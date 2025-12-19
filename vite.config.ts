@@ -1,14 +1,10 @@
-import { fileURLToPath, URL } from 'node:url'
-
-import { defineConfig, loadEnv } from 'vite'
-import createPlugins from './vite/plugins'
-import path from 'path'
+import { defineConfig, loadEnv } from 'vite';
+import createPlugins from './vite/plugins';
+import autoprefixer from 'autoprefixer'; // css自动添加兼容性前缀
+import path from 'path';
 
 export default defineConfig(({ mode, command }) => {
-  // Load env file based on `mode` in the current working directory.
-  // Set the third parameter to '' to load all env regardless of the
-  // `VITE_` prefix.
-  const env = loadEnv(mode, process.cwd(), '')
+  const env = loadEnv(mode, process.cwd());
   return {
     // 部署生产环境和开发环境下的URL。
     // 默认情况下，vite 会假设你的应用是被部署在一个域名的根路径上
@@ -16,29 +12,63 @@ export default defineConfig(({ mode, command }) => {
     base: env.VITE_APP_CONTEXT_PATH,
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, './src'),
+        '@': path.resolve(__dirname, './src')
       },
-      extensions: ['.mjs', '.js', '.ts', '.jsx', '.tsx', '.json', '.vue'],
+      extensions: ['.mjs', '.js', '.ts', '.jsx', '.tsx', '.json', '.vue']
     },
     // https://cn.vitejs.dev/config/#resolve-extensions
     plugins: createPlugins(env, command === 'build'),
-    define: {
-      // Provide an explicit app-level constant derived from an env var.
-      __APP_ENV__: JSON.stringify(env.APP_ENV),
-    },
-    // Example: use an env var to set the dev server port conditionally.
     server: {
       host: '0.0.0.0',
-      port: env.VITE_APP_PORT ? Number(env.VITE_APP_PORT) : 5173,
+      port: Number(env.VITE_APP_PORT),
       open: true,
       proxy: {
         [env.VITE_APP_BASE_API]: {
+          //target: 'http://10.10.10.136:5555',
+          target: 'http://127.0.0.1:5555',
           changeOrigin: true,
-          target: 'http://localhost:8080',
           ws: true,
-          rewrite: (path) => path.replace(new RegExp('^' + env.VITE_APP_BASE_API), ''),
-        },
-      },
+          rewrite: (path) => path.replace(new RegExp('^' + env.VITE_APP_BASE_API), '')
+        }
+      }
     },
-  }
-})
+    css: {
+      preprocessorOptions: {
+        scss: {
+          // additionalData: '@use "@/assets/styles/variables.module.scss as *";'
+          // javascriptEnabled: true
+          api: 'modern-compiler'
+        }
+      },
+      postcss: {
+        plugins: [
+          // 浏览器兼容性
+          autoprefixer(),
+          {
+            postcssPlugin: 'internal:charset-removal',
+            AtRule: {
+              charset: (atRule) => {
+                atRule.remove();
+              }
+            }
+          }
+        ]
+      }
+    },
+    // 预编译
+    optimizeDeps: {
+      include: [
+        'vue',
+        'vue-router',
+        'pinia',
+        'axios',
+        '@vueuse/core',
+        'echarts',
+        'vue-i18n',
+        '@vueup/vue-quill',
+        'image-conversion',
+        'element-plus/es/components/**/css'
+      ]
+    }
+  };
+});

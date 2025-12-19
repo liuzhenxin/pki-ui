@@ -6,6 +6,7 @@ export default {
   },
   // 登录页面国际化
   login: {
+    title: '密钥管理中心',
     selectPlaceholder: '请选择/输入公司名称',
     username: '用户名',
     password: '密码',

@@ -6,6 +6,7 @@ export default {
   },
   // 登录页面国际化
   login: {
+    title: 'Key Manage Center',
     selectPlaceholder: 'Please select/enter a company name',
     username: 'Username',
     password: 'Password',

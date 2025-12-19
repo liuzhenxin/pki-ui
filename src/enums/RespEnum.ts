@@ -86,5 +86,5 @@ export enum HttpStatus {
   /**
    * 系统警告消息
    */
-  WARN = 601,
+  WARN = 601
 }
