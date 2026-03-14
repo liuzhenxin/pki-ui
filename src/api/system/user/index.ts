@@ -2,7 +2,7 @@ import { DeptTreeVO } from './../dept/types';
 import { RoleVO } from '@/api/system/role/types';
 import request from '@/utils/request';
 import { AxiosPromise } from 'axios';
-import { UserForm, UserQuery, UserVO, UserInfoVO } from './types';
+import { UserForm, UserQuery, UserVO, UserInfoVO, ModifyPwdForm } from './types';
 import { parseStrEmpty } from '@/utils/ruoyi';
 
 /**
@@ -11,9 +11,9 @@ import { parseStrEmpty } from '@/utils/ruoyi';
  */
 export const listUser = (query: UserQuery): AxiosPromise<UserVO[]> => {
   return request({
-    url: '/system/user/list',
-    method: 'get',
-    params: query
+    url: '/admin/api/v1/users/page',
+    method: 'post',
+    data: query
   });
 };
 
@@ -45,6 +45,18 @@ export const getUser = (userId?: string | number): AxiosPromise<UserInfoVO> => {
 export const addUser = (data: UserForm) => {
   return request({
     url: '/system/user',
+    method: 'post',
+    data: data
+  });
+};
+
+/**
+ * 保存用户（含证书）
+ * @param data
+ */
+export const saveUserWithCert = (data: FormData) => {
+  return request({
+    url: '/admin/api/v1/users/cert-save',
     method: 'post',
     data: data
   });
@@ -209,11 +221,40 @@ export const deptTreeSelect = (): AxiosPromise<DeptTreeVO[]> => {
   });
 };
 
+/**
+ * 修改用户密码
+ * @param data
+ */
+export const modifyUserPwd = (data: ModifyPwdForm) => {
+  return request({
+    url: '/admin/api/v1/users/modify-pwd',
+    method: 'put',
+    headers: {
+      isEncrypt: true,
+      repeatSubmit: false
+    },
+    data: data
+  });
+};
+
+/**
+ * 上传用户证书
+ * @param data
+ */
+export const uploadUserCert = (data: FormData) => {
+  return request({
+    url: '/admin/api/v1/users/cert',
+    method: 'post',
+    data: data
+  });
+};
+
 export default {
   listUser,
   getUser,
   optionSelect,
   addUser,
+  saveUserWithCert,
   updateUser,
   delUser,
   resetUserPwd,
@@ -225,5 +266,7 @@ export default {
   getAuthRole,
   updateAuthRole,
   deptTreeSelect,
-  listUserByDeptId
+  listUserByDeptId,
+  modifyUserPwd,
+  uploadUserCert
 };

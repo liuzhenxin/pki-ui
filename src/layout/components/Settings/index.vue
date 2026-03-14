@@ -37,7 +37,7 @@
     <div class="drawer-item">
       <span>深色模式</span>
       <span class="comp-style">
-        <el-switch v-model="isDark" class="drawer-switch" @change="toggleDark" />
+        <el-switch v-model="settingsStore.dark" class="drawer-switch" />
       </span>
     </div>
 
@@ -114,21 +114,20 @@ const sideTheme = ref(settingsStore.sideTheme);
 const storeSettings = computed(() => settingsStore);
 const predefineColors = ref(['#409EFF', '#ff4500', '#ff8c00', '#ffd700', '#90ee90', '#00ced1', '#1e90ff', '#c71585']);
 
-// 是否暗黑模式
-const isDark = useDark({
-  storageKey: 'useDarkKey',
-  valueDark: 'dark',
-  valueLight: 'light'
-});
-// 匹配菜单颜色
-watch(isDark, () => {
-  if (isDark.value) {
-    settingsStore.sideTheme = SideThemeEnum.DARK;
-  } else {
-    settingsStore.sideTheme = sideTheme.value;
-  }
-});
-const toggleDark = () => useToggle(isDark);
+// 监听深色模式
+watch(
+  () => settingsStore.dark,
+  (isDark) => {
+    if (isDark) {
+      document.documentElement.classList.add('dark');
+      settingsStore.sideTheme = SideThemeEnum.DARK;
+    } else {
+      document.documentElement.classList.remove('dark');
+      settingsStore.sideTheme = sideTheme.value;
+    }
+  },
+  { immediate: true }
+);
 
 const topNavChange = (val: any) => {
   if (!val) {
@@ -148,7 +147,7 @@ const themeChange = (val: string) => {
 };
 const handleTheme = (val: string) => {
   sideTheme.value = val;
-  if (isDark.value && val === SideThemeEnum.LIGHT) {
+  if (settingsStore.dark && val === SideThemeEnum.LIGHT) {
     // 暗黑模式颜色不变
     settingsStore.sideTheme = SideThemeEnum.DARK;
     return;
@@ -166,6 +165,7 @@ const saveSetting = () => {
   settings.value.dynamicTitle = storeSettings.value.dynamicTitle;
   settings.value.sideTheme = storeSettings.value.sideTheme;
   settings.value.theme = storeSettings.value.theme;
+  settings.value.dark = storeSettings.value.dark;
   setTimeout(() => {
     proxy?.$modal.closeLoading();
   }, 1000);

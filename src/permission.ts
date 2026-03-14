@@ -41,7 +41,10 @@ router.beforeEach(async (to, from, next) => {
         } else {
           isRelogin.show = false;
           const res = await getTenant(setting.tenantId);
-          if (res?.data?.status === 0) {
+          if (res?.data) {
+            useSettingsStore().setAppTitle(res.data.name);
+          }
+          if (res?.data?.status != -1) {
             //未初始化
             const accessRoutes = await usePermissionStore().generateInitRoutes();
             // 根据roles权限生成可访问的路由表
@@ -61,7 +64,8 @@ router.beforeEach(async (to, from, next) => {
               }
             });
             // @ts-expect-error hack方法 确保addRoutes已完成
-            next({ path: to.path, replace: true, params: to.params, query: to.query, hash: to.hash, name: to.name as string }); // hack方法 确保addRoutes已完成
+            const targetPath = (to.path.includes('/init') || to.path.includes('/setup')) ? '/' : to.path;
+            next({ path: targetPath, replace: true, params: to.params, query: to.query, hash: to.hash, name: to.name as string }); // hack方法 确保addRoutes已完成
           }
         }
       } else {
@@ -71,7 +75,16 @@ router.beforeEach(async (to, from, next) => {
   } else {
     // 没有token
     if (isWhiteList(to.path)) {
-      // 在免登录白名单，直接进入
+      // 在免登录白名单，直接进入, 并且获取租户信息, 如果有租户id
+      if (setting.tenantId) {
+        getTenant(setting.tenantId)
+          .then((res) => {
+            if (res?.data) {
+              useSettingsStore().setAppTitle(res.data.name);
+            }
+          })
+          .catch(() => { });
+      }
       next();
     } else {
       const redirect = encodeURIComponent(to.fullPath || '/');

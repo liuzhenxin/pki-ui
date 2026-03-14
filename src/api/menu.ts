@@ -6,7 +6,7 @@ import { Result } from '@/api/types';
 // 获取路由
 export function getRouters(): Promise<Result<RouteRecordRaw[]>> {
   return request({
-    url: '/system/menu/getRouters',
+    url: '/admin/api/v1/menus/list-tree-user',
     method: 'get'
   }) as any;
 }

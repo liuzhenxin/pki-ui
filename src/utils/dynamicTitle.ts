@@ -7,8 +7,8 @@ import { useSettingsStore } from '@/store/modules/settings';
 export const useDynamicTitle = () => {
   const settingsStore = useSettingsStore();
   if (settingsStore.dynamicTitle) {
-    document.title = settingsStore.title + ' - ' + import.meta.env.VITE_APP_TITLE;
+    document.title = settingsStore.title + ' - ' + settingsStore.appTitle;
   } else {
-    document.title = defaultSettings.title as string;
+    document.title = settingsStore.appTitle;
   }
 };

@@ -17,10 +17,11 @@ export interface UserInfo {
  * 用户查询对象类型
  */
 export interface UserQuery extends PageQuery {
-  userName?: string;
-  nickName?: string;
-  phonenumber?: string;
-  status?: string;
+  username?: string;
+  mobile?: string;
+  mail?: string;
+  status?: string | number;
+  superAdmin?: number;
   deptId?: string | number;
   roleId?: string | number;
   userIds?: string | number | (string | number)[] | undefined;
@@ -70,4 +71,10 @@ export interface ResetPwdForm {
   oldPassword: string;
   newPassword: string;
   confirmPassword: string;
+}
+
+export interface ModifyPwdForm {
+  id: string | number;
+  oldPassword: string;
+  newPassword: string;
 }

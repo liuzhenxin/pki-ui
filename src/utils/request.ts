@@ -40,6 +40,27 @@ service.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     // 对应国际化资源文件后缀
     config.headers['Content-Language'] = getLanguage();
+    const language = getLanguage();
+    if (language === 'zh_CN' || language === 'zh-CN') {
+      config.headers['Language'] = 'zh-CN';
+    } else if (language === 'en_US' || language === 'en-US') {
+      config.headers['Language'] = 'en-US';
+    } else {
+      // 如果没有设置 Language，尝试从 Accept-Language 获取（虽然浏览器会自动发送 Accept-Language，但这里可以显式处理逻辑如果需要）
+      // 但根据需求：优先读取请求头 Language，如果没有则读取 Accept-Language。
+      // 这里是在设置请求头，所以我们应该确保 Language 头被正确设置。
+      // 如果 getLanguage() 返回空或者其他值，我们可能需要根据浏览器的语言设置来决定。
+      // 不过通常 getLanguage() 会返回默认值。
+      // 假设 getLanguage() 返回的是我们应用内部维护的语言设置。
+
+      // 如果 getLanguage() 没有匹配到，我们可以检查 navigator.language
+      const browserLang = navigator.language;
+      if (browserLang === 'zh-CN' || browserLang === 'zh') {
+         config.headers['Language'] = 'zh-CN';
+      } else if (browserLang === 'en-US' || browserLang === 'en') {
+         config.headers['Language'] = 'en-US';
+      }
+    }
 
     const isToken = config.headers?.isToken === false;
     // 是否需要防止数据重复提交
@@ -71,7 +92,7 @@ service.interceptors.request.use(
         const s_url = sessionObj.url; // 请求地址
         const s_data = sessionObj.data; // 请求数据
         const s_time = sessionObj.time; // 请求时间
-        const interval = 500; // 间隔时间(ms)，小于此时间视为重复提交
+        const interval = 50; // 间隔时间(ms)，小于此时间视为重复提交
         if (s_data === requestObj.data && requestObj.time - s_time < interval && s_url === requestObj.url) {
           const message = '数据正在处理，请勿重复提交';
           console.warn(`[${s_url}]: ` + message);
@@ -94,6 +115,8 @@ service.interceptors.request.use(
     if (config.data instanceof FormData) {
       delete config.headers['Content-Type'];
     }
+    // 添加 request-id
+    config.headers['request-id'] = new Date().getTime();
     return config;
   },
   (error: any) => {
@@ -122,16 +145,18 @@ service.interceptors.response.use(
     }
     // 未设置状态码则默认成功状态
     //const code = res.data.code || HttpStatus.SUCCESS;
-
     // 未设置状态码则默认成功状态
     //const code = res.data.code === 'OK' ? HttpStatus.SUCCESS : res.data.code;
-    const code = res.data.code === 'OK' || res.data.code === undefined ? 200 : res.data.code;
+    let code = res.data.code === 'OK' || res.data.code === undefined ? 200 : res.data.code;
     // 获取错误信息
     const msg = errorCode[code] || res.data.msg || errorCode['default'];
 
     // 二进制数据则直接返回
     if (res.request.responseType === 'blob' || res.request.responseType === 'arraybuffer') {
       return res.data;
+    }
+    if (res.data.code === 'Unauthorized' || res.data.code === 'Bad credentials' || res.data.code === 'oauth2_token_error') {
+      code = 401;
     }
     if (code === 401) {
       // prettier-ignore
@@ -144,12 +169,7 @@ service.interceptors.response.use(
         }).then(() => {
           isRelogin.show = false;
           useUserStore().logout().then(() => {
-            router.replace({
-              path: '/login',
-              query: {
-                redirect: encodeURIComponent(router.currentRoute.value.fullPath || '/')
-              }
-            })
+            location.href = '/login';
           });
         }).catch(() => {
           isRelogin.show = false;
@@ -172,9 +192,9 @@ service.interceptors.response.use(
   (error: any) => {
     console.log(error);
     let { message } = error;
-    if(error.response.data.error_description != null){
+    if (error.response != null && error.response.data != null && error.response.data.error_description != null) {
       message = error.response.data.error_description;
-    }else if (message == 'Network Error') {
+    } else if (message == 'Network Error') {
       message = '后端接口连接异常';
     } else if (message.includes('timeout')) {
       message = '系统接口请求超时';

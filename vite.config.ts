@@ -22,10 +22,12 @@ export default defineConfig(({ mode, command }) => {
       host: '0.0.0.0',
       port: Number(env.VITE_APP_PORT),
       open: true,
+      allowedHosts: ['liuzx.org'],
       proxy: {
         [env.VITE_APP_BASE_API]: {
           //target: 'http://10.10.10.136:5555',
           target: 'http://127.0.0.1:5555',
+          //target: 'http://211.88.25.177:5555',
           changeOrigin: true,
           ws: true,
           rewrite: (path) => path.replace(new RegExp('^' + env.VITE_APP_BASE_API), '')

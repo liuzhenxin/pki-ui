@@ -2,7 +2,7 @@
   <div class="login">
     <el-form ref="loginRef" :model="loginForm" :rules="loginRules" class="login-form">
       <div class="title-box">
-        <h3 class="title">{{ proxy.$t('login.title') }}</h3>
+        <h3 class="title">{{ loginTitle }}</h3>
         <lang-select />
       </div>
       <el-form-item v-if="tenantEnabled" prop="tenantId">
@@ -92,6 +92,7 @@ import { LoginData, TenantVO } from '@/api/types';
 import { to } from 'await-to-js';
 import { HttpStatus } from '@/enums/RespEnum';
 import { useI18n } from 'vue-i18n';
+import { v4 as uuidv4 } from 'uuid';
 
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
 
@@ -140,10 +141,10 @@ const tenantEnabled = ref(false);
 const register = ref(false);
 const redirect = ref('/');
 const loginRef = ref<ElFormInstance>();
-// 租户列表
-const tenantList = ref<TenantVO[]>([]);
+
 // 密钥
 const secretKey = ref('');
+const loginTitle = ref(proxy.$t('login.title'));
 
 watch(
   () => router.currentRoute.value,
@@ -203,7 +204,7 @@ const getCode = async () => {
   try {
     // 刷新验证码时清空输入框
     loginForm.value.code = '';
-    const uuid = crypto.randomUUID();
+    const uuid = uuidv4();
     const res = await getCodeImg(uuid);
     loginForm.value.uuid = uuid;
     const { data } = res;
@@ -255,6 +256,9 @@ const getLoginData = () => {
  */
 const getTenantInfo = async (tenantId: string) => {
   const res = await getTenant(tenantId);
+  if (res.data && res.data.name) {
+    loginTitle.value = res.data.name;
+  }
 };
 
 /**
@@ -277,6 +281,9 @@ onMounted(() => {
   getSecretKey();
   //initTenantList();
   getLoginData();
+  if (loginForm.value.tenantId) {
+    getTenantInfo(loginForm.value.tenantId);
+  }
 });
 </script>
 

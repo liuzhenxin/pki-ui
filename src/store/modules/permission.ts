@@ -9,7 +9,7 @@ import ParentView from '@/components/ParentView/index.vue';
 import InnerLink from '@/layout/components/InnerLink/index.vue';
 import { ref } from 'vue';
 import { createCustomNameComponent } from '@/utils/createCustomNameComponent';
-import { Result } from '@/api/types'
+import { Result } from '@/api/types';
 
 // 匹配views里面所有的.vue文件
 const modules = import.meta.glob('./../../views/**/*.vue');
@@ -68,7 +68,7 @@ export const usePermissionStore = defineStore('permission', () => {
     return new Promise<RouteRecordRaw[]>((resolve) => resolve(rewriteRoutes));
   };
 
-  const generateInitRoutes = async (): Promise<Result<RouteRecordRaw[]>> => {
+  const generateInitRoutes = async (): Promise<RouteRecordRaw[]> => {
     const res = await getInitRouters();
     // const { data } = res.data;
     const sdata = JSON.parse(JSON.stringify(res.data));
@@ -98,6 +98,10 @@ export const usePermissionStore = defineStore('permission', () => {
    */
   const filterAsyncRouter = (asyncRouterMap: RouteRecordRaw[], lastRouter?: RouteRecordRaw, type = false): RouteRecordRaw[] => {
     return asyncRouterMap.filter((route) => {
+      // Ensure top-level route paths start with '/' as required by Vue Router
+      if (!lastRouter && route.path && !route.path.startsWith('/')) {
+        route.path = '/' + route.path;
+      }
       if (type && route.children) {
         route.children = filterChildren(route.children, undefined);
       }

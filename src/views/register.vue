@@ -73,8 +73,8 @@
 </template>
 
 <script setup lang="ts">
-import { getCodeImg, register, getTenantList } from '@/api/login';
-import { RegisterForm, TenantVO } from '@/api/types';
+import { getCodeImg, register } from '@/api/login';
+import { RegisterForm } from '@/api/types';
 import { to } from 'await-to-js';
 import { useI18n } from 'vue-i18n';
 

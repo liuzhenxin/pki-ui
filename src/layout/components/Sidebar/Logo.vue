@@ -25,6 +25,7 @@
 import variables from '@/assets/styles/variables.module.scss';
 import logo from '@/assets/logo/logo.png';
 import { useSettingsStore } from '@/store/modules/settings';
+import { getTenant } from '@/api/system/tenant';
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
 
 defineProps({
@@ -34,10 +35,20 @@ defineProps({
   }
 });
 
-const title = import.meta.env.VITE_APP_LOGO_TITLE;
-const name = import.meta.env.VITE_APP_TITLE;
+const title = ref(import.meta.env.VITE_APP_LOGO_TITLE);
+const name = ref(import.meta.env.VITE_APP_TITLE);
 const settingsStore = useSettingsStore();
 const sideTheme = computed(() => settingsStore.sideTheme);
+
+onMounted(() => {
+  getTenant(import.meta.env.VITE_TENANT_ID).then((res) => {
+    if (res.data) {
+      name.value = res.data.name;
+      // If there is a specific field for title in the future, it can be assigned here.
+      // Currently TenantVO only has 'name'.
+    }
+  });
+});
 </script>
 
 <style lang="scss" scoped>

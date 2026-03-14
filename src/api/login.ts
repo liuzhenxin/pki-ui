@@ -136,13 +136,13 @@ export function getInfo(): Promise<Result<UserInfo>> {
   }) as any;
 }
 
-// 获取租户列表
-export function getTenantList(isToken: boolean): Promise<TenantInfo> {
-  return request({
-    url: '/auth/tenant/list',
-    headers: {
-      isToken: isToken
-    },
-    method: 'get'
-  }) as any;
-}
+// // 获取租户列表
+// export function getTenantList(isToken: boolean): Promise<TenantInfo> {
+//   return request({
+//     url: '/auth/tenant/list',
+//     headers: {
+//       isToken: isToken
+//     },
+//     method: 'get'
+//   }) as any;
+// }
