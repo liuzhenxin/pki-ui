@@ -45,3 +45,11 @@ export function issueAdminCert(data: any): Promise<Result<any>> {
     data: data
   }) as any;
 }
+
+// 删除所有根证书
+export function deleteAllRootCa(): Promise<Result<any>> {
+  return request({
+    url: '/ca/api/v1/roots/deleteAll',
+    method: 'delete'
+  }) as any;
+}

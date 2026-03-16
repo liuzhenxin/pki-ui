@@ -178,7 +178,13 @@
             <el-radio-button label="external">外部CA签发</el-radio-button>
           </el-radio-group>
 
-          <el-form :model="rootCaForm" :rules="rootCaRules" ref="rootCaFormRef" label-width="140px" style="width: 700px">
+          <el-form
+            :model="rootCaForm"
+            :rules="rootCaRules"
+            ref="rootCaFormRef"
+            label-width="140px"
+            style="width: 700px"
+          >
             <el-tabs type="border-card">
               <el-tab-pane label="基本信息">
                 <el-form-item label="CA名称" prop="name">
@@ -204,7 +210,10 @@
                   <el-input v-model="rootCaForm.password" type="password" show-password placeholder="请输入签名器密码" />
                 </el-form-item>
 
-                <div v-if="rootType === 'external'" style="margin-top: 20px; border-top: 1px dashed #eee; padding-top: 20px">
+                <div
+                  v-if="rootType === 'external'"
+                  style="margin-top: 20px; border-top: 1px dashed #eee; padding-top: 20px"
+                >
                   <el-form-item label="CSR操作">
                     <el-button type="primary" @click="handleDownloadCsr">生成并下载 CSR</el-button>
                   </el-form-item>
@@ -225,7 +234,9 @@
                         <div class="el-upload__tip">请上传外部CA签发的证书文件 (.cer, .crt, .pem)</div>
                       </template>
                     </el-upload>
-                    <el-button v-if="externalCertPem" type="text" @click="showExternalCertDialog = true">查看证书详情</el-button>
+                    <el-button v-if="externalCertPem" type="text" @click="showExternalCertDialog = true"
+                      >查看证书详情</el-button
+                    >
                   </el-form-item>
                 </div>
               </el-tab-pane>
@@ -283,8 +294,22 @@
                 >
                   <div style="display: flex; width: 100%">
                     <el-input v-model="item.value" style="flex: 1; margin-right: 10px" />
-                    <el-button v-if="index === 0" @click="addUri('cacertUris')" type="primary" :icon="Plus" circle size="small" />
-                    <el-button v-if="index !== 0" @click="removeUri('cacertUris', index)" type="danger" :icon="Minus" circle size="small" />
+                    <el-button
+                      v-if="index === 0"
+                      @click="addUri('cacertUris')"
+                      type="primary"
+                      :icon="Plus"
+                      circle
+                      size="small"
+                    />
+                    <el-button
+                      v-if="index !== 0"
+                      @click="removeUri('cacertUris', index)"
+                      type="danger"
+                      :icon="Minus"
+                      circle
+                      size="small"
+                    />
                   </div>
                 </el-form-item>
 
@@ -296,8 +321,22 @@
                 >
                   <div style="display: flex; width: 100%">
                     <el-input v-model="item.value" style="flex: 1; margin-right: 10px" />
-                    <el-button v-if="index === 0" @click="addUri('crlUris')" type="primary" :icon="Plus" circle size="small" />
-                    <el-button v-if="index !== 0" @click="removeUri('crlUris', index)" type="danger" :icon="Minus" circle size="small" />
+                    <el-button
+                      v-if="index === 0"
+                      @click="addUri('crlUris')"
+                      type="primary"
+                      :icon="Plus"
+                      circle
+                      size="small"
+                    />
+                    <el-button
+                      v-if="index !== 0"
+                      @click="removeUri('crlUris', index)"
+                      type="danger"
+                      :icon="Minus"
+                      circle
+                      size="small"
+                    />
                   </div>
                 </el-form-item>
 
@@ -309,8 +348,22 @@
                 >
                   <div style="display: flex; width: 100%">
                     <el-input v-model="item.value" style="flex: 1; margin-right: 10px" />
-                    <el-button v-if="index === 0" @click="addUri('ocspUris')" type="primary" :icon="Plus" circle size="small" />
-                    <el-button v-if="index !== 0" @click="removeUri('ocspUris', index)" type="danger" :icon="Minus" circle size="small" />
+                    <el-button
+                      v-if="index === 0"
+                      @click="addUri('ocspUris')"
+                      type="primary"
+                      :icon="Plus"
+                      circle
+                      size="small"
+                    />
+                    <el-button
+                      v-if="index !== 0"
+                      @click="removeUri('ocspUris', index)"
+                      type="danger"
+                      :icon="Minus"
+                      circle
+                      size="small"
+                    />
                   </div>
                 </el-form-item>
               </el-tab-pane>
@@ -360,11 +413,11 @@
                   <span class="help-card-title">USBKey 操作流程</span>
                 </div>
                 <div class="help-card-body">
-                  1. 插入 USB Key。<br />
-                  2. 选择 <b>设备提供商</b> (Provider) 并 <b>刷新</b>。<br />
-                  3. 选择对应的 <b>设备</b>、<b>应用</b>。<br />
-                  4. 输入 <b>容器名</b> (通常新建一个，如 admin)。<br />
-                  5. 输入 USBKey 的 <b>User PIN</b> 码。<br />
+                  1. 插入 USB Key。<br/>
+                  2. 选择 <b>设备提供商</b> (Provider) 并 <b>刷新</b>。<br/>
+                  3. 选择对应的 <b>设备</b>、<b>应用</b>。<br/>
+                  4. 输入 <b>容器名</b> (通常新建一个，如 admin)。<br/>
+                  5. 输入 USBKey 的 <b>User PIN</b> 码。<br/>
                   6. 点击 <b>生成 CSR 并签发</b>。
                 </div>
               </div>
@@ -393,7 +446,12 @@
               <h4 style="margin-top: 0; color: #606266; font-size: 14px">USBKey 证书设置</h4>
               <el-form-item label="设备提供商" prop="provider">
                 <div class="flex-row" style="display: flex; gap: 10px; width: 100%">
-                  <el-select v-model="adminForm.provider" placeholder="请选择或刷新" style="flex: 1" @change="onAdminProviderChange">
+                  <el-select
+                    v-model="adminForm.provider"
+                    placeholder="请选择或刷新"
+                    style="flex: 1"
+                    @change="onAdminProviderChange"
+                  >
                     <el-option v-for="p in adminProviders" :key="p" :label="p" :value="p" />
                   </el-select>
                   <el-button @click="refreshAdminProviders" :icon="Refresh" circle />
@@ -401,13 +459,23 @@
               </el-form-item>
 
               <el-form-item label="设备列表" prop="device">
-                <el-select v-model="adminForm.device" placeholder="请选择设备" style="width: 100%" @change="onAdminDeviceChange">
+                <el-select
+                  v-model="adminForm.device"
+                  placeholder="请选择设备"
+                  style="width: 100%"
+                  @change="onAdminDeviceChange"
+                >
                   <el-option v-for="d in adminDevices" :key="d" :label="d" :value="d" />
                 </el-select>
               </el-form-item>
 
               <el-form-item label="应用" prop="appName">
-                <el-select v-model="adminForm.appName" placeholder="请选择应用" style="width: 100%" @change="onAdminAppChange">
+                <el-select
+                  v-model="adminForm.appName"
+                  placeholder="请选择应用"
+                  style="width: 100%"
+                  @change="onAdminAppChange"
+                >
                   <el-option v-for="a in adminApps" :key="a" :label="a" :value="a" />
                 </el-select>
               </el-form-item>
@@ -421,7 +489,12 @@
               </el-form-item>
 
               <el-form-item label="证书操作">
-                <el-button type="primary" :loading="adminGeneratingCert" @click="handleGenerateAdminCert" style="width: 100%">
+                <el-button
+                  type="primary"
+                  :loading="adminGeneratingCert"
+                  @click="handleGenerateAdminCert"
+                  style="width: 100%"
+                >
                   生成 CSR 并签发写入 USBKey
                 </el-button>
               </el-form-item>
@@ -435,7 +508,12 @@
               <el-input v-model="adminForm.password" type="password" show-password placeholder="请输入平台登录新密码" />
             </el-form-item>
             <el-form-item label="确认密码" prop="confirmPassword">
-              <el-input v-model="adminForm.confirmPassword" type="password" show-password placeholder="请再次输入新密码" />
+              <el-input
+                v-model="adminForm.confirmPassword"
+                type="password"
+                show-password
+                placeholder="请再次输入新密码"
+              />
             </el-form-item>
           </el-form>
         </div>
@@ -475,7 +553,13 @@
               </div>
             </div>
           </el-drawer>
-          <el-form :model="auditorForm" :rules="auditorRules" ref="auditorFormRef" label-width="120px" style="width: 500px">
+          <el-form
+            :model="auditorForm"
+            :rules="auditorRules"
+            ref="auditorFormRef"
+            label-width="120px"
+            style="width: 500px"
+          >
             <el-form-item label="用户名" prop="username">
               <el-input v-model="auditorForm.username" disabled />
             </el-form-item>
@@ -551,7 +635,12 @@
               <el-input v-model="auditorForm.password" type="password" show-password placeholder="请输入平台登录新密码" />
             </el-form-item>
             <el-form-item label="确认密码" prop="confirmPassword">
-              <el-input v-model="auditorForm.confirmPassword" type="password" show-password placeholder="请再次输入新密码" />
+              <el-input
+                v-model="auditorForm.confirmPassword"
+                type="password"
+                show-password
+                placeholder="请再次输入新密码"
+              />
             </el-form-item>
           </el-form>
         </div>
@@ -621,7 +710,7 @@ import { useRouter } from 'vue-router';
 import { listProfile, getProfile, initProfiles } from '@/api/ca/profile';
 import { uploadUserCert } from '@/api/system/user';
 import { getTenant, updateTenant } from '@/api/system/tenant';
-import { genRootCa, importExternalCert, issueAdminCert } from '@/api/ca/root';
+import { genRootCa, importExternalCert, issueAdminCert, deleteAllRootCa } from '@/api/ca/root';
 import { useUserStore } from '@/store/modules/user';
 import { useTagsViewStore } from '@/store/modules/tagsView';
 import X509Cert from '@/components/X509Cert/index.vue';
@@ -836,6 +925,15 @@ watch(active, async (newActive) => {
   }
   if (newActive === 2) {
     console.log('Step 2: Starting initialization', selectedTemplates.value.length);
+    // 先删除所有根证书
+    try {
+      await deleteAllRootCa();
+      console.log('Step 2: Deleted all existing root certificates');
+    } catch (error) {
+      console.error('Step 2: Failed to delete root certificates', error);
+      ElMessage.warning('删除旧根证书失败，但继续初始化流程');
+    }
+
     if (selectedTemplates.value.length === 0) {
       await loadTemplateData();
       console.log('Step 2: Templates loaded', selectedTemplates.value.length);
@@ -887,6 +985,9 @@ watch(active, async (newActive) => {
     await refreshAdminProviders();
   }
   if (newActive === 4) {
+    // 强制断开 SK F连接，确保在步骤4时重新建立连接
+    await stopUsbMonitoring(true);
+
     if (selectedTemplates.value.length === 0) {
       await loadTemplateData();
     }
@@ -912,6 +1013,8 @@ watch(active, async (newActive) => {
         { type: 'commonName', value: 'auditor' }
       ]);
     }
+    // 等待一小段时间，确保 SK F连接断开
+    await new Promise((r) => setTimeout(r, 500));
     await refreshAuditorProviders();
   }
 
@@ -1413,19 +1516,25 @@ const auditorDevices = ref<string[]>([]);
 const auditorApps = ref<string[]>([]);
 
 const refreshAuditorProviders = async () => {
+  console.log('refreshAuditorProviders: Starting...');
   try {
     const skf = await getSkfClient();
+    console.log('refreshAuditorProviders: Connected to SKF');
     const providers = await skf.enumProvider();
+    console.log('refreshAuditorProviders: Providers:', providers);
     auditorProviders.value = providers;
     if (providers.length > 0) {
       auditorForm.provider = providers[0];
+      console.log('refreshAuditorProviders: Selected provider:', providers[0]);
       await onAuditorProviderChange();
     } else {
       auditorForm.provider = '';
       auditorDevices.value = [];
       auditorForm.device = '';
+      console.log('refreshAuditorProviders: No providers found');
     }
   } catch (e: any) {
+    console.error('refreshAuditorProviders: Error', e);
     ElMessage.error('SKF 服务连接失败: ' + (e.message || e));
   }
 };
@@ -1800,7 +1909,7 @@ const next = async () => {
       const currentRoute = router.currentRoute.value;
       tagsViewStore.delView(currentRoute);
 
-      // 登出并跳转到登录页
+      // 3. 登出并跳转到登录页
       userStore.logout().then(() => {
         router.replace({
           path: '/login',

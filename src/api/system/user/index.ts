@@ -34,7 +34,7 @@ export const optionSelect = (userIds: (number | string)[]): AxiosPromise<UserVO[
  */
 export const getUser = (userId?: string | number): AxiosPromise<UserInfoVO> => {
   return request({
-    url: '/system/user/' + parseStrEmpty(userId),
+    url: '/admin/api/v1/users/' + parseStrEmpty(userId),
     method: 'get'
   });
 };
@@ -44,21 +44,9 @@ export const getUser = (userId?: string | number): AxiosPromise<UserInfoVO> => {
  */
 export const addUser = (data: UserForm) => {
   return request({
-    url: '/system/user',
+    url: '/admin/api/v1/users',
     method: 'post',
-    data: data
-  });
-};
-
-/**
- * 保存用户（含证书）
- * @param data
- */
-export const saveUserWithCert = (data: FormData) => {
-  return request({
-    url: '/admin/api/v1/users/cert-save',
-    method: 'post',
-    data: data
+    data: { co: data }
   });
 };
 
@@ -67,9 +55,9 @@ export const saveUserWithCert = (data: FormData) => {
  */
 export const updateUser = (data: UserForm) => {
   return request({
-    url: '/system/user',
+    url: '/admin/api/v1/users',
     method: 'put',
-    data: data
+    data: { co: data }
   });
 };
 
@@ -79,8 +67,9 @@ export const updateUser = (data: UserForm) => {
  */
 export const delUser = (userId: Array<string | number> | string | number) => {
   return request({
-    url: '/system/user/' + userId,
-    method: 'delete'
+    url: '/admin/api/v1/users',
+    method: 'delete',
+    data: Array.isArray(userId) ? userId : [userId]
   });
 };
 
@@ -91,11 +80,13 @@ export const delUser = (userId: Array<string | number> | string | number) => {
  */
 export const resetUserPwd = (userId: string | number, password: string) => {
   const data = {
-    userId,
-    password
+    co: {
+      id: userId,
+      password: password
+    }
   };
   return request({
-    url: '/system/user/resetPwd',
+    url: '/admin/api/v1/users/reset-pwd',
     method: 'put',
     headers: {
       isEncrypt: true,
@@ -112,11 +103,51 @@ export const resetUserPwd = (userId: string | number, password: string) => {
  */
 export const changeUserStatus = (userId: number | string, status: string) => {
   const data = {
-    userId,
-    status
+    co: {
+      id: userId,
+      status: status
+    }
   };
   return request({
-    url: '/system/user/changeStatus',
+    url: '/admin/api/v1/users/authority',
+    method: 'put',
+    data: data
+  });
+};
+
+/**
+ * 用户状态修改（仅修改状态）
+ * @param userId 用户ID
+ * @param status 用户状态
+ */
+export const changeStatus = (userId: number | string, status: string) => {
+  const data = {
+    co: {
+      id: userId,
+      status: status
+    }
+  };
+  return request({
+    url: '/admin/api/v1/users/status',
+    method: 'put',
+    data: data
+  });
+};
+
+/**
+ * 用户角色授权
+ * @param userId 用户ID
+ * @param roleIds 角色ID列表
+ */
+export const authRole = (userId: number | string, roleIds: string[]) => {
+  const data = {
+    co: {
+      id: userId,
+      roleIds: roleIds
+    }
+  };
+  return request({
+    url: '/admin/api/v1/users/authority',
     method: 'put',
     data: data
   });
@@ -233,7 +264,7 @@ export const modifyUserPwd = (data: ModifyPwdForm) => {
       isEncrypt: true,
       repeatSubmit: false
     },
-    data: data
+    data: { co: data }
   });
 };
 
@@ -254,11 +285,12 @@ export default {
   getUser,
   optionSelect,
   addUser,
-  saveUserWithCert,
   updateUser,
   delUser,
   resetUserPwd,
   changeUserStatus,
+  changeStatus,
+  authRole,
   getUserProfile,
   updateUserProfile,
   updateUserPwd,

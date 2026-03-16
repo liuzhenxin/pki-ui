@@ -45,11 +45,11 @@ export interface UserForm {
   id?: string;
   userId?: string;
   deptId?: number;
-  userName: string;
+  username: string;
   nickName?: string;
   password: string;
-  phonenumber?: string;
-  email?: string;
+  mobile?: string;
+  mail?: string;
   sex?: string;
   status: string;
   remark?: string;

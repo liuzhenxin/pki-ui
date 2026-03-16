@@ -28,7 +28,6 @@
     </el-row>
 
     <el-table v-loading="loading" :data="certList">
-      <el-table-column label="ID" align="center" prop="id" />
       <el-table-column label="证书名称" align="center" prop="name" />
       <el-table-column label="颁发者" align="center" prop="issuer" />
       <el-table-column label="主题" align="center" prop="subject" />
@@ -61,31 +60,132 @@
     <el-dialog :title="title" v-model="open" width="600px" append-to-body>
       <el-tabs v-model="activeTab">
         <el-tab-pane v-if="dialogType === 'root'" label="自签根证书" name="self">
-          <el-form ref="selfFormRef" :model="selfForm" :rules="selfRules" label-width="100px">
-            <el-form-item label="证书模板" prop="profileId">
-              <el-select v-model="selfForm.profileId" placeholder="请选择模板" @change="onProfileChange" style="width: 100%">
-                <el-option
-                  v-for="item in rootCaProfiles"
-                  :key="item.id"
-                  :label="item.name"
-                  :value="item.id"
-                />
-              </el-select>
-            </el-form-item>
-            <el-form-item label="证书名称" prop="name">
-              <el-input v-model="selfForm.name" placeholder="请输入证书名称" />
-            </el-form-item>
+          <el-form :model="selfForm" :rules="selfRules" ref="selfFormRef" label-width="140px">
+            <el-tabs type="border-card">
+              <el-tab-pane label="基本信息">
+                <el-form-item label="证书名称" prop="name">
+                  <el-input v-model="selfForm.name" placeholder="请输入证书名称" />
+                </el-form-item>
+                <el-form-item label="证书模板" prop="profileId">
+                  <el-select v-model="selfForm.profileId" placeholder="请选择模板" @change="onProfileChange" style="width: 100%">
+                    <el-option v-for="item in rootCaProfiles" :key="item.id" :label="item.name" :value="item.id" />
+                  </el-select>
+                </el-form-item>
+                <CertSubject v-model="selfForm.subjectItems" propPrefix="subjectItems" />
+                <el-form-item label="密钥算法" prop="keyAlgorithm">
+                  <el-select v-model="selfForm.keyAlgorithm" style="width: 100%">
+                    <el-option v-for="item in availableAlgos" :key="item" :label="item" :value="item" />
+                  </el-select>
+                </el-form-item>
+                <el-form-item label="签名器类型" prop="signerType">
+                  <el-select v-model="selfForm.signerType" style="width: 100%">
+                    <el-option label="PKCS12" value="PKCS12" />
+                    <el-option label="JKS" value="JKS" />
+                    <el-option label="SDF" value="SDF" />
+                  </el-select>
+                </el-form-item>
+                <el-form-item v-if="selfForm.signerType === 'SDF'" label="密钥索引" prop="keyIndex">
+                  <el-input-number v-model="selfForm.keyIndex" :min="1" style="width: 100%" />
+                </el-form-item>
+                <el-form-item label="密码" prop="password">
+                  <el-input v-model="selfForm.password" type="password" show-password placeholder="请输入签名器密码" />
+                </el-form-item>
+              </el-tab-pane>
 
-            <CertSubject v-model="selfForm.subjectItems" propPrefix="subjectItems" />
+              <el-tab-pane label="有效期配置">
+                <el-form-item label="最大有效期" prop="validity">
+                  <el-input v-model.number="selfForm.validity" placeholder="请输入正整数" style="width: 100%">
+                    <template #append>
+                      <el-select v-model="selfForm.validityUnit" style="width: 80px">
+                        <el-option label="年" value="y" />
+                        <el-option label="天" value="d" />
+                      </el-select>
+                    </template>
+                  </el-input>
+                </el-form-item>
+                <el-form-item label="过期周期(天)" prop="expirationPeriod">
+                  <el-input-number v-model="selfForm.expirationPeriod" :min="1" style="width: 100%" />
+                </el-form-item>
+                <el-form-item label="保留过期证书(天)" prop="keepExpiredCertDays">
+                  <el-input-number v-model="selfForm.keepExpiredCertDays" style="width: 100%" />
+                </el-form-item>
+                <el-form-item label="有效期模式" prop="validityMode">
+                  <el-select v-model="selfForm.validityMode" style="width: 100%">
+                    <el-option label="截止" value="cutoff" />
+                    <el-option label="严格" value="strict" />
+                    <el-option label="宽松" value="lax" />
+                  </el-select>
+                </el-form-item>
+              </el-tab-pane>
 
-            <el-form-item label="有效期(年)" prop="validity">
-              <el-input-number v-model="selfForm.validity" :min="1" :max="100" />
-            </el-form-item>
-            <el-form-item label="密钥算法" prop="keyAlgorithm">
-              <el-select v-model="selfForm.keyAlgorithm">
-                <el-option v-for="alg in availableAlgos" :key="alg" :label="alg" :value="alg" />
-              </el-select>
-            </el-form-item>
+              <el-tab-pane label="CRL配置">
+                <el-form-item label="更新间隔(小时)" prop="crlIntervalHours">
+                  <el-input-number v-model="selfForm.crlIntervalHours" :min="1" style="width: 100%" />
+                </el-form-item>
+                <el-form-item label="全量CRL间隔" prop="crlFullIntervals">
+                  <el-input-number v-model="selfForm.crlFullIntervals" :min="1" style="width: 100%" />
+                </el-form-item>
+                <el-form-item label="重叠时间" prop="crlOverlap">
+                  <el-input v-model="selfForm.crlOverlap" placeholder="例如: 90d" />
+                </el-form-item>
+                <el-form-item label="更新时间点" prop="crlIntervalTime">
+                  <el-input v-model="selfForm.crlIntervalTime" placeholder="例如: 01:00" />
+                </el-form-item>
+                <el-form-item label="下一CRL编号" prop="nextCrlNo">
+                  <el-input-number v-model="selfForm.nextCrlNo" :min="1" style="width: 100%" />
+                </el-form-item>
+              </el-tab-pane>
+
+              <el-tab-pane label="URI配置">
+                <el-form-item
+                  v-for="(item, index) in selfForm.cacertUris"
+                  :key="'cacert-' + index"
+                  :label="index === 0 ? 'CA证书URI' : ' '"
+                >
+                  <div style="display: flex; width: 100%">
+                    <el-input v-model="item.value" style="flex: 1; margin-right: 10px" />
+                    <el-button v-if="index === 0" @click="addUri('cacertUris')" type="primary" :icon="Plus" circle size="small" />
+                    <el-button v-if="index !== 0" @click="removeUri('cacertUris', index)" type="danger" :icon="Minus" circle size="small" />
+                  </div>
+                </el-form-item>
+
+                <el-form-item
+                  v-for="(item, index) in selfForm.crlUris"
+                  :key="'crl-' + index"
+                  :label="index === 0 ? 'CRL URI' : ' '"
+                >
+                  <div style="display: flex; width: 100%">
+                    <el-input v-model="item.value" style="flex: 1; margin-right: 10px" />
+                    <el-button v-if="index === 0" @click="addUri('crlUris')" type="primary" :icon="Plus" circle size="small" />
+                    <el-button v-if="index !== 0" @click="removeUri('crlUris', index)" type="danger" :icon="Minus" circle size="small" />
+                  </div>
+                </el-form-item>
+
+                <el-form-item
+                  v-for="(item, index) in selfForm.ocspUris"
+                  :key="'ocsp-' + index"
+                  :label="index === 0 ? 'OCSP URI' : ' '"
+                >
+                  <div style="display: flex; width: 100%">
+                    <el-input v-model="item.value" style="flex: 1; margin-right: 10px" />
+                    <el-button v-if="index === 0" @click="addUri('ocspUris')" type="primary" :icon="Plus" circle size="small" />
+                    <el-button v-if="index !== 0" @click="removeUri('ocspUris', index)" type="danger" :icon="Minus" circle size="small" />
+                  </div>
+                </el-form-item>
+              </el-tab-pane>
+
+              <el-tab-pane label="高级配置">
+                <el-form-item label="序列号长度" prop="snSize">
+                  <el-input-number v-model="selfForm.snSize" :min="1" style="width: 100%" />
+                </el-form-item>
+                <el-form-item label="状态" prop="status">
+                  <el-select v-model="selfForm.status" style="width: 100%">
+                    <el-option label="激活" value="active" />
+                    <el-option label="停用" value="inactive" />
+                  </el-select>
+                </el-form-item>
+              </el-tab-pane>
+            </el-tabs>
           </el-form>
         </el-tab-pane>
         <el-tab-pane v-if="dialogType === 'sub'" label="从属CA（由上级签发）" name="import">
@@ -134,11 +234,11 @@
 <script setup name="RootCert" lang="ts">
 import { ref, reactive, toRefs, getCurrentInstance, ComponentInternalInstance } from 'vue';
 import { ElMessage, FormInstance, UploadInstance, UploadProps } from 'element-plus';
-import { ArrowDown, Search, Refresh, View, Download } from '@element-plus/icons-vue';
+import { ArrowDown, Search, Refresh, View, Download, Plus, Minus } from '@element-plus/icons-vue';
 import X509Cert from '@/components/X509Cert/index.vue';
 import CertSubject, { typeMapping, sortSubjectItems } from '@/components/CertSubject/index.vue';
 import { listProfile, getProfile } from '@/api/ca/profile';
-import { listRootCa } from '@/api/ca/root';
+import { listRootCa, genRootCa } from '@/api/ca/root';
 import { X509 } from 'jsrsasign';
 
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
@@ -166,10 +266,33 @@ const data = reactive({
   },
   selfForm: {
     name: '',
-    profileId: undefined,
+    profileId: undefined as string | number | undefined,
+    rootcaProfileName: '', // 模板名称
     subjectItems: [] as any[],
+    // 密钥配置
+    keyAlgorithm: 'SM2',
+    signerType: 'PKCS12',
+    keyIndex: 1,
+    password: '',
+    // 有效期配置
     validity: 10,
-    keyAlgorithm: 'RSA2048'
+    validityUnit: 'y',
+    expirationPeriod: 365,
+    keepExpiredCertDays: -1,
+    validityMode: 'cutoff',
+    // CRL配置
+    crlIntervalHours: 24,
+    crlFullIntervals: 90,
+    crlOverlap: '90d',
+    crlIntervalTime: '01:00',
+    nextCrlNo: 2,
+    // URI配置
+    cacertUris: [{ value: 'https://myorg.org/rootca1.der' }],
+    crlUris: [{ value: 'https://localhost:8081/dummy/crl/?type=crl&name=rootca1' }],
+    ocspUris: [{ value: 'https://localhost:8080/ocsp/responder1' }],
+    // 高级配置
+    snSize: 20,
+    status: 'active'
   },
   importForm: {
     name: '',
@@ -182,7 +305,16 @@ const { queryParams, selfForm, importForm } = toRefs(data);
 
 const selfRules = {
   name: [{ required: true, message: '请输入证书名称', trigger: 'blur' }],
-  profileId: [{ required: true, message: '请选择证书模板', trigger: 'change' }]
+  profileId: [{ required: true, message: '请选择证书模板', trigger: 'change' }],
+  password: [{ required: true, message: '请输入签名器密码', trigger: 'blur' }],
+  keyIndex: [
+    { required: true, message: '请输入密钥索引', trigger: 'blur' },
+    { type: 'number', message: '必须为正整数', trigger: 'blur', min: 1 }
+  ],
+  validity: [
+    { required: true, message: '请输入最大有效期', trigger: 'blur' },
+    { type: 'number', message: '必须为正整数', trigger: 'blur', min: 1 }
+  ]
 };
 
 const importRules = {
@@ -376,16 +508,21 @@ async function onProfileChange(profileId: any) {
     const conf = typeof profile.conf === 'string' ? JSON.parse(profile.conf) : profile.conf;
 
     if (conf) {
-      // 1. 设置有效期
+      // 1. 设置模板名称
+      selfForm.value.rootcaProfileName = profile.name || '';
+
+      // 2. 设置有效期
       if (conf.validity) {
         const v = conf.validity;
-        const val = parseInt(v.replace(/\D/g, ''));
+        const unit = v.slice(-1);
+        const val = parseInt(v.slice(0, -1));
         if (!isNaN(val)) {
           selfForm.value.validity = val;
+          selfForm.value.validityUnit = unit || 'y';
         }
       }
 
-      // 2. 设置可选算法
+      // 3. 设置可选算法
       if (conf.keyAlgorithms && Array.isArray(conf.keyAlgorithms)) {
         availableAlgos.value = conf.keyAlgorithms.map((a: any) => typeof a === 'string' ? a : (a.name || a.type));
         if (availableAlgos.value.length > 0) {
@@ -393,7 +530,7 @@ async function onProfileChange(profileId: any) {
         }
       }
 
-      // 3. 设置主题项
+      // 4. 设置主题项
       if (conf.subject) {
         const items: any[] = [];
         conf.subject.forEach((rdn: any) => {
@@ -417,6 +554,36 @@ async function onProfileChange(profileId: any) {
         });
         selfForm.value.subjectItems = sortSubjectItems(items);
       }
+
+      // 5. 设置CRL配置
+      if (conf.crlControl) {
+        if (conf.crlControl.intervalHours) {
+          selfForm.value.crlIntervalHours = conf.crlControl.intervalHours;
+        }
+        if (conf.crlControl.fullIntervals) {
+          selfForm.value.crlFullIntervals = conf.crlControl.fullIntervals;
+        }
+        if (conf.crlControl.overlap) {
+          selfForm.value.crlOverlap = conf.crlControl.overlap;
+        }
+        if (conf.crlControl.intervalTime) {
+          selfForm.value.crlIntervalTime = conf.crlControl.intervalTime;
+        }
+        if (conf.crlControl.nextCrlNumber) {
+          selfForm.value.nextCrlNo = conf.crlControl.nextCrlNumber;
+        }
+      }
+
+      // 6. 设置URI配置
+      if (conf.caCertUris && Array.isArray(conf.caCertUris) && conf.caCertUris.length > 0) {
+        selfForm.value.cacertUris = conf.caCertUris.map((uri: string) => ({ value: uri }));
+      }
+      if (conf.crlUris && Array.isArray(conf.crlUris) && conf.crlUris.length > 0) {
+        selfForm.value.crlUris = conf.crlUris.map((uri: string) => ({ value: uri }));
+      }
+      if (conf.ocspUris && Array.isArray(conf.ocspUris) && conf.ocspUris.length > 0) {
+        selfForm.value.ocspUris = conf.ocspUris.map((uri: string) => ({ value: uri }));
+      }
     }
   } catch (error) {
     console.error('加载模板详情失败', error);
@@ -429,9 +596,27 @@ function reset() {
   selfForm.value = {
     name: '',
     profileId: undefined,
+    rootcaProfileName: '',
     subjectItems: [],
+    keyAlgorithm: 'SM2',
+    signerType: 'PKCS12',
+    keyIndex: 1,
+    password: '',
     validity: 10,
-    keyAlgorithm: 'RSA2048'
+    validityUnit: 'y',
+    expirationPeriod: 365,
+    keepExpiredCertDays: -1,
+    validityMode: 'cutoff',
+    crlIntervalHours: 24,
+    crlFullIntervals: 90,
+    crlOverlap: '90d',
+    crlIntervalTime: '01:00',
+    nextCrlNo: 2,
+    cacertUris: [{ value: 'https://myorg.org/rootca1.der' }],
+    crlUris: [{ value: 'https://localhost:8081/dummy/crl/?type=crl&name=rootca1' }],
+    ocspUris: [{ value: 'https://localhost:8080/ocsp/responder1' }],
+    snSize: 20,
+    status: 'active'
   };
   importForm.value = {
     name: '',
@@ -469,21 +654,49 @@ const handleFileRemove: UploadProps['onRemove'] = () => {
 /** 提交按钮 */
 function submitForm() {
   if (activeTab.value === 'self') {
-    selfFormRef.value?.validate((valid) => {
+    selfFormRef.value?.validate(async (valid: boolean) => {
       if (valid) {
-        // 构建Subject字符串
-        const subject = selfForm.value.subjectItems
-          .filter((item: any) => item.value)
-          .map((item: any) => {
-            const key = typeMapping[item.type as keyof typeof typeMapping]?.key || item.type;
-            return `${key}=${item.value}`;
-          })
-          .join(',');
+        loading.value = true;
+        try {
+          const reqData = {
+            name: selfForm.value.name,
+            rootcaProfile: selfForm.value.rootcaProfileName,
+            subject: selfForm.value.subjectItems
+              .filter((item: any) => item.value)
+              .map((item: any) => {
+                const key = typeMapping[item.type as keyof typeof typeMapping]?.key || item.type;
+                return `${key}=${item.value}`;
+              })
+              .join(','),
+            algo: selfForm.value.keyAlgorithm,
+            signerType: selfForm.value.signerType,
+            keyIndex: selfForm.value.keyIndex,
+            password: selfForm.value.password,
+            maxValidity: selfForm.value.validity + selfForm.value.validityUnit,
+            expirationPeriod: selfForm.value.expirationPeriod,
+            keepExpiredCertDays: selfForm.value.keepExpiredCertDays,
+            validityModeS: selfForm.value.validityMode === 'cutoff' ? 'CUTOFF' : (selfForm.value.validityMode === 'strict' ? 'STRICT' : 'LAX'),
+            caStatus: selfForm.value.status,
+            snLen: selfForm.value.snSize,
+            nextCrlNumber: selfForm.value.nextCrlNo,
+            caCertUris: selfForm.value.cacertUris.map((u: any) => u.value).filter((v: any) => v),
+            crlUris: selfForm.value.crlUris.map((u: any) => u.value).filter((v: any) => v),
+            ocspUris: selfForm.value.ocspUris.map((u: any) => u.value).filter((v: any) => v)
+          };
 
-        console.log('Submit Self Signed:', { ...selfForm.value, subject });
-        ElMessage.success('根CA证书创建成功');
-        open.value = false;
-        getList();
+          const res = await genRootCa({ co: reqData });
+          if (res.data) {
+            ElMessage.success('证书生成成功');
+            open.value = false;
+            getList();
+          }
+        } catch (error: any) {
+          console.error('证书生成失败', error);
+          const errMsg = error.response?.data?.msg || error.message || '证书生成失败';
+          ElMessage.error(errMsg);
+        } finally {
+          loading.value = false;
+        }
       }
     });
   } else {
@@ -493,7 +706,7 @@ function submitForm() {
           ElMessage.error('请上传证书文件');
           return;
         }
-        // 调用导入二级根证书API
+        // TODO: 调用导入二级根证书API
         console.log('Submit Import:', importForm.value);
         ElMessage.success('子CA证书导入成功');
         open.value = false;
@@ -502,6 +715,14 @@ function submitForm() {
     });
   }
 }
+
+const addUri = (field: 'cacertUris' | 'crlUris' | 'ocspUris') => {
+  selfForm.value[field].push({ value: '' });
+};
+
+const removeUri = (field: 'cacertUris' | 'crlUris' | 'ocspUris', index: number) => {
+  selfForm.value[field].splice(index, 1);
+};
 
 /** 查看详情 */
 function handleView(row: any) {
