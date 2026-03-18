@@ -18,6 +18,14 @@ export interface ProfileForm {
   type?: string;
   certLevel?: string;
   description?: string;
+  metadata?: {
+    category: string;
+    details: string;
+  };
+  maxSize?: number;
+  validity?: string;
+  notBeforeTime?: string;
+  keyAlgorithms?: string[];
   conf?: string;
   subjectItems?: any[];
   extensions?: any[];

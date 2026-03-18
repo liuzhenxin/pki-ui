@@ -62,7 +62,7 @@ export function exportRequestor(ids: (string | number)[]): Promise<any> {
   return request({
     url: '/ca/api/v1/requestors/export',
     method: 'post',
-    data: ids,
+    data: { ids: ids }, // 使用 RequestorExportCmd 格式
     responseType: 'blob'
   }) as any;
 }

@@ -11,8 +11,6 @@
 <!--          <template #prefix><svg-icon icon-class="company" class="el-input__icon input-icon" /></template>-->
 <!--        </el-select>-->
       </el-form-item>
-      <el-input v-model="loginForm.tenantId" type="text" size="large" auto-complete="off" >
-      </el-input>
       <el-form-item prop="username">
         <el-input v-model="loginForm.username" type="text" size="large" auto-complete="off" :placeholder="proxy.$t('login.username')">
           <template #prefix><svg-icon icon-class="user" class="el-input__icon input-icon" /></template>

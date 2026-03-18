@@ -1,82 +1,85 @@
 <template>
   <div class="p-2">
+    <transition :enter-active-class="proxy?.animate.searchAnimate.enter" :leave-active-class="proxy?.animate.searchAnimate.leave">
+      <div v-show="showSearch" class="mb-10px">
+        <el-card shadow="hover">
+          <el-form ref="queryFormRef" :model="queryParams" :inline="true">
+            <el-form-item label="请求者名称" prop="name">
+              <el-input v-model="queryParams.name" placeholder="请输入请求者名称" clearable @keyup.enter="handleQuery" />
+            </el-form-item>
+            <el-form-item label="请求者类型" prop="type">
+              <el-select v-model="queryParams.type" placeholder="请求者类型" clearable>
+                <el-option label="API" value="API" />
+                <el-option label="CMP" value="CMP" />
+                <el-option label="ACME" value="ACME" />
+              </el-select>
+            </el-form-item>
+            <el-form-item>
+              <el-button type="primary" icon="Search" @click="handleQuery">搜索</el-button>
+              <el-button icon="Refresh" @click="resetQuery">重置</el-button>
+            </el-form-item>
+          </el-form>
+        </el-card>
+      </div>
+    </transition>
+
     <el-card shadow="hover">
-      <!-- 查询表单 -->
-      <el-form :model="queryParams" ref="queryFormRef" :inline="true" v-show="showSearch">
-        <el-form-item label="请求者名称" prop="name">
-          <el-input v-model="queryParams.name" placeholder="请输入请求者名称" clearable style="width: 200px" @keyup.enter="handleQuery" />
-        </el-form-item>
-        <el-form-item label="请求者类型" prop="type">
-          <el-select v-model="queryParams.type" placeholder="请求者类型" clearable style="width: 200px">
-            <el-option label="API" value="API" />
-            <el-option label="LDAP" value="LDAP" />
-            <el-option label="DATABASE" value="DATABASE" />
-          </el-select>
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary" :icon="Search" @click="handleQuery">搜索</el-button>
-          <el-button :icon="Refresh" @click="resetQuery">重置</el-button>
-        </el-form-item>
-      </el-form>
+      <template #header>
+        <el-row :gutter="10">
+          <el-col :span="1.5">
+            <el-button type="primary" plain icon="Plus" @click="handleAdd">新增</el-button>
+          </el-col>
+          <el-col :span="1.5">
+            <el-button type="success" plain icon="Upload" @click="handleImport">导入</el-button>
+          </el-col>
+          <el-col :span="1.5">
+            <el-button type="warning" plain icon="Download" @click="handleExport">导出</el-button>
+          </el-col>
+          <el-col :span="1.5">
+            <el-button type="danger" plain icon="Delete" :disabled="multiple" @click="handleDelete()">删除</el-button>
+          </el-col>
+          <right-toolbar v-model:show-search="showSearch" @query-table="getList"></right-toolbar>
+        </el-row>
+      </template>
 
-      <!-- 操作按钮 -->
-      <el-row :gutter="10" class="mb8">
-        <el-col :span="1.5">
-          <el-button type="primary" plain :icon="Plus" @click="handleAdd" v-hasPermi="['sys:requestor:save']">新增 </el-button>
-        </el-col>
-        <el-col :span="1.5">
-          <el-button type="success" plain :icon="Upload" @click="handleImport" v-hasPermi="['sys:requestor:import']"> 导入 </el-button>
-        </el-col>
-        <el-col :span="1.5">
-          <el-button type="warning" plain :icon="Download" @click="handleExport" v-hasPermi="['sys:requestor:export']"> 导出 </el-button>
-        </el-col>
-        <el-col :span="1.5">
-          <el-button type="danger" plain :icon="Delete" :disabled="multiple" @click="handleDelete()" v-hasPermi="['sys:requestor:remove']"
-            >删除
-          </el-button>
-        </el-col>
-        <right-toolbar v-model:showSearch="showSearch" @queryTable="getList"></right-toolbar>
-      </el-row>
-
-      <!-- 数据表格 -->
-      <el-table v-loading="loading" :data="requestorList" border @selection-change="handleSelectionChange">
-        <el-table-column type="selection" width="55" align="center" />
-        <el-table-column type="index" label="序号" width="60" align="center" />
-        <el-table-column label="请求者名称" align="center" prop="name" />
-        <el-table-column label="请求者类型" align="center" prop="type">
+      <el-table v-loading="loading" border :data="requestorList" @selection-change="handleSelectionChange">
+        <el-table-column type="selection" width="50" align="center" />
+        <el-table-column type="index" label="序号" width="80" align="center" />
+        <el-table-column label="请求者名称" align="center" prop="name" :show-overflow-tooltip="true" />
+        <el-table-column label="请求者类型" align="center" prop="type" width="120">
           <template #default="scope">
             <el-tag v-if="scope.row.type === 'API'" type="primary">API</el-tag>
-            <el-tag v-else-if="scope.row.type === 'LDAP'" type="success">LDAP</el-tag>
-            <el-tag v-else-if="scope.row.type === 'DATABASE'" type="warning">DATABASE</el-tag>
-            <el-tag v-else>{{ scope.row.type || '-' }}</el-tag>
+            <el-tag v-else-if="scope.row.type === 'CMP'" type="success">CMP</el-tag>
+            <el-tag v-else-if="scope.row.type === 'ACME'" type="warning">ACME</el-tag>
+            <el-tag v-else type="info">{{ scope.row.type || '-' }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="证书" align="center" prop="conf" :show-overflow-tooltip="true" min-width="200">
+        <el-table-column label="证书" align="center" prop="conf" width="100">
           <template #default="scope">
-            <span v-if="scope.row.conf">{{ scope.row.conf.substring(0, 50) }}{{ scope.row.conf.length > 50 ? '...' : '' }}</span>
-            <span v-else class="text-gray-400">-</span>
+            <el-button v-if="scope.row.conf" link type="success" @click="handleViewCert(scope.row)">
+              <el-icon :size="20"><Document /></el-icon>
+            </el-button>
+            <span v-else>-</span>
           </template>
         </el-table-column>
-        <el-table-column label="创建时间" align="center" prop="createTime" width="180" />
-        <el-table-column label="操作" align="center" width="240" fixed="right" class-name="small-padding fixed-width">
+        <el-table-column label="创建时间" align="center" prop="createTime" width="180">
+          <template #default="scope">
+            <span>{{ scope.row.createTime }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" fixed="right" width="160" class-name="small-padding fixed-width">
           <template #default="scope">
             <el-tooltip content="修改" placement="top">
-              <el-button v-hasPermi="['sys:requestor:modify']" link type="primary" icon="Edit" @click="handleUpdate(scope.row)"></el-button>
-            </el-tooltip>
-            <el-tooltip content="查看证书" placement="top">
-              <el-button link type="success" icon="View" @click="handleViewCert(scope.row)" v-if="scope.row.conf"></el-button>
+              <el-button link type="primary" icon="Edit" @click="handleUpdate(scope.row)"></el-button>
             </el-tooltip>
             <el-tooltip content="删除" placement="top">
-              <el-button v-hasPermi="['sys:requestor:remove']" link type="primary" icon="Delete" @click="handleDelete(scope.row)"></el-button>
+              <el-button link type="danger" icon="Delete" @click="handleDelete(scope.row)"></el-button>
             </el-tooltip>
           </template>
         </el-table-column>
       </el-table>
 
-      <!-- 分页 -->
-      <div class="flex justify-center mt-4">
-        <pagination v-show="total > 0" :total="total" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" @pagination="getList" />
-      </div>
+      <pagination v-show="total > 0" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" :total="total" @pagination="getList" />
     </el-card>
 
     <!-- 添加/修改对话框 -->
@@ -88,8 +91,8 @@
         <el-form-item label="请求者类型" prop="type">
           <el-select v-model="form.type" placeholder="请选择请求者类型" style="width: 100%">
             <el-option label="API" value="API" />
-            <el-option label="LDAP" value="LDAP" />
-            <el-option label="DATABASE" value="DATABASE" />
+            <el-option label="CMP" value="CMP" />
+            <el-option label="ACME" value="ACME" />
           </el-select>
         </el-form-item>
         <el-form-item label="证书" prop="conf">
@@ -106,7 +109,7 @@
     </el-dialog>
 
     <!-- 查看证书对话框 -->
-    <el-dialog title="查看证书" v-model="certOpen" width="800px" append-to-body>
+    <el-dialog title="查看证书" v-model="certOpen" width="900px" append-to-body>
       <X509Cert v-if="currentCert" :certPem="currentCert" />
       <el-empty v-else description="暂无证书信息" />
     </el-dialog>
@@ -145,10 +148,10 @@
   </div>
 </template>
 
-<script setup name="Requestor" lang="ts">
-import { ref, reactive, toRefs } from 'vue';
+<script setup name="CaRequestor" lang="ts">
+import { ref, reactive, toRefs, getCurrentInstance } from 'vue';
 import { ElMessage, ElMessageBox, type UploadInstance, type UploadProgressEvent, type UploadRawFile } from 'element-plus';
-import { Search, Refresh, Plus, Upload, Download, Edit, Delete, UploadFilled, View } from '@element-plus/icons-vue';
+import { Search, Refresh, Plus, Upload, Download, Edit, Delete, UploadFilled, Document } from '@element-plus/icons-vue';
 import { list as listProfile } from '@/api/ca/profile';
 import { pageRequestor, getRequestor, saveRequestor, modifyRequestor, removeRequestor, importRequestor, exportRequestor } from '@/api/ca/requestor';
 import { RequestorForm, RequestorQuery } from '@/api/ca/requestor/types';
@@ -206,7 +209,7 @@ function getList() {
   loading.value = true;
   pageRequestor(queryParams)
     .then((response) => {
-      requestorList.value = response.data.rows || [];
+      requestorList.value = response.data.records || [];
       total.value = response.data.total || 0;
     })
     .finally(() => {
@@ -272,14 +275,17 @@ function handleUpdate(row: any) {
 function submitForm() {
   requestorFormRef.value?.validate((valid: boolean) => {
     if (valid) {
+      const commandData = {
+        co: form.value
+      };
       if (form.value.id) {
-        modifyRequestor(form.value).then(() => {
+        modifyRequestor(commandData).then(() => {
           ElMessage.success('修改成功');
           open.value = false;
           getList();
         });
       } else {
-        saveRequestor(form.value).then(() => {
+        saveRequestor(commandData).then(() => {
           ElMessage.success('新增成功');
           open.value = false;
           getList();
@@ -369,7 +375,21 @@ getList();
 </script>
 
 <style scoped lang="scss">
-.mb8 {
-  margin-bottom: 8px;
+.p-2 {
+  padding: 8px;
+}
+
+.mb-10px {
+  margin-bottom: 10px;
+}
+
+.small-padding {
+  .cell {
+    padding: 0 5px;
+  }
+}
+
+.fixed-width {
+  min-width: 180px;
 }
 </style>

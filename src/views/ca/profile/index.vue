@@ -3,6 +3,7 @@ import { ref, reactive, toRefs, getCurrentInstance, ComponentInternalInstance, n
 import { ElMessage, ElMessageBox, FormInstance, FormRules, UploadProps, UploadUserFile } from 'element-plus'
 import { UploadFilled, View, Plus, Delete, Top, Bottom } from '@element-plus/icons-vue'
 import { to } from 'await-to-js'
+import { useRouter } from 'vue-router'
 import {
   pageProfile,
   getProfile,
@@ -13,8 +14,10 @@ import {
   exportProfile
 } from '@/api/ca/profile'
 import { ProfileForm, ProfileQuery } from '@/api/ca/profile/types'
+import CertProfile from '@/components/CertProfile/index.vue'
 
 const { proxy } = getCurrentInstance() as ComponentInternalInstance
+const router = useRouter()
 
 const profileList = ref<any[]>([])
 const loading = ref(true)
@@ -36,7 +39,8 @@ const dialog = reactive({
 
 const detailDialog = reactive({
   visible: false,
-  data: null as any
+  data: null as any,
+  confData: null as any
 })
 
 const uploadDialog = reactive({
@@ -142,9 +146,7 @@ function handleSelectionChange(selection: any[]) {
 
 /** 新增按钮操作 */
 function handleAdd() {
-  reset()
-  dialog.visible = true
-  dialog.title = '新增证书模板'
+  router.push('/ca/profile/form')
 }
 
 /** 删除按钮操作 */
@@ -304,24 +306,12 @@ function addCommonRdn(common: { oid: string; description: string }) {
 }
 
 /** 修改按钮操作 */
-async function handleUpdate(row?: any) {
-  reset()
+function handleUpdate(row?: any) {
   const id = row?.id || ids.value[0]
-  try {
-    const { data } = await getProfile(id)
-    dialog.visible = true
-    dialog.title = '修改证书模板'
-    Object.assign(form.value, data)
-
-    // 解析conf字段
-    if (data.conf) {
-      const conf = typeof data.conf === 'string' ? JSON.parse(data.conf) : data.conf
-      form.value.subjectItems = conf.subject?.rdns || []
-      form.value.extensions = conf.extensions || []
-    }
-  } catch (error) {
-    ElMessage.error('获取证书模板信息失败')
-  }
+  router.push({
+    path: '/ca/profile/form',
+    query: { id }
+  })
 }
 
 /** 详情按钮操作 */
@@ -333,8 +323,7 @@ async function handleDetail(row: any) {
     // 解析conf字段
     if (data.conf) {
       const conf = typeof data.conf === 'string' ? JSON.parse(data.conf) : data.conf
-      detailDialog.data.subjectItems = conf.subject?.rdns || []
-      detailDialog.data.extensions = conf.extensions || []
+      detailDialog.confData = conf
     }
     
     detailDialog.visible = true
@@ -666,7 +655,7 @@ getList()
     </el-dialog>
 
     <!-- 查看详情对话框 -->
-    <el-dialog v-model="detailDialog.visible" title="证书模板详情" width="900px" append-to-body>
+    <el-dialog v-model="detailDialog.visible" title="证书模板详情" width="1000px" append-to-body>
       <el-descriptions :column="2" border v-if="detailDialog.data">
         <el-descriptions-item label="模板名称">{{ detailDialog.data.name }}</el-descriptions-item>
         <el-descriptions-item label="模板类型">
@@ -678,53 +667,7 @@ getList()
         <el-descriptions-item label="描述" :span="2">{{ detailDialog.data.description || '-' }}</el-descriptions-item>
       </el-descriptions>
 
-      <el-divider content-position="left">主题信息</el-divider>
-      <div v-if="detailDialog.data.subjectItems && detailDialog.data.subjectItems.length > 0" class="detail-section">
-        <el-table :data="detailDialog.data.subjectItems" border size="small">
-          <el-table-column type="index" label="序号" width="60" align="center" />
-          <el-table-column label="OID" prop="type.oid" width="200" />
-          <el-table-column label="描述" prop="type.description" width="150" />
-          <el-table-column label="最小出现次数" prop="minOccurs" width="120" align="center">
-            <template #default="scope">
-              {{ scope.row.minOccurs !== undefined ? scope.row.minOccurs : 1 }}
-            </template>
-          </el-table-column>
-          <el-table-column label="最大出现次数" prop="maxOccurs" width="120" align="center">
-            <template #default="scope">
-              {{ scope.row.maxOccurs !== undefined ? scope.row.maxOccurs : 1 }}
-            </template>
-          </el-table-column>
-        </el-table>
-      </div>
-      <el-empty v-else description="暂无主题信息" />
-
-      <el-divider content-position="left">扩展信息</el-divider>
-      <div v-if="detailDialog.data.extensions && detailDialog.data.extensions.length > 0" class="detail-section">
-        <el-table :data="detailDialog.data.extensions" border size="small">
-          <el-table-column type="index" label="序号" width="60" align="center" />
-          <el-table-column label="扩展类型" prop="type" width="200">
-            <template #default="scope">
-              {{ getExtensionLabel(scope.row.type) }}
-            </template>
-          </el-table-column>
-          <el-table-column label="是否必须" prop="required" width="100" align="center">
-            <template #default="scope">
-              <el-tag :type="scope.row.required ? 'success' : 'info'" size="small">
-                {{ scope.row.required ? '是' : '否' }}
-              </el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column label="是否关键" prop="critical" width="100" align="center">
-            <template #default="scope">
-              <el-tag :type="scope.row.critical ? 'warning' : 'info'" size="small">
-                {{ scope.row.critical ? '是' : '否' }}
-              </el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column label="配置" prop="config" :show-overflow-tooltip="true" />
-        </el-table>
-      </div>
-      <el-empty v-else description="暂无扩展信息" />
+      <CertProfile v-if="detailDialog.confData" :profile="detailDialog.confData" />
 
       <template #footer>
         <div class="dialog-footer">

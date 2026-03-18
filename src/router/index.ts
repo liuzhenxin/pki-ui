@@ -95,6 +95,13 @@ export const constantRoutes: RouteRecordRaw[] = [
     name: 'AuthorizeProfile',
     hidden: true,
     meta: { title: '授权模板' }
+  },
+  {
+    path: '/ca/profile/form',
+    component: () => import('@/views/ca/profile/form.vue'),
+    name: 'ProfileForm',
+    hidden: true,
+    meta: { title: '证书模板表单' }
   }
 ];
 
