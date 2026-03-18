@@ -9,11 +9,8 @@
       </template>
       <el-descriptions-item label="类别">{{ profile.metadata?.category }}</el-descriptions-item>
       <el-descriptions-item label="详情">{{ profile.metadata?.details }}</el-descriptions-item>
-      <el-descriptions-item label="证书级别">{{ profile.certLevel }}</el-descriptions-item>
-      <el-descriptions-item label="最大大小">{{ profile.maxSize }}</el-descriptions-item>
       <el-descriptions-item label="有效期">{{ profile.validity }}</el-descriptions-item>
       <el-descriptions-item label="生效时间">{{ profile.notBeforeTime }}</el-descriptions-item>
-      <el-descriptions-item label="密钥对生成">{{ profile.keypairGeneration }}</el-descriptions-item>
       <el-descriptions-item label="密钥算法">
         <el-tag v-for="algo in profile.keyAlgorithms" :key="algo" class="mr-1" effect="plain">{{ algo }}</el-tag>
       </el-descriptions-item>

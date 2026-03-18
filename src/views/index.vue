@@ -255,7 +255,72 @@
           <el-col :xs="24" :sm="24" :md="16">
             <h4 style="margin: 0 0 15px 0; font-size: 16px; color: #303133; font-weight: 600;">更新日志</h4>
             <el-collapse accordion>
-              <el-collapse-item title="v4.0.1 - 2025-02-28" name="1">
+              <el-collapse-item title="v4.1.2 - 2025-11-25" name="1">
+                <ol>
+                  <template v-if="isKMC">
+                    <li>新增：密钥库状态监控面板，实时显示备用、在用、历史密钥库状态</li>
+                    <li>优化：密钥分发流程，增强分发安全性</li>
+                    <li>修复：密钥备份恢复功能的问题</li>
+                  </template>
+                  <template v-else>
+                    <li>新增：请求者管理功能，支持API/LDAP/DATABASE三种类型</li>
+                    <li>新增：请求者证书管理，支持证书PEM数据的查看和管理</li>
+                    <li>新增：根证书授权模板功能，支持模板授权管理</li>
+                    <li>优化：证书模板管理，支持RootCA类型模板筛选</li>
+                    <li>优化：业务管理员管理，支持证书签发和USBKey集成</li>
+                    <li>修复：证书状态显示问题</li>
+                  </template>
+                </ol>
+              </el-collapse-item>
+              <el-collapse-item title="v4.1.1 - 2025-08-20" name="2">
+                <ol>
+                  <template v-if="isKMC">
+                    <li>优化：密钥生成算法，提高生成效率</li>
+                    <li>新增：密钥使用情况统计报表</li>
+                    <li>修复：密钥库容量预警不准确的问题</li>
+                  </template>
+                  <template v-else>
+                    <li>新增：证书吊销列表（CRL）管理功能</li>
+                    <li>新增：CRL导入导出功能</li>
+                    <li>优化：证书模板管理界面，使用标签页展示基本信息、主题信息、扩展信息</li>
+                    <li>优化：证书主题组件，支持动态配置字段</li>
+                    <li>修复：证书模板保存时的数据格式问题</li>
+                  </template>
+                </ol>
+              </el-collapse-item>
+              <el-collapse-item title="v4.1.0 - 2025-05-10" name="3">
+                <ol>
+                  <template v-if="isKMC">
+                    <li>新增：CA机构管理功能，支持注册、更新、冻结、解冻操作</li>
+                    <li>新增：密钥更新自动化流程</li>
+                    <li>优化：密钥备份策略，支持多级备份</li>
+                    <li>修复：审计日志记录不完整的问题</li>
+                  </template>
+                  <template v-else>
+                    <li>新增：证书管理功能，支持证书申请、签发、查询、吊销</li>
+                    <li>新增：证书模板管理，支持自定义证书模板配置</li>
+                    <li>新增：X509证书解析组件，支持证书详细信息查看</li>
+                    <li>新增：证书主题组件，支持证书主题信息配置</li>
+                    <li>优化：证书状态查询（OCSP）性能</li>
+                  </template>
+                </ol>
+              </el-collapse-item>
+              <el-collapse-item title="v4.0.2 - 2025-03-15" name="4">
+                <ol>
+                  <template v-if="isKMC">
+                    <li>优化：三权分立权限管理，增强系统安全性</li>
+                    <li>新增：密钥分发日志记录</li>
+                    <li>修复：密钥恢复失败的问题</li>
+                  </template>
+                  <template v-else>
+                    <li>新增：根证书管理功能，支持根证书创建和管理</li>
+                    <li>新增：根证书初始化功能</li>
+                    <li>优化：CA系统整体架构，提升系统稳定性</li>
+                    <li>修复：用户权限控制问题</li>
+                  </template>
+                </ol>
+              </el-collapse-item>
+              <el-collapse-item title="v4.0.1 - 2025-01-20" name="5">
                 <ol>
                   <template v-if="isKMC">
                     <li>KMC 密钥管理中心初始版本发布</li>

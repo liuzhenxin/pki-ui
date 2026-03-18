@@ -50,6 +50,7 @@
         <template #default="scope">
           <el-button link type="primary" icon="View" @click="handleView(scope.row)">详情</el-button>
           <el-button link type="primary" icon="Download" @click="handleDownload(scope.row)">下载</el-button>
+          <el-button link type="success" icon="Stamp" @click="handleAuthorizeProfile(scope.row)">授权模板</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -232,9 +233,10 @@
 </template>
 
 <script setup name="RootCert" lang="ts">
-import { ref, reactive, toRefs, getCurrentInstance, ComponentInternalInstance } from 'vue';
+import { ref, reactive, toRefs, getCurrentInstance, ComponentInternalInstance, watch } from 'vue';
+import { useRouter } from 'vue-router';
 import { ElMessage, FormInstance, UploadInstance, UploadProps } from 'element-plus';
-import { ArrowDown, Search, Refresh, View, Download, Plus, Minus } from '@element-plus/icons-vue';
+import { ArrowDown, Search, Refresh, View, Download, Plus, Minus, Stamp } from '@element-plus/icons-vue';
 import X509Cert from '@/components/X509Cert/index.vue';
 import CertSubject, { typeMapping, sortSubjectItems } from '@/components/CertSubject/index.vue';
 import { listProfile, getProfile } from '@/api/ca/profile';
@@ -242,6 +244,7 @@ import { listRootCa, genRootCa } from '@/api/ca/root';
 import { X509 } from 'jsrsasign';
 
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
+const router = useRouter();
 
 const loading = ref(false);
 const showSearch = ref(true);
@@ -485,27 +488,58 @@ async function handleCommand(command: string) {
 
 /** 加载RootCA模板列表 */
 async function loadRootCaProfiles() {
+  console.log('开始加载根证书模板...');
+  
   try {
-    const res = await listProfile();
-    // 假设后端返回的数据结构，过滤出RootCA类型的模板
-    rootCaProfiles.value = res.data.filter((p: any) => p.type === 'RootCA' || p.certLevel === 'RootCA');
-    if (rootCaProfiles.value.length > 0) {
-      // 默认选中第一个
-      selfForm.value.profileId = (rootCaProfiles.value[0] as any).id;
-      await onProfileChange(selfForm.value.profileId);
+    // 调用listProfile API，传递type参数筛选RootCA模板
+    console.log('调用listProfile API，type=RootCA');
+    const res = await listProfile({ type: 'RootCA' });
+    console.log('listProfile响应:', res);
+    
+    const profiles = res.data || [];
+    console.log('解析后的模板列表:', profiles);
+    console.log('模板数量:', profiles.length);
+    
+    if (profiles.length === 0) {
+      console.warn('没有找到RootCA类型的模板');
+      ElMessage.warning('没有找到可用的根证书模板');
+      return;
     }
-  } catch (error) {
-    ElMessage.error('加载证书模板失败');
+    
+    // 设置模板列表
+    rootCaProfiles.value = profiles;
+    console.log('设置rootCaProfiles.value:', rootCaProfiles.value);
+    console.log('rootCaProfiles.value.length:', rootCaProfiles.value.length);
+    
+    // 默认选中第一个
+    const firstProfile = profiles[0];
+    console.log('默认选中模板:', firstProfile);
+    selfForm.value.profileId = firstProfile.id;
+    
+    // 调用模板变更处理
+    console.log('开始调用onProfileChange');
+    await onProfileChange(selfForm.value.profileId);
+    console.log('onProfileChange调用完成');
+    
+  } catch (error: any) {
+    console.error('加载根证书模板失败', error);
+    console.error('错误详情:', error.response?.data || error.message);
+    ElMessage.error('加载根证书模板失败: ' + (error.response?.data?.msg || error.message));
   }
 }
 
 /** 模板变更处理 */
 async function onProfileChange(profileId: any) {
   if (!profileId) return;
+  console.log('开始加载模板，profileId:', profileId);
+  
   try {
     const res = await getProfile(profileId);
     const profile = res.data;
+    console.log('获取到的profile数据:', profile);
+    
     const conf = typeof profile.conf === 'string' ? JSON.parse(profile.conf) : profile.conf;
+    console.log('解析后的conf:', conf);
 
     if (conf) {
       // 1. 设置模板名称
@@ -531,9 +565,11 @@ async function onProfileChange(profileId: any) {
       }
 
       // 4. 设置主题项
-      if (conf.subject) {
+      if (conf.subject && Array.isArray(conf.subject) && conf.subject.length > 0) {
+        console.log('开始解析主题项，conf.subject:', conf.subject);
         const items: any[] = [];
         conf.subject.forEach((rdn: any) => {
+          console.log('处理RDN:', rdn);
           let compType = rdn.type.toLowerCase();
           for (const [type, meta] of Object.entries(typeMapping)) {
             if (meta.key.toLowerCase() === rdn.type.toLowerCase() || type.toLowerCase() === rdn.type.toLowerCase()) {
@@ -553,6 +589,16 @@ async function onProfileChange(profileId: any) {
           }
         });
         selfForm.value.subjectItems = sortSubjectItems(items);
+        console.log('设置后的subjectItems:', selfForm.value.subjectItems);
+      } else {
+        console.warn('模板中没有subject配置，使用默认主题项');
+        // 如果没有subject配置，使用默认的主题项
+        selfForm.value.subjectItems = sortSubjectItems([
+          { type: 'country', value: 'CN', minOccurs: 1, maxOccurs: 1 },
+          { type: 'organization', value: '业务部门', minOccurs: 1, maxOccurs: 1 },
+          { type: 'organizationalUnit', value: '业务管理员', minOccurs: 0, maxOccurs: 1 },
+          { type: 'commonName', value: 'DemoCA', minOccurs: 1, maxOccurs: 1 }
+        ]);
       }
 
       // 5. 设置CRL配置
@@ -584,10 +630,20 @@ async function onProfileChange(profileId: any) {
       if (conf.ocspUris && Array.isArray(conf.ocspUris) && conf.ocspUris.length > 0) {
         selfForm.value.ocspUris = conf.ocspUris.map((uri: string) => ({ value: uri }));
       }
+    } else {
+      console.warn('模板conf为空，使用默认配置');
     }
   } catch (error) {
     console.error('加载模板详情失败', error);
-    ElMessage.error('加载模板详情失败');
+    ElMessage.error('加载模板详情失败: ' + (error as any).message);
+    
+    // 使用默认的主题项
+    selfForm.value.subjectItems = sortSubjectItems([
+      { type: 'country', value: 'CN', minOccurs: 1, maxOccurs: 1 },
+      { type: 'organization', value: '业务部门', minOccurs: 1, maxOccurs: 1 },
+      { type: 'organizationalUnit', value: '业务管理员', minOccurs: 0, maxOccurs: 1 },
+      { type: 'commonName', value: 'DemoCA', minOccurs: 1, maxOccurs: 1 }
+    ]);
   }
 }
 
@@ -738,6 +794,14 @@ function handleDownload(row: any) {
   link.href = window.URL.createObjectURL(blob);
   link.download = `${row.name}.crt`;
   link.click();
+}
+
+/** 授权模板按钮操作 */
+function handleAuthorizeProfile(row: any) {
+  router.push({
+    path: '/ca/root/authorize-profile',
+    query: { id: row.id }
+  });
 }
 
 getList();

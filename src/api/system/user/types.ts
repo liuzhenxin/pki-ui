@@ -55,6 +55,8 @@ export interface UserForm {
   remark?: string;
   postIds: string[];
   roleIds: string[];
+  certSn?: string;  // 证书序列号
+  cert?: string;    // 证书内容
 }
 
 export interface UserInfoVO {

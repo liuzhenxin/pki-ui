@@ -88,6 +88,13 @@ export const constantRoutes: RouteRecordRaw[] = [
         meta: { title: '个人中心', icon: 'user' }
       }
     ]
+  },
+  {
+    path: '/ca/root/authorize-profile',
+    component: () => import('@/views/ca/root/authorize-profile.vue'),
+    name: 'AuthorizeProfile',
+    hidden: true,
+    meta: { title: '授权模板' }
   }
 ];
 
