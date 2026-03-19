@@ -415,12 +415,36 @@ async function submitForm() {
               }
 
               // 对于 KeyUsage，必须有 keyUsage 配置
-              if (ext.type === 'KeyUsage' && !ext.keyUsage) {
+              if (ext.type === 'KeyUsage') {
+                if (!ext.keyUsage) {
+                  return false
+                }
+                // 检查是否有任何 usages
+                if (ext.keyUsage.usages && Array.isArray(ext.keyUsage.usages)) {
+                  return ext.keyUsage.usages.length > 0
+                }
+                // 检查新的格式：required 和 optional
+                if (ext.keyUsage.required && Array.isArray(ext.keyUsage.required) ||
+                    ext.keyUsage.optional && Array.isArray(ext.keyUsage.optional)) {
+                  return (ext.keyUsage.required?.length || 0) + (ext.keyUsage.optional?.length || 0) > 0
+                }
                 return false
               }
 
               // 对于 ExtendedKeyUsage，必须有 extendedKeyUsage 配置
-              if (ext.type === 'ExtendedKeyUsage' && !ext.extendedKeyUsage) {
+              if (ext.type === 'ExtendedKeyUsage') {
+                if (!ext.extendedKeyUsage) {
+                  return false
+                }
+                // 检查是否有任何 usages
+                if (ext.extendedKeyUsage.usages && Array.isArray(ext.extendedKeyUsage.usages)) {
+                  return ext.extendedKeyUsage.usages.length > 0
+                }
+                // 检查新的格式：required 和 optional
+                if (ext.extendedKeyUsage.required && Array.isArray(ext.extendedKeyUsage.required) ||
+                    ext.extendedKeyUsage.optional && Array.isArray(ext.extendedKeyUsage.optional)) {
+                  return (ext.extendedKeyUsage.required?.length || 0) + (ext.extendedKeyUsage.optional?.length || 0) > 0
+                }
                 return false
               }
 
@@ -457,13 +481,41 @@ async function submitForm() {
               extConfig.critical = true
               extConfig.required = true
               extConfig.inRequest = 'optional'
-              extConfig.keyUsage = ext.keyUsage
+              // 将usages数组转换为required和optional数组格式
+              if (ext.keyUsage.usages && Array.isArray(ext.keyUsage.usages)) {
+                const required = ext.keyUsage.usages
+                  .filter((u: any) => u.required === true)
+                  .map((u: any) => u.value)
+                const optional = ext.keyUsage.usages
+                  .filter((u: any) => u.required !== true)
+                  .map((u: any) => u.value)
+                extConfig.keyUsage = {
+                  required: required,
+                  optional: optional
+                }
+              } else {
+                extConfig.keyUsage = ext.keyUsage
+              }
             }
 
             // 对于ExtendedKeyUsage，添加extendedKeyUsage配置
             if (ext.type === 'ExtendedKeyUsage' && ext.extendedKeyUsage) {
               extConfig.inRequest = 'optional'
-              extConfig.extendedKeyUsage = ext.extendedKeyUsage
+              // 将usages数组转换为required和optional数组格式
+              if (ext.extendedKeyUsage.usages && Array.isArray(ext.extendedKeyUsage.usages)) {
+                const required = ext.extendedKeyUsage.usages
+                  .filter((u: any) => u.required === true)
+                  .map((u: any) => u.value)
+                const optional = ext.extendedKeyUsage.usages
+                  .filter((u: any) => u.required !== true)
+                  .map((u: any) => u.value)
+                extConfig.extendedKeyUsage = {
+                  required: required,
+                  optional: optional
+                }
+              } else {
+                extConfig.extendedKeyUsage = ext.extendedKeyUsage
+              }
             }
 
             // 对于SubjectAlternativeName，添加subjectAltName配置
@@ -599,6 +651,48 @@ async function getProfileDetail(id: string | number) {
           // 对于其他扩展，如果有config字段，转换为JSON字符串
           if (ext.type !== 'BasicConstraints' && ext.type !== 'KeyUsage' && ext.type !== 'SubjectKeyIdentifier' && ext.type !== 'ExtendedKeyUsage' && ext.type !== 'SubjectAlternativeName' && ext.type !== 'AuthorityKeyIdentifier' && ext.config) {
             extData.config = typeof ext.config === 'object' ? JSON.stringify(ext.config) : ext.config
+          }
+
+          // 处理KeyUsage：将required和optional数组转换为usages数组
+          if (ext.type === 'KeyUsage' && ext.keyUsage) {
+            if (ext.keyUsage.required && Array.isArray(ext.keyUsage.required) ||
+                ext.keyUsage.optional && Array.isArray(ext.keyUsage.optional)) {
+              const required = ext.keyUsage.required || []
+              const optional = ext.keyUsage.optional || []
+              const usages = []
+              
+              required.forEach((value: string) => {
+                usages.push({ required: true, value: value })
+              })
+              optional.forEach((value: string) => {
+                usages.push({ required: false, value: value })
+              })
+              
+              extData.keyUsage = {
+                usages: usages
+              }
+            }
+          }
+
+          // 处理ExtendedKeyUsage：将required和optional数组转换为usages数组
+          if (ext.type === 'ExtendedKeyUsage' && ext.extendedKeyUsage) {
+            if (ext.extendedKeyUsage.required && Array.isArray(ext.extendedKeyUsage.required) ||
+                ext.extendedKeyUsage.optional && Array.isArray(ext.extendedKeyUsage.optional)) {
+              const required = ext.extendedKeyUsage.required || []
+              const optional = ext.extendedKeyUsage.optional || []
+              const usages = []
+              
+              required.forEach((value: string) => {
+                usages.push({ required: true, value: value })
+              })
+              optional.forEach((value: string) => {
+                usages.push({ required: false, value: value })
+              })
+              
+              extData.extendedKeyUsage = {
+                usages: usages
+              }
+            }
           }
 
           return extData
