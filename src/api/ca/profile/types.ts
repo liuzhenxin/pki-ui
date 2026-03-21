@@ -26,7 +26,13 @@ export interface ProfileForm {
   validity?: string;
   notBeforeTime?: string;
   keyAlgorithms?: string[];
+  signatureAlgorithms?: string[];
+  keypairGeneration?: {
+    inheritCA: boolean;
+    forbidden: boolean;
+  };
   conf?: string;
   subjectItems?: any[];
+  subjectToSubjectAltNames?: any[];
   extensions?: any[];
 }
