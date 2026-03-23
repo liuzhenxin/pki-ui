@@ -158,7 +158,7 @@ export const authRole = (userId: number | string, roleIds: string[]) => {
  */
 export const getUserProfile = (): AxiosPromise<UserInfoVO> => {
   return request({
-    url: '/system/user/profile',
+    url: '/admin/api/v1/users/profile',
     method: 'get'
   });
 };
@@ -169,9 +169,9 @@ export const getUserProfile = (): AxiosPromise<UserInfoVO> => {
  */
 export const updateUserProfile = (data: UserForm) => {
   return request({
-    url: '/system/user/profile',
+    url: '/admin/api/v1/users/profile',
     method: 'put',
-    data: data
+    data: { co: data }
   });
 };
 
@@ -186,13 +186,13 @@ export const updateUserPwd = (oldPassword: string, newPassword: string) => {
     newPassword
   };
   return request({
-    url: '/system/user/profile/updatePwd',
+    url: '/admin/api/v1/users/profile/updatePwd',
     method: 'put',
     headers: {
       isEncrypt: true,
       repeatSubmit: false
     },
-    data: data
+    data: { co: data }
   });
 };
 
@@ -202,7 +202,7 @@ export const updateUserPwd = (oldPassword: string, newPassword: string) => {
  */
 export const uploadAvatar = (data: FormData) => {
   return request({
-    url: '/system/user/profile/avatar',
+    url: '/admin/api/v1/users/profile/avatar',
     method: 'post',
     data: data
   });

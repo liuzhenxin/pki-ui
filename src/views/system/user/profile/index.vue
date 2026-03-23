@@ -15,27 +15,32 @@
             <ul class="list-group list-group-striped">
               <li class="list-group-item">
                 <svg-icon icon-class="user" />用户名称
-                <div class="pull-right">{{ state.user.userName }}</div>
+                <div class="pull-right">{{ state.user.userName || state.user.username || '-' }}</div>
               </li>
-              <li class="list-group-item">
+              <li class="list-group-item" v-if="state.user.phonenumber">
                 <svg-icon icon-class="phone" />手机号码
-                <div class="pull-right">{{ state.user.phonenumber }}</div>
+                <div class="pull-right">{{ state.user.phonenumber || state.user.mobile || '-' }}</div>
               </li>
-              <li class="list-group-item">
+              <li class="list-group-item" v-if="state.user.email">
                 <svg-icon icon-class="email" />用户邮箱
-                <div class="pull-right">{{ state.user.email }}</div>
+                <div class="pull-right">{{ state.user.email || state.user.mail || '-' }}</div>
               </li>
-              <li class="list-group-item">
+              <li class="list-group-item" v-if="state.user.deptName || state.roleGroup">
                 <svg-icon icon-class="tree" />所属部门
                 <div v-if="state.user.deptName" class="pull-right">{{ state.user.deptName }} / {{ state.postGroup }}</div>
+                <div v-else-if="state.roleGroup" class="pull-right">{{ state.roleGroup }}</div>
               </li>
-              <li class="list-group-item">
+              <li class="list-group-item" v-if="state.roleGroup">
                 <svg-icon icon-class="peoples" />所属角色
                 <div class="pull-right">{{ state.roleGroup }}</div>
               </li>
-              <li class="list-group-item">
+              <li class="list-group-item" v-if="state.user.createTime">
                 <svg-icon icon-class="date" />创建日期
                 <div class="pull-right">{{ state.user.createTime }}</div>
+              </li>
+              <li class="list-group-item" v-if="state.user.id">
+                <svg-icon icon-class="peoples" />用户ID
+                <div class="pull-right">{{ state.user.id }}</div>
               </li>
             </ul>
           </div>
@@ -55,12 +60,6 @@
             <el-tab-pane label="修改密码" name="resetPwd">
               <resetPwd />
             </el-tab-pane>
-            <el-tab-pane label="第三方应用" name="thirdParty">
-              <thirdParty :auths="state.auths" />
-            </el-tab-pane>
-            <el-tab-pane label="在线设备" name="onlineDevice">
-              <onlineDevice :devices="state.devices" />
-            </el-tab-pane>
           </el-tabs>
         </el-card>
       </el-col>
@@ -72,11 +71,7 @@
 import UserAvatar from './userAvatar.vue';
 import UserInfo from './userInfo.vue';
 import ResetPwd from './resetPwd.vue';
-import ThirdParty from './thirdParty.vue';
-import OnlineDevice from './onlineDevice.vue';
-import { getAuthList } from '@/api/system/social/auth';
 import { getUserProfile } from '@/api/system/user';
-import { getOnline } from '@/api/monitor/online';
 import { UserVO } from '@/api/system/user/types';
 
 const activeTab = ref('userinfo');
@@ -84,39 +79,44 @@ interface State {
   user: Partial<UserVO>;
   roleGroup: string;
   postGroup: string;
-  auths: any;
-  devices: any;
 }
 const state = ref<State>({
   user: {},
   roleGroup: '',
-  postGroup: '',
-  auths: [],
-  devices: []
+  postGroup: ''
 });
 
 const userForm = ref({});
 
 const getUser = async () => {
   const res = await getUserProfile();
-  state.value.user = res.data.user;
-  userForm.value = { ...res.data.user };
-  state.value.roleGroup = res.data.roleGroup;
-  state.value.postGroup = res.data.postGroup;
-};
-
-const getAuths = async () => {
-  const res = await getAuthList();
-  state.value.auths = res.data;
-};
-const getOnlines = async () => {
-  const res = await getOnline();
-  state.value.devices = res.rows;
+  // 兼容新旧两种数据结构
+  if (res.data.user) {
+    // 旧格式：{ user: {...}, roles: [...], roleGroup: "...", postGroup: "..." }
+    state.value.user = res.data.user;
+    userForm.value = {
+      ...res.data.user,
+      nickName: res.data.user.nickName || res.data.user.userName || '',
+      phonenumber: res.data.user.phonenumber || res.data.user.mobile || '',
+      email: res.data.user.email || res.data.user.mail || ''
+    };
+    state.value.roleGroup = res.data.roleGroup || '';
+    state.value.postGroup = res.data.postGroup || '';
+  } else {
+    // 新格式：直接是用户对象 {...}
+    state.value.user = res.data;
+    userForm.value = {
+      ...res.data,
+      nickName: res.data.nickName || res.data.userName || res.data.username || '',
+      phonenumber: res.data.phonenumber || res.data.mobile || '',
+      email: res.data.email || res.data.mail || ''
+    };
+    state.value.roleGroup = '';
+    state.value.postGroup = '';
+  }
 };
 
 onMounted(() => {
   getUser();
-  getAuths();
-  getOnlines();
 });
 </script>

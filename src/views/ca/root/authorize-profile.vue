@@ -45,7 +45,7 @@
               <el-tag v-else>{{ scope.row.type || scope.row.certLevel || '-' }}</el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="描述" align="center" prop="description" :show-overflow-tooltip="true" />
+
           <el-table-column label="授权状态" align="center" width="120">
             <template #default="scope">
               <el-checkbox v-model="scope.row.authorized" @change="handleAuthorizeChange(scope.row)" />
@@ -142,8 +142,12 @@ async function getAllProfiles() {
   try {
     const res = await listProfile();
     console.log('所有模板数据:', res.data);
-    allProfiles.value = res.data || [];
-    console.log('模板列表长度:', allProfiles.value.length);
+    // 过滤掉 RootCA 类型的模板，只保留 IntermediateCA 和 EndEntity
+    allProfiles.value = (res.data || []).filter((profile: any) => {
+      const type = profile.type || profile.certLevel;
+      return type !== 'RootCA';
+    });
+    console.log('过滤后的模板列表长度:', allProfiles.value.length);
   } catch (error) {
     console.error('获取模板列表失败', error);
     ElMessage.error('获取模板列表失败');
@@ -158,7 +162,7 @@ async function getAuthorizedProfiles() {
     console.log('已授权的模板ID:', authorizedProfileIds.value);
     console.log('已授权模板ID类型:', typeof authorizedProfileIds.value[0]);
     
-    // 使用类型安全的比较方式
+    // 使用类型安全的比较方式，并创建深拷贝确保响应式
     profileList.value = allProfiles.value.map(profile => {
       const profileId = profile.id;
       const profileIdType = typeof profileId;
@@ -169,10 +173,11 @@ async function getAuthorizedProfiles() {
         String(authId) === String(profileId)
       );
       
-      return {
+      // 使用深拷贝创建独立的响应式对象
+      return JSON.parse(JSON.stringify({
         ...profile,
         authorized
-      };
+      }));
     });
     
     console.log('profileList:', profileList.value);
@@ -186,6 +191,10 @@ async function getAuthorizedProfiles() {
 /** 授权状态变更 */
 async function handleAuthorizeChange(profile: any) {
   hasChanges.value = true;
+  
+  // 记录变更前的状态，用于错误恢复
+  const previousState = !profile.authorized;
+  
   try {
     // TODO: 调用后端API更新授权状态
     if (profile.authorized) {
@@ -195,8 +204,10 @@ async function handleAuthorizeChange(profile: any) {
     }
   } catch (error) {
     // 失败时恢复状态
-    profile.authorized = !profile.authorized;
-    ElMessage.error('操作失败');
+    console.error('授权状态变更失败:', error);
+    profile.authorized = previousState;
+    hasChanges.value = false;
+    ElMessage.error('操作失败，请重试');
   }
 }
 

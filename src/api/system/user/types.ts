@@ -33,9 +33,17 @@ export interface UserQuery extends PageQuery {
 export interface UserVO {
   id: number;
   username: string;
+  userName?: string;
+  nickName?: string;
   avatar: string | null;
   permissions: string[];
   extValues: object;
+  phonenumber?: string;
+  email?: string;
+  deptName?: string;
+  createTime?: string;
+  mobile?: string;
+  mail?: string;
 }
 
 /**
@@ -61,12 +69,12 @@ export interface UserForm {
 
 export interface UserInfoVO {
   user: UserVO;
-  roles: RoleVO[];
-  roleIds: string[];
-  posts: PostVO[];
-  postIds: string[];
-  roleGroup: string;
-  postGroup: string;
+  roles?: RoleVO[];
+  roleIds?: string[];
+  posts?: PostVO[];
+  postIds?: string[];
+  roleGroup?: string;
+  postGroup?: string;
 }
 
 export interface ResetPwdForm {
