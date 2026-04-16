@@ -89,7 +89,7 @@ export function logout() {
  */
 export function getCodeImg(uuid: string | number): Promise<string> {
   return request({
-    url: '/auth/api/v1/captchas' + '/' + uuid,
+    url: '/auth/api/v1/username-password/captchas' + '/' + uuid,
     headers: {
       isToken: false
     },

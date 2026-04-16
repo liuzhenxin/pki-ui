@@ -4,6 +4,7 @@ import { ElMessage, ElMessageBox, FormInstance, FormRules, UploadProps, UploadUs
 import { UploadFilled, View, Plus, Delete, Top, Bottom } from '@element-plus/icons-vue'
 import { to } from 'await-to-js'
 import { useRouter } from 'vue-router'
+import { parseJson, parseKeyAlgorithms } from '@/utils/json'
 import {
   pageProfile,
   getProfile,
@@ -317,17 +318,33 @@ function handleUpdate(row?: any) {
 /** 详情按钮操作 */
 async function handleDetail(row: any) {
   try {
-    const { data } = await getProfile(row.id)
-    detailDialog.data = data
+    const res = await getProfile(row.id)
+    const profile = res.data
+    if (!profile) {
+      ElMessage.error('获取到的模板数据为空')
+      return
+    }
+    detailDialog.data = profile
     
     // 解析conf字段
-    if (data.conf) {
-      const conf = typeof data.conf === 'string' ? JSON.parse(data.conf) : data.conf
-      detailDialog.confData = conf
+    if (profile.conf) {
+      try {
+        const conf = parseJson(profile.conf);
+        if (conf && conf.keyAlgorithms) {
+          conf.keyAlgorithms = parseKeyAlgorithms(conf.keyAlgorithms);
+        }
+        detailDialog.confData = conf
+      } catch (e) {
+        console.error('解析模板配置失败:', e)
+        detailDialog.confData = null
+      }
+    } else {
+      detailDialog.confData = null
     }
     
     detailDialog.visible = true
   } catch (error) {
+    console.error('获取证书模板详情失败:', error)
     ElMessage.error('获取证书模板详情失败')
   }
 }
@@ -655,19 +672,21 @@ getList()
     </el-dialog>
 
     <!-- 查看详情对话框 -->
-    <el-dialog v-model="detailDialog.visible" title="证书模板详情" width="1000px" append-to-body>
-      <el-descriptions :column="2" border v-if="detailDialog.data">
-        <el-descriptions-item label="模板名称">{{ detailDialog.data.name }}</el-descriptions-item>
-        <el-descriptions-item label="模板类型">
-          <el-tag v-if="detailDialog.data.type === 'RootCA'" type="danger">根CA</el-tag>
-          <el-tag v-else-if="detailDialog.data.type === 'IntermediateCA'" type="warning">中间CA</el-tag>
-          <el-tag v-else-if="detailDialog.data.type === 'EndEntity'" type="success">终端实体</el-tag>
-          <el-tag v-else type="info">{{ detailDialog.data.type }}</el-tag>
-        </el-descriptions-item>
-        <el-descriptions-item label="描述" :span="2">{{ detailDialog.data.description || '-' }}</el-descriptions-item>
-      </el-descriptions>
+    <el-dialog v-model="detailDialog.visible" title="证书模板详情" width="1000px" append-to-body top="5vh">
+      <div style="max-height: 75vh; overflow-y: auto; padding-right: 10px;">
+        <el-descriptions :column="2" border v-if="detailDialog.data" class="mb-4">
+          <el-descriptions-item label="模板名称">{{ detailDialog.data.name }}</el-descriptions-item>
+          <el-descriptions-item label="模板类型">
+            <el-tag v-if="detailDialog.data.type === 'RootCA'" type="danger">根CA</el-tag>
+            <el-tag v-else-if="detailDialog.data.type === 'IntermediateCA'" type="warning">中间CA</el-tag>
+            <el-tag v-else-if="detailDialog.data.type === 'EndEntity'" type="success">终端实体</el-tag>
+            <el-tag v-else type="info">{{ detailDialog.data.type }}</el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="描述" :span="2">{{ detailDialog.data.description || '-' }}</el-descriptions-item>
+        </el-descriptions>
 
-      <CertProfile v-if="detailDialog.confData" :profile="detailDialog.confData" />
+        <CertProfile v-if="detailDialog.confData" :profile="detailDialog.confData" />
+      </div>
 
       <template #footer>
         <div class="dialog-footer">

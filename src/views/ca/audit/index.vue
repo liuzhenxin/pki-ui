@@ -235,6 +235,7 @@ import { to } from 'await-to-js';
 import { listUser, getUser, addUser, updateUser, delUser, resetUserPwd, changeStatus } from '@/api/system/user';
 import { issueAdminCert } from '@/api/ca/root';
 import { getProfileByName } from '@/api/ca/profile';
+import { parseJson } from '@/utils/json';
 import { UserForm, UserQuery } from '@/api/system/user/types';
 import CertSubject, { typeMapping, sortSubjectItems } from '@/components/CertSubject/index.vue';
 import SKFClient from '@/api/skf/skf_api';
@@ -517,7 +518,7 @@ async function handleIssueCert(row: any) {
     ElMessage.info('正在加载证书模板...');
     const profileRes = await getProfileByName('通用证书模板');
     const profile = profileRes.data;
-    const conf = typeof profile.conf === 'string' ? JSON.parse(profile.conf) : profile.conf;
+    const conf = parseJson(profile.conf);
 
     // 根据模板配置和用户信息填充主题字段
     if (conf && conf.subject) {

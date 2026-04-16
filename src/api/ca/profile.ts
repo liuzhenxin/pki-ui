@@ -93,3 +93,11 @@ export function initProfiles(data: { ids: string[] }): Promise<Result<any>> {
     data: data
   }) as any;
 }
+
+// 查询初始化证书模板列表
+export function listInitProfile(): Promise<Result<ProfileCO[]>> {
+  return request({
+    url: '/ca/api/v1/profiles/init-list',
+    method: 'get'
+  }) as any;
+}

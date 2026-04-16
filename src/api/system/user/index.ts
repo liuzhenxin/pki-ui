@@ -280,6 +280,18 @@ export const uploadUserCert = (data: FormData) => {
   });
 };
 
+/**
+ * 新增用户并上传证书
+ * @param data
+ */
+export const saveUserWithCert = (data: FormData) => {
+  return request({
+    url: '/admin/api/v1/users/cert/save',
+    method: 'post',
+    data: data
+  });
+};
+
 export default {
   listUser,
   getUser,
@@ -300,5 +312,6 @@ export default {
   deptTreeSelect,
   listUserByDeptId,
   modifyUserPwd,
-  uploadUserCert
+  uploadUserCert,
+  saveUserWithCert
 };

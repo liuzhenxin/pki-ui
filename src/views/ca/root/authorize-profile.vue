@@ -32,7 +32,7 @@
       <div class="template-section">
         <div class="section-header">
           <h3>模板列表</h3>
-          <el-button type="primary" icon="Check" :loading="loading" @click="handleSubmitAuthorize">保存授权</el-button>
+          <el-button type="primary" icon="Check" :loading="loading" @click="handleSubmitAuthorize" :disabled="!hasChanges">保存授权</el-button>
         </div>
         <el-table v-loading="loading" border :data="profileList">
           <el-table-column type="index" label="序号" width="60" align="center" />
@@ -61,28 +61,30 @@
     </el-card>
 
     <!-- 模板详情对话框 -->
-    <el-dialog v-model="showDetailDialog" title="模板详情" width="60%" append-to-body>
-      <CertProfile v-if="currentProfile" :profile="currentProfile" />
-      
-      <!-- 如果CertProfile没有显示数据，显示原始数据用于调试 -->
-      <el-collapse v-if="currentProfile" style="margin-top: 20px">
-        <el-collapse-item title="原始数据（调试用）">
-          <pre>{{ JSON.stringify(currentProfile, null, 2) }}</pre>
-        </el-collapse-item>
-      </el-collapse>
+    <el-dialog v-model="showDetailDialog" title="模板详情" width="60%" append-to-body top="5vh">
+      <div style="max-height: 75vh; overflow-y: auto;">
+        <CertProfile v-if="currentProfile" :profile="currentProfile" />
+        
+        <el-collapse v-if="currentProfile" style="margin-top: 20px">
+          <el-collapse-item title="原始数据（调试用）">
+            <pre class="debug-pre">{{ JSON.stringify(currentProfile, null, 2) }}</pre>
+          </el-collapse-item>
+        </el-collapse>
+      </div>
     </el-dialog>
   </div>
 </template>
 
 <script setup name="AuthorizeProfile" lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, reactive, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
-import { Check } from '@element-plus/icons-vue';
+import { Check, View, Back } from '@element-plus/icons-vue';
 import { listProfile, getProfile } from '@/api/ca/profile';
 import { getRootCa, authorizeProfile } from '@/api/ca/root';
 import X509Cert from '@/components/X509Cert/index.vue';
 import CertProfile from '@/components/CertProfile/index.vue';
+import { parseJson, parseKeyAlgorithms } from '@/utils/json';
 
 const route = useRoute();
 const router = useRouter();
@@ -117,7 +119,7 @@ async function getRootCertInfo() {
       rootCertInfo.value = {
         id: cert.id,
         name: cert.name,
-        cert: cert.cert || cert.pem || '', // 获取证书PEM数据
+        cert: cert.cert || cert.pem || '',
         issuer: cert.issuer || '-',
         subject: cert.subject || '-',
         notBefore: cert.notBefore || '-',
@@ -125,11 +127,7 @@ async function getRootCertInfo() {
         status: cert.status || '0'
       };
       
-      // 保存已授权的模板ID列表
       authorizedProfileIds.value = cert.profileIds || [];
-      
-      console.log('根证书信息:', rootCertInfo.value);
-      console.log('已授权的模板ID:', authorizedProfileIds.value);
     }
   } catch (error) {
     console.error('获取根证书信息失败', error);
@@ -141,97 +139,42 @@ async function getRootCertInfo() {
 async function getAllProfiles() {
   try {
     const res = await listProfile();
-    console.log('所有模板数据:', res.data);
-    // 过滤掉 RootCA 类型的模板，只保留 IntermediateCA 和 EndEntity
     allProfiles.value = (res.data || []).filter((profile: any) => {
       const type = profile.type || profile.certLevel;
       return type !== 'RootCA';
     });
-    console.log('过滤后的模板列表长度:', allProfiles.value.length);
   } catch (error) {
     console.error('获取模板列表失败', error);
     ElMessage.error('获取模板列表失败');
   }
 }
 
-/** 获取已授权的模板 */
-async function getAuthorizedProfiles() {
-  loading.value = true;
-  try {
-    console.log('allProfiles:', allProfiles.value);
-    console.log('已授权的模板ID:', authorizedProfileIds.value);
-    console.log('已授权模板ID类型:', typeof authorizedProfileIds.value[0]);
-    
-    // 使用类型安全的比较方式，并创建深拷贝确保响应式
-    profileList.value = allProfiles.value.map(profile => {
-      const profileId = profile.id;
-      const profileIdType = typeof profileId;
-      console.log(`模板ID: ${profileId}, 类型: ${profileIdType}`);
-      
-      // 转换为字符串进行比较，确保类型一致
-      const authorized = authorizedProfileIds.value.some(authId => 
-        String(authId) === String(profileId)
-      );
-      
-      // 使用深拷贝创建独立的响应式对象
-      return JSON.parse(JSON.stringify({
-        ...profile,
-        authorized
-      }));
-    });
-    
-    console.log('profileList:', profileList.value);
-  } catch (error) {
-    console.error('获取授权模板失败', error);
-  } finally {
-    loading.value = false;
-  }
+/** 组装展示列表 */
+function buildProfileList() {
+  profileList.value = allProfiles.value.map(profile => {
+    const authorized = authorizedProfileIds.value.some(authId => 
+      String(authId) === String(profile.id)
+    );
+    return {
+      ...profile,
+      authorized
+    };
+  });
 }
 
 /** 授权状态变更 */
-async function handleAuthorizeChange(profile: any) {
+function handleAuthorizeChange(profile: any) {
   hasChanges.value = true;
-  
-  // 记录变更前的状态，用于错误恢复
-  const previousState = !profile.authorized;
-  
-  try {
-    // TODO: 调用后端API更新授权状态
-    if (profile.authorized) {
-      ElMessage.success(`已授权模板: ${profile.name}`);
-    } else {
-      ElMessage.success(`已取消授权: ${profile.name}`);
-    }
-  } catch (error) {
-    // 失败时恢复状态
-    console.error('授权状态变更失败:', error);
-    profile.authorized = previousState;
-    hasChanges.value = false;
-    ElMessage.error('操作失败，请重试');
-  }
 }
 
 /** 提交授权 */
 async function handleSubmitAuthorize() {
-  if (!hasChanges.value) {
-    ElMessage.info('没有需要保存的更改');
-    return;
-  }
-
   loading.value = true;
   try {
-    // 收集所有已授权的模板ID
     const profileIds = profileList.value
       .filter(p => p.authorized)
       .map(p => p.id);
 
-    // 检查是否至少选择了一个模板
-    if (profileIds.length === 0) {
-      ElMessage.warning('请至少选择一个模板进行授权');
-      return;
-    }
-
-    // 调用后端API保存授权状态
     await authorizeProfile({
       rootId: rootId.value,
       profileIds: profileIds
@@ -239,6 +182,8 @@ async function handleSubmitAuthorize() {
     
     hasChanges.value = false;
     ElMessage.success('授权保存成功');
+    await getRootCertInfo();
+    buildProfileList();
   } catch (error: any) {
     console.error('保存授权失败', error);
     const errMsg = error.response?.data?.msg || error.message || '保存授权失败';
@@ -248,22 +193,12 @@ async function handleSubmitAuthorize() {
   }
 }
 
-
-
 /** 查看模板详情 */
 async function handleViewProfile(profile: any) {
   try {
     const res = await getProfile(profile.id);
     const profileData = res.data;
-    
-    console.log('原始profile数据:', profileData);
-    
-    // 解析conf字段，生成CertProfile组件需要的数据结构
-    const conf = typeof profileData.conf === 'string' 
-      ? JSON.parse(profileData.conf) 
-      : profileData.conf;
-    
-    console.log('解析后的conf:', conf);
+    const conf = parseJson(profileData.conf);    
     
     const parsedProfile = {
       ...profileData,
@@ -276,12 +211,10 @@ async function handleViewProfile(profile: any) {
       validity: conf.validity || '-',
       notBeforeTime: conf.notBeforeTime || '-',
       keypairGeneration: conf.keypairGeneration || '-',
-      keyAlgorithms: conf.keyAlgorithms || [],
+      keyAlgorithms: parseKeyAlgorithms(conf.keyAlgorithms),
       subject: conf.subject || [],
       extensions: conf.extensions || []
     };
-    
-    console.log('传递给CertProfile的数据:', parsedProfile);
     
     currentProfile.value = parsedProfile;
     showDetailDialog.value = true;
@@ -299,9 +232,11 @@ onMounted(async () => {
     return;
   }
   
+  loading.value = true;
   await getRootCertInfo();
   await getAllProfiles();
-  await getAuthorizedProfiles();
+  buildProfileList();
+  loading.value = false;
 });
 </script>
 
@@ -329,7 +264,6 @@ onMounted(async () => {
     padding: 15px;
     background-color: #f5f7fa;
     border-radius: 4px;
-    margin-bottom: 0;
 
     .cert-name {
       display: flex;
@@ -374,11 +308,13 @@ onMounted(async () => {
   }
 }
 
-pre {
+.debug-pre {
   background-color: #f5f5f5;
   padding: 10px;
   border-radius: 4px;
   max-height: 400px;
   overflow-y: auto;
+  font-size: 12px;
+  color: #666;
 }
 </style>

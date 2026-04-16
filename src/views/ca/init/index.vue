@@ -41,10 +41,10 @@
               <div class="help-card root-ca">
                 <div class="help-card-header">
                   <el-tag type="danger" effect="dark" round size="small">必选</el-tag>
-                  <span class="help-card-title">根证书模板 (RootCA)</span>
+                  <span class="help-card-title">RootCA证书模板 (RootCA)</span>
                 </div>
                 <div class="help-card-body">
-                  用于自签发该 CA 的根证书。在初始化时，<b>必须至少选择一个根证书模板</b>作为信任锚体系的基础。
+                  用于自签发该 CA 的根证书。在初始化时，<b>必须至少选择一个RootCA证书模板</b>作为信任锚体系的基础。
                 </div>
               </div>
 
@@ -109,7 +109,7 @@
 
           <div v-if="active === 1 && !hasRootCASelected && selectedTemplates.length > 0" class="validation-warning">
             <el-icon><Warning /></el-icon>
-            <span>请至少选择一个根证书模板 (RootCA) 作为可信根。</span>
+            <span>请至少选择一个RootCA证书模板 (RootCA) 作为可信根。</span>
           </div>
         </div>
 
@@ -707,8 +707,8 @@ import {
   genFileId
 } from 'element-plus';
 import { useRouter } from 'vue-router';
-import { listProfile, getProfile, initProfiles } from '@/api/ca/profile';
-import { uploadUserCert } from '@/api/system/user';
+import { listProfile, listInitProfile, getProfile, initProfiles } from '@/api/ca/profile';
+import { uploadUserCert, resetUserPwd } from '@/api/system/user';
 import { getTenant, updateTenant } from '@/api/system/tenant';
 import { genRootCa, importExternalCert, issueAdminCert, deleteAllRootCa } from '@/api/ca/root';
 import { useUserStore } from '@/store/modules/user';
@@ -717,6 +717,7 @@ import X509Cert from '@/components/X509Cert/index.vue';
 import CertProfile from '@/components/CertProfile/index.vue';
 import Agreement from '@/components/Agreement/index.vue';
 import CertSubject, { typeMapping, sortSubjectItems } from '@/components/CertSubject/index.vue';
+import { parseJson, parseKeyAlgorithms } from '@/utils/json';
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
 import * as forge from 'node-forge';
 import { Plus, Minus, QuestionFilled, Warning, Refresh, View } from '@element-plus/icons-vue';
@@ -898,7 +899,7 @@ const currentTemplate = ref({});
 const loadTemplateData = async () => {
   console.log('loadTemplateData: Fetching profiles...');
   try {
-    const res = await listProfile();
+    const res = await listInitProfile();
     templateData.value = res.data.map((p: any) => ({
       ...p,
       // Normalize type from certLevel if type is missing or generic
@@ -938,12 +939,18 @@ watch(active, async (newActive) => {
       await loadTemplateData();
       console.log('Step 2: Templates loaded', selectedTemplates.value.length);
     }
-    const rootCaTemplate = selectedTemplates.value.find((t: any) => t.name === '根证书模板') || rootCaTemplates.value[0];
+    const rootCaTemplate = selectedTemplates.value.find((t: any) => t.name === 'RootCA证书模板') || rootCaTemplates.value[0];
     console.log('Step 2: Target template', rootCaTemplate?.name, rootCaTemplate?.id);
+    console.log('Step 2: All selected templates', selectedTemplates.value.map((t: any) => ({ id: t.id, name: t.name, type: t.type })));
+    console.log('Step 2: RootCA templates', rootCaTemplates.value.map((t: any) => ({ id: t.id, name: t.name })));
     if (rootCaTemplate) {
       rootCaForm.profileId = (rootCaTemplate as any).id;
+      console.log('Step 2: Loading profile with ID', rootCaForm.profileId);
       await loadProfileToForm(rootCaForm.profileId, rootCaForm);
       console.log('Step 2: Template applied', rootCaForm.subjectItems.length);
+    } else {
+      console.error('Step 2: No RootCA template found!');
+      ElMessage.error('未找到RootCA证书模板，请确保已选择至少一个RootCA证书模板');
     }
 
     // Ensure subjectItems is at least initialized with basic structure if still empty
@@ -1036,7 +1043,7 @@ const handleTemplateSelectionChange = (val: any) => {
 
 const handleTemplateDetail = (row: any) => {
   try {
-    const conf = typeof row.conf === 'string' ? JSON.parse(row.conf) : row.conf;
+    const conf = parseJson(row.conf);
     currentTemplate.value = conf || row;
   } catch (e) {
     currentTemplate.value = row;
@@ -1045,7 +1052,7 @@ const handleTemplateDetail = (row: any) => {
 };
 
 const profileTypeMap: Record<string, string> = {
-  RootCA: '根证书模板',
+  RootCA: 'RootCA证书模板',
   SubCA: '子CA证书模板',
   EndEntity: '终端实体证书模板'
 };
@@ -1108,7 +1115,7 @@ const rootCaForm = reactive({
   status: 'active'
 });
 
-const rootCaAlgos = ref<string[]>(['SM2', 'RSA', 'ECC']);
+const rootCaAlgos = ref<string[]>([]);
 
 const rootCaTemplates = computed(() => {
   const filtered = selectedTemplates.value.filter((t: any) => (t as any).type === 'RootCA');
@@ -1124,25 +1131,43 @@ const loadProfileToForm = async (id: string | number, form: any, defaultValues?:
   loading.value = true;
   try {
     const res = await getProfile(id);
+    console.log('getProfile response', res);
     const profile = res.data;
-    console.log('Profile loaded', profile.name);
-    const conf = typeof profile.conf === 'string' ? JSON.parse(profile.conf) : profile.conf;
+    if (!profile) {
+      throw new Error('Profile data is empty');
+    }
+    console.log('Profile loaded', profile.name, profile.id);
+    // Remove JSON comments before parsing
+    const parseConf = (confStr: string) => {
+      // Remove single-line comments (// ...)
+      const withoutSingleLine = confStr.replace(/\/\/.*$/gm, '');
+      // Remove multi-line comments (/* ... */)
+      const withoutComments = withoutSingleLine.replace(/\/\*[\s\S]*?\*\//g, '');
+      return JSON.parse(withoutComments);
+    };
+    const conf = typeof profile.conf === 'string' ? parseConf(profile.conf) : profile.conf;
     if (conf) {
       console.log('Profile config parsed', !!conf.subject);
       // 1. Subject Items
       if (conf.subject) {
         const items: any[] = [];
-        conf.subject.forEach((rdn: any) => {
-          let compType = rdn.type.toLowerCase();
+        const rdns = Array.isArray(conf.subject) ? conf.subject : conf.subject.rdns || [];
+        rdns.forEach((rdn: any) => {
+          const rdnType = rdn.type || {};
+          let compType = (rdnType.description || rdnType.oid || '').toLowerCase();
           for (const [type, meta] of Object.entries(typeMapping)) {
-            if (meta.key.toLowerCase() === rdn.type.toLowerCase() || type.toLowerCase() === rdn.type.toLowerCase()) {
+            if (meta.key.toLowerCase() === compType || type.toLowerCase() === compType) {
               compType = type;
               break;
             }
           }
           let val = rdn.value || '';
           if (!val && defaultValues && defaultValues[compType]) {
-            val = defaultValues[compType];
+            // Check if there is a regex constraint (like :FQDN), if so, don't use the simple default value
+            const hasRegex = !!rdn.regex;
+            if (!hasRegex) {
+              val = defaultValues[compType];
+            }
           }
 
           // If minOccurs > 1, create multiple items
@@ -1152,7 +1177,8 @@ const loadProfileToForm = async (id: string | number, form: any, defaultValues?:
               type: compType,
               value: val,
               minOccurs: rdn.minOccurs,
-              maxOccurs: rdn.maxOccurs
+              maxOccurs: rdn.maxOccurs,
+              regex: rdn.regex
             });
           }
         });
@@ -1177,8 +1203,8 @@ const loadProfileToForm = async (id: string | number, form: any, defaultValues?:
       }
 
       // 4. Algorithms (only for Root CA)
-      if (form === rootCaForm && conf.keyAlgorithms && Array.isArray(conf.keyAlgorithms)) {
-        const algos = conf.keyAlgorithms.map((a: any) => (typeof a === 'string' ? a : a.name || a.type));
+      if (form === rootCaForm && conf.keyAlgorithms) {
+        const algos = parseKeyAlgorithms(conf.keyAlgorithms);
         rootCaAlgos.value = algos;
         if (algos.length > 0 && !algos.includes(form.algo)) {
           form.algo = algos[0];
@@ -1258,7 +1284,13 @@ const handleExternalCertRemove: UploadProps['onRemove'] = () => {
   externalCertPem.value = '';
 };
 
-const handleDownloadCsr = () => {
+const handleDownloadCsr = async () => {
+  if (!rootCaFormRef.value) return;
+  try {
+    await rootCaFormRef.value.validate();
+  } catch (error) {
+    return;
+  }
   // 这里应该调用后端接口生成CSR，或者在前端生成
   // 暂时模拟
   ElMessage.success('CSR 生成请求已发送（模拟），请检查下载');
@@ -1388,14 +1420,22 @@ const onAdminAppChange = () => {
 };
 
 const handleGenerateAdminCert = async () => {
-  if (
-    !adminForm.provider ||
-    !adminForm.device ||
-    !adminForm.appName ||
-    !adminForm.containerName ||
-    !adminForm.pin
-  ) {
-    ElMessage.warning('请完整填写 USBKey 证书设置信息');
+  if (!adminFormRef.value) return;
+
+  // Validate only the fields needed for CSR generation
+  const fieldsToValidate = [
+    'provider',
+    'device',
+    'appName',
+    'containerName',
+    'pin',
+    ...adminForm.subjectItems.map((_, i) => `subjectItems.${i}.value`)
+  ];
+
+  try {
+    await adminFormRef.value.validateField(fieldsToValidate);
+  } catch (error) {
+    console.warn('Form validation failed for CSR generation', error);
     return;
   }
 
@@ -1579,14 +1619,22 @@ const onAuditorAppChange = () => {
 };
 
 const handleGenerateAuditorCert = async () => {
-  if (
-    !auditorForm.provider ||
-    !auditorForm.device ||
-    !auditorForm.appName ||
-    !auditorForm.containerName ||
-    !auditorForm.pin
-  ) {
-    ElMessage.warning('请完整填写 USBKey 证书设置信息');
+  if (!auditorFormRef.value) return;
+
+  // Validate only the fields needed for CSR generation
+  const fieldsToValidate = [
+    'provider',
+    'device',
+    'appName',
+    'containerName',
+    'pin',
+    ...auditorForm.subjectItems.map((_, i) => `subjectItems.${i}.value`)
+  ];
+
+  try {
+    await auditorFormRef.value.validateField(fieldsToValidate);
+  } catch (error) {
+    console.warn('Form validation failed for CSR generation', error);
     return;
   }
 
@@ -1768,7 +1816,8 @@ const next = async () => {
       }
     } else if (active.value === 2) {
       if (!rootCaFormRef.value) return;
-      await rootCaFormRef.value.validate(async (valid) => {
+      try {
+        const valid = await rootCaFormRef.value.validate();
         if (valid) {
           loading.value = true;
           try {
@@ -1830,10 +1879,13 @@ const next = async () => {
             loading.value = false;
           }
         }
-      });
+      } catch (error) {
+        console.error('表单验证失败', error);
+      }
     } else if (active.value === 3) {
       if (!adminFormRef.value) return;
-      await adminFormRef.value.validate(async (valid) => {
+      try {
+        const valid = await adminFormRef.value.validate();
         if (valid) {
           if (!adminCertPem.value) {
             ElMessage.warning('请先生成并写入管理员证书');
@@ -1842,14 +1894,16 @@ const next = async () => {
           loading.value = true;
           try {
             // 上传证书逻辑已经替换为写入USBKey
-            // 这里我们只需要提交用户的密码即可(或者同时把生成的证书PEM提交给后端保存)
-            // 发起一个表单提交用户证书和密码
+            // 这里我们只需要提交生成的证书PEM给后端保存
+            // 发起一个表单提交用户证书
             const formData = new FormData();
             const certBlob = new Blob([adminCertPem.value], { type: 'application/x-x509-ca-cert' });
             formData.append('file', certBlob, 'admin.pem');
             formData.append('id', ADMIN_USER_ID); // 管理员ID
-            formData.append('password', adminForm.password); // 新增密码字段
             await uploadUserCert(formData);
+            
+            // 提交证书成功后，重置用户密码
+            await resetUserPwd(ADMIN_USER_ID, adminForm.password);
 
             ElMessage.success('管理员设置成功');
             await updateTenantStep();
@@ -1859,24 +1913,29 @@ const next = async () => {
             loading.value = false;
           }
         }
-      });
+      } catch (error) {
+        console.error('表单验证失败', error);
+      }
     } else if (active.value === 4) {
       if (!auditorFormRef.value) return;
-      await auditorFormRef.value.validate(async (valid) => {
+      try {
+        const valid = await auditorFormRef.value.validate();
         if (valid) {
+          if (!auditorCertPem.value) {
+            ElMessage.warning('请先生成并写入审计员证书');
+            return;
+          }
           loading.value = true;
           try {
-            if (!auditorCertPem.value) {
-              ElMessage.warning('请先生成并写入审计员证书');
-              return;
-            }
-            // 提交通过 USBKey 生成并签发的证书数据及密码
+            // 提交通过 USBKey 生成并签发的证书数据
             const formData = new FormData();
             const certBlob = new Blob([auditorCertPem.value], { type: 'application/x-x509-ca-cert' });
             formData.append('file', certBlob, 'auditor.pem');
             formData.append('id', AUDITOR_USER_ID); // 审计员ID
-            formData.append('password', auditorForm.password); // 新增密码字段
             await uploadUserCert(formData);
+            
+            // 提交证书成功后，重置用户密码
+            await resetUserPwd(AUDITOR_USER_ID, auditorForm.password);
 
             ElMessage.success('审计员设置成功');
             await updateTenantStep();
@@ -1887,7 +1946,9 @@ const next = async () => {
             loading.value = false;
           }
         }
-      });
+      } catch (error) {
+        console.error('表单验证失败', error);
+      }
     } else {
       loading.value = true;
       try {

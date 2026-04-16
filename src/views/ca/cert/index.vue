@@ -1,426 +1,493 @@
-<script setup name="CertManagement" lang="ts">
-import { ref, reactive, toRefs, getCurrentInstance, ComponentInternalInstance, nextTick } from 'vue';
-import { ElMessage, ElMessageBox, FormInstance, FormRules, UploadProps, UploadUserFile } from 'element-plus';
-import { UploadFilled, Warning } from '@element-plus/icons-vue';
-import { to } from 'await-to-js';
-import { pageCert, getCert, saveCert, modifyCert, removeCert, importCert, exportCert } from '@/api/cert';
-import { CertForm, CertQuery } from '@/api/cert/types';
-
-const { proxy } = getCurrentInstance() as ComponentInternalInstance;
-
-const certList = ref<any[]>([]);
-const loading = ref(true);
-const showSearch = ref(true);
-const ids = ref<Array<string | number>>([]);
-const single = ref(true);
-const multiple = ref(true);
-const total = ref(0);
-
-const queryFormRef = ref<FormInstance>();
-const certFormRef = ref<FormInstance>();
-const formDialogRef = ref<any>();
-
-const dialog = reactive({
-  visible: false,
-  title: ''
-});
-
-const uploadDialog = reactive({
-  visible: false,
-  loading: false,
-  fileList: [] as UploadUserFile[]
-});
-
-const initFormData: CertForm = {
-  id: undefined,
-  certSn: '',
-  subject: '',
-  issuer: '',
-  cert: '',
-  certType: '',
-  status: '0',
-  notBefore: '',
-  notAfter: '',
-  remark: ''
-};
-
-const data = reactive({
-  form: { ...initFormData },
-  queryParams: {
-    pageNum: 1,
-    pageSize: 10,
-    certSn: '',
-    subject: '',
-    issuer: '',
-    status: '',
-    certType: ''
-  } as CertQuery
-});
-
-const { queryParams, form } = toRefs(data);
-
-const certRules: FormRules = {
-  certSn: [{ required: true, message: '证书序列号不能为空', trigger: 'blur' }],
-  subject: [{ required: true, message: '主题不能为空', trigger: 'blur' }],
-  issuer: [{ required: true, message: '颁发者不能为空', trigger: 'blur' }]
-};
-
-/** 查询证书列表 */
-async function getList() {
-  loading.value = true;
-  try {
-    const res = await pageCert(queryParams.value);
-    certList.value = [];
-    total.value = res.data.total || 0;
-    await nextTick();
-    certList.value = res.data.rows || res.data.records || [];
-  } catch (error) {
-    console.error('获取列表失败', error);
-  } finally {
-    loading.value = false;
-  }
-}
-
-/** 搜索按钮操作 */
-function handleQuery() {
-  queryParams.value.pageNum = 1;
-  getList();
-}
-
-/** 重置按钮操作 */
-function resetQuery() {
-  queryFormRef.value?.resetFields();
-  handleQuery();
-}
-
-/** 多选框选中数据 */
-function handleSelectionChange(selection: any[]) {
-  ids.value = selection.map(item => item.id);
-  single.value = selection.length !== 1;
-  multiple.value = !selection.length;
-}
-
-/** 新增按钮操作 */
-function handleAdd() {
-  reset();
-  dialog.visible = true;
-  dialog.title = '证书申请';
-}
-
-/** 吊销按钮操作 */
-async function handleRevoke(row?: any) {
-  const certIds = row?.id || ids.value;
-  const [err] = await to(proxy?.$modal.confirm('是否确认吊销证书编号为"' + certIds + '"的数据项？') as any);
-  if (!err) {
-    try {
-      await removeCert(Array.isArray(certIds) ? certIds : [certIds]);
-      await getList();
-      proxy?.$modal.msgSuccess('吊销成功');
-    } catch (error) {
-      console.error('吊销失败', error);
-    }
-  }
-}
-
-/** 修改按钮操作 */
-async function handleUpdate(row?: any) {
-  reset();
-  const id = row?.id || ids.value[0];
-  try {
-    const { data } = await getCert(id);
-    dialog.visible = true;
-    dialog.title = '修改证书';
-    Object.assign(form.value, data);
-  } catch (error) {
-    ElMessage.error('获取证书信息失败');
-  }
-}
-
-/** 提交按钮 */
-async function submitForm() {
-  certFormRef.value?.validate(async (valid: boolean) => {
-    if (valid) {
-      try {
-        if (form.value.id) {
-          await modifyCert(form.value);
-        } else {
-          await saveCert(form.value);
-        }
-        proxy?.$modal.msgSuccess('操作成功');
-        dialog.visible = false;
-        await getList();
-      } catch (error) {
-        console.error('操作失败', error);
-      }
-    }
-  });
-}
-
-/** 删除按钮操作 */
-async function handleDelete(row?: any) {
-  const certIds = row?.id || ids.value;
-  const [err] = await to(proxy?.$modal.confirm('是否确认删除证书编号为"' + certIds + '"的数据项？') as any);
-  if (!err) {
-    try {
-      await removeCert(Array.isArray(certIds) ? certIds : [certIds]);
-      await getList();
-      proxy?.$modal.msgSuccess('删除成功');
-    } catch (error) {
-      console.error('删除失败', error);
-    }
-  }
-}
-
-/** 导入按钮操作 */
-function handleImport() {
-  uploadDialog.visible = true;
-  uploadDialog.fileList = [];
-}
-
-/** 导入证书 */
-async function submitImport() {
-  if (uploadDialog.fileList.length === 0) {
-    ElMessage.warning('请选择要导入的证书文件');
-    return;
-  }
-  
-  uploadDialog.loading = true;
-  try {
-    const formData = new FormData();
-    uploadDialog.fileList.forEach(file => {
-      if (file.raw) {
-        formData.append('files', file.raw);
-      }
-    });
-    await importCert(formData);
-    ElMessage.success('导入成功');
-    uploadDialog.visible = false;
-    await getList();
-  } catch (error) {
-    ElMessage.error('导入失败');
-  } finally {
-    uploadDialog.loading = false;
-  }
-}
-
-/** 导出按钮操作 */
-async function handleExport() {
-  if (ids.value.length === 0) {
-    ElMessage.warning('请选择要导出的证书');
-    return;
-  }
-  
-  try {
-    const blob = await exportCert(ids.value);
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `certificates_${new Date().getTime()}.zip`;
-    link.click();
-    window.URL.revokeObjectURL(url);
-    ElMessage.success('导出成功');
-  } catch (error) {
-    ElMessage.error('导出失败');
-  }
-}
-
-/** 重置操作表单 */
-function reset() {
-  form.value = { ...initFormData };
-  certFormRef.value?.resetFields();
-}
-
-/** 关闭对话框 */
-function cancel() {
-  dialog.visible = false;
-  reset();
-}
-
-/** 文件上传前校验 */
-const beforeUpload: UploadProps['beforeUpload'] = (file) => {
-  const isCert = file.name.endsWith('.pem') || file.name.endsWith('.cer') || file.name.endsWith('.crt') || file.name.endsWith('.der');
-  if (!isCert) {
-    ElMessage.error('只支持上传证书文件');
-    return false;
-  }
-  return true;
-};
-
-/** 文件上传 */
-const handleFileChange: UploadProps['onChange'] = (uploadFile, uploadFiles) => {
-  uploadDialog.fileList = uploadFiles;
-};
-
-getList();
-</script>
-
 <template>
-  <div class="p-2">
-    <transition :enter-active-class="proxy?.animate.searchAnimate.enter" :leave-active-class="proxy?.animate.searchAnimate.leave">
-      <div v-show="showSearch" class="mb-10px">
-        <el-card shadow="hover">
-          <el-form ref="queryFormRef" :model="queryParams" :inline="true">
-            <el-form-item label="证书序列号" prop="certSn">
-              <el-input v-model="queryParams.certSn" placeholder="请输入证书序列号" clearable @keyup.enter="handleQuery" />
-            </el-form-item>
-            <el-form-item label="主题" prop="subject">
-              <el-input v-model="queryParams.subject" placeholder="请输入主题" clearable @keyup.enter="handleQuery" />
-            </el-form-item>
-            <el-form-item label="颁发者" prop="issuer">
-              <el-input v-model="queryParams.issuer" placeholder="请输入颁发者" clearable @keyup.enter="handleQuery" />
-            </el-form-item>
-            <el-form-item label="证书类型" prop="certType">
-              <el-select v-model="queryParams.certType" placeholder="证书类型" clearable>
-                <el-option label="根证书" value="ROOT" />
-                <el-option label="中间证书" value="INTERMEDIATE" />
-                <el-option label="终端证书" value="END_ENTITY" />
-              </el-select>
-            </el-form-item>
-            <el-form-item>
-              <el-button type="primary" icon="Search" @click="handleQuery">搜索</el-button>
-              <el-button icon="Refresh" @click="resetQuery">重置</el-button>
-            </el-form-item>
-          </el-form>
-        </el-card>
-      </div>
-    </transition>
+  <div class="app-container">
+    <el-form :model="queryParams" ref="queryForm" :inline="true" v-show="showSearch" label-width="68px">
+      <el-form-item label="证书名称" prop="name">
+        <el-input v-model="queryParams.name" placeholder="请输入证书名称" clearable style="width: 240px" @keyup.enter="handleQuery" />
+      </el-form-item>
+      <el-form-item label="序列号" prop="serialNumber">
+        <el-input v-model="queryParams.serialNumber" placeholder="请输入序列号" clearable style="width: 240px" @keyup.enter="handleQuery" />
+      </el-form-item>
+      <el-form-item>
+        <el-button type="primary" icon="Search" @click="handleQuery">搜索</el-button>
+        <el-button icon="Refresh" @click="resetQuery">重置</el-button>
+      </el-form-item>
+    </el-form>
 
-    <el-card shadow="hover">
-      <template #header>
-        <el-row :gutter="10">
-          <el-col :span="1.5">
-            <el-button type="primary" plain icon="Plus" @click="handleAdd">证书申请</el-button>
-          </el-col>
-          <el-col :span="1.5">
-            <el-button type="warning" plain icon="Warning" :disabled="single" @click="handleRevoke">吊销</el-button>
-          </el-col>
-          <el-col :span="1.5">
-            <el-button type="danger" plain icon="Delete" :disabled="multiple" @click="handleDelete">删除</el-button>
-          </el-col>
-          <el-col :span="1.5">
-            <el-button type="warning" plain icon="Upload" @click="handleImport">导入</el-button>
-          </el-col>
-          <el-col :span="1.5">
-            <el-button type="info" plain icon="Download" :disabled="multiple" @click="handleExport">导出</el-button>
-          </el-col>
-          <right-toolbar v-model:show-search="showSearch" @query-table="getList"></right-toolbar>
-        </el-row>
+    <el-row :gutter="10" class="mb8">
+      <el-col :span="1.5">
+        <el-dropdown @command="handleIssueCommand">
+          <el-button type="primary" plain icon="Plus">
+            签发证书<el-icon class="el-icon--right"><arrow-down /></el-icon>
+          </el-button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="key">USB Key 签发</el-dropdown-item>
+              <el-dropdown-item command="p10">PKCS10 签发</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
+      </el-col>
+      <el-col :span="1.5">
+        <el-button type="danger" plain icon="Delete" :disabled="multiple" @click="handleDelete">删除</el-button>
+      </el-col>
+      <el-col :span="1.5">
+        <el-button type="warning" plain icon="Download" :disabled="multiple" @click="handleExport">导出</el-button>
+      </el-col>
+      <right-toolbar v-model:showSearch="showSearch" @queryTable="getList"></right-toolbar>
+    </el-row>
+
+    <el-table v-loading="loading" :data="certList" @selection-change="handleSelectionChange">
+      <el-table-column type="selection" width="55" align="center" />
+      <el-table-column label="证书名称" align="center" prop="name" :show-overflow-tooltip="true" />
+      <el-table-column label="序列号" align="center" prop="serialNumber" width="120" />
+      <el-table-column label="颁发者" align="center" prop="issuer" :show-overflow-tooltip="true" />
+      <el-table-column label="主题" align="center" prop="subject" :show-overflow-tooltip="true" />
+      <el-table-column label="有效期结束" align="center" prop="notAfter" width="160" />
+      <el-table-column label="状态" align="center" prop="status" width="100">
+        <template #default="scope">
+          <el-tag :type="getStatusType(scope.row.status)">{{ getStatusLabel(scope.row.status) }}</el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column label="操作" align="center" class-name="small-padding fixed-width">
+        <template #default="scope">
+          <el-button link type="primary" icon="View" @click="handleView(scope.row)">详情</el-button>
+          <el-button link type="primary" icon="Download" @click="handleDownload(scope.row)">下载</el-button>
+          <el-button v-if="scope.row.status === 'VALID'" link type="danger" icon="CircleClose" @click="handleRevoke(scope.row)">吊销</el-button>
+        </template>
+      </el-table-column>
+    </el-table>
+
+    <pagination v-show="total > 0" :total="total" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" @pagination="getList" />
+
+    <!-- 证书详情弹窗 -->
+    <el-dialog v-model="showDetail" title="证书详情" width="60%" append-to-body>
+      <X509Cert v-if="showDetail" :certPem="currentCertPem" />
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button @click="showDetail = false">关 闭</el-button>
+        </div>
       </template>
+    </el-dialog>
 
-      <el-table v-loading="loading" border :data="certList" @selection-change="handleSelectionChange">
-        <el-table-column type="selection" width="50" align="center" />
-        <el-table-column label="证书序列号" align="center" prop="certSn" width="200" :show-overflow-tooltip="true" />
-        <el-table-column label="主题" align="center" prop="subject" width="250" :show-overflow-tooltip="true" />
-        <el-table-column label="颁发者" align="center" prop="issuer" width="250" :show-overflow-tooltip="true" />
-        <el-table-column label="证书类型" align="center" prop="certType" width="120">
-          <template #default="scope">
-            <el-tag v-if="scope.row.certType === 'ROOT'" type="danger">根证书</el-tag>
-            <el-tag v-else-if="scope.row.certType === 'INTERMEDIATE'" type="warning">中间证书</el-tag>
-            <el-tag v-else-if="scope.row.certType === 'END_ENTITY'" type="success">终端证书</el-tag>
-            <el-tag v-else type="info">{{ scope.row.certType }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="生效时间" align="center" prop="notBefore" width="180" />
-        <el-table-column label="失效时间" align="center" prop="notAfter" width="180" />
-        <el-table-column label="操作" fixed="right" width="150" class-name="small-padding fixed-width">
-          <template #default="scope">
-            <el-tooltip content="吊销" placement="top">
-              <el-button link type="warning" icon="Warning" @click="handleRevoke(scope.row)"></el-button>
-            </el-tooltip>
-            <el-tooltip content="删除" placement="top">
-              <el-button link type="primary" icon="Delete" @click="handleDelete(scope.row)"></el-button>
-            </el-tooltip>
-          </template>
-        </el-table-column>
-      </el-table>
+    <!-- 吊销对话框 -->
+    <el-dialog v-model="revokeOpen" title="吊销证书" width="400px" append-to-body>
+      <el-form :model="revokeForm" label-width="80px">
+        <el-form-item label="吊销原因">
+          <el-select v-model="revokeForm.reason" placeholder="请选择吊销原因" style="width: 100%">
+            <el-option label="未指定" :value="0" />
+            <el-option label="密钥泄露" :value="1" />
+            <el-option label="CA泄露" :value="2" />
+            <el-option label="从属关系变更" :value="3" />
+            <el-option label="被取代" :value="4" />
+            <el-option label="业务停止" :value="5" />
+            <el-option label="证书持有" :value="6" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button type="primary" @click="submitRevoke">确 定</el-button>
+          <el-button @click="revokeOpen = false">取 消</el-button>
+        </div>
+      </template>
+    </el-dialog>
 
-      <pagination v-show="total > 0" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" :total="total" @pagination="getList" />
-    </el-card>
+    <!-- 签发证书对话框 -->
+    <el-dialog v-model="issueOpen" :title="issueTitle" width="850px" append-to-body top="5vh" @close="closeIssueDialog">
+      <el-form ref="issueFormRef" :model="issueForm" :rules="issueRules" label-width="120px">
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <div class="form-section">
+              <div class="section-title">颁发者与模板</div>
+              <el-form-item label="颁发者" prop="rootId">
+                <el-select v-model="issueForm.rootId" placeholder="请选择颁发者" style="width: 100%" @change="handleRootChange">
+                  <el-option v-for="item in rootList" :key="item.id" :label="item.name" :value="item.id" />
+                </el-select>
+              </el-form-item>
+              <el-form-item label="证书模板" prop="profileId">
+                <el-select v-model="issueForm.profileId" placeholder="请选择模板" style="width: 100%" @change="handleProfileChange">
+                  <el-option v-for="item in profileList" :key="item.id" :label="item.name" :value="item.id" />
+                </el-select>
+              </el-form-item>
+            </div>
 
-    <!-- 添加或修改证书对话框 -->
-    <el-dialog ref="formDialogRef" v-model="dialog.visible" :title="dialog.title" width="600px" append-to-body @close="cancel">
-      <el-form ref="certFormRef" :model="form" :rules="certRules" label-width="120px">
-        <el-row>
-          <el-col :span="24">
-            <el-form-item label="证书序列号" prop="certSn">
-              <el-input v-model="form.certSn" placeholder="请输入证书序列号" :disabled="!!form.id" />
-            </el-form-item>
+            <div class="form-section" v-if="issueForm.subjectItems.length > 0">
+              <div class="section-title">主体信息 (Subject)</div>
+              <div class="subject-scroll-area">
+                <CertSubject v-model="issueForm.subjectItems" propPrefix="subjectItems" />
+              </div>
+            </div>
           </el-col>
-        </el-row>
-        <el-row>
-          <el-col :span="24">
-            <el-form-item label="主题" prop="subject">
-              <el-input v-model="form.subject" placeholder="请输入主题" />
-            </el-form-item>
-          </el-col>
-        </el-row>
-        <el-row>
-          <el-col :span="24">
-            <el-form-item label="颁发者" prop="issuer">
-              <el-input v-model="form.issuer" placeholder="请输入颁发者" />
-            </el-form-item>
-          </el-col>
-        </el-row>
-        <el-row>
-          <el-col :span="24">
-            <el-form-item label="证书类型" prop="certType">
-              <el-select v-model="form.certType" placeholder="请选择证书类型" style="width: 100%">
-                <el-option label="根证书" value="ROOT" />
-                <el-option label="中间证书" value="INTERMEDIATE" />
-                <el-option label="终端证书" value="END_ENTITY" />
-              </el-select>
-            </el-form-item>
-          </el-col>
-        </el-row>
-        <el-row>
-          <el-col :span="24">
-            <el-form-item label="证书内容" prop="cert">
-              <el-input v-model="form.cert" type="textarea" :rows="10" placeholder="请输入证书内容" />
-            </el-form-item>
-          </el-col>
-        </el-row>
-        <el-row>
-          <el-col :span="24">
-            <el-form-item label="备注">
-              <el-input v-model="form.remark" type="textarea" placeholder="请输入备注" />
-            </el-form-item>
+
+          <el-col :span="12">
+            <div v-if="issueType === 'key'" class="form-section">
+              <div class="section-title">
+                <span>USBKey 证书设置</span>
+                <div v-if="monitoring" class="monitoring-tag">
+                  <span class="pulse-dot"></span>
+                  正在监控设备插拔...
+                </div>
+              </div>
+              <el-form-item label="设备提供商" prop="provider">
+                <div class="flex-row" style="display: flex; gap: 10px; width: 100%">
+                  <el-select v-model="issueForm.provider" placeholder="请选择或刷新" style="flex: 1" @change="onCertProviderChange">
+                    <el-option v-for="p in certProviders" :key="p" :label="p" :value="p" />
+                  </el-select>
+                  <el-button @click="refreshCertProviders" :icon="Refresh" circle />
+                </div>
+              </el-form-item>
+              <el-form-item label="设备列表" prop="device">
+                <el-select v-model="issueForm.device" placeholder="请选择设备" style="width: 100%" @change="onCertDeviceChange">
+                  <el-option v-for="d in certDevices" :key="d" :label="d" :value="d" />
+                </el-select>
+              </el-form-item>
+              <el-form-item label="应用" prop="appName">
+                <el-select v-model="issueForm.appName" placeholder="请选择应用" style="width: 100%">
+                  <el-option v-for="a in certApps" :key="a" :label="a" :value="a" />
+                </el-select>
+              </el-form-item>
+              <el-form-item label="容器名" prop="containerName">
+                <el-input v-model="issueForm.containerName" placeholder="已自动生成随机容器名" />
+              </el-form-item>
+              <el-form-item label="User PIN" prop="pin">
+                <el-input v-model="issueForm.pin" type="password" show-password placeholder="请输入 USBKey User PIN" />
+              </el-form-item>
+            </div>
+
+            <div v-if="issueType === 'p10'" class="form-section">
+              <div class="section-title">PKCS10 CSR 内容</div>
+              <el-form-item label="CSR PEM" prop="csr" label-width="0">
+                <el-input v-model="issueForm.csr" type="textarea" :rows="15" placeholder="-----BEGIN CERTIFICATE REQUEST----- ..." />
+              </el-form-item>
+            </div>
           </el-col>
         </el-row>
       </el-form>
       <template #footer>
         <div class="dialog-footer">
-          <el-button type="primary" @click="submitForm">确 定</el-button>
-          <el-button @click="cancel">取 消</el-button>
-        </div>
-      </template>
-    </el-dialog>
-
-    <!-- 导入证书对话框 -->
-    <el-dialog v-model="uploadDialog.visible" title="导入证书" width="600px" append-to-body>
-      <el-upload
-        drag
-        :auto-upload="false"
-        :file-list="uploadDialog.fileList"
-        :on-change="handleFileChange"
-        :before-upload="beforeUpload"
-        multiple
-        accept=".pem,.cer,.crt,.der"
-      >
-        <el-icon class="el-icon--upload"><upload-filled /></el-icon>
-        <div class="el-upload__text">将文件拖到此处，或<em>点击上传</em></div>
-        <template #tip>
-          <div class="el-upload__tip">支持 .pem, .cer, .crt, .der 格式的证书文件</div>
-        </template>
-      </el-upload>
-      <template #footer>
-        <div class="dialog-footer">
-          <el-button type="primary" :loading="uploadDialog.loading" @click="submitImport">确 定</el-button>
-          <el-button @click="uploadDialog.visible = false">取 消</el-button>
+          <el-button type="primary" :loading="issueLoading" @click="submitIssue">确认签发</el-button>
+          <el-button @click="issueOpen = false">取 消</el-button>
         </div>
       </template>
     </el-dialog>
   </div>
 </template>
 
+<script setup name="CertManagement" lang="ts">
+import { ref, reactive, toRefs, getCurrentInstance, ComponentInternalInstance, onMounted } from 'vue';
+import { ElMessage, ElMessageBox, FormInstance } from 'element-plus';
+import { ArrowDown, Plus, View, Download, Delete, CircleClose, Refresh, Search, Document, Key, QuestionFilled, Cpu, InfoFilled, Warning } from '@element-plus/icons-vue';
+import X509Cert from '@/components/X509Cert/index.vue';
+import CertSubject, { typeMapping, sortSubjectItems } from '@/components/CertSubject/index.vue';
+import { pageCert, getCert, revokeCert, removeCert, exportCert, issueCert } from '@/api/ca/cert';
+import { listRootCa, getRootCa } from '@/api/ca/root';
+import { listProfile, getProfile } from '@/api/ca/profile';
+import { X509 } from 'jsrsasign';
+import { parseJson, parseKeyAlgorithms } from '@/utils/json';
+import { parseTime } from '@/utils/ruoyi';
+import SKFClient from '@/api/skf/skf_api';
+
+const { proxy } = getCurrentInstance() as ComponentInternalInstance;
+
+// SKF 客户端单例管理
+let skfClientPromise: Promise<any> | null = null;
+const getSkfClient = (): Promise<any> => {
+  if (skfClientPromise) return skfClientPromise;
+  const skf = new SKFClient('ws://127.0.0.1:9001');
+  skfClientPromise = new Promise((resolve, reject) => {
+    skf.connect()
+      .then(() => resolve(skf))
+      .catch((err: any) => {
+        skfClientPromise = null;
+        reject(err || new Error('连接 SKF 服务超时或被拒绝'));
+      });
+  });
+  return skfClientPromise;
+};
+
+const loading = ref(false);
+const showSearch = ref(true);
+const total = ref(0);
+const certList = ref([]);
+const ids = ref<Array<string | number>>([]);
+const single = ref(true);
+const multiple = ref(true);
+const showDetail = ref(false);
+const currentCertPem = ref('');
+const revokeOpen = ref(false);
+
+// 签发相关状态
+const issueOpen = ref(false);
+const issueLoading = ref(false);
+const monitoring = ref(false);
+const issueTitle = ref('');
+const issueType = ref('key'); 
+const rootList = ref([]);
+const profileList = ref([]);
+const allProfileList = ref([]); 
+const certProviders = ref<string[]>([]);
+const certDevices = ref<string[]>([]);
+const certApps = ref<string[]>([]);
+const issueFormRef = ref<FormInstance>();
+
+const data = reactive({
+  queryParams: { pageNum: 1, pageSize: 10, name: undefined, serialNumber: undefined },
+  revokeForm: { id: undefined as string | number | undefined, reason: 0 },
+  issueForm: {
+    rootId: undefined as string | number | undefined,
+    profileId: undefined as string | number | undefined,
+    name: '',
+    subjectItems: [] as any[],
+    provider: '', device: '', appName: '', containerName: '', pin: '123456', csr: ''
+  }
+});
+
+const { queryParams, revokeForm, issueForm } = toRefs(data);
+
+const issueRules = {
+  rootId: [{ required: true, message: '请选择颁发者', trigger: 'change' }],
+  profileId: [{ required: true, message: '请选择证书模板', trigger: 'change' }],
+  provider: [{ required: true, message: '请选择厂商', trigger: 'change' }],
+  device: [{ required: true, message: '请选择设备', trigger: 'change' }],
+  appName: [{ required: true, message: '请选择应用', trigger: 'change' }],
+  containerName: [{ required: true, message: '请输入容器名称', trigger: 'blur' }],
+  pin: [{ required: true, message: '请输入PIN码', trigger: 'blur' }],
+  csr: [{ required: true, message: '请输入CSR', trigger: 'blur' }]
+};
+
+async function loadRoots() { try { const res = await listRootCa({ pageNum: 1, pageSize: 100 }); rootList.value = res.data.rows || res.data.records || []; } catch (e) {} }
+async function loadProfiles() { try { const res = await listProfile(); allProfileList.value = (res.data || []).filter((p: any) => p.type !== 'RootCA'); profileList.value = []; } catch (e) {} }
+
+async function refreshCertProviders() {
+  certProviders.value = [];
+  try {
+    skfClientPromise = null;
+    const skf = await getSkfClient();
+    try { await skf.setLanguage('CN'); } catch(e) {}
+    const providers = await skf.enumProvider();
+    certProviders.value = providers;
+    if (providers.length > 0) { issueForm.value.provider = providers[0]; await onCertProviderChange(); }
+    if (issueOpen.value && !monitoring.value && issueType.value === 'key') startDeviceMonitoring();
+  } catch (e: any) {
+    console.error('SKF Service Error:', e);
+    const errorMsg = e?.message || (typeof e === 'string' ? e : 'SKF 服务连接异常');
+    ElMessage.error('无法连接到 SKF 服务: ' + errorMsg);
+  }
+}
+
+async function startDeviceMonitoring() {
+  if (monitoring.value) return;
+  monitoring.value = true;
+  try {
+    const skf = await getSkfClient();
+    while (monitoring.value && issueOpen.value) {
+      try {
+        const prov = issueForm.value.provider || (certProviders.value.length > 0 ? certProviders.value[0] : null);
+        if (!prov) { await new Promise(resolve => setTimeout(resolve, 2000)); continue; }
+        const event = await skf.waitForDeviceEvent(prov);
+        if (event.event === 1) { ElMessage.success(`检测到设备插入: ${event.deviceName}`); await refreshCertProviders(); }
+        else if (event.event === 2) { ElMessage.warning(`设备已拔出: ${event.deviceName}`); await refreshCertProviders(); }
+      } catch (e: any) { if (e.message && !e.message.includes('timeout')) { console.warn('设备监控异常:', e); await new Promise(resolve => setTimeout(resolve, 5000)); } }
+    }
+  } finally { monitoring.value = false; }
+}
+
+async function onCertProviderChange() {
+  certDevices.value = [];
+  if (!issueForm.value.provider) return;
+  try {
+    const skf = await getSkfClient();
+    const devices = await skf.enumDevice(issueForm.value.provider);
+    certDevices.value = devices;
+    if (devices.length > 0) { issueForm.value.device = devices[0]; await onCertDeviceChange(); }
+  } catch (e: any) { ElMessage.error('获取设备列表失败'); }
+}
+
+async function onCertDeviceChange() {
+  certApps.value = [];
+  if (!issueForm.value.provider || !issueForm.value.device) return;
+  try {
+    const skf = await getSkfClient();
+    const apps = await skf.enumApplication(issueForm.value.provider, issueForm.value.device);
+    certApps.value = apps;
+    if (apps.length > 0) issueForm.value.appName = apps[0];
+  } catch (e: any) { ElMessage.error('获取应用列表失败'); }
+}
+
+async function handleRootChange(val: any) {
+  if (!val) { profileList.value = []; issueForm.value.profileId = undefined; issueForm.value.subjectItems = []; return; }
+  try {
+    const res = await getRootCa(val);
+    const authorizedIds = res.data.profileIds || [];
+    profileList.value = allProfileList.value.filter((p: any) => authorizedIds.some((authId: any) => String(authId) === String(p.id)));
+    issueForm.value.profileId = undefined; issueForm.value.subjectItems = [];
+  } catch (e) {}
+}
+
+async function handleProfileChange(val: any) {
+  if (!val) return;
+  try {
+    const res = await getProfile(val);
+    const conf = parseJson(res.data.conf);
+    if (conf && conf.subject) {
+      const items: any[] = [];
+      const rdns = conf.subject.rdns || (Array.isArray(conf.subject) ? conf.subject : []);
+      rdns.forEach((rdn: any) => {
+        const rdnType = (typeof rdn.type === 'object' ? rdn.type.description : rdn.type) || '';
+        let compType = rdnType.toLowerCase();
+        for (const [type, meta] of Object.entries(typeMapping)) { if (meta.key.toLowerCase() === compType || type.toLowerCase() === compType) { compType = type; break; } }
+        const count = Math.max(1, rdn.minOccurs === undefined ? 1 : rdn.minOccurs);
+        for (let i = 0; i < count; i++) { items.push({ type: compType, value: '', minOccurs: rdn.minOccurs, maxOccurs: rdn.maxOccurs }); }
+      });
+      issueForm.value.subjectItems = sortSubjectItems(items);
+    }
+  } catch (e) {}
+}
+
+function handleIssueCommand(command: string) {
+  issueType.value = command;
+  issueTitle.value = command === 'key' ? 'USB Key 签发' : 'PKCS10 签发';
+  resetIssueForm();
+  issueForm.value.containerName = 'cert-' + Math.random().toString(36).substring(2, 10) + '-' + Date.now().toString(36);
+  issueOpen.value = true;
+  if (command === 'key') refreshCertProviders();
+}
+
+function resetIssueForm() {
+  issueForm.value = { rootId: undefined, profileId: undefined, name: '', subjectItems: [], provider: '', device: '', appName: '', containerName: '', pin: '123456', csr: '' };
+  if (issueFormRef.value) issueFormRef.value.resetFields();
+}
+
+function closeIssueDialog() { issueOpen.value = false; monitoring.value = false; }
+
+async function submitIssue() {
+  issueFormRef.value?.validate(async (valid) => {
+    if (valid) {
+      issueLoading.value = true;
+      let skf: any = null;
+      try {
+        let finalCsr = '';
+        if (issueType.value === 'key') {
+          skf = await getSkfClient();
+          const appPath = `${issueForm.value.provider}/${issueForm.value.device}/${issueForm.value.appName}`;
+          ElMessage.info('正在验证 PIN...');
+          await skf.checkPIN(appPath, issueForm.value.pin);
+          const subject = issueForm.value.subjectItems.filter((i: any) => i.value).map((i: any) => {
+            const key = typeMapping[i.type as keyof typeof typeMapping]?.key || i.type;
+            return `${key}=${i.value}`;
+          }).join(',');
+          ElMessage.info('正在生成 CSR...');
+          const p10Res = await skf.createPKCS10(issueForm.value.provider, issueForm.value.device, issueForm.value.appName, subject, 'SM2', 256, issueForm.value.containerName);
+          finalCsr = p10Res.pem;
+        } else { finalCsr = issueForm.value.csr; }
+
+        ElMessage.info('正在签发证书...');
+        const res = await issueCert({ rootId: issueForm.value.rootId, profileId: issueForm.value.profileId, csrPem: finalCsr });
+        if (res.data && res.data.cert) {
+          if (issueType.value === 'key' && skf) {
+            ElMessage.info('正在写入 USB Key...');
+            await skf.importCertificate(issueForm.value.provider, issueForm.value.device, issueForm.value.appName, issueForm.value.containerName, true, res.data.cert);
+          }
+          ElMessage.success('签发成功'); issueOpen.value = false; getList();
+        } else { throw new Error(res.msg || '后端签发结果异常'); }
+      } catch (e: any) {
+        console.error('Issue Error:', e);
+        const errorMsg = e?.message || (typeof e === 'string' ? e : '操作失败');
+        ElMessage.error('签发失败: ' + errorMsg);
+      } finally { issueLoading.value = false; }
+    }
+  });
+}
+
+function getStatusType(status: string) { switch (status) { case 'VALID': return 'success'; case 'REVOKED': return 'danger'; case 'EXPIRED': return 'warning'; default: return 'info'; } }
+function getStatusLabel(status: string) { switch (status) { case 'VALID': return '有效'; case 'REVOKED': return '已吊销'; case 'EXPIRED': return '已过期'; default: return status || '未知'; } }
+function handleQuery() { queryParams.value.pageNum = 1; getList(); }
+function resetQuery() { proxy?.resetForm('queryForm'); handleQuery(); }
+function handleSelectionChange(selection: any[]) { ids.value = selection.map(item => item.id); single.value = selection.length !== 1; multiple.value = !selection.length; }
+function handleView(row: any) { currentCertPem.value = row.cert || row.pem; showDetail.value = true; }
+function handleDownload(row: any) {
+  const pem = row.cert || row.pem;
+  if (!pem) { ElMessage.error('内容为空'); return; }
+  const blob = new Blob([pem], { type: 'application/x-pem-file' });
+  const link = document.createElement('a');
+  link.href = window.URL.createObjectURL(blob);
+  link.download = `${row.serialNumber}.crt`; link.click();
+}
+function handleRevoke(row: any) { revokeForm.value.id = row.id; revokeForm.value.reason = 0; revokeOpen.value = true; }
+async function submitRevoke() {
+  try { await revokeCert(revokeForm.value as any); ElMessage.success('吊销成功'); revokeOpen.value = false; getList(); }
+  catch (error: any) { ElMessage.error('失败'); }
+}
+function handleDelete(row: any) {
+  const certIds = row.id || ids.value;
+  ElMessageBox.confirm('确认删除？', '提示', { type: 'warning' }).then(async () => {
+    try { await removeCert(Array.isArray(certIds) ? certIds : [certIds]); ElMessage.success('成功'); getList(); } catch (e) {}
+  });
+}
+async function handleExport() {
+  try {
+    const res = await exportCert(ids.value);
+    const link = document.createElement('a');
+    link.href = window.URL.createObjectURL(new Blob([res]));
+    link.download = `certs_${Date.now()}.zip`; link.click();
+  } catch (e) {}
+}
+
+function parseCertInfo(certPem: string) {
+  if (!certPem) return null;
+  const x509 = new X509();
+  try {
+    x509.readCertPEM(certPem);
+    const issuer = x509.getIssuerString();
+    const subject = x509.getSubjectString();
+    const notAfter = x509.getNotAfter();
+    const serialNumber = x509.getSerialNumberHex();
+    return { issuer, subject, notAfter: formatX509Date(notAfter), serialNumber: serialNumber.toUpperCase(), pem: certPem };
+  } catch (e) { return null; }
+}
+
+function formatX509Date(zStr: string): string {
+  if (!zStr) return '-';
+  try {
+    let y, m, d, h, min, s;
+    if (zStr.length === 13) {
+      y = '20' + zStr.substring(0, 2); m = parseInt(zStr.substring(2, 4)) - 1; d = zStr.substring(4, 6);
+      h = zStr.substring(6, 8); min = zStr.substring(8, 10); s = zStr.substring(10, 12);
+    } else {
+      y = zStr.substring(0, 4); m = parseInt(zStr.substring(4, 6)) - 1; d = zStr.substring(6, 8);
+      h = zStr.substring(8, 10); min = zStr.substring(10, 12); s = zStr.substring(12, 14);
+    }
+    const date = new Date(Date.UTC(y as any, m, d as any, h as any, min as any, s as any));
+    return date.toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  } catch (e) { return zStr; }
+}
+
+async function getList() {
+  loading.value = true;
+  try {
+    const res = await pageCert(queryParams.value);
+    let rawList = res.data?.rows || res.data?.records || [];
+    total.value = res.data?.total || 0;
+    certList.value = rawList.map((item: any) => {
+      const info = parseCertInfo(item.cert);
+      return { ...item, ...info };
+    });
+  } catch (error: any) { ElMessage.error('获取列表失败'); } finally { loading.value = false; }
+}
+
+onMounted(() => { loadRoots(); loadProfiles(); getList(); });
+</script>
+
 <style scoped lang="scss">
+.mb8 { margin-bottom: 8px; }
+.section-h4 { margin-top: 0; margin-bottom: 15px; color: #606266; font-size: 14px; }
+.cert-section-header { margin-bottom: 15px; }
+.cert-divider-section { margin-top: 20px; border-top: 1px dashed #eee; padding-top: 20px; margin-bottom: 20px; }
+.flex-between { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; .section-h4 { margin-bottom: 0; } }
+.monitoring-tag { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #67c23a; font-weight: normal; background: #f0f9eb; padding: 2px 10px; border-radius: 12px; border: 1px solid #e1f3d8; }
+.pulse-dot { width: 6px; height: 6px; background-color: #67c23a; border-radius: 50%; position: relative; &::after { content: ''; position: absolute; width: 100%; height: 100%; background-color: #67c23a; border-radius: 50%; animation: pulse 2s infinite; } }
+@keyframes pulse { 0% { transform: scale(1); opacity: 0.8; } 70% { transform: scale(2.5); opacity: 0; } 100% { transform: scale(1); opacity: 0; } }
+.subject-scroll-area { max-height: 400px; overflow-y: auto; padding-right: 5px; }
+.flex-row { display: flex; align-items: center; }
+.ml-2 { margin-left: 10px; }
 </style>

@@ -93,13 +93,25 @@ const certText = computed(() => {
     text += `        Serial Number:\n            ${formattedSerial}\n`;
   }
 
+  const algMap: Record<string, string> = {
+    '1.2.156.10197.1.501': 'sm2sign_with_sm3',
+    '1.2.156.10197.1.301': 'SM2',
+    '2.16.840.1.101.3.4.3.17': 'ML-DSA-44',
+    '2.16.840.1.101.3.4.3.18': 'ML-DSA-65',
+    '2.16.840.1.101.3.4.3.19': 'ML-DSA-87',
+    '1.3.101.112': 'Ed25519',
+    '1.3.101.113': 'Ed448',
+    '1.2.840.113549.1.1.1': 'rsaEncryption',
+    '1.2.840.10045.2.1': 'id-ecPublicKey'
+  };
+
   let sigAlgName = 'Unknown';
   try {
     sigAlgName = x509.getSignatureAlgorithmName();
   } catch (e) {}
   
-  if (sigAlgName === '1.2.156.10197.1.501') {
-    sigAlgName = 'sm2sign_with_sm3';
+  if (algMap[sigAlgName]) {
+    sigAlgName = algMap[sigAlgName];
   } else if (sigAlgName === 'Unknown' || props.certPem.includes('SM2')) {
     sigAlgName = 'sm2sign_with_sm3';
   }
@@ -124,17 +136,43 @@ const certText = computed(() => {
   text += `        Subject: ${subjectStr}\n`;
 
   text += `        Subject Public Key Info:\n`;
-  let pubKeyAlg = 'id-ecPublicKey';
+  let pubKeyAlg = 'Unknown';
+  let pubKeyOID = '';
   try {
-    const pub = x509.getPublicKey();
-    if (pub && (pub as any).type === 'EC') pubKeyAlg = 'id-ecPublicKey';
-    else if (pub && (pub as any).type === 'RSA') pubKeyAlg = 'rsaEncryption';
+    // 尝试提取公钥 OID
+    // 路径 [0, 6, 0, 0] 对应 Certificate -> tbsCertificate (idx 0) -> subjectPublicKeyInfo (idx 6) -> algorithm (idx 0) -> algorithm (idx 0)
+    // 如果没有 Version 字段，subjectPublicKeyInfo 的索引可能会变成 5
+    let oidHex = ASN1HEX.getVbyList(x509.hex, 0, [0, 6, 0, 0]);
+    if (!oidHex || oidHex.length < 2) {
+      oidHex = ASN1HEX.getVbyList(x509.hex, 0, [0, 5, 0, 0]);
+    }
+    
+    if (oidHex) {
+      pubKeyOID = ASN1HEX.hextooidstr(oidHex);
+      pubKeyAlg = algMap[pubKeyOID] || pubKeyOID || 'Unknown';
+    }
   } catch (e) {}
+
+  if (pubKeyAlg === 'Unknown' || pubKeyAlg.startsWith('2.')) {
+    try {
+      const pub = x509.getPublicKey();
+      if (pub && (pub as any).type === 'EC') pubKeyAlg = 'id-ecPublicKey';
+      else if (pub && (pub as any).type === 'RSA') pubKeyAlg = 'rsaEncryption';
+      else if (pub && (pub as any).type) pubKeyAlg = (pub as any).type;
+    } catch (e) {}
+  }
 
   text += `            Public Key Algorithm: ${pubKeyAlg}\n`;
   
-  if (pubKeyAlg === 'id-ecPublicKey' || props.certPem.includes('SM2')) {
+  if (pubKeyAlg === 'id-ecPublicKey' || pubKeyOID === '1.2.156.10197.1.301' || (pubKeyAlg === 'Unknown' && props.certPem.includes('SM2'))) {
     text += `                Public-Key: (256 bit)\n`;
+  } else if (pubKeyAlg === 'rsaEncryption') {
+    try {
+      const pub = x509.getPublicKey();
+      if (pub && (pub as any).n) {
+        text += `                Public-Key: (${(pub as any).n.bitLength()} bit)\n`;
+      }
+    } catch (e) {}
   }
 
   let pub16 = '';
@@ -144,7 +182,7 @@ const certText = computed(() => {
 
   if (pub16) {
     text += `                pub:\n                    ${formatHexWithColonLines(pub16, '                    ')}\n`;
-    if (pubKeyAlg === 'id-ecPublicKey' || props.certPem.includes('SM2')) {
+    if (pubKeyOID === '1.2.156.10197.1.301' || (pubKeyAlg === 'id-ecPublicKey' && props.certPem.includes('SM2'))) {
       text += `                ASN1 OID: SM2\n`;
     }
   }

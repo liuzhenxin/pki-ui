@@ -39,6 +39,7 @@ export interface SubjectItem {
   minOccurs?: number;
   maxOccurs?: number;
   value?: string;
+  regex?: string;
 }
 
 // Map x509 component types to corresponding short codes and translations
@@ -57,6 +58,9 @@ export const typeMapping: Record<string, { label: string; key: string; isSelect?
   surname: { label: '姓氏(SN)', key: 'surname' },
   givenName: { label: '名字(GN)', key: 'givenName' }
 };
+
+// Common Regex Patterns
+const FQDN_REGEX = /^(?!:\/\/)([a-zA-Z0-9-_]+\.)*[a-zA-Z0-9][a-zA-Z0-9-_]+\.[a-zA-Z]{2,11}?$/;
 
 // Sort weights from smallest scope to largest scope (从小到大)
 const orderWeights: Record<string, number> = {
@@ -101,15 +105,47 @@ const getFieldMeta = (type: string) => {
 };
 
 const getRules = (item: SubjectItem) => {
-  // If minOccurs is omitting or > 0, the field is considered required
+  const rules: any[] = [];
+  const meta = getFieldMeta(item.type);
+
+  // 1. Required validation
   const isRequired = item.minOccurs === undefined || item.minOccurs > 0;
   if (isRequired) {
-    const meta = getFieldMeta(item.type);
-    return [
-      { required: true, message: `请填写${meta.label}`, trigger: meta.isSelect ? 'change' : 'blur' }
-    ];
+    rules.push({
+      required: true,
+      message: `请填写${meta.label}`,
+      trigger: meta.isSelect ? 'change' : 'blur'
+    });
   }
-  return [];
+
+  // 2. Regex validation
+  if (item.regex) {
+    if (item.regex === ':FQDN') {
+      rules.push({
+        pattern: FQDN_REGEX,
+        message: `${meta.label}格式不正确，应为 FQDN (如: example.com)`,
+        trigger: 'blur'
+      });
+    } else {
+      // Handle standard regex strings from profile
+      try {
+        // If the regex starts and ends with /, treat it as a literal regex
+        const pattern = item.regex.startsWith('/') && item.regex.endsWith('/')
+          ? new RegExp(item.regex.slice(1, -1))
+          : new RegExp(item.regex);
+
+        rules.push({
+          pattern: pattern,
+          message: `${meta.label}格式不正确 (需符合正则: ${item.regex})`,
+          trigger: 'blur'
+        });
+      } catch (e) {
+        console.warn(`Invalid regex pattern: ${item.regex}`, e);
+      }
+    }
+  }
+
+  return rules;
 };
 </script>
 

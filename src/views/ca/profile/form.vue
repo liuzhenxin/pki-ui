@@ -5,6 +5,7 @@ import { useRouter, useRoute } from 'vue-router';
 import { Plus, Delete, Top, Bottom, Postcard, CollectionTag, Timer, Calendar, EditPen, Key } from '@element-plus/icons-vue';
 import { getProfile, saveProfile, modifyProfile } from '@/api/ca/profile';
 import { ProfileForm } from '@/api/ca/profile/types';
+import { parseJson, parseKeyAlgorithms } from '@/utils/json';
 
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
 const router = useRouter();
@@ -47,10 +48,10 @@ const signatureAlgorithmOptions = [
 // 预设模板列表
 const presetTemplates = [
   {
-    name: '根证书模板',
+    name: 'RootCA证书模板',
     type: 'RootCA',
     certLevel: 'RootCA',
-    category: '根证书模板',
+    category: 'RootCA证书模板',
     validity: '8y',
     keyAlgorithms: ['RSA-2048', 'RSA-4096', 'SM2P256V1']
   },
@@ -114,7 +115,7 @@ const presetTemplates = [
 
 // 模板类别选项
 const categoryOptions = [
-  { label: '根证书模板', value: '根证书模板' },
+  { label: 'RootCA证书模板', value: 'RootCA证书模板' },
   { label: '子CA证书模板', value: '子CA证书模板' },
   { label: 'TLS服务器证书模板', value: 'TLS服务器证书模板' },
   { label: 'TLS客户端证书模板', value: 'TLS客户端证书模板' },
@@ -765,7 +766,7 @@ async function submitForm() {
               // 对于BasicConstraints，添加basicConstraints配置
               if (ext.type === 'BasicConstraints' && ext.config) {
                 try {
-                  const config = typeof ext.config === 'string' ? JSON.parse(ext.config) : ext.config;
+                  const config = parseJson(ext.config);
                   extConfig.basicConstraints = config;
                 } catch (e) {
                   console.error('解析BasicConstraints配置失败', e);
@@ -775,7 +776,7 @@ async function submitForm() {
               // 对于AuthorityInfoAccess，添加authorityInfoAccess配置
               if (ext.type === 'AuthorityInfoAccess' && ext.config) {
                 try {
-                  const config = typeof ext.config === 'string' ? JSON.parse(ext.config) : ext.config;
+                  const config = parseJson(ext.config);
                   extConfig.authorityInfoAccess = config;
                 } catch (e) {
                   console.error('解析AuthorityInfoAccess配置失败', e);
@@ -842,12 +843,16 @@ function goBack() {
 async function getProfileDetail(id: string | number) {
   try {
     loading.value = true;
-    const { data } = await getProfile(id);
+    const res = await getProfile(id);
+    const data = res.data;
+    if (!data) {
+      throw new Error('未获取到模板数据');
+    }
     Object.assign(form, data);
 
     // 解析conf字段
     if (data.conf) {
-      const conf = typeof data.conf === 'string' ? JSON.parse(data.conf) : data.conf;
+      const conf = parseJson(data.conf);
 
       // 解析新格式的字段
       form.metadata = conf.metadata || { category: '', details: '' };
@@ -855,14 +860,15 @@ async function getProfileDetail(id: string | number) {
       form.maxSize = conf.maxSize || 8400;
       form.validity = conf.validity || '1y';
       form.notBeforeTime = conf.notBeforeTime || 'current';
-      form.keyAlgorithms = conf.keyAlgorithms || ['RSA-2048'];
+      form.keyAlgorithms = conf.keyAlgorithms ? parseKeyAlgorithms(conf.keyAlgorithms) : ['RSA-2048'];
       form.signatureAlgorithms = conf.signatureAlgorithms || [];
 
-      // 解析subject（新格式是直接数组）
-      form.subjectItems = (conf.subject || []).map((item: any) => {
+      // 解析subject（处理可能存在的 rdns 嵌套）
+      const subjectRaw = conf.subject?.rdns || (Array.isArray(conf.subject) ? conf.subject : []);
+      form.subjectItems = subjectRaw.map((item: any) => {
         let typeValue = item.type;
         // 处理type字段：可能是对象 {oid, description} 或字符串
-        if (typeof item.type === 'object' && item.type.description) {
+        if (item.type && typeof item.type === 'object' && item.type.description) {
           // 从description反推type值
           const description = item.type.description.toLowerCase();
           typeValue = subjectValueToDescriptionMap[description] || description;
@@ -872,157 +878,110 @@ async function getProfileDetail(id: string | number) {
           typeValue = subjectValueToDescriptionMap[lowerType] || item.type;
         }
         return {
-          type: typeValue,
-          minOccurs: item.minOccurs,
+          type: typeValue || '',
+          minOccurs: item.minOccurs !== undefined ? item.minOccurs : 1,
+          maxOccurs: item.maxOccurs,
           regex: item.regex
         };
       });
+      
       // 解析主题到备用名称映射
       form.subjectToSubjectAltNames = conf.subjectToSubjectAltNames || [];
 
-      // 解析扩展信息（新格式）
+      // 解析扩展信息
       if (conf.extensions && Array.isArray(conf.extensions)) {
         form.extensions = conf.extensions.map((ext: any) => {
+          if (!ext) return null;
+          
           // 处理type字段：可能是对象 {oid, description} 或字符串
-          let typeValue = ext.type;
-          if (typeof ext.type === 'object' && ext.type.description) {
+          let typeValue = '';
+          const rawType = ext.type;
+          if (rawType && typeof rawType === 'object' && rawType.description) {
             // 从description反推type值
-            const typeEntry = Object.entries(extensionTypeOIDMap).find(([_, info]) => info.description === ext.type.description);
-            typeValue = typeEntry ? typeEntry[0] : ext.type.description;
+            const typeEntry = Object.entries(extensionTypeOIDMap).find(([_, info]) => info.description === rawType.description);
+            typeValue = typeEntry ? typeEntry[0] : rawType.description;
+          } else {
+            typeValue = rawType;
           }
 
           const extData: any = {
             type: typeValue,
-            required: ext.required,
-            critical: ext.critical,
+            required: !!ext.required,
+            critical: !!ext.critical,
             keyUsage: ext.keyUsage,
             extendedKeyUsage: ext.extendedKeyUsage,
             subjectAltName: ext.subjectAltName
           };
 
           // 对于BasicConstraints，将basicConstraints转为config字符串
-          if (ext.type === 'BasicConstraints' && ext.basicConstraints) {
+          if (extData.type === 'BasicConstraints' && ext.basicConstraints) {
             extData.config = typeof ext.basicConstraints === 'object' ? JSON.stringify(ext.basicConstraints) : ext.basicConstraints;
           }
 
           // 对于AuthorityInfoAccess，将authorityInfoAccess转为config字符串
-          if (ext.type === 'AuthorityInfoAccess' && ext.authorityInfoAccess) {
+          if (extData.type === 'AuthorityInfoAccess' && ext.authorityInfoAccess) {
             extData.config = typeof ext.authorityInfoAccess === 'object' ? JSON.stringify(ext.authorityInfoAccess) : ext.authorityInfoAccess;
           }
 
-          // 对于其他扩展，如果有config字段，转换为JSON字符串
+          // 对于其他扩展，如果有config字段且不是特殊处理的类型，转换为JSON字符串
           if (
-            ext.type !== 'BasicConstraints' &&
-            ext.type !== 'KeyUsage' &&
-            ext.type !== 'SubjectKeyIdentifier' &&
-            ext.type !== 'ExtendedKeyUsage' &&
-            ext.type !== 'SubjectAlternativeName' &&
-            ext.type !== 'AuthorityKeyIdentifier' &&
+            !['BasicConstraints', 'KeyUsage', 'ExtendedKeyUsage', 'SubjectAlternativeName', 'AuthorityInfoAccess'].includes(extData.type) &&
             ext.config
           ) {
             extData.config = typeof ext.config === 'object' ? JSON.stringify(ext.config) : ext.config;
           }
 
-          // 处理KeyUsage：从usages数组转换为usages数组（新格式）
-          if (ext.type === 'KeyUsage' && ext.keyUsage) {
+          // 处理KeyUsage：标准化 usages 格式
+          if (extData.type === 'KeyUsage' && ext.keyUsage) {
             if (ext.keyUsage.usages && Array.isArray(ext.keyUsage.usages)) {
               const usages = ext.keyUsage.usages.map((u: any) => {
-                // 从oid反推value
-                const oidEntry = Object.entries(keyUsageOIDMap).find(([_, info]) => info.oid === u.oid);
+                const val = u.value || u.oid || '';
+                // 从oid或value反推key
+                const entry = Object.entries(keyUsageOIDMap).find(([key, info]) => info.oid === val || key === val);
                 return {
-                  required: u.required || false,
-                  value: oidEntry ? oidEntry[0] : u.oid
+                  required: !!u.required,
+                  value: entry ? entry[0] : val
                 };
               });
-              extData.keyUsage = {
-                usages: usages
-              };
-            } else if (
-              (ext.keyUsage.required && Array.isArray(ext.keyUsage.required)) ||
-              (ext.keyUsage.optional && Array.isArray(ext.keyUsage.optional))
-            ) {
-              // 兼容旧格式
-              const required = ext.keyUsage.required || [];
-              const optional = ext.keyUsage.optional || [];
-              const usages = [];
-
-              required.forEach((value: string) => {
-                usages.push({ required: true, value: value });
-              });
-              optional.forEach((value: string) => {
-                usages.push({ required: false, value: value });
-              });
-
-              extData.keyUsage = {
-                usages: usages
-              };
+              extData.keyUsage = { usages };
             }
           }
 
-          // 处理ExtendedKeyUsage：从usages数组转换为usages数组（新格式）
-          if (ext.type === 'ExtendedKeyUsage' && ext.extendedKeyUsage) {
+          // 处理ExtendedKeyUsage：标准化 usages 格式
+          if (extData.type === 'ExtendedKeyUsage' && ext.extendedKeyUsage) {
             if (ext.extendedKeyUsage.usages && Array.isArray(ext.extendedKeyUsage.usages)) {
               const usages = ext.extendedKeyUsage.usages.map((u: any) => {
-                // 从oid反推value
-                const oidEntry = Object.entries(extendedKeyUsageOIDMap).find(([_, info]) => info.oid === u.oid);
+                const val = u.oid || u.value || '';
+                const entry = Object.entries(extendedKeyUsageOIDMap).find(([key, info]) => info.oid === val || key === val);
                 return {
-                  required: u.required || false,
-                  value: oidEntry ? oidEntry[0] : u.oid
+                  required: !!u.required,
+                  value: entry ? entry[0] : val
                 };
               });
-              extData.extendedKeyUsage = {
-                usages: usages
-              };
-            } else if (
-              (ext.extendedKeyUsage.required && Array.isArray(ext.extendedKeyUsage.required)) ||
-              (ext.extendedKeyUsage.optional && Array.isArray(ext.extendedKeyUsage.optional))
-            ) {
-              // 兼容旧格式
-              const required = ext.extendedKeyUsage.required || [];
-              const optional = ext.extendedKeyUsage.optional || [];
-              const usages = [];
-
-              required.forEach((value: string) => {
-                usages.push({ required: true, value: value });
-              });
-              optional.forEach((value: string) => {
-                usages.push({ required: false, value: value });
-              });
-
-              extData.extendedKeyUsage = {
-                usages: usages
-              };
+              extData.extendedKeyUsage = { usages };
             }
           }
 
           return extData;
-        });
+        }).filter(Boolean);
 
-        // 初始化selectedKeyUsages、selectedExtendedKeyUsages和selectedSubjectAltNameModes
-        selectedKeyUsages.value = form.extensions.map((ext: any) => {
-          if (ext.type === 'KeyUsage' && ext.keyUsage && ext.keyUsage.usages) {
-            return ext.keyUsage.usages.map((u: any) => u.value);
-          }
-          return [];
-        });
+        // 同步辅助状态
+        selectedKeyUsages.value = form.extensions.map((ext: any) => 
+          ext.type === 'KeyUsage' && ext.keyUsage?.usages ? ext.keyUsage.usages.map((u: any) => u.value) : []
+        );
 
-        selectedExtendedKeyUsages.value = form.extensions.map((ext: any) => {
-          if (ext.type === 'ExtendedKeyUsage' && ext.extendedKeyUsage && ext.extendedKeyUsage.usages) {
-            return ext.extendedKeyUsage.usages.map((u: any) => u.value);
-          }
-          return [];
-        });
+        selectedExtendedKeyUsages.value = form.extensions.map((ext: any) => 
+          ext.type === 'ExtendedKeyUsage' && ext.extendedKeyUsage?.usages ? ext.extendedKeyUsage.usages.map((u: any) => u.value) : []
+        );
 
-        selectedSubjectAltNameModes.value = form.extensions.map((ext: any) => {
-          if (ext.type === 'SubjectAlternativeName' && ext.subjectAltName && ext.subjectAltName.modes) {
-            return ext.subjectAltName.modes;
-          }
-          return [];
-        });
+        selectedSubjectAltNameModes.value = form.extensions.map((ext: any) => 
+          ext.type === 'SubjectAlternativeName' && ext.subjectAltName?.modes ? ext.subjectAltName.modes : []
+        );
       }
     }
-  } catch (error) {
-    ElMessage.error('获取证书模板信息失败');
+  } catch (error: any) {
+    console.error('获取或解析证书模板信息失败:', error);
+    ElMessage.error('获取证书模板信息失败: ' + (error.message || '未知错误'));
     router.back();
   } finally {
     loading.value = false;
@@ -1171,7 +1130,7 @@ onMounted(() => {
                     </template>
                     <div class="algo-selection-wrapper">
                       <el-checkbox-group v-model="form.keyAlgorithms" class="custom-checkbox-group">
-                        <el-checkbox-button v-for="algo in keyAlgorithmOptions" :key="algo.value" :label="algo.value">
+                        <el-checkbox-button v-for="algo in keyAlgorithmOptions" :key="algo.value" :value="algo.value">
                           {{ algo.label }}
                         </el-checkbox-button>
                       </el-checkbox-group>
@@ -1190,11 +1149,10 @@ onMounted(() => {
                     </template>
                     <div class="algo-selection-wrapper">
                       <el-checkbox-group v-model="form.signatureAlgorithms" class="custom-checkbox-group">
-                        <el-checkbox-button v-for="algo in signatureAlgorithmOptions" :key="algo.value" :label="algo.value">
-                          {{ algo.label }}
-                        </el-checkbox-button>
-                      </el-checkbox-group>
-                    </div>
+                      <el-checkbox-button v-for="algo in signatureAlgorithmOptions" :key="algo.value" :value="algo.value">
+                        {{ algo.label }}
+                      </el-checkbox-button>
+                      </el-checkbox-group>                    </div>
                   </el-form-item>
                 </el-col>
               </el-row>
@@ -1496,7 +1454,7 @@ onMounted(() => {
                   </el-card>
                 </div>
               </div>
-              <el-empty v-else description="暂无扩展信息" />
+              <el-empty v-else description="无扩展信息" />
               <el-button type="primary" icon="Plus" @click="addExtension" style="margin-top: 10px">添加扩展</el-button>
             </div>
           </el-tab-pane>

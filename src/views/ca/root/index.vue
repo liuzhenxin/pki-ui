@@ -242,6 +242,8 @@ import CertSubject, { typeMapping, sortSubjectItems } from '@/components/CertSub
 import { listProfile, getProfile } from '@/api/ca/profile';
 import { listRootCa, genRootCa } from '@/api/ca/root';
 import { X509 } from 'jsrsasign';
+import { parseJson, parseKeyAlgorithms } from '@/utils/json';
+import { parseTime } from '@/utils/ruoyi';
 
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
 const router = useRouter();
@@ -488,7 +490,7 @@ async function handleCommand(command: string) {
 
 /** 加载RootCA模板列表 */
 async function loadRootCaProfiles() {
-  console.log('开始加载根证书模板...');
+  console.log('开始加载RootCA证书模板...');
   
   try {
     // 调用listProfile API，传递type参数筛选RootCA模板
@@ -502,7 +504,7 @@ async function loadRootCaProfiles() {
     
     if (profiles.length === 0) {
       console.warn('没有找到RootCA类型的模板');
-      ElMessage.warning('没有找到可用的根证书模板');
+      ElMessage.warning('没有找到可用的RootCA证书模板');
       return;
     }
     
@@ -522,9 +524,9 @@ async function loadRootCaProfiles() {
     console.log('onProfileChange调用完成');
     
   } catch (error: any) {
-    console.error('加载根证书模板失败', error);
+    console.error('加载RootCA证书模板失败', error);
     console.error('错误详情:', error.response?.data || error.message);
-    ElMessage.error('加载根证书模板失败: ' + (error.response?.data?.msg || error.message));
+    ElMessage.error('加载RootCA证书模板失败: ' + (error.response?.data?.msg || error.message));
   }
 }
 
@@ -538,7 +540,7 @@ async function onProfileChange(profileId: any) {
     const profile = res.data;
     console.log('获取到的profile数据:', profile);
     
-    const conf = typeof profile.conf === 'string' ? JSON.parse(profile.conf) : profile.conf;
+    const conf = parseJson(profile.conf);
     console.log('解析后的conf:', conf);
 
     if (conf) {
@@ -558,27 +560,53 @@ async function onProfileChange(profileId: any) {
 
       // 3. 设置可选算法
       if (conf.keyAlgorithms && Array.isArray(conf.keyAlgorithms)) {
-        availableAlgos.value = conf.keyAlgorithms.map((a: any) => typeof a === 'string' ? a : (a.name || a.type));
+        const algos: string[] = [];
+        conf.keyAlgorithms.forEach((a: any) => {
+          if (typeof a === 'string') {
+            algos.push(a);
+            return;
+          }
+          // 处理复杂结构
+          const mainDesc = a.algorithms?.[0]?.description;
+          if (mainDesc === 'RSA' && a.parameters?.rsa?.modulus) {
+            a.parameters.rsa.modulus.forEach((m: number) => {
+              algos.push(`RSA${m}`);
+            });
+          } else if (mainDesc === 'EC' && a.parameters?.ec?.curves?.[0]?.description?.toLowerCase().includes('sm2')) {
+            algos.push('SM2');
+          } else if (mainDesc === 'EC' && a.parameters?.ec?.curves?.[0]?.description) {
+            algos.push(a.parameters.ec.curves[0].description.toUpperCase());
+          } else if (mainDesc) {
+            // 支持 PQC (ML-DSA 等) 或其他直接在 description 中定义的算法
+            algos.push(mainDesc);
+          } else if (a.name || a.type) {
+            algos.push(a.name || a.type);
+          }
+        });
+        availableAlgos.value = algos;
         if (availableAlgos.value.length > 0) {
           selfForm.value.keyAlgorithm = availableAlgos.value[0];
         }
       }
 
       // 4. 设置主题项
-      if (conf.subject && Array.isArray(conf.subject) && conf.subject.length > 0) {
-        console.log('开始解析主题项，conf.subject:', conf.subject);
+      const rdns = conf.subject?.rdns || conf.subject;
+      if (rdns && Array.isArray(rdns) && rdns.length > 0) {
+        console.log('开始解析主题项，rdns:', rdns);
         const items: any[] = [];
-        conf.subject.forEach((rdn: any) => {
+        rdns.forEach((rdn: any) => {
           console.log('处理RDN:', rdn);
-          let compType = rdn.type.toLowerCase();
+          // 处理 type: { oid: '...', description: '...' } 或 type: '...'
+          const rdnType = (typeof rdn.type === 'object' ? rdn.type.description : rdn.type) || '';
+          let compType = rdnType.toLowerCase();
           for (const [type, meta] of Object.entries(typeMapping)) {
-            if (meta.key.toLowerCase() === rdn.type.toLowerCase() || type.toLowerCase() === rdn.type.toLowerCase()) {
+            if (meta.key.toLowerCase() === compType || type.toLowerCase() === compType) {
               compType = type;
               break;
             }
           }
 
-          const count = Math.max(1, rdn.minOccurs || 0);
+          const count = Math.max(1, rdn.minOccurs === undefined ? 1 : rdn.minOccurs);
           for (let i = 0; i < count; i++) {
             items.push({
               type: compType,

@@ -185,7 +185,7 @@
             </el-radio-group>
           </el-form-item>
           <el-form-item label="流程配置">
-            <el-checkbox v-model="autoPass" label="下一节点执行人是当前任务处理人自动审批" />
+            <el-checkbox v-model="autoPass">下一节点执行人是当前任务处理人自动审批</el-checkbox>
           </el-form-item>
           <el-form-item label="是否动态表单" prop="formCustom">
             <el-radio-group v-model="form.formCustom">

@@ -235,6 +235,7 @@ import { to } from 'await-to-js';
 import { listUser, getUser, addUser, updateUser, delUser, resetUserPwd, changeStatus } from '@/api/system/user';
 import { issueAdminCert } from '@/api/ca/root';
 import { getProfileByName } from '@/api/ca/profile';
+import { parseJson } from '@/utils/json';
 import { UserForm, UserQuery } from '@/api/system/user/types';
 import CertSubject, { typeMapping, sortSubjectItems } from '@/components/CertSubject/index.vue';
 import SKFClient from '@/api/skf/skf_api';
@@ -517,7 +518,7 @@ async function handleIssueCert(row: any) {
     ElMessage.info('正在加载证书模板...');
     const profileRes = await getProfileByName('通用证书模板');
     const profile = profileRes.data;
-    const conf = typeof profile.conf === 'string' ? JSON.parse(profile.conf) : profile.conf;
+    const conf = parseJson(profile.conf);
     
     // 根据模板配置和用户信息填充主题字段
     if (conf && conf.subject) {
@@ -530,10 +531,12 @@ async function handleIssueCert(row: any) {
         emailAddress: row.mail || ''
       };
       
-      conf.subject.forEach((rdn: any) => {
-        let compType = rdn.type.toLowerCase();
+      const rdns = conf.subject.rdns || (Array.isArray(conf.subject) ? conf.subject : []);
+      rdns.forEach((rdn: any) => {
+        const rdnType = (typeof rdn.type === 'object' ? rdn.type.description : rdn.type) || '';
+        let compType = rdnType.toLowerCase();
         for (const [type, meta] of Object.entries(typeMapping)) {
-          if (meta.key.toLowerCase() === rdn.type.toLowerCase() || type.toLowerCase() === rdn.type.toLowerCase()) {
+          if (meta.key.toLowerCase() === compType || type.toLowerCase() === compType) {
             compType = type;
             break;
           }
@@ -543,7 +546,7 @@ async function handleIssueCert(row: any) {
           val = defaultValues[compType];
         }
         
-        const count = Math.max(1, rdn.minOccurs || 0);
+        const count = Math.max(1, rdn.minOccurs === undefined ? 1 : rdn.minOccurs);
         for (let i = 0; i < count; i++) {
           items.push({
             type: compType,
