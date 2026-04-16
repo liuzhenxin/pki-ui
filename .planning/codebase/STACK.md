@@ -1,75 +1,75 @@
-# Technology Stack
+# 技术栈
 
-**Analysis Date:** 2025-05-13
+**分析日期：** 2025-05-13
 
-## Languages
+## 语言
 
-**Primary:**
-- TypeScript 5.9.3 - Core application logic and type definitions across the codebase.
+**主要：**
+- TypeScript 5.9.3 - 核心应用逻辑和全库类型定义。
 
-**Secondary:**
-- Vue 3.5.22 - Component framework (SFC with `<script setup lang="ts">`).
-- SCSS 1.93.3 - Styling and theme customization.
+**次要：**
+- Vue 3.5.22 - 组件框架（使用 `<script setup lang="ts">` 的 SFC）。
+- SCSS 1.93.3 - 样式和主题定制。
 
-## Runtime
+## 运行环境
 
-**Environment:**
-- Node.js >=18.18.0 - Development and build environment.
+**环境：**
+- Node.js >=18.18.0 - 开发和构建环境。
 
-**Package Manager:**
+**包管理器：**
 - yarn 1.22.19
-- Lockfile: `yarn.lock` present.
+- 锁定文件：存在 `yarn.lock`。
 
-## Frameworks
+## 框架
 
-**Core:**
-- Vue 3.5.22 - Primary frontend framework.
-- Element Plus 2.11.7 - UI component library.
-- Pinia 3.0.3 - State management.
+**核心：**
+- Vue 3.5.22 - 主要前端框架。
+- Element Plus 2.11.7 - UI 组件库。
+- Pinia 3.0.3 - 状态管理。
 
-**Testing:**
-- Vitest 3.2.4 - Unit and component testing.
+**测试：**
+- Vitest 3.2.4 - 单元和组件测试。
 
-**Build/Dev:**
-- Vite 6.4.1 - Build tool and development server.
-- UnoCSS 66.5.4 - Atomic CSS engine.
+**构建/开发：**
+- Vite 6.4.1 - 构建工具和开发服务器。
+- UnoCSS 66.5.4 - 原子化 CSS 引擎。
 
-## Key Dependencies
+## 关键依赖
 
-**Critical:**
-- `axios` 1.13.1 - HTTP client for API communication.
-- `jsrsasign` 11.1.0 - PKI library for RSA, ECC, and X.509 operations.
-- `node-forge` 1.3.1 - Cryptographic tools for TLS and PKI.
-- `sm-crypto` 0.3.13 - ShangMi (SM2/SM3/SM4) algorithms for Chinese standards.
-- `jsencrypt` 3.5.4 - RSA encryption and decryption.
-- `crypto-js` 4.2.0 - Standard cryptographic algorithms (AES, DES, etc.).
+**核心依赖：**
+- `axios` 1.13.1 - 用于 API 通信的 HTTP 客户端。
+- `jsrsasign` 11.1.0 - 用于 RSA、ECC 和 X.509 操作的 PKI 库。
+- `node-forge` 1.3.1 - 用于 TLS 和 PKI 的密码学工具。
+- `sm-crypto` 0.3.13 - 符合中国标准的国密（SM2/SM3/SM4）算法。
+- `jsencrypt` 3.5.4 - RSA 加密和解密。
+- `crypto-js` 4.2.0 - 标准密码学算法（AES、DES 等）。
 
-**Infrastructure:**
-- `vue-router` 4.6.3 - Application routing.
-- `vue-i18n` 11.1.12 - Internationalization support.
-- `echarts` 5.6.0 - Data visualization.
-- `@vueuse/core` 13.9.0 - Composition API utilities.
+**基础设施：**
+- `vue-router` 4.6.3 - 应用路由。
+- `vue-i18n` 11.1.12 - 国际化支持。
+- `echarts` 5.6.0 - 数据可视化。
+- `@vueuse/core` 13.9.0 - Composition API 工具库。
 
-## Configuration
+## 配置
 
-**Environment:**
-- Configured via `.env`, `.env.development`, and `.env.production`.
-- Key configs: `VITE_APP_BASE_API`, `VITE_APP_CLIENT_ID`, `VITE_APP_ENCRYPT`.
+**环境配置：**
+- 通过 `.env`、`.env.development` 和 `.env.production` 进行配置。
+- 关键配置：`VITE_APP_BASE_API`、`VITE_APP_CLIENT_ID`、`VITE_APP_ENCRYPT`。
 
-**Build:**
-- `vite.config.ts` - Main Vite configuration including proxy and plugin setup.
-- `tsconfig.json` - TypeScript compiler configuration.
+**构建配置：**
+- `vite.config.ts` - 主要 Vite 配置，包括代理和插件设置。
+- `tsconfig.json` - TypeScript 编译器配置。
 
-## Platform Requirements
+## 平台要求
 
-**Development:**
+**开发环境：**
 - Node.js >=18.18.0
-- Yarn or NPM
+- Yarn 或 NPM
 
-**Production:**
-- Modern browsers (Chrome >= 87, Edge >= 88, Safari >= 14, Firefox >= 78).
-- Backend: RuoYi-Vue-Plus compatible API.
+**生产环境：**
+- 现代浏览器（Chrome >= 87, Edge >= 88, Safari >= 14, Firefox >= 78）。
+- 后端：兼容 RuoYi-Vue-Plus 的 API。
 
 ---
 
-*Stack analysis: 2025-05-13*
+*技术栈分析：2025-05-13*

@@ -1,17 +1,17 @@
-# Project State: PKI-UI
+# 项目状态：PKI-UI
 
-## Project Metadata
-- **Vision:** Secure, modular PKI management UI.
-- **Milestone:** Milestone 1: Core PKI Lifecycle Management
-- **Phase:** Phase 1: CA Management (Root & Sub-CA)
+## 项目元数据
+- **愿景：** 安全、模块化的 PKI 管理 UI。
+- **里程碑：** 里程碑 1：核心 PKI 生命周期管理
+- **阶段：** 第 1 阶段：CA 管理（根 CA 和子 CA）
 
-## Current Status
-- **Current Task:** Initialize Project State
-- **Status:** COMPLETED
-- **Next Task:** Create Milestone 1 Phase 1 Plan
+## 当前状态
+- **当前任务：** 初始化项目状态
+- **状态：** 已完成
+- **下一任务：** 创建里程碑 1 第 1 阶段计划
 
-## State Checklist
-- [x] Codebase Map Created
-- [x] Vision & Roadmap Defined
-- [x] State Initialized
-- [ ] Milestone 1 Started
+## 状态检查清单
+- [x] 已创建代码库映射
+- [x] 已定义愿景与路线图
+- [x] 已初始化状态
+- [ ] 已启动里程碑 1

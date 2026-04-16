@@ -1,116 +1,116 @@
-# Codebase Structure
+# 代码库结构
 
-**Analysis Date:** 2025-03-05
+**分析日期：** 2025-03-05
 
-## Directory Layout
+## 目录布局
 
 ```
 pki-ui/
-├── .planning/          # GSD planning and codebase maps
-├── profiles/           # Configuration templates for PKI
-├── public/             # Static assets (favicon, etc.)
-├── src/                # Source code
-│   ├── api/            # API request modules
-│   ├── assets/         # Static assets (images, styles, icons)
-│   ├── components/     # Reusable UI components
-│   ├── directive/      # Custom Vue directives
-│   ├── enums/          # TypeScript enums (response codes, etc.)
-│   ├── hooks/          # Shared Composition API hooks
-│   ├── lang/           # Internationalization (i18n) files
-│   ├── layout/         # Application layout components
-│   ├── plugins/        # Vue plugins and third-party integrations
-│   ├── router/         # Vue Router configuration
-│   ├── store/          # Pinia state management modules
-│   ├── types/          # Global TypeScript type definitions
-│   ├── utils/          # Utility functions and helpers
-│   └── views/          # Page-level components (business logic)
-├── vite/               # Vite configuration and plugins
-├── .env.development    # Development environment config
-├── .env.production     # Production environment config
-├── index.html          # HTML entry point
-├── package.json        # Dependencies and scripts
-├── tsconfig.json       # TypeScript configuration
-└── vite.config.ts      # Vite build configuration
+├── .planning/          # GSD 规划和代码库映射
+├── profiles/           # PKI 配置模板
+├── public/             # 静态资源（favicon 等）
+├── src/                # 源代码
+│   ├── api/            # API 请求模块
+│   ├── assets/         # 静态资源（图片、样式、图标）
+│   ├── components/     # 可复用 UI 组件
+│   ├── directive/      # 自定义 Vue 指令
+│   ├── enums/          # TypeScript 枚举（响应码等）
+│   ├── hooks/          # 共享 Composition API hooks
+│   ├── lang/           # 国际化 (i18n) 文件
+│   ├── layout/         # 应用布局组件
+│   ├── plugins/        # Vue 插件和第三方集成
+│   ├── router/         # Vue Router 配置
+│   ├── store/          # Pinia 状态管理模块
+│   ├── types/          # 全局 TypeScript 类型定义
+│   ├── utils/          # 工具函数和助手
+│   └── views/          # 页面级组件（业务逻辑）
+├── vite/               # Vite 配置和插件
+├── .env.development    # 开发环境配置
+├── .env.production     # 生产环境配置
+├── index.html          # HTML 入口点
+├── package.json        # 依赖和脚本
+├── tsconfig.json       # TypeScript 配置
+└── vite.config.ts      # Vite 构建配置
 ```
 
-## Directory Purposes
+## 目录用途
 
 **src/api/:**
-- Purpose: Modularized backend service definitions.
-- Contains: Feature-specific subdirectories (e.g., `ca/`, `system/`, `monitor/`).
-- Key files: `src/api/ca/root.ts`, `src/api/login.ts`.
+- 职责：模块化的后端服务定义。
+- 内容：特定功能的子目录（如 `ca/`、`system/`、`monitor/`）。
+- 关键文件：`src/api/ca/root.ts`、`src/api/login.ts`。
 
 **src/views/:**
-- Purpose: Main business logic and page components.
-- Contains: Subdirectories mirroring the sidebar menu structure.
-- Key files: `src/views/ca/root/index.vue`, `src/views/login.vue`.
+- 职责：主要业务逻辑和页面组件。
+- 内容：镜像侧边栏菜单结构的子目录。
+- 关键文件：`src/views/ca/root/index.vue`、`src/views/login.vue`。
 
 **src/store/:**
-- Purpose: Centralized state management using Pinia.
-- Contains: Feature-based modules.
-- Key files: `src/store/modules/user.ts`, `src/store/modules/permission.ts`.
+- 职责：使用 Pinia 的集中状态管理。
+- 内容：基于模块的功能。
+- 关键文件：`src/store/modules/user.ts`、`src/store/modules/permission.ts`。
 
 **src/components/:**
-- Purpose: Reusable UI widgets and business-specific complex components.
-- Contains: `X509Cert`, `CertProfile`, `FileUpload`, etc.
+- 职责：可复用 UI 挂件和业务相关的复杂组件。
+- 内容：`X509Cert`、`CertProfile`、`FileUpload` 等。
 
 **src/utils/:**
-- Purpose: Shared logic and helper functions.
-- Contains: `request.ts` (axios configuration), `crypto.ts` (encryption), `auth.ts` (token management).
+- 职责：共享逻辑和助手函数。
+- 内容：`request.ts` (axios 配置)、`crypto.ts` (加密)、`auth.ts` (令牌管理)。
 
-## Key File Locations
+## 关键文件位置
 
-**Entry Points:**
-- `src/main.ts`: Application initialization and mounting.
-- `src/permission.ts`: Global navigation guards and route generation.
+**入口点：**
+- `src/main.ts`：应用初始化和挂载。
+- `src/permission.ts`：全局导航守卫和路由生成。
 
-**Configuration:**
-- `vite.config.ts`: Build system and dev server configuration.
-- `src/settings.ts`: Global application settings (title, theme, etc.).
+**配置：**
+- `vite.config.ts`：构建系统和开发服务器配置。
+- `src/settings.ts`：全局应用设置（标题、主题等）。
 
-**Core Logic:**
-- `src/utils/request.ts`: Global API interceptor and error handling.
-- `src/router/index.ts`: Static routes and router instance creation.
+**核心逻辑：**
+- `src/utils/request.ts`：全局 API 拦截器和错误处理。
+- `src/router/index.ts`：静态路由和路由实例创建。
 
-**Testing:**
-- `test_x509.js`: A script for testing X509 certificate operations (at root).
+**测试：**
+- `test_x509.js`：用于测试 X509 证书操作的脚本（位于根目录）。
 
-## Naming Conventions
+## 命名规范
 
-**Files:**
-- Vue Components: PascalCase (e.g., `UserSelect/index.vue`).
-- API Modules: camelCase (e.g., `src/api/ca/cert.ts`).
-- Utility Files: kebab-case or camelCase (e.g., `scroll-to.ts`).
+**文件：**
+- Vue 组件：PascalCase (如 `UserSelect/index.vue`)。
+- API 模块：camelCase (如 `src/api/ca/cert.ts`)。
+- 工具文件：kebab-case 或 camelCase (如 `scroll-to.ts`)。
 
-**Directories:**
-- Source Folders: camelCase (e.g., `src/views/ca/`).
-- Component Folders: PascalCase (e.g., `src/components/DictTag/`).
+**目录：**
+- 源码文件夹：camelCase (如 `src/views/ca/`)。
+- 组件文件夹：PascalCase (如 `src/components/DictTag/`)。
 
-## Where to Add New Code
+## 如何添加新代码
 
-**New Feature (e.g., "KMC Audit"):**
-1. Define API endpoints in `src/api/kmc/audit.ts`.
-2. (Optional) Create a Pinia store in `src/store/modules/kmc.ts`.
-3. Create page components in `src/views/kmc/audit/index.vue`.
-4. Add the menu entry in the backend (it will be picked up by `src/permission.ts`).
+**新功能 (如 "KMC 审计"):**
+1. 在 `src/api/kmc/audit.ts` 中定义 API 端点。
+2. (可选) 在 `src/store/modules/kmc.ts` 中创建 Pinia store。
+3. 在 `src/views/kmc/audit/index.vue` 中创建页面组件。
+4. 在后端添加菜单项（它将被 `src/permission.ts` 自动获取）。
 
-**New Shared Component:**
-- Create a new directory in `src/components/` and place the `index.vue` there.
+**新的共享组件：**
+- 在 `src/components/` 下创建一个新目录，并将 `index.vue` 放在其中。
 
-**New Utility:**
-- Add to `src/utils/` if it's general-purpose, or `src/hooks/` if it uses the Composition API.
+**新的工具函数：**
+- 如果是通用用途，添加到 `src/utils/`；如果使用了 Composition API，添加到 `src/hooks/`。
 
-## Special Directories
+## 特殊目录
 
 **.planning/codebase/:**
-- Purpose: Contains codebase maps and architecture documentation for AI agents.
-- Generated: No
-- Committed: Yes
+- 职责：包含供 AI 代理使用的代码库映射和架构文档。
+- 是否生成：否
+- 是否提交：是
 
 **profiles/:**
-- Purpose: Configuration templates for PKI certificate profiles.
-- Committed: Yes
+- 职责：PKI 证书模板配置。
+- 是否提交：是
 
 ---
 
-*Structure analysis: 2025-03-05*
+*结构分析：2025-03-05*

@@ -1,43 +1,43 @@
-# Project Roadmap: PKI-UI
+# 项目路线图：PKI-UI
 
-## Vision
-To provide a secure, modular, and easy-to-use PKI management interface for CA (Certificate Authority) and KMC (Key Management Center) operations, built on modern Vue 3 + TS architecture.
+## 愿景
+基于现代 Vue 3 + TS 架构，为 CA（证书颁发机构）和 KMC（密钥管理中心）操作提供安全、模块化且易于使用的 PKI 管理界面。
 
-## Milestones
+## 里程碑
 
-### Milestone 1: Core PKI Lifecycle Management
-- **Phase 1: CA Management (Root & Sub-CA)**
-  - Support for self-signed and externally signed CA creation.
-  - CA authorization profiles.
-- **Phase 2: Certificate Issuance & Lifecycle**
-  - Issuance from various profiles (TLS, SMIME, Client, etc.).
-  - CRL (Certificate Revocation List) management.
-- **Phase 3: Key Management Center (KMC) - Basic**
-  - Archive, reserve, and used key management.
-  - Basic key storage strategy management.
+### 里程碑 1：核心 PKI 生命周期管理
+- **第 1 阶段：CA 管理（根 CA 和子 CA）**
+  - 支持自签名和外部签名的 CA 创建。
+  - CA 授权模板配置。
+- **第 2 阶段：证书签发与生命周期**
+  - 基于各种模板（TLS、SMIME、客户端等）进行签发。
+  - CRL（证书吊销列表）管理。
+- **第 3 阶段：密钥管理中心 (KMC) - 基础**
+  - 存档密钥、预留密钥和已用密钥管理。
+  - 基础密钥存储策略管理。
 
-### Milestone 2: Security & Operations
-- **Phase 1: Advanced Security Features**
-  - Browser-based secure key handling (SM2, RSA).
-  - Multi-factor authentication (MFA) integration.
-- **Phase 2: Comprehensive Audit & Logging**
-  - Detailed operation logs for all PKI activities.
-  - Audit dashboards for CA operators.
-- **Phase 3: Role-Based Access Control (RBAC)**
-  - Fine-grained permissions for CA/KMC operations.
+### 里程碑 2：安全与运营
+- **第 1 阶段：高级安全特性**
+  - 基于浏览器的安全密钥处理（SM2、RSA）。
+  - 多因素身份验证 (MFA) 集成。
+- **第 2 阶段：全面审计与日志**
+  - 所有 PKI 活动的详细操作日志。
+  - 面向 CA 操作员的审计仪表板。
+- **第 3 阶段：基于角色的访问控制 (RBAC)**
+  - CA/KMC 操作的精细权限管理。
 
-### Milestone 3: Quality & Performance
-- **Phase 1: Test Coverage**
-  - Implement unit tests for all cryptographic utilities.
-  - E2E tests for core issuance workflows.
-- **Phase 2: Performance Optimization**
-  - Optimize large certificate list loading and rendering.
-  - Improve encryption/decryption performance.
-- **Phase 3: Internationalization (i18n)**
-  - Complete zh-CN/en-US translations for all PKI-specific terms.
+### 里程碑 3：质量与性能
+- **第 1 阶段：测试覆盖率**
+  - 为所有密码学工具类实现单元测试。
+  - 核心签发流程的 E2E 测试。
+- **第 2 阶段：性能优化**
+  - 优化大型证书列表的加载和渲染。
+  - 提高加密/解密性能。
+- **第 3 阶段：国际化 (i18n)**
+  - 完成所有 PKI 专业术语的中英文翻译。
 
-## Success Criteria
-- [ ] 100% of core PKI lifecycle operations are available via UI.
-- [ ] Automated test coverage for critical crypto logic.
-- [ ] Zero critical security vulnerabilities in key handling.
-- [ ] Successful audit of CA/KMC operation logs.
+## 成功标准
+- [ ] 100% 的核心 PKI 生命周期操作可通过 UI 完成。
+- [ ] 关键密码学逻辑拥有自动测试覆盖。
+- [ ] 密钥处理过程中零关键安全漏洞。
+- [ ] 成功通过 CA/KMC 操作日志审计。

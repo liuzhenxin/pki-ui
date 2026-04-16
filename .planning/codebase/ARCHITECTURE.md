@@ -1,101 +1,101 @@
-# Architecture
+# 系统架构
 
-**Analysis Date:** 2025-03-05
+**分析日期：** 2025-03-05
 
-## Pattern Overview
+## 模式概述
 
-**Overall:** Single Page Application (SPA) built with Vue 3, Vite, and Element Plus, following the RuoYi-Vue-Plus template architecture.
+**总体：** 基于 RuoYi-Vue-Plus 模板架构，使用 Vue 3、Vite 和 Element Plus 构建的单页面应用 (SPA)。
 
-**Key Characteristics:**
-- **Dynamic Routing:** Routes are generated dynamically based on backend menu configuration and user permissions.
-- **Modular Design:** Clear separation between API, State (Pinia), and View layers.
-- **Cryptographic Security:** Integrated support for CA management, payload encryption (AES/RSA), and various crypto libraries (`jsrsasign`, `node-forge`, `sm-crypto`).
+**核心特征：**
+- **动态路由：** 根据后端菜单配置和用户权限动态生成路由。
+- **模块化设计：** API 层、状态层 (Pinia) 和视图层清晰分离。
+- **密码学安全：** 集成支持 CA 管理、载荷加密 (AES/RSA) 以及多种密码学库 (`jsrsasign`, `node-forge`, `sm-crypto`)。
 
-## Layers
+## 分层架构
 
-**View Layer:**
-- Purpose: UI implementation and local state management.
-- Location: `src/views/`
-- Contains: Vue SFCs (Single File Components) using `<script setup lang="ts">`.
-- Depends on: `src/api/`, `src/store/`, `src/components/`, `src/hooks/`.
-- Used by: Vue Router.
+**视图层 (View Layer)：**
+- 职责：UI 实现和局部状态管理。
+- 位置：`src/views/`
+- 内容：使用 `<script setup lang="ts">` 的 Vue SFC（单文件组件）。
+- 依赖：`src/api/`、`src/store/`、`src/components/`、`src/hooks/`。
+- 调用方：Vue Router。
 
-**State Management Layer:**
-- Purpose: Global application state and cross-component communication.
-- Location: `src/store/`
-- Contains: Pinia store modules.
-- Depends on: `src/api/`, `src/utils/`.
-- Used by: `src/views/`, `src/permission.ts`, `src/layout/`.
+**状态管理层 (State Management Layer)：**
+- 职责：全局应用状态和跨组件通信。
+- 位置：`src/store/`
+- 内容：Pinia store 模块。
+- 依赖：`src/api/`、`src/utils/`。
+- 调用方：`src/views/`、`src/permission.ts`、`src/layout/`。
 
-**API Layer:**
-- Purpose: Backend communication and data fetching.
-- Location: `src/api/`
-- Contains: Modular TypeScript files defining request functions.
-- Depends on: `src/utils/request.ts`.
-- Used by: `src/views/`, `src/store/`.
+**API 层 (API Layer)：**
+- 职责：后端通信和数据获取。
+- 位置：`src/api/`
+- 内容：定义请求函数的模块化 TypeScript 文件。
+- 依赖：`src/utils/request.ts`。
+- 调用方：`src/views/`、`src/store/`。
 
-**Utility Layer:**
-- Purpose: Shared helper functions and global configurations.
-- Location: `src/utils/`
-- Contains: Auth helpers, crypto functions, request interceptors, and common validators.
-- Depends on: External libraries (`axios`, `js-cookie`, `crypto-js`).
-- Used by: All other layers.
+**工具层 (Utility Layer)：**
+- 职责：共享助手函数和全局配置。
+- 位置：`src/utils/`
+- 内容：认证助手、加密函数、请求拦截器和常用校验器。
+- 依赖：外部库 (`axios`, `js-cookie`, `crypto-js`)。
+- 调用方：所有其他层级。
 
-## Data Flow
+## 数据流
 
-**Standard Request Flow:**
+**标准请求流程：**
 
-1. **User Interaction:** A user triggers an action in a `src/views/` component.
-2. **API Call:** The component calls a function from `src/api/`.
-3. **Request Interceptor:** `src/utils/request.ts` adds authorization headers, handles payload encryption (if enabled), and logs the request.
-4. **Backend Processing:** The request is sent to the backend.
-5. **Response Interceptor:** `src/utils/request.ts` decrypts the response (if needed), handles global error codes (e.g., 401 logout), and extracts the data.
-6. **State Update:** The component updates its local state or calls a `src/store/` action to update global state.
-7. **UI Update:** Vue's reactivity system updates the UI.
+1. **用户交互：** 用户在 `src/views/` 组件中触发操作。
+2. **API 调用：** 组件调用 `src/api/` 中的函数。
+3. **请求拦截器：** `src/utils/request.ts` 添加认证头，处理载荷加密（如果开启），并记录请求。
+4. **后端处理：** 请求发送至后端。
+5. **响应拦截器：** `src/utils/request.ts` 解密响应（如果需要），处理全局错误码（如 401 登出），并提取数据。
+6. **状态更新：** 组件更新局部状态，或调用 `src/store/` 动作更新全局状态。
+7. **UI 更新：** Vue 的响应式系统更新 UI。
 
-**State Management:**
-- **Pinia Stores:** Used for user info, permissions, app settings, and shared data (e.g., dictionaries).
-- **Persistent State:** Some state (like tokens) is persisted in Cookies or LocalStorage via `src/utils/auth.ts` and `src/plugins/cache.ts`.
+**状态管理：**
+- **Pinia Stores：** 用于用户信息、权限、应用设置和共享数据（如字典）。
+- **持久化状态：** 部分状态（如令牌）通过 `src/utils/auth.ts` 和 `src/plugins/cache.ts` 持久化在 Cookies 或 LocalStorage 中。
 
-## Key Abstractions
+## 核心抽象
 
-**Axios Instance:**
-- Purpose: Centralized HTTP client configuration.
-- Examples: `src/utils/request.ts`
-- Pattern: Singleton axios instance with interceptors.
+**Axios 实例：**
+- 职责：集中的 HTTP 客户端配置。
+- 示例：`src/utils/request.ts`
+- 模式：带拦截器的单例 axios 实例。
 
-**Custom Components:**
-- Purpose: Encapsulated UI logic for PKI-specific features.
-- Examples: `src/components/X509Cert/index.vue`, `src/components/CertProfile/index.vue`.
-- Pattern: Reusable Vue components with props and events.
+**自定义组件：**
+- 职责：封装 PKI 特定特性的 UI 逻辑。
+- 示例：`src/components/X509Cert/index.vue`、`src/components/CertProfile/index.vue`。
+- 模式：带 props 和 events 的可复用 Vue 组件。
 
-## Entry Points
+## 入口点
 
-**Main Entry:**
-- Location: `src/main.ts`
-- Triggers: Browser page load.
-- Responsibilities: Mounts the Vue app, registers plugins (Pinia, Router, Element Plus, I18n), and loads global CSS.
+**主入口：**
+- 位置：`src/main.ts`
+- 触发：浏览器页面加载。
+- 职责：挂载 Vue 应用，注册插件（Pinia, Router, Element Plus, I18n），并加载全局 CSS。
 
-**Permission Guard:**
-- Location: `src/permission.ts`
-- Triggers: Navigation changes (Vue Router).
-- Responsibilities: Checks for JWT tokens, fetches user info/permissions, and dynamically generates the route table.
+**权限守卫：**
+- 位置：`src/permission.ts`
+- 触发：路由跳转（Vue Router）。
+- 职责：检查 JWT 令牌，获取用户信息/权限，并动态生成路由表。
 
-## Error Handling
+## 错误处理
 
-**Strategy:** Global interceptors combined with local try-catch for specific UI feedback.
+**策略：** 全局拦截器结合局部 try-catch 以提供特定的 UI 反馈。
 
-**Patterns:**
-- **Global Interceptor:** `src/utils/request.ts` handles common HTTP status codes (401, 403, 500) and displays notifications via `ElMessage` or `ElNotification`.
-- **Dictionary/Constant Error Codes:** `src/utils/errorCode.ts` maps status codes to human-readable messages.
+**模式：**
+- **全局拦截器：** `src/utils/request.ts` 处理常见的 HTTP 状态码（401, 403, 500），并通过 `ElMessage` 或 `ElNotification` 显示通知。
+- **字典/常量错误码：** `src/utils/errorCode.ts` 将状态码映射为人类可读的消息。
 
-## Cross-Cutting Concerns
+## 横向关注点
 
-**Logging:** Handled via console for development; critical errors displayed via UI notifications.
-**Validation:** Element Plus form validation in views; modular validation rules in `src/utils/validate.ts`.
-**Authentication:** JWT-based. Tokens stored in cookies and managed via `src/store/modules/user.ts`.
-**Internationalization:** Using `vue-i18n`. Locales stored in `src/lang/`.
+**日志：** 开发环境下通过控制台处理；关键错误通过 UI 通知显示。
+**校验：** 视图中使用 Element Plus 表单校验；`src/utils/validate.ts` 中定义模块化校验规则。
+**身份验证：** 基于 JWT。令牌存储在 cookies 中，通过 `src/store/modules/user.ts` 管理。
+**国际化：** 使用 `vue-i18n`。语言文件存储在 `src/lang/`。
 
 ---
 
-*Architecture analysis: 2025-03-05*
+*架构分析：2025-03-05*
