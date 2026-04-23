@@ -5,16 +5,16 @@ import { Result } from '@/api/types';
 // 查询租户列表
 export function listTenant(query: TenantQuery): Promise<TenantVO[]> {
   return request({
-    url: '/admin/api/v1/tenants/list',
-    method: 'get',
-    params: query
+    url: '/admin/v1/tenants/list',
+    method: 'post',
+    data: query
   }) as any;
 }
 
 // 查询租户详细
 export function getTenant(id: string | number): Promise<Result<TenantVO>> {
   return request({
-    url: '/admin/api/v1/tenants/' + id,
+    url: '/admin/v1/tenants/' + id,
     method: 'get'
   }) as any;
 }
@@ -22,7 +22,7 @@ export function getTenant(id: string | number): Promise<Result<TenantVO>> {
 // 新增租户
 export function addTenant(data: TenantForm) {
   return request({
-    url: '/admin/api/v1/tenants',
+    url: '/admin/v1/tenants',
     method: 'post',
     headers: {
       isEncrypt: true,
@@ -35,7 +35,7 @@ export function addTenant(data: TenantForm) {
 // 修改租户
 export function updateTenant(data: TenantForm) {
   return request({
-    url: '/admin/api/v1/tenants',
+    url: '/admin/v1/tenants',
     method: 'put',
     data: data
   });
@@ -58,7 +58,7 @@ export function changeTenantStatus(id: string | number, tenantId: string | numbe
 // 删除租户
 export function delTenant(id: string | number | Array<string | number>) {
   return request({
-    url: '/admin/api/v1/tenants/' + id,
+    url: '/admin/v1/tenants/' + id,
     method: 'delete'
   });
 }
@@ -66,7 +66,7 @@ export function delTenant(id: string | number | Array<string | number>) {
 // 动态切换租户
 export function dynamicTenant(tenantId: string | number) {
   return request({
-    url: '/admin/api/v1/tenants/dynamic/' + tenantId,
+    url: '/admin/v1/tenants/dynamic/' + tenantId,
     method: 'get'
   });
 }
@@ -74,7 +74,7 @@ export function dynamicTenant(tenantId: string | number) {
 // 清除动态租户
 export function dynamicClear() {
   return request({
-    url: '/admin/api/v1/tenants/dynamic/clear',
+    url: '/admin/v1/tenants/dynamic/clear',
     method: 'get'
   });
 }
@@ -86,7 +86,7 @@ export function syncTenantPackage(tenantId: string | number, packageId: string |
     packageId
   };
   return request({
-    url: '/admin/api/v1/tenants/syncTenantPackage',
+    url: '/admin/v1/tenants/syncTenantPackage',
     method: 'get',
     params: data
   });
@@ -95,7 +95,7 @@ export function syncTenantPackage(tenantId: string | number, packageId: string |
 // 同步租户字典
 export function syncTenantDict() {
   return request({
-    url: '/admin/api/v1/tenants/syncTenantDict',
+    url: '/admin/v1/tenants/syncTenantDict',
     method: 'get'
   });
 }
@@ -103,7 +103,7 @@ export function syncTenantDict() {
 // 同步租户字典
 export function syncTenantConfig() {
   return request({
-    url: '/admin/api/v1/tenants/syncTenantConfig',
+    url: '/admin/v1/tenants/syncTenantConfig',
     method: 'get'
   });
 }

@@ -47,7 +47,7 @@ export const usePermissionStore = defineStore('permission', () => {
     sidebarRouters.value = routes;
   };
   const generateRoutes = async (): Promise<RouteRecordRaw[]> => {
-    const res = await getRouters();
+    const res = await getRouters({ types: ['M', 'C'] });
     const { data } = res;
     const sdata = JSON.parse(JSON.stringify(data));
     const rdata = JSON.parse(JSON.stringify(data));
@@ -69,7 +69,7 @@ export const usePermissionStore = defineStore('permission', () => {
   };
 
   const generateInitRoutes = async (): Promise<RouteRecordRaw[]> => {
-    const res = await getInitRouters();
+    const res = await getInitRouters({ types: ['M', 'C'] });
     // const { data } = res.data;
     const sdata = JSON.parse(JSON.stringify(res.data));
     const rdata = JSON.parse(JSON.stringify(res.data));
@@ -219,17 +219,19 @@ function duplicateRouteChecker(localRoutes: Route[], routes: Route[]) {
 
   const nameList: string[] = [];
   allRoutes.forEach((route) => {
-    const name = route.name.toString();
-    if (name && nameList.includes(name)) {
-      const message = `路由名称: [${name}] 重复, 会造成 404`;
-      console.error(message);
-      ElNotification({
-        title: '路由名称重复',
-        message,
-        type: 'error'
-      });
-      return;
+    if (route.name) {
+      const name = route.name.toString();
+      if (name && nameList.includes(name)) {
+        const message = `路由名称: [${name}] 重复, 会造成 404`;
+        console.error(message);
+        ElNotification({
+          title: '路由名称重复',
+          message,
+          type: 'error'
+        });
+        return;
+      }
+      nameList.push(name);
     }
-    nameList.push(route.name.toString());
   });
 }

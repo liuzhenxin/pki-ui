@@ -4,7 +4,7 @@ import { Result } from '@/api/types';
 // 分页查询请求者列表
 export function pageRequestor(query: any): Promise<Result<any>> {
   return request({
-    url: '/ca/api/v1/requestors/page',
+    url: '/ca/v1/requestors/page',
     method: 'post',
     data: query
   }) as any;
@@ -13,7 +13,7 @@ export function pageRequestor(query: any): Promise<Result<any>> {
 // 查看请求者详情
 export function getRequestor(id: string | number): Promise<Result<any>> {
   return request({
-    url: `/ca/api/v1/requestors/${id}`,
+    url: `/ca/v1/requestors/${id}`,
     method: 'get'
   }) as any;
 }
@@ -21,7 +21,7 @@ export function getRequestor(id: string | number): Promise<Result<any>> {
 // 保存请求者
 export function saveRequestor(data: any): Promise<Result<any>> {
   return request({
-    url: '/ca/api/v1/requestors',
+    url: '/ca/v1/requestors',
     method: 'post',
     data: data
   }) as any;
@@ -30,7 +30,7 @@ export function saveRequestor(data: any): Promise<Result<any>> {
 // 修改请求者
 export function modifyRequestor(data: any): Promise<Result<any>> {
   return request({
-    url: '/ca/api/v1/requestors',
+    url: '/ca/v1/requestors',
     method: 'put',
     data: data
   }) as any;
@@ -39,7 +39,7 @@ export function modifyRequestor(data: any): Promise<Result<any>> {
 // 删除请求者
 export function removeRequestor(ids: (string | number)[]): Promise<Result<any>> {
   return request({
-    url: '/ca/api/v1/requestors',
+    url: '/ca/v1/requestors',
     method: 'delete',
     data: ids
   }) as any;
@@ -48,7 +48,7 @@ export function removeRequestor(ids: (string | number)[]): Promise<Result<any>> 
 // 导入请求者
 export function importRequestor(formData: FormData): Promise<Result<any>> {
   return request({
-    url: '/ca/api/v1/requestors/import',
+    url: '/ca/v1/requestors/import',
     method: 'post',
     data: formData,
     headers: {
@@ -60,7 +60,7 @@ export function importRequestor(formData: FormData): Promise<Result<any>> {
 // 导出请求者
 export function exportRequestor(ids: (string | number)[]): Promise<any> {
   return request({
-    url: '/ca/api/v1/requestors/export',
+    url: '/ca/v1/requestors/export',
     method: 'post',
     data: { ids: ids }, // 使用 RequestorExportCmd 格式
     responseType: 'blob'

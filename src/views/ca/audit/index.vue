@@ -1,93 +1,173 @@
 <template>
   <div class="p-2">
-    <transition :enter-active-class="proxy?.animate.searchAnimate.enter" :leave-active-class="proxy?.animate.searchAnimate.leave">
-      <div v-show="showSearch" class="mb-10px">
-        <el-card shadow="hover">
-          <el-form ref="queryFormRef" :model="queryParams" :inline="true">
-            <el-form-item label="用户名称" prop="username">
-              <el-input v-model="queryParams.username" placeholder="请输入用户名称" clearable @keyup.enter="handleQuery" />
-            </el-form-item>
-            <el-form-item label="手机号码" prop="mobile">
-              <el-input v-model="queryParams.mobile" placeholder="请输入手机号码" clearable @keyup.enter="handleQuery" />
-            </el-form-item>
-            <el-form-item label="状态" prop="status">
-              <el-select v-model="queryParams.status" placeholder="用户状态" clearable>
-                <el-option label="正常" value="0" />
-                <el-option label="停用" value="1" />
-              </el-select>
-            </el-form-item>
-            <el-form-item>
-              <el-button type="primary" icon="Search" @click="handleQuery">搜索</el-button>
-              <el-button icon="Refresh" @click="resetQuery">重置</el-button>
-            </el-form-item>
-          </el-form>
+    <!-- 安全概览看板 -->
+    <el-row :gutter="20" class="mb-4">
+      <el-col :span="6">
+        <el-card shadow="hover" class="status-card">
+          <template #header
+            ><div class="card-header"><span class="title">敏感操作</span><el-tag type="danger" effect="dark" round>高风险</el-tag></div></template
+          >
+          <div class="card-body">
+            <div class="value">{{ stats.sensitiveOps }}</div>
+            <div class="desc">累计执行</div>
+          </div>
         </el-card>
-      </div>
-    </transition>
+      </el-col>
+      <el-col :span="6">
+        <el-card shadow="hover" class="status-card">
+          <template #header
+            ><div class="card-header"><span class="title">吊销请求</span><el-tag type="warning" effect="dark" round>待处理</el-tag></div></template
+          >
+          <div class="card-body">
+            <div class="value">{{ stats.revokeRequests }}</div>
+            <div class="desc">待审核</div>
+          </div>
+        </el-card>
+      </el-col>
+      <el-col :span="6">
+        <el-card shadow="hover" class="status-card">
+          <template #header
+            ><div class="card-header"><span class="title">异常登录</span><el-tag type="info" effect="dark" round>告警</el-tag></div></template
+          >
+          <div class="card-body">
+            <div class="value">{{ stats.alerts }}</div>
+            <div class="desc">近24小时</div>
+          </div>
+        </el-card>
+      </el-col>
+      <el-col :span="6">
+        <el-card shadow="hover" class="status-card health">
+          <template #header
+            ><div class="card-header"><span class="title">系统健康度</span><el-tag type="success" effect="dark" round>正常</el-tag></div></template
+          >
+          <div class="card-body">
+            <div class="value">{{ stats.healthScore }}</div>
+            <div class="desc">安全评分</div>
+          </div>
+        </el-card>
+      </el-col>
+    </el-row>
 
-    <el-card shadow="hover">
-      <template #header>
-        <el-row :gutter="10">
+    <el-tabs type="border-card">
+      <el-tab-pane label="审计员管理">
+        <transition :enter-active-class="proxy?.animate.searchAnimate.enter" :leave-active-class="proxy?.animate.searchAnimate.leave">
+          <div v-show="showSearch" class="mb-10px">
+            <el-form ref="queryFormRef" :model="queryParams" :inline="true">
+              <el-form-item label="用户名称" prop="username">
+                <el-input v-model="queryParams.username" placeholder="请输入用户名称" clearable @keyup.enter="handleQuery" />
+              </el-form-item>
+              <el-form-item label="手机号码" prop="mobile">
+                <el-input v-model="queryParams.mobile" placeholder="请输入手机号码" clearable @keyup.enter="handleQuery" />
+              </el-form-item>
+              <el-form-item label="状态" prop="status">
+                <el-select v-model="queryParams.status" placeholder="用户状态" clearable>
+                  <el-option label="正常" value="0" />
+                  <el-option label="停用" value="1" />
+                </el-select>
+              </el-form-item>
+              <el-form-item>
+                <el-button type="primary" icon="Search" @click="handleQuery">搜索</el-button>
+                <el-button icon="Refresh" @click="resetQuery">重置</el-button>
+              </el-form-item>
+            </el-form>
+          </div>
+        </transition>
+
+        <el-row :gutter="10" class="mb-4">
           <el-col :span="1.5">
-            <el-button type="primary" plain icon="Plus" @click="handleAdd">新增</el-button>
-          </el-col>
-          <el-col :span="1.5">
-            <el-button type="success" plain icon="Edit" :disabled="single" @click="handleUpdate">修改</el-button>
-          </el-col>
-          <el-col :span="1.5">
-            <el-button type="danger" plain icon="Delete" :disabled="multiple" @click="handleDelete">删除</el-button>
+            <el-button type="primary" plain icon="Plus" @click="handleAdd">新增审计员</el-button>
           </el-col>
           <right-toolbar v-model:show-search="showSearch" @query-table="getList"></right-toolbar>
         </el-row>
-      </template>
 
-      <el-table v-loading="loading" border :data="userList" @selection-change="handleSelectionChange">
-        <el-table-column type="selection" width="50" align="center" />
-        <el-table-column label="用户名称" align="center" prop="username" :show-overflow-tooltip="true" />
-        <el-table-column label="手机号码" align="center" prop="mobile" width="120" />
-        <el-table-column label="邮箱" align="center" prop="mail" width="200" :show-overflow-tooltip="true" />
-        <el-table-column label="状态" align="center" width="80">
-          <template #default="scope">
-            <el-switch
-  v-model="scope.row.status"
-  :active-value="0"
-  :inactive-value="1"
-  active-color="#13ce66"
-  inactive-color="#ff4949"
-  @change="(val) => handleStatusChange(scope.row, val)">
-</el-switch>
-          </template>
-        </el-table-column>
-        <el-table-column label="证书状态" align="center" prop="certSn" width="100">
-          <template #default="scope">
-            <el-tag :type="scope.row.certSn ? 'success' : 'info'">{{ scope.row.certSn ? '已签发' : '未签发' }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="创建时间" align="center" prop="createTime" width="180">
-          <template #default="scope">
-            <span>{{ scope.row.createTime }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" fixed="right" width="240" class-name="small-padding fixed-width">
-          <template #default="scope">
-            <el-tooltip content="修改" placement="top">
-              <el-button link type="primary" icon="Edit" @click="handleUpdate(scope.row)"></el-button>
-            </el-tooltip>
-            <el-tooltip v-if="!scope.row.certSn" content="签发证书" placement="top">
-              <el-button link type="success" icon="Document" @click="handleIssueCert(scope.row)"></el-button>
-            </el-tooltip>
-            <el-tooltip content="删除" placement="top">
-              <el-button link type="primary" icon="Delete" @click="handleDelete(scope.row)"></el-button>
-            </el-tooltip>
-            <el-tooltip content="重置密码" placement="top">
-              <el-button link type="primary" icon="Key" @click="handleResetPwd(scope.row)"></el-button>
-            </el-tooltip>
-          </template>
-        </el-table-column>
-      </el-table>
+        <el-table v-loading="loading" border :data="userList" @selection-change="handleSelectionChange">
+          <el-table-column type="selection" width="50" align="center" />
+          <el-table-column label="用户名称" align="center" prop="username" :show-overflow-tooltip="true" />
+          <el-table-column label="手机号码" align="center" prop="mobile" width="120" />
+          <el-table-column label="邮箱" align="center" prop="mail" width="200" :show-overflow-tooltip="true" />
+          <el-table-column label="状态" align="center" width="80">
+            <template #default="scope">
+              <el-switch
+                v-model="scope.row.status"
+                :active-value="0"
+                :inactive-value="1"
+                active-color="#13ce66"
+                inactive-color="#ff4949"
+                @change="(val) => handleStatusChange(scope.row, val)"
+              />
+            </template>
+          </el-table-column>
+          <el-table-column label="证书状态" align="center" prop="certSn" width="100">
+            <template #default="scope">
+              <el-tag :type="scope.row.certSn ? 'success' : 'info'">{{ scope.row.certSn ? '已签发' : '未签发' }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" fixed="right" width="240" class-name="small-padding fixed-width">
+            <template #default="scope">
+              <el-button link type="primary" icon="Edit" @click="handleUpdate(scope.row)">修改</el-button>
+              <el-button v-if="!scope.row.certSn" link type="success" icon="Document" @click="handleIssueCert(scope.row)">签发证书</el-button>
+              <el-button link type="primary" icon="Delete" @click="handleDelete(scope.row)">删除</el-button>
+              <el-button link type="primary" icon="Key" @click="handleResetPwd(scope.row)">重置密码</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+        <pagination v-show="total > 0" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" :total="total" @pagination="getList" />
+      </el-tab-pane>
+      <el-tab-pane label="实时审计日志">
+        <el-form :model="logQueryParams" :inline="true" class="mb-2">
+          <el-form-item label="操作模块">
+            <el-input v-model="logQueryParams.moduleName" placeholder="请输入模块名" clearable @keyup.enter="handleLogQuery" />
+          </el-form-item>
+          <el-form-item label="操作人员">
+            <el-input v-model="logQueryParams.operator" placeholder="请输入人员" clearable @keyup.enter="handleLogQuery" />
+          </el-form-item>
+          <el-form-item label="状态">
+            <el-select v-model="logQueryParams.status" placeholder="操作状态" clearable style="width: 120px">
+              <el-option label="成功" :value="0" />
+              <el-option label="失败" :value="1" />
+            </el-select>
+          </el-form-item>
+          <el-form-item>
+            <el-button type="primary" icon="Search" @click="handleLogQuery">搜索</el-button>
+            <el-button icon="Refresh" @click="resetLogQuery">重置</el-button>
+          </el-form-item>
+        </el-form>
 
-      <pagination v-show="total > 0" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" :total="total" @pagination="getList" />
-    </el-card>
+        <el-table v-loading="logLoading" :data="logList" border stripe>
+          <el-table-column label="操作时间" align="center" prop="createTime" width="180" />
+          <el-table-column label="模块名称" align="center" prop="moduleName" width="120" />
+          <el-table-column label="操作方法" align="center" prop="methodName" :show-overflow-tooltip="true" min-width="180" />
+          <el-table-column label="操作人员" align="center" prop="operator" width="100" />
+          <el-table-column label="IP地址" align="center" prop="ip" width="130" />
+          <el-table-column label="状态" align="center" width="80">
+            <template #default="scope">
+              <el-tag :type="scope.row.status === 0 ? 'success' : 'danger'">{{ scope.row.status === 0 ? '成功' : '失败' }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="耗时" align="center" width="90">
+            <template #default="scope">
+              <span>{{ scope.row.costTime }}ms</span>
+            </template>
+          </el-table-column>
+        </el-table>
+
+        <pagination
+          v-show="logTotal > 0"
+          v-model:page="logQueryParams.pageNum"
+          v-model:limit="logQueryParams.pageSize"
+          :total="logTotal"
+          @pagination="getLogList"
+        />
+      </el-tab-pane>
+    </el-tabs>
+
+    <!-- 安全确认对话框 -->
+    <SecurityConfirm
+      v-model="securityConfirm.visible"
+      :title="securityConfirm.title"
+      :action="securityConfirm.action"
+      @confirm="securityConfirm.onConfirm"
+    />
 
     <!-- 添加或修改业务管理员对话框 -->
     <el-dialog ref="formDialogRef" v-model="dialog.visible" :title="dialog.title" width="600px" append-to-body @close="closeDialog">
@@ -178,34 +258,19 @@
           <h4 style="margin-top: 0; color: #606266; font-size: 14px">USBKey 证书设置</h4>
           <el-form-item label="设备提供商" prop="provider">
             <div class="flex-row" style="display: flex; gap: 10px; width: 100%">
-              <el-select
-                v-model="certForm.provider"
-                placeholder="请选择或刷新"
-                style="flex: 1"
-                @change="onCertProviderChange"
-              >
+              <el-select v-model="certForm.provider" placeholder="请选择或刷新" style="flex: 1" @change="onCertProviderChange">
                 <el-option v-for="p in certProviders" :key="p" :label="p" :value="p" />
               </el-select>
               <el-button @click="refreshCertProviders" :icon="Refresh" circle />
             </div>
           </el-form-item>
           <el-form-item label="设备列表" prop="device">
-            <el-select
-              v-model="certForm.device"
-              placeholder="请选择设备"
-              style="width: 100%"
-              @change="onCertDeviceChange"
-            >
+            <el-select v-model="certForm.device" placeholder="请选择设备" style="width: 100%" @change="onCertDeviceChange">
               <el-option v-for="d in certDevices" :key="d" :label="d" :value="d" />
             </el-select>
           </el-form-item>
           <el-form-item label="应用" prop="appName">
-            <el-select
-              v-model="certForm.appName"
-              placeholder="请选择应用"
-              style="width: 100%"
-              @change="onCertAppChange"
-            >
+            <el-select v-model="certForm.appName" placeholder="请选择应用" style="width: 100%" @change="onCertAppChange">
               <el-option v-for="a in certApps" :key="a" :label="a" :value="a" />
             </el-select>
           </el-form-item>
@@ -230,21 +295,50 @@
 <script setup name="BusinessAdmin" lang="ts">
 import { ref, reactive, toRefs, getCurrentInstance, ComponentInternalInstance, onMounted, nextTick } from 'vue';
 import { ElMessage, ElMessageBox, FormInstance, FormRules } from 'element-plus';
-import { Refresh } from '@element-plus/icons-vue';
+import { Refresh, Search, Plus, Edit, Delete, Key, Document, Lock, Bell, Warning, SuccessFilled, InfoFilled } from '@element-plus/icons-vue';
 import { to } from 'await-to-js';
 import { listUser, getUser, addUser, updateUser, delUser, resetUserPwd, changeStatus } from '@/api/system/user';
+import { list as listOperLog } from '@/api/system/operlog';
 import { issueAdminCert } from '@/api/ca/root';
 import { getProfileByName } from '@/api/ca/profile';
 import { parseJson } from '@/utils/json';
 import { UserForm, UserQuery } from '@/api/system/user/types';
 import CertSubject, { typeMapping, sortSubjectItems } from '@/components/CertSubject/index.vue';
+import SecurityConfirm from '@/components/SecurityConfirm/index.vue';
 import SKFClient from '@/api/skf/skf_api';
 
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
 
+const securityConfirm = reactive({
+  visible: false,
+  title: '敏感操作安全确认',
+  action: '',
+  onConfirm: () => {}
+});
+
 const userList = ref<any[]>([]);
 const loading = ref(true);
 const showSearch = ref(true);
+
+// 日志相关状态
+const logList = ref<any[]>([]);
+const logTotal = ref(0);
+const logLoading = ref(false);
+const logQueryParams = reactive({
+  pageNum: 1,
+  pageSize: 10,
+  moduleName: undefined,
+  operator: undefined,
+  status: undefined
+});
+
+// 统计数据状态
+const stats = reactive({
+  sensitiveOps: 0,
+  revokeRequests: 0,
+  alerts: 0,
+  healthScore: '99%'
+});
 const ids = ref<Array<string | number>>([]);
 const single = ref(true);
 const multiple = ref(true);
@@ -326,13 +420,13 @@ const data = reactive({
       { pattern: /^[^<>"'|\\]+$/, message: '不能包含非法字符：< > " \' \\ |', trigger: 'blur' }
     ],
     mail: [{ type: 'email', message: '请输入正确的邮箱地址', trigger: ['blur', 'change'] }],
-        mobile: [
-          {
-            pattern: /^1[3456789][0-9]\d{8}$/,
-            message: '请输入正确的手机号码',
-            trigger: 'blur'
-          }
-        ],
+    mobile: [
+      {
+        pattern: /^1[3456789][0-9]\d{8}$/,
+        message: '请输入正确的手机号码',
+        trigger: 'blur'
+      }
+    ],
     roleIds: [{ required: true, message: '用户角色不能为空', trigger: 'blur' }]
   }
 });
@@ -463,8 +557,10 @@ async function submitForm() {
 /** 删除按钮操作 */
 async function handleDelete(row?: any) {
   const userIds = row?.id || ids.value;
-  const [err] = await to(proxy?.$modal.confirm('是否确认删除用户编号为"' + userIds + '"的数据项？') as any);
-  if (!err) {
+  const username = row?.username || '选中的用户';
+
+  securityConfirm.action = `删除审计员 "${username}" (ID: ${userIds})`;
+  securityConfirm.onConfirm = async () => {
     try {
       await delUser(userIds);
       await getList();
@@ -472,7 +568,8 @@ async function handleDelete(row?: any) {
     } catch (error) {
       console.error('删除失败', error);
     }
-  }
+  };
+  securityConfirm.visible = true;
 }
 
 /** 重置密码按钮操作 */
@@ -491,13 +588,18 @@ async function handleResetPwd(row: any) {
       }
     })
   );
+
   if (!err && res) {
-    try {
-      await resetUserPwd(row.id, res.value);
-      proxy?.$modal.msgSuccess('修改成功，新密码是：' + res.value);
-    } catch (error) {
-      console.error('重置密码失败', error);
-    }
+    securityConfirm.action = `重置用户 "${row.username}" 的密码`;
+    securityConfirm.onConfirm = async () => {
+      try {
+        await resetUserPwd(row.id, res.value);
+        proxy?.$modal.msgSuccess('修改成功，新密码是：' + res.value);
+      } catch (error) {
+        console.error('重置密码失败', error);
+      }
+    };
+    securityConfirm.visible = true;
   }
 }
 
@@ -666,15 +768,7 @@ async function submitCertForm() {
         await skf.checkPIN(`${certForm.provider}/${certForm.device}/${certForm.appName}`, certForm.pin);
 
         ElMessage.info('正在从 USBKey 生成 CSR...');
-        const csrRes = await skf.createPKCS10(
-          certForm.provider,
-          certForm.device,
-          certForm.appName,
-          subject,
-          'SM2',
-          256,
-          certForm.containerName
-        );
+        const csrRes = await skf.createPKCS10(certForm.provider, certForm.device, certForm.appName, subject, 'SM2', 256, certForm.containerName);
 
         // 2. 调用后端API签发证书
         ElMessage.info('正在请求后端签发证书...');
@@ -690,14 +784,7 @@ async function submitCertForm() {
 
         // 3. 导入证书到USBKey
         ElMessage.info('正在将证书写入 USBKey...');
-        await skf.importCertificate(
-          certForm.provider,
-          certForm.device,
-          certForm.appName,
-          csrRes.container,
-          true,
-          issueRes.data.cert
-        );
+        await skf.importCertificate(certForm.provider, certForm.device, certForm.appName, csrRes.container, true, issueRes.data.cert);
 
         // 4. 更新用户信息，将证书和证书序列号写入用户表
         ElMessage.info('正在更新用户证书信息...');
@@ -763,18 +850,97 @@ function resetForm() {
   form.value.status = '0';
 }
 
+/** 查询操作日志列表 */
+async function getLogList() {
+  logLoading.value = true;
+  try {
+    const res = await listOperLog(logQueryParams);
+    logList.value = res.data.rows || res.data.records || [];
+    logTotal.value = res.data.total || 0;
+
+    // 模拟联动统计数据
+    stats.sensitiveOps = logTotal.value; // 展示总操作数作为敏感操作参考
+    stats.revokeRequests = logList.value.filter((l: any) => l.methodName?.toLowerCase().includes('revoke')).length;
+  } catch (error) {
+    console.error('获取日志失败', error);
+  } finally {
+    logLoading.value = false;
+  }
+}
+
+/** 日志查询操作 */
+function handleLogQuery() {
+  logQueryParams.pageNum = 1;
+  getLogList();
+}
+
+/** 日志重置操作 */
+function resetLogQuery() {
+  logQueryParams.moduleName = undefined;
+  logQueryParams.operator = undefined;
+  logQueryParams.status = undefined;
+  handleLogQuery();
+}
+
 onMounted(() => {
   getList();
+  getLogList();
 });
 </script>
 
 <style scoped lang="scss">
 .p-2 {
-  padding: 8px;
+  padding: 15px;
 }
 
-.mb-10px {
-  margin-bottom: 10px;
+.mb-4 {
+  margin-bottom: 20px;
+}
+
+.status-card {
+  border-radius: 8px;
+  border-left: 5px solid #f56c6c;
+  background: #fff;
+  transition: all 0.3s;
+
+  &:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  }
+
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    .title {
+      font-size: 14px;
+      font-weight: bold;
+      color: #606266;
+    }
+  }
+
+  .card-body {
+    padding: 10px 0;
+    text-align: center;
+    .value {
+      font-size: 28px;
+      font-weight: bold;
+      color: #303133;
+    }
+    .desc {
+      font-size: 12px;
+      color: #909399;
+      margin-top: 5px;
+    }
+  }
+
+  &.health {
+    border-left-color: #67c23a;
+    background: linear-gradient(135deg, #fff 0%, #f0f9eb 100%);
+    .value {
+      color: #67c23a;
+    }
+  }
 }
 
 .small-padding {

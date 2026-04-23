@@ -48,19 +48,20 @@ export interface SecretsResult {
   publicKey: string;
 }
 
-// /**
-//  * 租户
-//  */
-// export interface TenantVO {
-//   companyName: string;
-//   domain: any;
-//   tenantId: string;
-// }
-//
-// export interface TenantInfo {
-//   tenantEnabled: boolean;
-//   voList: TenantVO[];
-// }
+/**
+ * 租户
+ */
+export interface TenantVO {
+  companyName: string;
+  domain: any;
+  tenantId: string;
+  tenantCode: string;
+}
+
+export interface TenantInfo {
+  tenantEnabled: boolean;
+  voList: TenantVO[];
+}
 
 export interface Result<T = any> {
   /** 状态编码 */

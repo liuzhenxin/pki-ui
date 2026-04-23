@@ -4,7 +4,7 @@ import { Result } from '@/api/types';
 // 获取根证书分页列表
 export function listRootCa(query: any): Promise<Result<any>> {
   return request({
-    url: '/ca/api/v1/roots/page',
+    url: '/ca/v1/roots/page',
     method: 'post',
     data: query
   }) as any;
@@ -13,7 +13,7 @@ export function listRootCa(query: any): Promise<Result<any>> {
 // 获取根证书详情
 export function getRootCa(id: string | number): Promise<Result<any>> {
   return request({
-    url: `/ca/api/v1/roots/${id}`,
+    url: `/ca/v1/roots/${id}`,
     method: 'get'
   }) as any;
 }
@@ -21,7 +21,7 @@ export function getRootCa(id: string | number): Promise<Result<any>> {
 // 生成自签名CA根证书
 export function genRootCa(data: any): Promise<Result<any>> {
   return request({
-    url: '/ca/api/v1/roots/gen',
+    url: '/ca/v1/roots/gen',
     method: 'post',
     data: data
   }) as any;
@@ -30,7 +30,7 @@ export function genRootCa(data: any): Promise<Result<any>> {
 // 生成 CSR（外部CA签发模式）
 export function genCsr(data: any): Promise<Result<any>> {
   return request({
-    url: '/ca/api/v1/roots/csr',
+    url: '/ca/v1/roots/csr',
     method: 'post',
     data: data
   }) as any;
@@ -39,7 +39,7 @@ export function genCsr(data: any): Promise<Result<any>> {
 // 导入外部CA签发的证书
 export function importExternalCert(data: any): Promise<Result<any>> {
   return request({
-    url: '/ca/api/v1/roots/external',
+    url: '/ca/v1/roots/external',
     method: 'post',
     data: data
   }) as any;
@@ -48,7 +48,7 @@ export function importExternalCert(data: any): Promise<Result<any>> {
 // 签发管理员证书
 export function issueAdminCert(data: any): Promise<Result<any>> {
   return request({
-    url: '/ca/api/v1/roots/admin-cert',
+    url: '/ca/v1/roots/admin-cert',
     method: 'post',
     data: data
   }) as any;
@@ -57,7 +57,7 @@ export function issueAdminCert(data: any): Promise<Result<any>> {
 // 删除所有根证书
 export function deleteAllRootCa(): Promise<Result<any>> {
   return request({
-    url: '/ca/api/v1/roots/deleteAll',
+    url: '/ca/v1/roots/deleteAll',
     method: 'delete'
   }) as any;
 }
@@ -65,7 +65,41 @@ export function deleteAllRootCa(): Promise<Result<any>> {
 // 授权模板给根证书
 export function authorizeProfile(data: { rootId: string | number; profileIds: (string | number)[] }): Promise<Result<any>> {
   return request({
-    url: '/ca/api/v1/roots/authorize-profile',
+    url: '/ca/v1/roots/authorize-profile',
+    method: 'post',
+    data: data
+  }) as any;
+}
+
+// 启用根证书
+export function enableRootCa(id: string | number): Promise<Result<any>> {
+  return request({
+    url: `/ca/v1/roots/${id}/enable`,
+    method: 'put'
+  }) as any;
+}
+
+// 停用根证书
+export function disableRootCa(id: string | number): Promise<Result<any>> {
+  return request({
+    url: `/ca/v1/roots/${id}/disable`,
+    method: 'put'
+  }) as any;
+}
+
+// 吊销根证书
+export function revokeRootCa(id: string | number, reason: string): Promise<Result<any>> {
+  return request({
+    url: `/ca/v1/roots/${id}/revoke`,
+    method: 'post',
+    data: { reason }
+  }) as any;
+}
+
+// 在线签发从属CA证书
+export function genSubCaOnline(data: any): Promise<Result<any>> {
+  return request({
+    url: '/ca/v1/roots/sub-ca/gen',
     method: 'post',
     data: data
   }) as any;

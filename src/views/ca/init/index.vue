@@ -22,14 +22,7 @@
         <div v-if="active === 1" class="step-content" style="width: 80%; margin: auto">
           <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 20px">
             <h2 style="margin: 0">初始化模板</h2>
-            <el-button
-              type="info"
-              text
-              circle
-              style="font-size: 24px; padding: 12px"
-              :icon="QuestionFilled"
-              @click="showTemplateHelp = true"
-            />
+            <el-button type="info" text circle style="font-size: 24px; padding: 12px" :icon="QuestionFilled" @click="showTemplateHelp = true" />
           </div>
 
           <el-drawer v-model="showTemplateHelp" title="证书模板说明" direction="rtl" size="450px">
@@ -43,9 +36,7 @@
                   <el-tag type="danger" effect="dark" round size="small">必选</el-tag>
                   <span class="help-card-title">RootCA证书模板 (RootCA)</span>
                 </div>
-                <div class="help-card-body">
-                  用于自签发该 CA 的根证书。在初始化时，<b>必须至少选择一个RootCA证书模板</b>作为信任锚体系的基础。
-                </div>
+                <div class="help-card-body">用于自签发该 CA 的根证书。在初始化时，<b>必须至少选择一个RootCA证书模板</b>作为信任锚体系的基础。</div>
               </div>
 
               <div class="help-card sub-ca">
@@ -53,9 +44,7 @@
                   <el-tag type="warning" effect="light" round size="small">可选</el-tag>
                   <span class="help-card-title">子CA证书模板 (SubCA)</span>
                 </div>
-                <div class="help-card-body">
-                  用于签发下一级从属 CA (Subordinate CA) 的证书。通常用于构建多层级的证书信任链。
-                </div>
+                <div class="help-card-body">用于签发下一级从属 CA (Subordinate CA) 的证书。通常用于构建多层级的证书信任链。</div>
               </div>
 
               <div class="help-card end-entity">
@@ -63,9 +52,7 @@
                   <el-tag type="success" effect="light" round size="small">可选</el-tag>
                   <span class="help-card-title">终端实体证书模板 (EndEntity)</span>
                 </div>
-                <div class="help-card-body">
-                  用于签发普通用户、设备或服务的最终业务证书，不具备向下签发其他证书的能力。
-                </div>
+                <div class="help-card-body">用于签发普通用户、设备或服务的最终业务证书，不具备向下签发其他证书的能力。</div>
               </div>
             </div>
           </el-drawer>
@@ -91,11 +78,7 @@
             </el-table-column>
             <el-table-column prop="type" label="模板类型" min-width="150">
               <template #default="{ row }">
-                <el-tag
-                  :type="row.type === 'RootCA' ? 'danger' : row.type === 'SubCA' ? 'warning' : 'success'"
-                  effect="light"
-                  round
-                >
+                <el-tag :type="row.type === 'RootCA' ? 'danger' : row.type === 'SubCA' ? 'warning' : 'success'" effect="light" round>
                   {{ getProfileTypeLabel(row.type) }}
                 </el-tag>
               </template>
@@ -116,14 +99,7 @@
         <div v-if="active === 2" class="step-content">
           <div class="step-header" style="display: flex; justify-content: space-between; align-items: center; width: 100%">
             <h2>初始化根证书</h2>
-            <el-button
-              type="info"
-              text
-              circle
-              style="font-size: 24px; padding: 12px"
-              :icon="QuestionFilled"
-              @click="showRootCaHelp = true"
-            />
+            <el-button type="info" text circle style="font-size: 24px; padding: 12px" :icon="QuestionFilled" @click="showRootCaHelp = true" />
           </div>
 
           <el-drawer v-model="showRootCaHelp" title="根证书初始化说明" direction="rtl" size="500px">
@@ -136,18 +112,14 @@
                 <div class="help-card-header">
                   <span class="help-card-title">自签根证书</span>
                 </div>
-                <div class="help-card-body">
-                  系统会自动生成私钥，并使用该私钥对生成的证书进行签名。这是构建独立信任体系的常用方式。
-                </div>
+                <div class="help-card-body">系统会自动生成私钥，并使用该私钥对生成的证书进行签名。这是构建独立信任体系的常用方式。</div>
               </div>
 
               <div class="help-card sub-ca">
                 <div class="help-card-header">
                   <span class="help-card-title">外部CA签发</span>
                 </div>
-                <div class="help-card-body">
-                  系统生成 CSR（证书签名请求），您需要将其交由上级或第三方 CA 进行签发，然后再将签回的证书导入。
-                </div>
+                <div class="help-card-body">系统生成 CSR（证书签名请求），您需要将其交由上级或第三方 CA 进行签发，然后再将签回的证书导入。</div>
               </div>
 
               <el-divider />
@@ -178,13 +150,7 @@
             <el-radio-button label="external">外部CA签发</el-radio-button>
           </el-radio-group>
 
-          <el-form
-            :model="rootCaForm"
-            :rules="rootCaRules"
-            ref="rootCaFormRef"
-            label-width="140px"
-            style="width: 700px"
-          >
+          <el-form :model="rootCaForm" :rules="rootCaRules" ref="rootCaFormRef" label-width="140px" style="width: 700px">
             <el-tabs type="border-card">
               <el-tab-pane label="基本信息">
                 <el-form-item label="CA名称" prop="name">
@@ -210,10 +176,7 @@
                   <el-input v-model="rootCaForm.password" type="password" show-password placeholder="请输入签名器密码" />
                 </el-form-item>
 
-                <div
-                  v-if="rootType === 'external'"
-                  style="margin-top: 20px; border-top: 1px dashed #eee; padding-top: 20px"
-                >
+                <div v-if="rootType === 'external'" style="margin-top: 20px; border-top: 1px dashed #eee; padding-top: 20px">
                   <el-form-item label="CSR操作">
                     <el-button type="primary" @click="handleDownloadCsr">生成并下载 CSR</el-button>
                   </el-form-item>
@@ -234,9 +197,7 @@
                         <div class="el-upload__tip">请上传外部CA签发的证书文件 (.cer, .crt, .pem)</div>
                       </template>
                     </el-upload>
-                    <el-button v-if="externalCertPem" type="text" @click="showExternalCertDialog = true"
-                      >查看证书详情</el-button
-                    >
+                    <el-button v-if="externalCertPem" type="text" @click="showExternalCertDialog = true">查看证书详情</el-button>
                   </el-form-item>
                 </div>
               </el-tab-pane>
@@ -294,22 +255,8 @@
                 >
                   <div style="display: flex; width: 100%">
                     <el-input v-model="item.value" style="flex: 1; margin-right: 10px" />
-                    <el-button
-                      v-if="index === 0"
-                      @click="addUri('cacertUris')"
-                      type="primary"
-                      :icon="Plus"
-                      circle
-                      size="small"
-                    />
-                    <el-button
-                      v-if="index !== 0"
-                      @click="removeUri('cacertUris', index)"
-                      type="danger"
-                      :icon="Minus"
-                      circle
-                      size="small"
-                    />
+                    <el-button v-if="index === 0" @click="addUri('cacertUris')" type="primary" :icon="Plus" circle size="small" />
+                    <el-button v-if="index !== 0" @click="removeUri('cacertUris', index)" type="danger" :icon="Minus" circle size="small" />
                   </div>
                 </el-form-item>
 
@@ -321,22 +268,8 @@
                 >
                   <div style="display: flex; width: 100%">
                     <el-input v-model="item.value" style="flex: 1; margin-right: 10px" />
-                    <el-button
-                      v-if="index === 0"
-                      @click="addUri('crlUris')"
-                      type="primary"
-                      :icon="Plus"
-                      circle
-                      size="small"
-                    />
-                    <el-button
-                      v-if="index !== 0"
-                      @click="removeUri('crlUris', index)"
-                      type="danger"
-                      :icon="Minus"
-                      circle
-                      size="small"
-                    />
+                    <el-button v-if="index === 0" @click="addUri('crlUris')" type="primary" :icon="Plus" circle size="small" />
+                    <el-button v-if="index !== 0" @click="removeUri('crlUris', index)" type="danger" :icon="Minus" circle size="small" />
                   </div>
                 </el-form-item>
 
@@ -348,22 +281,8 @@
                 >
                   <div style="display: flex; width: 100%">
                     <el-input v-model="item.value" style="flex: 1; margin-right: 10px" />
-                    <el-button
-                      v-if="index === 0"
-                      @click="addUri('ocspUris')"
-                      type="primary"
-                      :icon="Plus"
-                      circle
-                      size="small"
-                    />
-                    <el-button
-                      v-if="index !== 0"
-                      @click="removeUri('ocspUris', index)"
-                      type="danger"
-                      :icon="Minus"
-                      circle
-                      size="small"
-                    />
+                    <el-button v-if="index === 0" @click="addUri('ocspUris')" type="primary" :icon="Plus" circle size="small" />
+                    <el-button v-if="index !== 0" @click="removeUri('ocspUris', index)" type="danger" :icon="Minus" circle size="small" />
                   </div>
                 </el-form-item>
               </el-tab-pane>
@@ -392,14 +311,7 @@
                 <span class="status-text">正在监控 USB Key 插拨...</span>
               </div>
             </div>
-            <el-button
-              type="info"
-              text
-              circle
-              style="font-size: 24px; padding: 12px"
-              :icon="QuestionFilled"
-              @click="showAdminHelp = true"
-            />
+            <el-button type="info" text circle style="font-size: 24px; padding: 12px" :icon="QuestionFilled" @click="showAdminHelp = true" />
           </div>
 
           <el-drawer v-model="showAdminHelp" title="管理员 USBKey 设置说明" direction="rtl" size="500px">
@@ -413,11 +325,11 @@
                   <span class="help-card-title">USBKey 操作流程</span>
                 </div>
                 <div class="help-card-body">
-                  1. 插入 USB Key。<br/>
-                  2. 选择 <b>设备提供商</b> (Provider) 并 <b>刷新</b>。<br/>
-                  3. 选择对应的 <b>设备</b>、<b>应用</b>。<br/>
-                  4. 输入 <b>容器名</b> (通常新建一个，如 admin)。<br/>
-                  5. 输入 USBKey 的 <b>User PIN</b> 码。<br/>
+                  1. 插入 USB Key。<br />
+                  2. 选择 <b>设备提供商</b> (Provider) 并 <b>刷新</b>。<br />
+                  3. 选择对应的 <b>设备</b>、<b>应用</b>。<br />
+                  4. 输入 <b>容器名</b> (通常新建一个，如 admin)。<br />
+                  5. 输入 USBKey 的 <b>User PIN</b> 码。<br />
                   6. 点击 <b>生成 CSR 并签发</b>。
                 </div>
               </div>
@@ -446,12 +358,7 @@
               <h4 style="margin-top: 0; color: #606266; font-size: 14px">USBKey 证书设置</h4>
               <el-form-item label="设备提供商" prop="provider">
                 <div class="flex-row" style="display: flex; gap: 10px; width: 100%">
-                  <el-select
-                    v-model="adminForm.provider"
-                    placeholder="请选择或刷新"
-                    style="flex: 1"
-                    @change="onAdminProviderChange"
-                  >
+                  <el-select v-model="adminForm.provider" placeholder="请选择或刷新" style="flex: 1" @change="onAdminProviderChange">
                     <el-option v-for="p in adminProviders" :key="p" :label="p" :value="p" />
                   </el-select>
                   <el-button @click="refreshAdminProviders" :icon="Refresh" circle />
@@ -459,23 +366,13 @@
               </el-form-item>
 
               <el-form-item label="设备列表" prop="device">
-                <el-select
-                  v-model="adminForm.device"
-                  placeholder="请选择设备"
-                  style="width: 100%"
-                  @change="onAdminDeviceChange"
-                >
+                <el-select v-model="adminForm.device" placeholder="请选择设备" style="width: 100%" @change="onAdminDeviceChange">
                   <el-option v-for="d in adminDevices" :key="d" :label="d" :value="d" />
                 </el-select>
               </el-form-item>
 
               <el-form-item label="应用" prop="appName">
-                <el-select
-                  v-model="adminForm.appName"
-                  placeholder="请选择应用"
-                  style="width: 100%"
-                  @change="onAdminAppChange"
-                >
+                <el-select v-model="adminForm.appName" placeholder="请选择应用" style="width: 100%" @change="onAdminAppChange">
                   <el-option v-for="a in adminApps" :key="a" :label="a" :value="a" />
                 </el-select>
               </el-form-item>
@@ -489,12 +386,7 @@
               </el-form-item>
 
               <el-form-item label="证书操作">
-                <el-button
-                  type="primary"
-                  :loading="adminGeneratingCert"
-                  @click="handleGenerateAdminCert"
-                  style="width: 100%"
-                >
+                <el-button type="primary" :loading="adminGeneratingCert" @click="handleGenerateAdminCert" style="width: 100%">
                   生成 CSR 并签发写入 USBKey
                 </el-button>
               </el-form-item>
@@ -508,12 +400,7 @@
               <el-input v-model="adminForm.password" type="password" show-password placeholder="请输入平台登录新密码" />
             </el-form-item>
             <el-form-item label="确认密码" prop="confirmPassword">
-              <el-input
-                v-model="adminForm.confirmPassword"
-                type="password"
-                show-password
-                placeholder="请再次输入新密码"
-              />
+              <el-input v-model="adminForm.confirmPassword" type="password" show-password placeholder="请再次输入新密码" />
             </el-form-item>
           </el-form>
         </div>
@@ -527,14 +414,7 @@
                 <span class="status-text">正在监控 USB Key 插拨...</span>
               </div>
             </div>
-            <el-button
-              type="info"
-              text
-              circle
-              style="font-size: 24px; padding: 12px"
-              :icon="QuestionFilled"
-              @click="showAuditorHelp = true"
-            />
+            <el-button type="info" text circle style="font-size: 24px; padding: 12px" :icon="QuestionFilled" @click="showAuditorHelp = true" />
           </div>
 
           <el-drawer v-model="showAuditorHelp" title="审计员设置说明" direction="rtl" size="500px">
@@ -553,13 +433,7 @@
               </div>
             </div>
           </el-drawer>
-          <el-form
-            :model="auditorForm"
-            :rules="auditorRules"
-            ref="auditorFormRef"
-            label-width="120px"
-            style="width: 500px"
-          >
+          <el-form :model="auditorForm" :rules="auditorRules" ref="auditorFormRef" label-width="120px" style="width: 500px">
             <el-form-item label="用户名" prop="username">
               <el-input v-model="auditorForm.username" disabled />
             </el-form-item>
@@ -573,12 +447,7 @@
               <h4 style="margin-top: 0; color: #606266; font-size: 14px">USBKey 证书设置</h4>
               <el-form-item label="设备提供商" prop="provider">
                 <div class="flex-row" style="display: flex; gap: 10px; width: 100%">
-                  <el-select
-                    v-model="auditorForm.provider"
-                    placeholder="请选择或刷新"
-                    style="flex: 1"
-                    @change="onAuditorProviderChange"
-                  >
+                  <el-select v-model="auditorForm.provider" placeholder="请选择或刷新" style="flex: 1" @change="onAuditorProviderChange">
                     <el-option v-for="p in auditorProviders" :key="p" :label="p" :value="p" />
                   </el-select>
                   <el-button @click="refreshAuditorProviders" :icon="Refresh" circle />
@@ -586,23 +455,13 @@
               </el-form-item>
 
               <el-form-item label="设备列表" prop="device">
-                <el-select
-                  v-model="auditorForm.device"
-                  placeholder="请选择设备"
-                  style="width: 100%"
-                  @change="onAuditorDeviceChange"
-                >
+                <el-select v-model="auditorForm.device" placeholder="请选择设备" style="width: 100%" @change="onAuditorDeviceChange">
                   <el-option v-for="d in auditorDevices" :key="d" :label="d" :value="d" />
                 </el-select>
               </el-form-item>
 
               <el-form-item label="应用" prop="appName">
-                <el-select
-                  v-model="auditorForm.appName"
-                  placeholder="请选择应用"
-                  style="width: 100%"
-                  @change="onAuditorAppChange"
-                >
+                <el-select v-model="auditorForm.appName" placeholder="请选择应用" style="width: 100%" @change="onAuditorAppChange">
                   <el-option v-for="a in auditorApps" :key="a" :label="a" :value="a" />
                 </el-select>
               </el-form-item>
@@ -616,12 +475,7 @@
               </el-form-item>
 
               <el-form-item label="证书操作">
-                <el-button
-                  type="primary"
-                  :loading="auditorGeneratingCert"
-                  @click="handleGenerateAuditorCert"
-                  style="width: 100%"
-                >
+                <el-button type="primary" :loading="auditorGeneratingCert" @click="handleGenerateAuditorCert" style="width: 100%">
                   生成 CSR 并签发写入 USBKey
                 </el-button>
               </el-form-item>
@@ -635,12 +489,7 @@
               <el-input v-model="auditorForm.password" type="password" show-password placeholder="请输入平台登录新密码" />
             </el-form-item>
             <el-form-item label="确认密码" prop="confirmPassword">
-              <el-input
-                v-model="auditorForm.confirmPassword"
-                type="password"
-                show-password
-                placeholder="请再次输入新密码"
-              />
+              <el-input v-model="auditorForm.confirmPassword" type="password" show-password placeholder="请再次输入新密码" />
             </el-form-item>
           </el-form>
         </div>
@@ -663,12 +512,7 @@
     </el-dialog>
 
     <!-- 生成的自签名根证书详情弹窗 -->
-    <el-dialog
-      v-model="showGeneratedRootCaDialog"
-      title="初始化根证书成功"
-      width="60%"
-      :before-close="handleGeneratedRootCaConfirm"
-    >
+    <el-dialog v-model="showGeneratedRootCaDialog" title="初始化根证书成功" width="60%" :before-close="handleGeneratedRootCaConfirm">
       <X509Cert v-if="showGeneratedRootCaDialog" :certPem="generatedRootCaPem" />
       <template #footer>
         <span class="dialog-footer">
@@ -696,16 +540,7 @@
 
 <script setup lang="ts">
 import { ref, computed, reactive, onMounted, onUnmounted, watch, getCurrentInstance, ComponentInternalInstance } from 'vue';
-import {
-  ElMessage,
-  FormInstance,
-  FormRules,
-  UploadInstance,
-  UploadUserFile,
-  UploadProps,
-  UploadRawFile,
-  genFileId
-} from 'element-plus';
+import { ElMessage, FormInstance, FormRules, UploadInstance, UploadUserFile, UploadProps, UploadRawFile, genFileId } from 'element-plus';
 import { useRouter } from 'vue-router';
 import { listProfile, listInitProfile, getProfile, initProfiles } from '@/api/ca/profile';
 import { uploadUserCert, resetUserPwd } from '@/api/system/user';
@@ -941,8 +776,14 @@ watch(active, async (newActive) => {
     }
     const rootCaTemplate = selectedTemplates.value.find((t: any) => t.name === 'RootCA证书模板') || rootCaTemplates.value[0];
     console.log('Step 2: Target template', rootCaTemplate?.name, rootCaTemplate?.id);
-    console.log('Step 2: All selected templates', selectedTemplates.value.map((t: any) => ({ id: t.id, name: t.name, type: t.type })));
-    console.log('Step 2: RootCA templates', rootCaTemplates.value.map((t: any) => ({ id: t.id, name: t.name })));
+    console.log(
+      'Step 2: All selected templates',
+      selectedTemplates.value.map((t: any) => ({ id: t.id, name: t.name, type: t.type }))
+    );
+    console.log(
+      'Step 2: RootCA templates',
+      rootCaTemplates.value.map((t: any) => ({ id: t.id, name: t.name }))
+    );
     if (rootCaTemplate) {
       rootCaForm.profileId = (rootCaTemplate as any).id;
       console.log('Step 2: Loading profile with ID', rootCaForm.profileId);
@@ -972,8 +813,7 @@ watch(active, async (newActive) => {
 
     // Use "通用证书模板" if available, fallback to any EndEntity template
     const eeTemplate =
-      selectedTemplates.value.find((t: any) => t.name === '通用证书模板') ||
-      selectedTemplates.value.find((t: any) => t.type === 'EndEntity');
+      selectedTemplates.value.find((t: any) => t.name === '通用证书模板') || selectedTemplates.value.find((t: any) => t.type === 'EndEntity');
     if (eeTemplate) {
       adminForm.profileId = eeTemplate.id;
       await loadProfileToForm(eeTemplate.id, adminForm, {
@@ -1003,8 +843,7 @@ watch(active, async (newActive) => {
 
     // Use "通用证书模板" if available, fallback to any EndEntity template
     const eeTemplate =
-      selectedTemplates.value.find((t: any) => t.name === '通用证书模板') ||
-      selectedTemplates.value.find((t: any) => t.type === 'EndEntity');
+      selectedTemplates.value.find((t: any) => t.name === '通用证书模板') || selectedTemplates.value.find((t: any) => t.type === 'EndEntity');
     if (eeTemplate) {
       auditorForm.profileId = eeTemplate.id;
       await loadProfileToForm(eeTemplate.id, auditorForm, {
@@ -1773,6 +1612,7 @@ const canNext = computed(() => {
 });
 
 const saveTenantStatus = async (statusValue: number) => {
+  console.log(`saveTenantStatus: Updating status to ${statusValue} for tenant ${import.meta.env.VITE_TENANT_ID}`);
   try {
     const tenantId = import.meta.env.VITE_TENANT_ID;
     const tenantRes = await getTenant(tenantId);
@@ -1781,17 +1621,25 @@ const saveTenantStatus = async (statusValue: number) => {
       const updateData = {
         co: {
           id: tenantInfo.id,
+          tenantId: tenantInfo.tenantId,
           name: tenantInfo.name,
           code: tenantInfo.code,
           status: statusValue as any,
           sourceId: tenantInfo.sourceId,
-          packageId: tenantInfo.packageId
+          packageId: tenantInfo.packageId,
+          companyName: tenantInfo.companyName
         }
       };
+      console.log('saveTenantStatus: Sending updateData', updateData);
       await updateTenant(updateData);
+      console.log('saveTenantStatus: Status updated successfully');
+    } else {
+      throw new Error('获取租户信息为空，无法更新状态');
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('更新租户状态失败', error);
+    ElMessage.error('更新租户状态失败: ' + (error.message || error));
+    throw error; // Rethrow so caller knows it failed
   }
 };
 
@@ -1901,7 +1749,7 @@ const next = async () => {
             formData.append('file', certBlob, 'admin.pem');
             formData.append('id', ADMIN_USER_ID); // 管理员ID
             await uploadUserCert(formData);
-            
+
             // 提交证书成功后，重置用户密码
             await resetUserPwd(ADMIN_USER_ID, adminForm.password);
 
@@ -1933,7 +1781,7 @@ const next = async () => {
             formData.append('file', certBlob, 'auditor.pem');
             formData.append('id', AUDITOR_USER_ID); // 审计员ID
             await uploadUserCert(formData);
-            
+
             // 提交证书成功后，重置用户密码
             await resetUserPwd(AUDITOR_USER_ID, auditorForm.password);
 

@@ -1,28 +1,34 @@
 import request from '@/utils/request';
 import { Result } from '@/api/types';
 
-// 获取环境信息
+/**
+ * 获取环境监测信息
+ */
 export function getEnvInfo(): Promise<Result<any>> {
-  // 模拟 API 返回
-  const envInfo = {
-    os: { name: '操作系统', value: 'Linux', status: 'success' },
-    database: { name: '数据库连接', value: '正常', status: 'success' },
-    redis: { name: 'Redis连接', value: '正常', status: 'success' }
-  };
-  return Promise.resolve({
-    code: 'OK',
-    data: envInfo,
-    msg: '请求成功'
+  return request({
+    url: '/kmc/v1/init/env',
+    method: 'get'
   });
 }
 
-// 初始化管理员
+/**
+ * 初始化管理员和审计员
+ * @param data 初始化数据
+ */
 export function initAdmin(data: any): Promise<Result<any>> {
-  console.log('调用初始化管理员接口', data);
-  // 模拟成功返回
-  return Promise.resolve({
-    code: 'OK',
-    data: null,
-    msg: '设置成功'
+  return request({
+    url: '/kmc/v1/init/admin',
+    method: 'post',
+    data: data
+  });
+}
+
+/**
+ * 获取当前初始化状态
+ */
+export function getInitStatus(): Promise<Result<any>> {
+  return request({
+    url: '/kmc/v1/init/status',
+    method: 'get'
   });
 }

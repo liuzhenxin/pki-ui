@@ -14,8 +14,8 @@
       <el-descriptions-item label="有效期">{{ profile.validity || '-' }}</el-descriptions-item>
       <el-descriptions-item label="生效时间">{{ profile.notBeforeTime || '-' }}</el-descriptions-item>
       <el-descriptions-item label="密钥算法" :span="2">
-        <el-tag v-for="algo in (profile.keyAlgorithms || [])" :key="typeof algo === 'string' ? algo : JSON.stringify(algo)" class="mr-1" type="info" effect="plain">
-          {{ typeof algo === 'string' ? algo : (algo.name || algo.type || 'Unknown') }}
+        <el-tag v-for="algo in parsedKeyAlgorithms" :key="algo" class="mr-1" type="info" effect="plain">
+          {{ algo }}
         </el-tag>
       </el-descriptions-item>
       <el-descriptions-item label="签名算法" :span="2">
@@ -202,6 +202,7 @@
 <script setup lang="ts">
 import { PropType, computed } from 'vue';
 import { InfoFilled, User, Connection } from '@element-plus/icons-vue';
+import { parseKeyAlgorithms } from '@/utils/json';
 
 const props = defineProps({
   profile: {
@@ -209,6 +210,11 @@ const props = defineProps({
     required: true,
     default: () => ({})
   }
+});
+
+/** 解析密钥算法 */
+const parsedKeyAlgorithms = computed(() => {
+  return parseKeyAlgorithms(props.profile?.keyAlgorithms || []);
 });
 
 /** 处理主体数据，支持直接数组或 { rdns: [] } 结构 */

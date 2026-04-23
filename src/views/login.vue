@@ -6,10 +6,10 @@
         <lang-select />
       </div>
       <el-form-item v-if="tenantEnabled" prop="tenantId">
-<!--        <el-select v-model="loginForm.tenantId" filterable :placeholder="proxy.$t('login.selectPlaceholder')" style="width: 100%">-->
-<!--          <el-option v-for="item in tenantList" :key="item.tenantId" :label="item.companyName" :value="item.tenantId"></el-option>-->
-<!--          <template #prefix><svg-icon icon-class="company" class="el-input__icon input-icon" /></template>-->
-<!--        </el-select>-->
+        <el-select v-model="loginForm.tenantId" filterable :placeholder="proxy.$t('login.selectPlaceholder')" style="width: 100%" @change="handleTenantChange">
+          <el-option v-for="item in tenantList" :key="item.tenantId" :label="item.companyName" :value="item.tenantId"></el-option>
+          <template #prefix><svg-icon icon-class="company" class="el-input__icon input-icon" /></template>
+        </el-select>
       </el-form-item>
       <el-form-item prop="username">
         <el-input v-model="loginForm.username" type="text" size="large" auto-complete="off" :placeholder="proxy.$t('login.username')">
@@ -83,6 +83,7 @@ import { encryptExt } from '@/utils/jsencrypt';
 import { getCodeImg, getSecrets } from '@/api/login';
 
 import { getTenant } from '@/api/system/tenant';
+import { getTenantList } from '@/api/login';
 
 import { authBinding } from '@/api/system/social/auth';
 import { useUserStore } from '@/store/modules/user';
@@ -134,6 +135,8 @@ const loading = ref(false);
 const captchaEnabled = ref(true);
 // 租户开关
 const tenantEnabled = ref(false);
+// 租户列表
+const tenantList = ref<TenantVO[]>([]);
 
 // 注册开关
 const register = ref(false);
@@ -238,16 +241,44 @@ const getLoginData = () => {
 /**
  * 获取租户列表
  */
-// const initTenantList = async () => {
-//   const { data } = await getTenantList(false);
-//   tenantEnabled.value = data.tenantEnabled === undefined ? true : data.tenantEnabled;
-//   if (tenantEnabled.value) {
-//     tenantList.value = data.voList;
-//     if (tenantList.value != null && tenantList.value.length !== 0) {
-//       loginForm.value.tenantId = tenantList.value[0].tenantId;
-//     }
-//   }
-// };
+const initTenantList = async () => {
+  try {
+    const { data } = await getTenantList(false);
+    // data is TenantCO[] from backend (id, name, code fields)
+    const list: any[] = Array.isArray(data) ? data : [];
+    tenantEnabled.value = list.length > 0;
+    if (tenantEnabled.value) {
+      tenantList.value = list.map((item: any) => ({
+        tenantId: String(item.id),
+        companyName: item.name,
+        tenantCode: item.code,
+        domain: null
+      }));
+      // 如果没有从本地存储中获取到租户ID，则默认选中第一个
+      if (!loginForm.value.tenantId) {
+        loginForm.value.tenantId = tenantList.value[0].tenantId;
+        loginForm.value.tenantCode = tenantList.value[0].tenantCode;
+      } else {
+        // 如果有租户ID，同步一下 tenantCode
+        const tenant = tenantList.value.find((item) => item.tenantId === loginForm.value.tenantId);
+        if (tenant) {
+          loginForm.value.tenantCode = tenant.tenantCode;
+        }
+      }
+    }
+  } catch (error) {
+    console.error('获取租户列表失败:', error);
+    tenantEnabled.value = false;
+  }
+};
+
+const handleTenantChange = (val: string) => {
+  const tenant = tenantList.value.find((item) => item.tenantId === val);
+  if (tenant) {
+    loginForm.value.tenantCode = tenant.tenantCode;
+    getTenantInfo(val);
+  }
+};
 
 /**
  * 获取租户
@@ -277,7 +308,7 @@ const doSocialLogin = (type: string) => {
 onMounted(() => {
   getCode();
   getSecretKey();
-  //initTenantList();
+  initTenantList();
   getLoginData();
   if (loginForm.value.tenantId) {
     getTenantInfo(loginForm.value.tenantId);

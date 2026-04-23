@@ -2,12 +2,7 @@
   <div class="app-container">
     <el-form :model="queryParams" ref="queryFormRef" :inline="true" v-show="showSearch" label-width="100px">
       <el-form-item label="密码算法类型" prop="algType">
-        <el-input
-          v-model="queryParams.algType"
-          placeholder="请输入密码算法类型(如SM2)"
-          clearable
-          @keyup.enter="handleQuery"
-        />
+        <el-input v-model="queryParams.algType" placeholder="请输入密码算法类型(如SM2)" clearable @keyup.enter="handleQuery" />
       </el-form-item>
       <el-form-item label="状态" prop="status">
         <el-select v-model="queryParams.status" placeholder="策略状态" clearable style="width: 200px">
@@ -23,13 +18,13 @@
 
     <el-row :gutter="10" class="mb8">
       <el-col :span="1.5">
-        <el-button type="primary" plain icon="Plus" @click="handleAdd">新增</el-button>
+        <el-button type="primary" plain icon="Plus" @click="handleAdd" v-hasPermi="['kmc:strategy:add']">新增</el-button>
       </el-col>
       <el-col :span="1.5">
-        <el-button type="success" plain icon="Edit" :disabled="single" @click="handleUpdate()">修改</el-button>
+        <el-button type="success" plain icon="Edit" :disabled="single" @click="handleUpdate()" v-hasPermi="['kmc:strategy:edit']">修改</el-button>
       </el-col>
       <el-col :span="1.5">
-        <el-button type="danger" plain icon="Delete" :disabled="multiple" @click="handleDelete()">删除</el-button>
+        <el-button type="danger" plain icon="Delete" :disabled="multiple" @click="handleDelete()" v-hasPermi="['kmc:strategy:remove']">删除</el-button>
       </el-col>
       <right-toolbar v-model:showSearch="showSearch" @queryTable="getList" />
     </el-row>
@@ -51,22 +46,16 @@
       <el-table-column label="操作" align="center" class-name="small-padding fixed-width">
         <template #default="scope">
           <el-tooltip content="修改" placement="top">
-            <el-button link type="primary" icon="Edit" @click="handleUpdate(scope.row)" />
+            <el-button link type="primary" icon="Edit" @click="handleUpdate(scope.row)" v-hasPermi="['kmc:strategy:edit']" />
           </el-tooltip>
           <el-tooltip content="删除" placement="top">
-            <el-button link type="primary" icon="Delete" @click="handleDelete(scope.row)" />
+            <el-button link type="primary" icon="Delete" @click="handleDelete(scope.row)" v-hasPermi="['kmc:strategy:remove']" />
           </el-tooltip>
         </template>
       </el-table-column>
     </el-table>
 
-    <pagination
-      v-show="total > 0"
-      :total="total"
-      v-model:page="queryParams.pageNum"
-      v-model:limit="queryParams.pageSize"
-      @pagination="getList"
-    />
+    <pagination v-show="total > 0" :total="total" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" @pagination="getList" />
 
     <!-- 添加或修改策略对话框 -->
     <el-dialog :title="dialog.title" v-model="dialog.visible" width="500px" append-to-body>
@@ -101,15 +90,9 @@
 </template>
 
 <script setup name="PoolStrategy" lang="ts">
-import { ref, reactive, toRefs, onMounted } from 'vue';
+import { ref, reactive, toRefs, onMounted, getCurrentInstance, ComponentInternalInstance } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import {
-  listPoolStrategy,
-  getPoolStrategy,
-  delPoolStrategy,
-  addPoolStrategy,
-  updatePoolStrategy
-} from '@/api/kmc/poolStrategy/index';
+import { listPoolStrategy, getPoolStrategy, delPoolStrategy, addPoolStrategy, updatePoolStrategy } from '@/api/kmc/poolStrategy/index';
 import { PoolStrategyVO, PoolStrategyQuery, PoolStrategyForm } from '@/api/kmc/poolStrategy/types';
 
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
@@ -127,6 +110,18 @@ const dialog = reactive<DialogOption>({
   title: ''
 });
 
+const validateWatermark = (rule: any, value: any, callback: any) => {
+  if (form.value.lowWatermark && form.value.highWatermark) {
+    if (form.value.highWatermark <= form.value.lowWatermark) {
+      callback(new Error('高水位阈值必须大于低水位阈值'));
+    } else {
+      callback();
+    }
+  } else {
+    callback();
+  }
+};
+
 const data = reactive<PageData<PoolStrategyForm, PoolStrategyQuery>>({
   form: {
     id: undefined,
@@ -143,10 +138,23 @@ const data = reactive<PageData<PoolStrategyForm, PoolStrategyQuery>>({
     status: undefined
   },
   rules: {
-    algType: [{ required: true, message: '密码算法类型不能为空', trigger: 'blur' }],
-    keyUsage: [{ required: true, message: '密钥用途不能为空', trigger: 'blur' }],
-    lowWatermark: [{ required: true, message: '低水位阈值不能为空', trigger: 'blur' }],
-    highWatermark: [{ required: true, message: '高水位阈值不能为空', trigger: 'blur' }],
+    algType: [
+      { required: true, message: '密码算法类型不能为空', trigger: 'blur' },
+      { pattern: /^[A-Za-z0-9]+$/, message: '算法类型格式不正确 (字母或数字)', trigger: 'blur' }
+    ],
+    keyUsage: [
+      { required: true, message: '密钥用途不能为空', trigger: 'blur' },
+      { pattern: /^[A-Z_]+$/, message: '用途格式不正确 (大写字母和下划线)', trigger: 'blur' }
+    ],
+    lowWatermark: [
+      { required: true, message: '低水位阈值不能为空', trigger: 'blur' },
+      { type: 'number', min: 1, message: '必须是大于0的数字', trigger: 'blur' }
+    ],
+    highWatermark: [
+      { required: true, message: '高水位阈值不能为空', trigger: 'blur' },
+      { type: 'number', min: 1, message: '必须是大于0的数字', trigger: 'blur' },
+      { validator: validateWatermark, trigger: 'blur' }
+    ],
     status: [{ required: true, message: '状态不能为空', trigger: 'change' }]
   }
 });
@@ -160,7 +168,7 @@ const getList = async () => {
     const res = await listPoolStrategy(queryParams.value);
     // RuoYi-Vue-Plus backend format: res.data.rows or res.data.data depends on how Page is serialized
     // Typically Result.buildSuccess(Page<...>) means standard nested data shape.
-    let responseData = res.data;
+    const responseData = res.data;
     if (responseData && responseData.data) {
       // In liuzx framework it is usually res.data.data.data or res.data.data.records
       const pageInfo = responseData.data;
@@ -170,10 +178,10 @@ const getList = async () => {
       poolStrategyList.value = res.rows;
       total.value = res.total;
     } else {
-        // Fallback
-        poolStrategyList.value = responseData as any;
+      // Fallback
+      poolStrategyList.value = responseData as any;
     }
-  } catch(e) {
+  } catch (e) {
     console.error(e);
   } finally {
     loading.value = false;
@@ -213,7 +221,7 @@ const resetQuery = () => {
 
 /** 多选框选中数据 */
 const handleSelectionChange = (selection: PoolStrategyVO[]) => {
-  ids.value = selection.map(item => item.id);
+  ids.value = selection.map((item) => item.id);
   single.value = selection.length !== 1;
   multiple.value = !selection.length;
 };
@@ -230,13 +238,13 @@ const handleUpdate = async (row?: PoolStrategyVO) => {
   reset();
   const id = row?.id || ids.value[0];
   const res = await getPoolStrategy(id);
-  
+
   if (res.data && res.data.data) {
-      Object.assign(form.value, res.data.data);
+    Object.assign(form.value, res.data.data);
   } else {
-      Object.assign(form.value, res.data);
+    Object.assign(form.value, res.data);
   }
-  
+
   dialog.visible = true;
   dialog.title = '修改备用密钥池策略';
 };

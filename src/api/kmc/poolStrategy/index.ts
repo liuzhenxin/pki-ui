@@ -5,7 +5,7 @@ import { parseStrEmpty } from '@/utils/ruoyi';
 
 export const listPoolStrategy = (query: PoolStrategyQuery): AxiosPromise<PoolStrategyVO[]> => {
   return request({
-    url: '/v1/pool-strategies/page',
+    url: '/kmc/v1/pool-strategies/page',
     method: 'post',
     data: query
   });
@@ -13,14 +13,14 @@ export const listPoolStrategy = (query: PoolStrategyQuery): AxiosPromise<PoolStr
 
 export const getPoolStrategy = (id?: string | number): AxiosPromise<PoolStrategyVO> => {
   return request({
-    url: '/v1/pool-strategies/' + parseStrEmpty(id),
+    url: '/kmc/v1/pool-strategies/' + parseStrEmpty(id),
     method: 'get'
   });
 };
 
 export const addPoolStrategy = (data: PoolStrategyForm) => {
   return request({
-    url: '/v1/pool-strategies',
+    url: '/kmc/v1/pool-strategies',
     method: 'post',
     data: data
   });
@@ -28,7 +28,7 @@ export const addPoolStrategy = (data: PoolStrategyForm) => {
 
 export const updatePoolStrategy = (data: PoolStrategyForm) => {
   return request({
-    url: '/v1/pool-strategies',
+    url: '/kmc/v1/pool-strategies',
     method: 'put',
     data: data
   });
@@ -36,7 +36,7 @@ export const updatePoolStrategy = (data: PoolStrategyForm) => {
 
 export const delPoolStrategy = (id: Array<string | number> | string | number) => {
   return request({
-    url: '/v1/pool-strategies',
+    url: '/kmc/v1/pool-strategies',
     method: 'delete',
     data: Array.isArray(id) ? id : [id]
   });

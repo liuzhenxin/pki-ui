@@ -5,7 +5,7 @@ import { parseStrEmpty } from '@/utils/ruoyi';
 
 export const listReserveKey = (query: ReserveKeyQuery): AxiosPromise<ReserveKeyVO[]> => {
   return request({
-    url: '/v1/reserve-keys/page',
+    url: '/kmc/v1/reserve-keys/page',
     method: 'post',
     data: query
   });
@@ -13,14 +13,14 @@ export const listReserveKey = (query: ReserveKeyQuery): AxiosPromise<ReserveKeyV
 
 export const getReserveKey = (id?: string | number): AxiosPromise<ReserveKeyVO> => {
   return request({
-    url: '/v1/reserve-keys/' + parseStrEmpty(id),
+    url: '/kmc/v1/reserve-keys/' + parseStrEmpty(id),
     method: 'get'
   });
 };
 
 export const addReserveKey = (data: ReserveKeyForm) => {
   return request({
-    url: '/v1/reserve-keys',
+    url: '/kmc/v1/reserve-keys',
     method: 'post',
     data: data
   });
@@ -28,7 +28,7 @@ export const addReserveKey = (data: ReserveKeyForm) => {
 
 export const updateReserveKey = (data: ReserveKeyForm) => {
   return request({
-    url: '/v1/reserve-keys',
+    url: '/kmc/v1/reserve-keys',
     method: 'put',
     data: data
   });
@@ -36,7 +36,7 @@ export const updateReserveKey = (data: ReserveKeyForm) => {
 
 export const delReserveKey = (id: Array<string | number> | string | number) => {
   return request({
-    url: '/v1/reserve-keys',
+    url: '/kmc/v1/reserve-keys',
     method: 'delete',
     data: Array.isArray(id) ? id : [id]
   });

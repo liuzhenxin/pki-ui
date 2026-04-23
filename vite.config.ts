@@ -26,7 +26,7 @@ export default defineConfig(({ mode, command }) => {
       proxy: {
         [env.VITE_APP_BASE_API]: {
           //target: 'http://10.10.10.136:5555',
-          target: 'http://127.0.0.1:5555',
+          target: 'http://127.0.0.1:5555/api-gateway',
           //target: 'http://211.88.25.177:5555',
           changeOrigin: true,
           ws: true,

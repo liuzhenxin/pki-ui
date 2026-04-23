@@ -1,10 +1,11 @@
 import request from '@/utils/request';
 import { AxiosPromise } from 'axios';
-import { LoginData, LoginResult, Result, SecretsResult } from './types';
+import { LoginData, LoginResult, Result, SecretsResult, TenantInfo } from './types';
 import { UserInfo } from '@/api/system/user/types';
 import { encrypt } from '@/utils/jsencrypt';
 import { getToken } from '@/utils/auth';
 import setting from '@/settings';
+import { useUserStore } from '@/store/modules/user';
 
 // pc端固定客户端授权id
 const clientId = import.meta.env.VITE_APP_CLIENT_ID;
@@ -25,7 +26,7 @@ export function login(data: LoginData): Promise<LoginResult> {
     grant_type: data.grantType || 'username_password'
   };
   return request({
-    url: '/auth/api/v1/oauth2/token',
+    url: '/auth/v1/oauth2/token',
     headers: {
       isToken: false,
       isEncrypt: false,
@@ -78,7 +79,7 @@ export function logout() {
   };
 
   return request({
-    url: '/auth/api/v1/tokens',
+    url: '/auth/v1/tokens',
     data: data,
     method: 'delete'
   });
@@ -89,7 +90,7 @@ export function logout() {
  */
 export function getCodeImg(uuid: string | number): Promise<string> {
   return request({
-    url: '/auth/api/v1/username-password/captchas' + '/' + uuid,
+    url: '/auth/v1/username-password/captchas' + '/' + uuid,
     headers: {
       isToken: false
     },
@@ -103,7 +104,7 @@ export function getCodeImg(uuid: string | number): Promise<string> {
  */
 export function getSecrets(): Promise<SecretsResult> {
   return request({
-    url: '/auth/api/v1/secrets',
+    url: '/auth/v1/secrets',
     headers: {
       isToken: false
     },
@@ -131,18 +132,27 @@ export function callback(data: LoginData): Promise<any> {
 // 获取用户详细信息
 export function getInfo(): Promise<Result<UserInfo>> {
   return request({
-    url: '/admin/api/v1/users/profile',
+    url: '/admin/v1/users/profile',
     method: 'get'
   }) as any;
 }
 
-// // 获取租户列表
-// export function getTenantList(isToken: boolean): Promise<TenantInfo> {
-//   return request({
-//     url: '/auth/tenant/list',
-//     headers: {
-//       isToken: isToken
-//     },
-//     method: 'get'
-//   }) as any;
-// }
+// 获取租户列表
+export function getTenantList(isToken: boolean): Promise<TenantInfo> {
+  return request({
+    url: '/admin/v1/tenants/list',
+    method: 'post',
+    data: {}
+  }) as any;
+}
+
+/**
+ * 校验当前用户密码 (用于敏感操作二次确认)
+ */
+export function verifyPassword(password: string): Promise<boolean> {
+  const userStore = useUserStore();
+  return login({
+    username: userStore.name,
+    password: password
+  } as LoginData).then(() => true).catch(() => false);
+}

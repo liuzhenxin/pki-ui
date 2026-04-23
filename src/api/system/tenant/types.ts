@@ -14,11 +14,13 @@ export interface TenantQuery extends PageQuery {
 
 export interface TenantCO {
   id?: number | string;
+  tenantId?: number | string;
   name?: string;
   code?: string;
   status?: number | string;
   sourceId?: string | number;
   packageId?: string | number;
+  companyName?: string;
 }
 
 export interface TenantForm {

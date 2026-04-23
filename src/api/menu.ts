@@ -4,17 +4,19 @@ import { RouteRecordRaw } from 'vue-router';
 import { Result } from '@/api/types';
 
 // 获取路由
-export function getRouters(): Promise<Result<RouteRecordRaw[]>> {
+export function getRouters(query?: any): Promise<Result<RouteRecordRaw[]>> {
   return request({
-    url: '/admin/api/v1/menus/list-tree-user',
-    method: 'get'
+    url: '/admin/v1/menus/list-tree-user',
+    method: 'post',
+    data: query
   }) as any;
 }
 
 // 获取初始化路由
-export function getInitRouters(): Promise<Result<RouteRecordRaw[]>> {
+export function getInitRouters(query?: any): Promise<Result<RouteRecordRaw[]>> {
   return request({
-    url: '/admin/api/v1/menus/list-tree-init',
-    method: 'post'
+    url: '/admin/v1/menus/list-tree-init',
+    method: 'post',
+    data: query
   }) as any;
 }

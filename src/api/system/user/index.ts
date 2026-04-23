@@ -11,7 +11,7 @@ import { parseStrEmpty } from '@/utils/ruoyi';
  */
 export const listUser = (query: UserQuery): AxiosPromise<UserVO[]> => {
   return request({
-    url: '/admin/api/v1/users/page',
+    url: '/admin/v1/users/page',
     method: 'post',
     data: query
   });
@@ -34,7 +34,7 @@ export const optionSelect = (userIds: (number | string)[]): AxiosPromise<UserVO[
  */
 export const getUser = (userId?: string | number): AxiosPromise<UserInfoVO> => {
   return request({
-    url: '/admin/api/v1/users/' + parseStrEmpty(userId),
+    url: '/admin/v1/users/' + parseStrEmpty(userId),
     method: 'get'
   });
 };
@@ -44,7 +44,7 @@ export const getUser = (userId?: string | number): AxiosPromise<UserInfoVO> => {
  */
 export const addUser = (data: UserForm) => {
   return request({
-    url: '/admin/api/v1/users',
+    url: '/admin/v1/users',
     method: 'post',
     data: { co: data }
   });
@@ -55,7 +55,7 @@ export const addUser = (data: UserForm) => {
  */
 export const updateUser = (data: UserForm) => {
   return request({
-    url: '/admin/api/v1/users',
+    url: '/admin/v1/users',
     method: 'put',
     data: { co: data }
   });
@@ -67,7 +67,7 @@ export const updateUser = (data: UserForm) => {
  */
 export const delUser = (userId: Array<string | number> | string | number) => {
   return request({
-    url: '/admin/api/v1/users',
+    url: '/admin/v1/users',
     method: 'delete',
     data: Array.isArray(userId) ? userId : [userId]
   });
@@ -86,7 +86,7 @@ export const resetUserPwd = (userId: string | number, password: string) => {
     }
   };
   return request({
-    url: '/admin/api/v1/users/reset-pwd',
+    url: '/admin/v1/users/reset-pwd',
     method: 'put',
     headers: {
       isEncrypt: true,
@@ -109,7 +109,7 @@ export const changeUserStatus = (userId: number | string, status: string) => {
     }
   };
   return request({
-    url: '/admin/api/v1/users/authority',
+    url: '/admin/v1/users/authority',
     method: 'put',
     data: data
   });
@@ -128,7 +128,7 @@ export const changeStatus = (userId: number | string, status: string) => {
     }
   };
   return request({
-    url: '/admin/api/v1/users/status',
+    url: '/admin/v1/users/status',
     method: 'put',
     data: data
   });
@@ -147,7 +147,7 @@ export const authRole = (userId: number | string, roleIds: string[]) => {
     }
   };
   return request({
-    url: '/admin/api/v1/users/authority',
+    url: '/admin/v1/users/authority',
     method: 'put',
     data: data
   });
@@ -158,7 +158,7 @@ export const authRole = (userId: number | string, roleIds: string[]) => {
  */
 export const getUserProfile = (): AxiosPromise<UserInfoVO> => {
   return request({
-    url: '/admin/api/v1/users/profile',
+    url: '/admin/v1/users/profile',
     method: 'get'
   });
 };
@@ -169,7 +169,7 @@ export const getUserProfile = (): AxiosPromise<UserInfoVO> => {
  */
 export const updateUserProfile = (data: UserForm) => {
   return request({
-    url: '/admin/api/v1/users/profile',
+    url: '/admin/v1/users/profile',
     method: 'put',
     data: { co: data }
   });
@@ -186,7 +186,7 @@ export const updateUserPwd = (oldPassword: string, newPassword: string) => {
     newPassword
   };
   return request({
-    url: '/admin/api/v1/users/profile/updatePwd',
+    url: '/admin/v1/users/profile/updatePwd',
     method: 'put',
     headers: {
       isEncrypt: true,
@@ -202,7 +202,7 @@ export const updateUserPwd = (oldPassword: string, newPassword: string) => {
  */
 export const uploadAvatar = (data: FormData) => {
   return request({
-    url: '/admin/api/v1/users/profile/avatar',
+    url: '/admin/v1/users/profile/avatar',
     method: 'post',
     data: data
   });
@@ -258,7 +258,7 @@ export const deptTreeSelect = (): AxiosPromise<DeptTreeVO[]> => {
  */
 export const modifyUserPwd = (data: ModifyPwdForm) => {
   return request({
-    url: '/admin/api/v1/users/modify-pwd',
+    url: '/admin/v1/users/modify-pwd',
     method: 'put',
     headers: {
       isEncrypt: true,
@@ -274,7 +274,7 @@ export const modifyUserPwd = (data: ModifyPwdForm) => {
  */
 export const uploadUserCert = (data: FormData) => {
   return request({
-    url: '/admin/api/v1/users/cert',
+    url: '/admin/v1/users/cert',
     method: 'post',
     data: data
   });
@@ -286,7 +286,7 @@ export const uploadUserCert = (data: FormData) => {
  */
 export const saveUserWithCert = (data: FormData) => {
   return request({
-    url: '/admin/api/v1/users/cert/save',
+    url: '/admin/v1/users/cert/save',
     method: 'post',
     data: data
   });

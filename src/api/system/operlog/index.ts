@@ -3,7 +3,7 @@ import request from '@/utils/request';
 /** 查询操作日志列表 */
 export function list(query: any) {
   return request({
-    url: '/admin/api/v1/operate-logs/page',
+    url: '/admin/v1/operate-logs/page',
     method: 'post',
     data: query
   });
@@ -12,7 +12,7 @@ export function list(query: any) {
 /** 查询操作日志详细 */
 export function getOperLog(id: string | number) {
   return request({
-    url: `/admin/api/v1/operate-logs/${id}`,
+    url: `/admin/v1/operate-logs/${id}`,
     method: 'get'
   });
 }
@@ -20,7 +20,7 @@ export function getOperLog(id: string | number) {
 /** 新增操作日志 */
 export function addOperLog(data: any) {
   return request({
-    url: '/admin/api/v1/operate-logs',
+    url: '/admin/v1/operate-logs',
     method: 'post',
     data: data
   });
@@ -29,7 +29,7 @@ export function addOperLog(data: any) {
 /** 修改操作日志 */
 export function updateOperLog(data: any) {
   return request({
-    url: '/admin/api/v1/operate-logs',
+    url: '/admin/v1/operate-logs',
     method: 'put',
     data: data
   });
@@ -38,7 +38,7 @@ export function updateOperLog(data: any) {
 /** 删除操作日志 */
 export function delOperLog(ids: (string | number)[]) {
   return request({
-    url: '/admin/api/v1/operate-logs',
+    url: '/admin/v1/operate-logs',
     method: 'delete',
     data: ids
   });
@@ -47,7 +47,7 @@ export function delOperLog(ids: (string | number)[]) {
 /** 导出操作日志 */
 export function exportOperLog(query: any) {
   return request({
-    url: '/admin/api/v1/operate-logs/export',
+    url: '/admin/v1/operate-logs/export',
     method: 'post',
     data: query,
     responseType: 'blob'

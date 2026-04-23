@@ -12,7 +12,7 @@
 
     <el-row :gutter="10" class="mb8">
       <el-col :span="1.5">
-        <el-dropdown @command="handleCommand">
+        <el-dropdown @command="handleCommand" v-hasPermi="['ca:root:add']">
           <el-button type="primary" plain>
             创建证书<el-icon class="el-icon--right"><arrow-down /></el-icon>
           </el-button>
@@ -41,16 +41,21 @@
           <span>{{ parseTime(scope.row.notAfter) }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="状态" align="center" prop="status">
+      <el-table-column label="状态" align="center" width="100">
         <template #default="scope">
-          <el-tag :type="scope.row.status === '1' ? 'success' : 'info'">{{ scope.row.status === '1' ? '有效' : '无效' }}</el-tag>
+          <el-tooltip :content="scope.row.status === '1' ? '证书在有效期内' : '证书已过期或无效'" placement="top">
+            <el-tag :type="scope.row.status === '1' ? 'success' : 'info'">{{ scope.row.status === '1' ? '有效' : '无效' }}</el-tag>
+          </el-tooltip>
         </template>
       </el-table-column>
-      <el-table-column label="操作" align="center" class-name="small-padding fixed-width">
+      <el-table-column label="操作" align="center" class-name="small-padding" width="300">
         <template #default="scope">
-          <el-button link type="primary" icon="View" @click="handleView(scope.row)">详情</el-button>
-          <el-button link type="primary" icon="Download" @click="handleDownload(scope.row)">下载</el-button>
-          <el-button link type="success" icon="Stamp" @click="handleAuthorizeProfile(scope.row)">授权模板</el-button>
+          <el-button link type="primary" icon="View" @click="handleView(scope.row)" v-hasPermi="['ca:root:list']">详情</el-button>
+          <el-button link type="primary" icon="Download" @click="handleDownload(scope.row)" v-hasPermi="['ca:root:download']">下载</el-button>
+          <el-button link type="success" icon="Stamp" @click="handleAuthorizeProfile(scope.row)" v-hasPermi="['ca:root:authorize']">授权模板</el-button>
+          <el-button v-if="scope.row.caStatus !== 'inactive'" link type="warning" icon="CircleCloseFilled" @click="handleDisable(scope.row)" v-hasPermi="['ca:root:disable']">停用</el-button>
+          <el-button v-else link type="success" icon="SuccessFilled" @click="handleEnable(scope.row)" v-hasPermi="['ca:root:enable']">启用</el-button>
+          <el-button v-if="scope.row.status === '1'" link type="danger" icon="Delete" @click="handleRevoke(scope.row)" v-hasPermi="['ca:root:revoke']">吊销</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -138,11 +143,7 @@
               </el-tab-pane>
 
               <el-tab-pane label="URI配置">
-                <el-form-item
-                  v-for="(item, index) in selfForm.cacertUris"
-                  :key="'cacert-' + index"
-                  :label="index === 0 ? 'CA证书URI' : ' '"
-                >
+                <el-form-item v-for="(item, index) in selfForm.cacertUris" :key="'cacert-' + index" :label="index === 0 ? 'CA证书URI' : ' '">
                   <div style="display: flex; width: 100%">
                     <el-input v-model="item.value" style="flex: 1; margin-right: 10px" />
                     <el-button v-if="index === 0" @click="addUri('cacertUris')" type="primary" :icon="Plus" circle size="small" />
@@ -150,11 +151,7 @@
                   </div>
                 </el-form-item>
 
-                <el-form-item
-                  v-for="(item, index) in selfForm.crlUris"
-                  :key="'crl-' + index"
-                  :label="index === 0 ? 'CRL URI' : ' '"
-                >
+                <el-form-item v-for="(item, index) in selfForm.crlUris" :key="'crl-' + index" :label="index === 0 ? 'CRL URI' : ' '">
                   <div style="display: flex; width: 100%">
                     <el-input v-model="item.value" style="flex: 1; margin-right: 10px" />
                     <el-button v-if="index === 0" @click="addUri('crlUris')" type="primary" :icon="Plus" circle size="small" />
@@ -162,11 +159,7 @@
                   </div>
                 </el-form-item>
 
-                <el-form-item
-                  v-for="(item, index) in selfForm.ocspUris"
-                  :key="'ocsp-' + index"
-                  :label="index === 0 ? 'OCSP URI' : ' '"
-                >
+                <el-form-item v-for="(item, index) in selfForm.ocspUris" :key="'ocsp-' + index" :label="index === 0 ? 'OCSP URI' : ' '">
                   <div style="display: flex; width: 100%">
                     <el-input v-model="item.value" style="flex: 1; margin-right: 10px" />
                     <el-button v-if="index === 0" @click="addUri('ocspUris')" type="primary" :icon="Plus" circle size="small" />
@@ -189,7 +182,40 @@
             </el-tabs>
           </el-form>
         </el-tab-pane>
-        <el-tab-pane v-if="dialogType === 'sub'" label="从属CA（由上级签发）" name="import">
+        <el-tab-pane v-if="dialogType === 'sub'" label="在线签发模式" name="online">
+          <el-form ref="onlineSubFormRef" :model="onlineSubForm" :rules="onlineSubRules" label-width="140px">
+            <el-form-item label="证书名称" prop="name">
+              <el-input v-model="onlineSubForm.name" placeholder="请输入证书名称" />
+            </el-form-item>
+            <el-form-item label="父级CA" prop="parentCaId">
+              <el-select v-model="onlineSubForm.parentCaId" placeholder="请选择父级CA" @change="onParentCaChange" style="width: 100%">
+                <el-option v-for="item in certList" :key="item.id" :label="item.name" :value="item.id" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="证书模板" prop="profileId">
+              <el-select v-model="onlineSubForm.profileId" placeholder="请选择子CA模板" @change="onSubProfileChange" style="width: 100%">
+                <el-option v-for="item in subCaProfiles" :key="item.id" :label="item.name" :value="item.id" />
+              </el-select>
+            </el-form-item>
+            <CertSubject v-model="onlineSubForm.subjectItems" propPrefix="subjectItems" />
+            <el-form-item label="密钥算法" prop="keyAlgorithm">
+              <el-select v-model="onlineSubForm.keyAlgorithm" style="width: 100%">
+                <el-option v-for="item in subAvailableAlgos" :key="item" :label="item" :value="item" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="有效期" prop="validity">
+              <el-input v-model.number="onlineSubForm.validity" style="width: 100%">
+                <template #append>
+                  <el-select v-model="onlineSubForm.validityUnit" style="width: 80px">
+                    <el-option label="年" value="y" />
+                    <el-option label="天" value="d" />
+                  </el-select>
+                </template>
+              </el-input>
+            </el-form-item>
+          </el-form>
+        </el-tab-pane>
+        <el-tab-pane v-if="dialogType === 'sub'" label="CSR导入模式" name="import">
           <el-form ref="importFormRef" :model="importForm" :rules="importRules" label-width="100px">
             <el-form-item label="证书名称" prop="name">
               <el-input v-model="importForm.name" placeholder="请输入证书名称" />
@@ -225,28 +251,59 @@
       </template>
     </el-dialog>
 
-    <!-- 证书详情弹窗 -->
+    <!-- 详情弹窗 -->
     <el-dialog v-model="showDetail" title="证书详情" width="60%">
       <X509Cert v-if="showDetail" :certPem="currentCertPem" />
     </el-dialog>
-  </div>
-</template>
+
+    <!-- 安全确认对话框 -->
+    <SecurityConfirm
+      v-model="securityConfirm.visible"
+      :title="securityConfirm.title"
+      :action="securityConfirm.action"
+      @confirm="securityConfirm.onConfirm"
+    />
+    </div>
+    </template>
+
 
 <script setup name="RootCert" lang="ts">
 import { ref, reactive, toRefs, getCurrentInstance, ComponentInternalInstance, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage, FormInstance, UploadInstance, UploadProps } from 'element-plus';
-import { ArrowDown, Search, Refresh, View, Download, Plus, Minus, Stamp } from '@element-plus/icons-vue';
+import {
+  ArrowDown,
+  Search,
+  Refresh,
+  View,
+  Download,
+  Plus,
+  Minus,
+  Stamp,
+  QuestionFilled,
+  Edit,
+  Delete,
+  SuccessFilled,
+  CircleCloseFilled
+} from '@element-plus/icons-vue';
 import X509Cert from '@/components/X509Cert/index.vue';
+import SecurityConfirm from '@/components/SecurityConfirm/index.vue';
 import CertSubject, { typeMapping, sortSubjectItems } from '@/components/CertSubject/index.vue';
 import { listProfile, getProfile } from '@/api/ca/profile';
-import { listRootCa, genRootCa } from '@/api/ca/root';
+import { listRootCa, genRootCa, enableRootCa, disableRootCa, revokeRootCa, genSubCaOnline } from '@/api/ca/root';
 import { X509 } from 'jsrsasign';
 import { parseJson, parseKeyAlgorithms } from '@/utils/json';
 import { parseTime } from '@/utils/ruoyi';
 
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
 const router = useRouter();
+
+const securityConfirm = reactive({
+  visible: false,
+  title: '敏感操作安全确认',
+  action: '',
+  onConfirm: () => {}
+});
 
 const loading = ref(false);
 const showSearch = ref(true);
@@ -303,10 +360,32 @@ const data = reactive({
     name: '',
     csr: '',
     certFile: null as File | null
+  },
+  onlineSubForm: {
+    name: '',
+    parentCaId: undefined as string | number | undefined,
+    profileId: undefined as string | number | undefined,
+    subjectItems: [] as any[],
+    keyAlgorithm: 'SM2',
+    validity: 5,
+    validityUnit: 'y'
   }
 });
 
-const { queryParams, selfForm, importForm } = toRefs(data);
+const { queryParams, selfForm, importForm, onlineSubForm } = toRefs(data);
+
+const parentCas = ref([]);
+const subCaProfiles = ref([]);
+const subAvailableAlgos = ref(['RSA2048', 'SM2']);
+
+const onlineSubRules = {
+  parentCaId: [{ required: true, message: '请选择父级CA', trigger: 'change' }],
+  profileId: [{ required: true, message: '请选择证书模板', trigger: 'change' }],
+  validity: [
+    { required: true, message: '请输入有效期', trigger: 'blur' },
+    { type: 'number', message: '必须为正整数', trigger: 'blur', min: 1 }
+  ]
+};
 
 const selfRules = {
   name: [{ required: true, message: '请输入证书名称', trigger: 'blur' }],
@@ -329,6 +408,7 @@ const importRules = {
 
 const selfFormRef = ref<FormInstance>();
 const importFormRef = ref<FormInstance>();
+const onlineSubFormRef = ref<FormInstance>();
 const uploadRef = ref<UploadInstance>();
 
 /** 解析 X509 日期格式 */
@@ -376,11 +456,13 @@ function parseCertInfo(certPem: string) {
     // 格式化 DN
     const formatDN = (array: any[]) => {
       if (!array || array.length === 0) return '';
-      return array.map((e: any) => {
-        let type = e[0].type;
-        let val = e[0].value;
-        return `${type}=${val}`;
-      }).join(', ');
+      return array
+        .map((e: any) => {
+          const type = e[0].type;
+          const val = e[0].value;
+          return `${type}=${val}`;
+        })
+        .join(', ');
     };
 
     const issuer = formatDN(x509.getIssuer().array);
@@ -392,7 +474,7 @@ function parseCertInfo(certPem: string) {
     const now = new Date();
     const notBeforeDate = parseX509Date(notBefore);
     const notAfterDate = parseX509Date(notAfter);
-    const status = (now >= notBeforeDate && now <= notAfterDate) ? '1' : '0';
+    const status = now >= notBeforeDate && now <= notAfterDate ? '1' : '0';
 
     return {
       issuer,
@@ -437,14 +519,17 @@ async function getList() {
     }
 
     // 解析每个证书
-    certList.value = rawList.map((item: any) => {
-      const certInfo = parseCertInfo(item.cert);
-      return {
-        id: item.id,
-        name: item.name,
-        ...certInfo
-      };
-    }).filter((item: any) => item.issuer); // 过滤掉解析失败的证书
+    certList.value = rawList
+      .map((item: any) => {
+        const certInfo = parseCertInfo(item.cert);
+        return {
+          id: item.id,
+          name: item.name,
+          caStatus: item.caStatus,
+          ...certInfo
+        };
+      })
+      .filter((item: any) => item.issuer); // 过滤掉解析失败的证书
 
     total.value = totalCount;
   } catch (error: any) {
@@ -483,7 +568,9 @@ async function handleCommand(command: string) {
   } else if (command === 'sub') {
     dialogType.value = 'sub';
     title.value = '创建子CA证书';
-    activeTab.value = 'import';
+    activeTab.value = 'online';
+    // 加载子CA模板
+    await loadSubCaProfiles();
   }
   open.value = true;
 }
@@ -491,38 +578,37 @@ async function handleCommand(command: string) {
 /** 加载RootCA模板列表 */
 async function loadRootCaProfiles() {
   console.log('开始加载RootCA证书模板...');
-  
+
   try {
     // 调用listProfile API，传递type参数筛选RootCA模板
     console.log('调用listProfile API，type=RootCA');
     const res = await listProfile({ type: 'RootCA' });
     console.log('listProfile响应:', res);
-    
+
     const profiles = res.data || [];
     console.log('解析后的模板列表:', profiles);
     console.log('模板数量:', profiles.length);
-    
+
     if (profiles.length === 0) {
       console.warn('没有找到RootCA类型的模板');
       ElMessage.warning('没有找到可用的RootCA证书模板');
       return;
     }
-    
+
     // 设置模板列表
     rootCaProfiles.value = profiles;
     console.log('设置rootCaProfiles.value:', rootCaProfiles.value);
     console.log('rootCaProfiles.value.length:', rootCaProfiles.value.length);
-    
+
     // 默认选中第一个
     const firstProfile = profiles[0];
     console.log('默认选中模板:', firstProfile);
     selfForm.value.profileId = firstProfile.id;
-    
+
     // 调用模板变更处理
     console.log('开始调用onProfileChange');
     await onProfileChange(selfForm.value.profileId);
     console.log('onProfileChange调用完成');
-    
   } catch (error: any) {
     console.error('加载RootCA证书模板失败', error);
     console.error('错误详情:', error.response?.data || error.message);
@@ -530,16 +616,78 @@ async function loadRootCaProfiles() {
   }
 }
 
+/** 加载SubCA模板列表 */
+async function loadSubCaProfiles() {
+  try {
+    const res = await listProfile({ type: 'SubCA' });
+    subCaProfiles.value = res.data || [];
+    if (subCaProfiles.value.length > 0) {
+      onlineSubForm.value.profileId = subCaProfiles.value[0].id;
+      await onSubProfileChange(onlineSubForm.value.profileId);
+    }
+  } catch (error: any) {
+    ElMessage.error('加载子CA证书模板失败');
+  }
+}
+
+/** 子CA模板变更处理 */
+async function onSubProfileChange(profileId: any) {
+  if (!profileId) return;
+  try {
+    const res = await getProfile(profileId);
+    const profile = res.data;
+    const conf = parseJson(profile.conf);
+
+    if (conf) {
+      // 设置有效期
+      if (conf.validity) {
+        const v = conf.validity;
+        const unit = v.slice(-1);
+        const val = parseInt(v.slice(0, -1));
+        if (!isNaN(val)) {
+          onlineSubForm.value.validity = val;
+          onlineSubForm.value.validityUnit = unit || 'y';
+        }
+      }
+
+      // 设置主题项
+      const rdns = conf.subject?.rdns || conf.subject;
+      if (rdns && Array.isArray(rdns) && rdns.length > 0) {
+        const items: any[] = [];
+        rdns.forEach((rdn: any) => {
+          const rdnType = (typeof rdn.type === 'object' ? rdn.type.description : rdn.type) || '';
+          let compType = rdnType.toLowerCase();
+          for (const [type, meta] of Object.entries(typeMapping)) {
+            if (meta.key.toLowerCase() === compType || type.toLowerCase() === compType) {
+              compType = type;
+              break;
+            }
+          }
+          items.push({
+            type: compType,
+            value: rdn.value || '',
+            minOccurs: rdn.minOccurs,
+            maxOccurs: rdn.maxOccurs
+          });
+        });
+        onlineSubForm.value.subjectItems = sortSubjectItems(items);
+      }
+    }
+  } catch (error) {
+    console.error('加载子CA模板详情失败', error);
+  }
+}
+
 /** 模板变更处理 */
 async function onProfileChange(profileId: any) {
   if (!profileId) return;
   console.log('开始加载模板，profileId:', profileId);
-  
+
   try {
     const res = await getProfile(profileId);
     const profile = res.data;
     console.log('获取到的profile数据:', profile);
-    
+
     const conf = parseJson(profile.conf);
     console.log('解析后的conf:', conf);
 
@@ -664,7 +812,7 @@ async function onProfileChange(profileId: any) {
   } catch (error) {
     console.error('加载模板详情失败', error);
     ElMessage.error('加载模板详情失败: ' + (error as any).message);
-    
+
     // 使用默认的主题项
     selfForm.value.subjectItems = sortSubjectItems([
       { type: 'country', value: 'CN', minOccurs: 1, maxOccurs: 1 },
@@ -707,8 +855,18 @@ function reset() {
     csr: '',
     certFile: null
   };
+  onlineSubForm.value = {
+    name: '',
+    parentCaId: undefined,
+    profileId: undefined,
+    subjectItems: [],
+    keyAlgorithm: 'SM2',
+    validity: 5,
+    validityUnit: 'y'
+  };
   if (selfFormRef.value) selfFormRef.value.resetFields();
   if (importFormRef.value) importFormRef.value.resetFields();
+  if (onlineSubFormRef.value) onlineSubFormRef.value.resetFields();
   if (uploadRef.value) uploadRef.value.clearFiles();
 }
 
@@ -759,7 +917,7 @@ function submitForm() {
             maxValidity: selfForm.value.validity + selfForm.value.validityUnit,
             expirationPeriod: selfForm.value.expirationPeriod,
             keepExpiredCertDays: selfForm.value.keepExpiredCertDays,
-            validityModeS: selfForm.value.validityMode === 'cutoff' ? 'CUTOFF' : (selfForm.value.validityMode === 'strict' ? 'STRICT' : 'LAX'),
+            validityModeS: selfForm.value.validityMode === 'cutoff' ? 'CUTOFF' : selfForm.value.validityMode === 'strict' ? 'STRICT' : 'LAX',
             caStatus: selfForm.value.status,
             snLen: selfForm.value.snSize,
             nextCrlNumber: selfForm.value.nextCrlNo,
@@ -777,6 +935,39 @@ function submitForm() {
         } catch (error: any) {
           console.error('证书生成失败', error);
           const errMsg = error.response?.data?.msg || error.message || '证书生成失败';
+          ElMessage.error(errMsg);
+        } finally {
+          loading.value = false;
+        }
+      }
+    });
+  } else if (activeTab.value === 'online') {
+    onlineSubFormRef.value?.validate(async (valid: boolean) => {
+      if (valid) {
+        loading.value = true;
+        try {
+          const reqData = {
+            name: onlineSubForm.value.name,
+            parentRootId: onlineSubForm.value.parentCaId,
+            profileId: onlineSubForm.value.profileId,
+            subject: onlineSubForm.value.subjectItems
+              .filter((item: any) => item.value)
+              .map((item: any) => {
+                const key = typeMapping[item.type as keyof typeof typeMapping]?.key || item.type;
+                return `${key}=${item.value}`;
+              })
+              .join(','),
+            algo: onlineSubForm.value.keyAlgorithm,
+            maxValidity: onlineSubForm.value.validity + onlineSubForm.value.validityUnit
+          };
+          const res = await genSubCaOnline(reqData);
+          if (res.data) {
+            ElMessage.success('子CA签发成功');
+            open.value = false;
+            getList();
+          }
+        } catch (error: any) {
+          const errMsg = error.response?.data?.msg || error.message || '子CA签发失败';
           ElMessage.error(errMsg);
         } finally {
           loading.value = false;
@@ -830,6 +1021,61 @@ function handleAuthorizeProfile(row: any) {
     path: '/ca/root/authorize-profile',
     query: { id: row.id }
   });
+}
+
+/** 启用按钮操作 */
+async function handleEnable(row: any) {
+  try {
+    await proxy?.$modal.confirm(`确认要启用名称为 "${row.name}" 的证书吗？`);
+    await enableRootCa(row.id);
+    ElMessage.success('启用成功');
+    getList();
+  } catch (error) {}
+}
+
+/** 停用按钮操作 */
+async function handleDisable(row: any) {
+  try {
+    await proxy?.$modal.confirm(`确认要停用名称为 "${row.name}" 的证书吗？停用后将无法使用该证书进行签发。`);
+    await disableRootCa(row.id);
+    ElMessage.success('停用成功');
+    getList();
+  } catch (error) {}
+}
+
+/** 吊销按钮操作 */
+async function handleRevoke(row: any) {
+  try {
+    const { value: reason } = await proxy?.$modal.prompt('请输入吊销原因', '吊销根证书', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      inputPlaceholder: '请输入吊销原因 (例如: keyCompromise, superseded)',
+      inputValidator: (val: string) => {
+        if (!val) return '原因不能为空';
+      }
+    });
+
+    if (reason) {
+      // 触发安全确认
+      securityConfirm.action = `吊销根证书 "${row.name}" (原因: ${reason})`;
+      securityConfirm.onConfirm = async () => {
+        try {
+          await revokeRootCa(row.id, reason);
+          ElMessage.success('吊销成功');
+          getList();
+        } catch (error) {}
+      };
+      securityConfirm.visible = true;
+    }
+  } catch (error) {
+    // 处理取消输入原因
+  }
+}
+
+/** 父级CA变更处理 */
+function onParentCaChange(val: any) {
+  console.log('Parent CA changed:', val);
+  // 可以根据父级CA限制子CA的一些属性，比如算法或有效期
 }
 
 getList();
