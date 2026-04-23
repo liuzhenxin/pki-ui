@@ -130,9 +130,9 @@ declare global {
      */
     title: string;
 
-    tenantId: number;
+    tenantId?: string;
 
-    tenantCode: string;
+    tenantCode?: string;
 
     /**
      * 是否显示系统布局设置

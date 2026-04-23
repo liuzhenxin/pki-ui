@@ -6,15 +6,13 @@
   >
     <transition :enter-active-class="proxy?.animate.logoAnimate.enter" mode="out-in">
       <router-link v-if="collapse" key="collapse" class="sidebar-logo-link" to="/">
-        <img v-if="logo" :src="logo" class="sidebar-logo" />
-        <h1 v-else class="sidebar-title" :style="{ color: sideTheme === 'theme-dark' ? variables.logoTitleColor : variables.logoLightTitleColor }">
-          {{ name }} {{ title }}
+        <h1 class="sidebar-title" :style="{ color: sideTheme === 'theme-dark' ? variables.logoTitleColor : variables.logoLightTitleColor }">
+          {{ name }}
         </h1>
       </router-link>
       <router-link v-else key="expand" class="sidebar-logo-link" to="/">
-        <img v-if="logo" :src="logo" class="sidebar-logo" />
         <h1 class="sidebar-title" :style="{ color: sideTheme === 'theme-dark' ? variables.logoTitleColor : variables.logoLightTitleColor }">
-          {{ name }} {{ title }}
+          {{ name }}
         </h1>
       </router-link>
     </transition>
@@ -25,6 +23,7 @@
 import variables from '@/assets/styles/variables.module.scss';
 import logo from '@/assets/logo/logo.png';
 import { useSettingsStore } from '@/store/modules/settings';
+import { useUserStore } from '@/store/modules/user';
 import { getTenant } from '@/api/system/tenant';
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
 
@@ -38,16 +37,27 @@ defineProps({
 const title = ref(import.meta.env.VITE_APP_LOGO_TITLE);
 const name = ref(import.meta.env.VITE_APP_TITLE);
 const settingsStore = useSettingsStore();
+const userStore = useUserStore();
 const sideTheme = computed(() => settingsStore.sideTheme);
 
 onMounted(() => {
-  getTenant(import.meta.env.VITE_TENANT_ID).then((res) => {
-    if (res.data) {
-      name.value = res.data.name;
-      // If there is a specific field for title in the future, it can be assigned here.
-      // Currently TenantVO only has 'name'.
-    }
-  });
+  const tenantId = userStore.tenantId || localStorage.getItem('tenantId');
+  if (tenantId) {
+    getTenant(tenantId).then((res) => {
+      if (res.data) {
+        name.value = res.data.name;
+        // 动态设置 Logo 标题
+        const idStr = String(tenantId);
+        if (idStr === '3') {
+           title.value = 'KMC密钥管理中心';
+        } else if (idStr === '10') {
+           title.value = 'NAS网络存储管理系统';
+        } else {
+           title.value = 'CA证书认证系统';
+        }
+      }
+    });
+  }
 });
 </script>
 
@@ -87,7 +97,7 @@ onMounted(() => {
       color: #fff;
       font-weight: 600;
       line-height: 50px;
-      font-size: 14px;
+      font-size: 20px;
       font-family:
         Avenir,
         Helvetica Neue,

@@ -40,9 +40,19 @@ router.beforeEach(async (to, from, next) => {
           next({ path: '/' });
         } else {
           isRelogin.show = false;
-          const res = await getTenant(setting.tenantId);
+          const tenantId = useUserStore().tenantId || localStorage.getItem('tenantId') || '';
+          const res = await getTenant(tenantId);
           if (res?.data) {
-            useSettingsStore().setAppTitle(res.data.name);
+            let appTitle = res.data.name;
+            const idStr = String(tenantId);
+            if (idStr === '3') {
+              appTitle += ' (KMC密钥管理中心)';
+            } else if (idStr === '10') {
+              appTitle += ' (NAS网络存储管理系统)';
+            } else {
+              appTitle += ' (CA证书认证系统)';
+            }
+            useSettingsStore().setAppTitle(appTitle);
           }
           if (res?.data?.status != -1) {
             //未初始化
@@ -76,11 +86,21 @@ router.beforeEach(async (to, from, next) => {
     // 没有token
     if (isWhiteList(to.path)) {
       // 在免登录白名单，直接进入, 并且获取租户信息, 如果有租户id
-      if (setting.tenantId) {
-        getTenant(setting.tenantId)
+      const tenantId = localStorage.getItem('tenantId');
+      if (tenantId) {
+        getTenant(tenantId)
           .then((res) => {
             if (res?.data) {
-              useSettingsStore().setAppTitle(res.data.name);
+              let appTitle = res.data.name;
+              const idStr = String(tenantId);
+              if (idStr === '3') {
+                appTitle += ' (KMC密钥管理中心)';
+              } else if (idStr === '10') {
+                appTitle += ' (NAS网络存储管理系统)';
+              } else {
+                appTitle += ' (CA证书认证系统)';
+              }
+              useSettingsStore().setAppTitle(appTitle);
             }
           })
           .catch(() => { });

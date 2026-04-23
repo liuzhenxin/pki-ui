@@ -19,7 +19,7 @@ export function login(data: LoginData): Promise<LoginResult> {
     username: encodeURIComponent(encrypt(data.username)),
     password: encodeURIComponent(encrypt(data.password)),
     clientId: data.clientId || clientId,
-    tenant_code: data.tenantCode || setting.tenantCode,
+    tenant_code: data.tenantCode,
     authorization_code: data.tenantCode,
     uuid: data.uuid,
     captcha: data.code,

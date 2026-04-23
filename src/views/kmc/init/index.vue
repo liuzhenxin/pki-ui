@@ -408,7 +408,7 @@ const next = async () => {
     // 完成向导
     try {
       // 1. 获取租户信息
-      const tenantId = import.meta.env.VITE_TENANT_ID;
+      const tenantId = userStore.tenantId || localStorage.getItem('tenantId') || '';
       const tenantRes = await getTenant(tenantId);
       if (tenantRes.data) {
         const tenantInfo = tenantRes.data;

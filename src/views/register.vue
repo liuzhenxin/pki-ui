@@ -6,7 +6,7 @@
         <lang-select />
       </div>
       <el-form-item v-if="tenantEnabled" prop="tenantId">
-        <el-select v-model="registerForm.tenantId" filterable :placeholder="proxy.$t('register.selectPlaceholder')" style="width: 100%">
+        <el-select v-model="registerForm.tenantId" filterable :placeholder="proxy.$t('register.selectPlaceholder')" style="width: 100%" @change="handleTenantChange">
           <el-option v-for="item in tenantList" :key="item.tenantId" :label="item.companyName" :value="item.tenantId"> </el-option>
           <template #prefix><svg-icon icon-class="company" class="el-input__icon input-icon" /></template>
         </el-select>
@@ -80,7 +80,7 @@ import { useI18n } from 'vue-i18n';
 
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
 
-const title = import.meta.env.VITE_APP_TITLE;
+const title = ref(import.meta.env.VITE_APP_TITLE);
 const router = useRouter();
 
 const { t } = useI18n();
@@ -94,6 +94,19 @@ const registerForm = ref<RegisterForm>({
   uuid: '',
   userType: 'sys_user'
 });
+
+const handleTenantChange = (val: string) => {
+  const tenant = tenantList.value.find((item) => item.tenantId === val);
+  if (tenant) {
+    let newTitle = tenant.companyName;
+    if (String(val) === '3') {
+      newTitle += ' (KMC密钥管理中心)';
+    } else {
+      newTitle += ' (CA证书认证系统)';
+    }
+    title.value = newTitle;
+  }
+};
 
 // 租户开关
 const tenantEnabled = ref(true);

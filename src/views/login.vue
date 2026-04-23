@@ -101,11 +101,11 @@ const router = useRouter();
 const { t } = useI18n();
 
 const loginForm = ref<LoginData>({
-  tenantId: '',
-  tenantCode: '',
-  username: 'admin',
+  tenantId: localStorage.getItem('tenantId') || '',
+  tenantCode: localStorage.getItem('tenantCode') || '',
+  username: localStorage.getItem('username') || 'admin',
   password: '',
-  rememberMe: false,
+  rememberMe: localStorage.getItem('rememberMe') === 'true',
   code: '',
   uuid: ''
 } as LoginData);
@@ -119,8 +119,6 @@ const loginData = ref<LoginData>({
   code: '',
   uuid: ''
 } as LoginData);
-loginForm.value.tenantId = import.meta.env.VITE_TENANT_ID;
-loginForm.value.tenantCode = import.meta.env.VITE_TENANT_CODE;
 
 const loginRules: ElFormRules = {
   tenantId: [{ required: true, trigger: 'blur', message: t('login.rule.tenantId.required') }],
@@ -166,12 +164,14 @@ const handleLogin = () => {
       // 勾选了需要记住密码设置在 localStorage 中设置记住用户名和密码
       if (loginForm.value.rememberMe) {
         localStorage.setItem('tenantId', String(loginForm.value.tenantId));
+        localStorage.setItem('tenantCode', String(loginForm.value.tenantCode));
         localStorage.setItem('username', String(loginForm.value.username));
         localStorage.setItem('password', String(loginForm.value.password));
         localStorage.setItem('rememberMe', String(loginForm.value.rememberMe));
       } else {
         // 否则移除
         localStorage.removeItem('tenantId');
+        localStorage.removeItem('tenantCode');
         localStorage.removeItem('username');
         localStorage.removeItem('password');
         localStorage.removeItem('rememberMe');
@@ -227,14 +227,16 @@ const getSecretKey = async () => {
 
 const getLoginData = () => {
   const tenantId = localStorage.getItem('tenantId');
+  const tenantCode = localStorage.getItem('tenantCode');
   const username = localStorage.getItem('username');
   const password = localStorage.getItem('password');
   const rememberMe = localStorage.getItem('rememberMe');
   loginForm.value = {
     tenantId: tenantId === null ? String(loginForm.value.tenantId) : tenantId,
+    tenantCode: tenantCode === null ? String(loginForm.value.tenantCode) : tenantCode,
     username: username === null ? String(loginForm.value.username) : username,
     password: password === null ? String(loginForm.value.password) : String(password),
-    rememberMe: rememberMe === null ? false : Boolean(rememberMe)
+    rememberMe: rememberMe === null ? false : rememberMe === 'true'
   } as LoginData;
 };
 
@@ -264,6 +266,10 @@ const initTenantList = async () => {
         if (tenant) {
           loginForm.value.tenantCode = tenant.tenantCode;
         }
+      }
+      // 初始化标题
+      if (loginForm.value.tenantId) {
+        getTenantInfo(loginForm.value.tenantId);
       }
     }
   } catch (error) {

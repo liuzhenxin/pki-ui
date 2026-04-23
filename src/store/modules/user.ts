@@ -27,6 +27,7 @@ export const useUserStore = defineStore('user', () => {
     if (res) {
       setToken(res.access_token);
       token.value = res.access_token;
+      tenantId.value = userInfo.tenantId || '';
       return Promise.resolve(res);
     }
     return Promise.reject(err);
@@ -49,6 +50,10 @@ export const useUserStore = defineStore('user', () => {
       name.value = user.username;
       avatar.value = profile;
       userId.value = user.id;
+      // 从 extValues 中尝试获取 tenantId
+      if (user.extValues && user.extValues.tenantId) {
+        tenantId.value = String(user.extValues.tenantId);
+      }
       return Promise.resolve();
     }
     return Promise.reject(err);

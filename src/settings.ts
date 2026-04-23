@@ -5,14 +5,6 @@ const setting: DefaultSettings = {
    * 网页标题
    */
   title: import.meta.env.VITE_APP_TITLE,
-  /**
-   * 租户ID
-   */
-  tenantId: import.meta.env.VITE_TENANT_ID,
-  /**
-   * 租户CODE
-   */
-  tenantCode: import.meta.env.VITE_TENANT_CODE,
 
   theme: '#409EFF',
 

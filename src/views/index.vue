@@ -64,14 +64,20 @@
       </el-row>
     </el-card>
 
-    <el-row :gutter="20" class="main-content">
+    <!-- NAS 专用仪表盘 -->
+    <NASDashboard v-if="isNAS" />
+
+    <!-- CA 专用仪表盘 -->
+    <CADashboard v-if="isCA" />
+
+    <el-row v-if="!isNAS && !isCA" :gutter="20" class="main-content">
       <!-- 左侧：核心功能 -->
       <el-col :xs="24" :sm="24" :lg="16">
         <el-card class="box-card feature-card" shadow="hover">
           <template #header>
             <div class="card-header">
               <el-icon><Menu /></el-icon>
-              <span>核心功能{{ isKMC ? '（遵循 GM/T 0038）' : '' }}</span>
+              <span>核心功能{{ isKMC ? '（遵循 GM/T 0038）' : '' }}{{ isNAS ? '（高性能网络存储）' : '' }}</span>
             </div>
           </template>
           <el-row :gutter="20" class="feature-list">
@@ -225,7 +231,7 @@
     </el-row>
 
     <!-- 系统信息 (全宽) -->
-    <el-card class="box-card update-log" shadow="hover">
+    <el-card v-if="!isNAS && !isCA" class="box-card update-log" shadow="hover">
       <template #header>
         <div class="card-header">
           <el-icon><InfoFilled /></el-icon>
@@ -346,8 +352,13 @@
 import { useRouter } from 'vue-router';
 import { onMounted, ref, onUnmounted, computed } from 'vue';
 import * as echarts from 'echarts';
+import { useUserStore } from '@/store/modules/user';
+import { getTenant } from '@/api/system/tenant';
+import NASDashboard from '@/views/nas/index.vue';
+import CADashboard from '@/views/ca/index.vue';
 
 const router = useRouter();
+const userStore = useUserStore();
 const backupKeyChartRef = ref<HTMLElement | null>(null);
 const activeKeyChartRef = ref<HTMLElement | null>(null);
 const historyKeyChartRef = ref<HTMLElement | null>(null);
@@ -356,15 +367,44 @@ let backupKeyChart: echarts.ECharts | null = null;
 let activeKeyChart: echarts.ECharts | null = null;
 let historyKeyChart: echarts.ECharts | null = null;
 
-const tenantId = import.meta.env.VITE_TENANT_ID;
-const isKMC = computed(() => tenantId === '3');
+const tenantInfo = ref<any>(null);
+const currentTenantId = computed(() => userStore.tenantId || localStorage.getItem('tenantId'));
+const isKMC = computed(() => String(currentTenantId.value) === '3');
+const isNAS = computed(() => String(currentTenantId.value) === '10');
+const isCA = computed(() => String(currentTenantId.value) === '4');
 
-const systemTitle = computed(() => (isKMC.value ? 'PKI-Cloud-KMC密钥管理中心' : 'PKI-Cloud-CA证书认证系统'));
-const systemDesc = computed(() =>
-  isKMC.value
-    ? '为数字认证中心（CA）提供加密密钥对，并提供对这些密钥对的备份、归档、恢复、更新等全生命周期服务，以满足认证中心和司法取证的需要。'
-    : '提供数字证书的全生命周期管理服务，包括证书申请、签发、查询、吊销、更新等，构建可信的网络安全基础环境。'
-);
+const systemTitle = computed(() => {
+  if (tenantInfo.value && tenantInfo.value.name) {
+    return tenantInfo.value.name;
+  }
+  if (isKMC.value) return 'PKI-Cloud-KMC密钥管理中心';
+  if (isNAS.value) return 'PKI-Cloud-NAS网络存储管理系统';
+  return 'PKI-Cloud-CA证书认证系统';
+});
+
+const systemDesc = computed(() => {
+  if (isKMC.value) {
+    return '为数字认证中心（CA）提供加密密钥对，并提供对这些密钥对的备份、归档、恢复、更新等全生命周期服务，以满足认证中心和司法取证的需要。';
+  }
+  if (isNAS.value) {
+    return '提供高性能、高可靠的网络存储管理服务，支持多协议接入、数据迁移、备份恢复及容量动态扩展，确保存储资源的高效利用与安全。';
+  }
+  return '提供数字证书的全生命周期管理服务，包括证书申请、签发、查询、吊销、更新等，构建可信的网络安全基础环境。';
+});
+
+/**
+ * 获取租户信息
+ */
+const fetchTenantInfo = async () => {
+  if (currentTenantId.value) {
+    try {
+      const res = await getTenant(currentTenantId.value);
+      tenantInfo.value = res.data;
+    } catch (error) {
+      console.error('获取租户信息失败:', error);
+    }
+  }
+};
 
 const goTarget = (url: string) => {
   if (url.startsWith('http')) {
@@ -437,6 +477,7 @@ const initCharts = () => {
 };
 
 onMounted(() => {
+  fetchTenantInfo();
   initCharts();
   window.addEventListener('resize', handleResize);
 });

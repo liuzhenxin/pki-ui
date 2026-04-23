@@ -554,6 +554,7 @@ import Agreement from '@/components/Agreement/index.vue';
 import CertSubject, { typeMapping, sortSubjectItems } from '@/components/CertSubject/index.vue';
 import { parseJson, parseKeyAlgorithms } from '@/utils/json';
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
+const userStore = useUserStore();
 import * as forge from 'node-forge';
 import { Plus, Minus, QuestionFilled, Warning, Refresh, View } from '@element-plus/icons-vue';
 
@@ -1612,9 +1613,9 @@ const canNext = computed(() => {
 });
 
 const saveTenantStatus = async (statusValue: number) => {
-  console.log(`saveTenantStatus: Updating status to ${statusValue} for tenant ${import.meta.env.VITE_TENANT_ID}`);
+  console.log(`saveTenantStatus: Updating status to ${statusValue} for tenant ${userStore.tenantId || localStorage.getItem('tenantId') || ''}`);
   try {
-    const tenantId = import.meta.env.VITE_TENANT_ID;
+    const tenantId = userStore.tenantId || localStorage.getItem('tenantId') || '';
     const tenantRes = await getTenant(tenantId);
     if (tenantRes.data) {
       const tenantInfo = tenantRes.data;
@@ -1843,7 +1844,7 @@ const prev = async () => {
 onMounted(async () => {
   // 获取租户信息
   try {
-    const tenantId = import.meta.env.VITE_TENANT_ID;
+    const tenantId = userStore.tenantId || localStorage.getItem('tenantId') || '';
     const tenantRes = await getTenant(tenantId);
     if (tenantRes.data) {
       tenantCode.value = (tenantRes.data.code || '').toUpperCase();
