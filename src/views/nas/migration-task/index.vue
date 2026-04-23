@@ -130,6 +130,8 @@ const loading = ref(true);
 const showSearch = ref(true);
 const total = ref(0);
 const title = ref("");
+const taskFormRef = ref();
+const queryFormRef = ref();
 
 const data = reactive({
   form: {},
@@ -177,7 +179,7 @@ function reset() {
     sourcePath: undefined,
     targetPath: undefined
   };
-  proxy.resetForm("taskFormRef");
+  taskFormRef.value?.resetFields();
 }
 
 /** 搜索按钮操作 */
@@ -188,7 +190,7 @@ function handleQuery() {
 
 /** 重置按钮操作 */
 function resetQuery() {
-  proxy.resetForm("queryFormRef");
+  queryFormRef.value?.resetFields();
   handleQuery();
 }
 
