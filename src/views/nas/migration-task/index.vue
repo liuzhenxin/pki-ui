@@ -221,7 +221,7 @@ function handleDetail(row) {
 
 /** 提交按钮 */
 function submitForm() {
-  proxy.$refs["taskFormRef"].validate(valid => {
+  taskFormRef.value.validate(valid => {
     if (valid) {
       if (form.value.id !== undefined) {
         updateTask(form.value).then(response => {
@@ -243,7 +243,7 @@ function submitForm() {
 /** 删除按钮操作 */
 function handleDelete(row) {
   const ids = row.id;
-  proxy.$modal.confirm('是否确认删除任务编号为"' + ids + '"的数据项？').then(function() {
+  proxy?.$modal.confirm('是否确认删除任务编号为"' + ids + '"的数据项？').then(function() {
     return delTask(ids);
   }).then(() => {
     getList();
@@ -253,7 +253,7 @@ function handleDelete(row) {
 
 /** 启动任务 */
 function handleStart(row) {
-  proxy.$modal.confirm('是否确认启动任务 "' + row.name + '"？').then(function() {
+  proxy?.$modal.confirm('是否确认启动任务 "' + row.name + '"？').then(function() {
     return startTask(row.id);
   }).then(() => {
     getList();
@@ -263,7 +263,7 @@ function handleStart(row) {
 
 /** 停止任务 */
 function handleStop(row) {
-  proxy.$modal.confirm('是否确认停止任务 "' + row.name + '"？').then(function() {
+  proxy?.$modal.confirm('是否确认停止任务 "' + row.name + '"？').then(function() {
     return stopTask(row.id);
   }).then(() => {
     getList();
