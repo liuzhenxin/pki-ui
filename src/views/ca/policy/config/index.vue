@@ -99,10 +99,11 @@
               </el-select>
             </el-form-item>
             <el-form-item label="保留策略" v-if="archiveForm.enabled">
-              <el-radio-group v-model="archiveForm.policy">
-                <el-radio label="keep">永久保留</el-radio>
-                <el-radio label="delete">过期后删除</el-radio>
+              <el-radio-group v-model="form.retentionPolicy">
+                <el-radio value="keep">永久保留</el-radio>
+                <el-radio value="delete">过期后删除</el-radio>
               </el-radio-group>
+
             </el-form-item>
             <el-form-item label="保留时长" v-if="archiveForm.enabled && archiveForm.policy === 'delete'">
               <el-input-number v-model="archiveForm.retentionTime" :min="1" />

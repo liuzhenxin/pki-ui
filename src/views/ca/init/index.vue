@@ -146,8 +146,8 @@
             </div>
           </el-drawer>
           <el-radio-group v-model="rootType" style="margin-bottom: 20px">
-            <el-radio-button label="self">自签根证书</el-radio-button>
-            <el-radio-button label="external">外部CA签发</el-radio-button>
+            <el-radio-button value="self">自签根证书</el-radio-button>
+            <el-radio-button value="external">外部CA签发</el-radio-button>
           </el-radio-group>
 
           <el-form :model="rootCaForm" :rules="rootCaRules" ref="rootCaFormRef" label-width="140px" style="width: 700px">

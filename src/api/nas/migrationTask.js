@@ -3,16 +3,16 @@ import request from '@/utils/request'
 // 查询迁移任务列表
 export function listTask(query) {
   return request({
-    url: '/nas/migration-tasks',
-    method: 'get',
-    params: query
+    url: '/nas/v1/migration-tasks/page',
+    method: 'post',
+    data: query
   })
 }
 
 // 查询迁移任务详细
 export function getTask(id) {
   return request({
-    url: '/nas/migration-tasks/' + id,
+    url: '/nas/v1/migration-tasks/' + id,
     method: 'get'
   })
 }
@@ -20,7 +20,7 @@ export function getTask(id) {
 // 新增迁移任务
 export function addTask(data) {
   return request({
-    url: '/nas/migration-tasks',
+    url: '/nas/v1/migration-tasks',
     method: 'post',
     data: data
   })
@@ -29,7 +29,7 @@ export function addTask(data) {
 // 修改迁移任务
 export function updateTask(data) {
   return request({
-    url: '/nas/migration-tasks',
+    url: '/nas/v1/migration-tasks',
     method: 'put',
     data: data
   })
@@ -38,7 +38,7 @@ export function updateTask(data) {
 // 删除迁移任务
 export function delTask(id) {
   return request({
-    url: '/nas/migration-tasks/' + id,
+    url: '/nas/v1/migration-tasks/' + id,
     method: 'delete'
   })
 }
@@ -46,7 +46,7 @@ export function delTask(id) {
 // 启动迁移任务
 export function startTask(id) {
   return request({
-    url: '/nas/migration-tasks/' + id + '/start',
+    url: '/nas/v1/migration-tasks/' + id + '/start',
     method: 'post'
   })
 }
@@ -54,7 +54,7 @@ export function startTask(id) {
 // 停止迁移任务
 export function stopTask(id) {
   return request({
-    url: '/nas/migration-tasks/' + id + '/stop',
+    url: '/nas/v1/migration-tasks/' + id + '/stop',
     method: 'post'
   })
 }

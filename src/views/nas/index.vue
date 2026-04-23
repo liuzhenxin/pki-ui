@@ -6,7 +6,7 @@
         <el-card shadow="hover" class="stat-card">
           <div class="stat-content">
             <div class="stat-icon bg-blue">
-              <el-icon><Storage /></el-icon>
+              <el-icon><Box /></el-icon>
             </div>
             <div class="stat-info">
               <div class="stat-label">总存储容量</div>
@@ -55,7 +55,7 @@
         <el-card shadow="hover" class="stat-card">
           <div class="stat-content">
             <div class="stat-icon bg-purple">
-              <el-icon><Notification /></el-icon>
+              <el-icon><Bell /></el-icon>
             </div>
             <div class="stat-info">
               <div class="stat-label">系统运行状态</div>
@@ -77,9 +77,9 @@
             <div class="card-header">
               <span>性能趋势监控 (IOPS & 带宽)</span>
               <el-radio-group v-model="timeRange" size="small">
-                <el-radio-button label="1h">近1小时</el-radio-button>
-                <el-radio-button label="24h">近24小时</el-radio-button>
-                <el-radio-button label="7d">近7天</el-radio-button>
+                <el-radio-button value="1h">近1小时</el-radio-button>
+                <el-radio-button value="24h">近24小时</el-radio-button>
+                <el-radio-button value="7d">近7天</el-radio-button>
               </el-radio-group>
             </div>
           </template>
@@ -153,6 +153,7 @@ import { ref, onMounted, onUnmounted, nextTick } from 'vue';
 import * as echarts from 'echarts';
 import { useRouter } from 'vue-router';
 import { listTask } from '@/api/nas/migrationTask';
+import { Box, Switch, Connection, Bell } from '@element-plus/icons-vue';
 
 const router = useRouter();
 const timeRange = ref('1h');

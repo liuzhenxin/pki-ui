@@ -153,8 +153,11 @@ const { queryParams, form, detailForm, rules } = toRefs(data);
 function getList() {
   loading.value = true;
   listTask(queryParams.value).then(response => {
-    taskList.value = response.rows;
-    total.value = response.total;
+    const data = response.data || {};
+    taskList.value = data.records || data.rows || [];
+    total.value = data.total || 0;
+    loading.value = false;
+  }).catch(() => {
     loading.value = false;
   });
 }
