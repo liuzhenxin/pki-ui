@@ -155,7 +155,7 @@ function getList() {
   listTask(queryParams.value).then(response => {
     const data = response.data || {};
     taskList.value = data.records || data.rows || [];
-    total.value = data.total || 0;
+    total.value = Number(data.total) || 0;
     loading.value = false;
   }).catch(() => {
     loading.value = false;
