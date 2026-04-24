@@ -2,10 +2,10 @@
   <div class="app-container">
     <el-form :model="queryParams" ref="queryFormRef" :inline="true" v-show="showSearch" label-width="68px">
       <el-form-item label="任务名称" prop="name">
-        <el-input v-model="queryParams.name" placeholder="请输入任务名称" clearable style="width: 240px" @keyup.enter="handleQuery" />
+        <el-input v-model="queryParams.name" placeholder="请输入任务名称" clearable style="width: 200px" @keyup.enter="handleQuery" />
       </el-form-item>
       <el-form-item label="状态" prop="status">
-        <el-select v-model="queryParams.status" placeholder="任务状态" clearable style="width: 240px">
+        <el-select v-model="queryParams.status" placeholder="任务状态" clearable style="width: 200px">
           <el-option label="等待中" value="PENDING" />
           <el-option label="启动中" value="STARTING" />
           <el-option label="运行中" value="RUNNING" />
@@ -29,7 +29,7 @@
     </el-row>
 
     <el-table v-loading="loading" :data="taskList">
-      <el-table-column label="任务名称" align="center" prop="name" :show-overflow-tooltip="true" />
+      <el-table-column label="任务名称" align="center" prop="name" :show-overflow-tooltip="true" width="150" />
       <el-table-column label="源路径" align="center" prop="sourcePath" :show-overflow-tooltip="true" />
       <el-table-column label="目标路径" align="center" prop="targetPath" :show-overflow-tooltip="true" />
       <el-table-column label="进度" align="center" width="200">
@@ -132,6 +132,7 @@ const total = ref(0);
 const title = ref("");
 const taskFormRef = ref();
 const queryFormRef = ref();
+const refreshTimer = ref(null);
 
 const data = reactive({
   form: {},
@@ -152,17 +153,45 @@ const data = reactive({
 const { queryParams, form, detailForm, rules } = toRefs(data);
 
 /** 查询迁移任务列表 */
-function getList() {
-  loading.value = true;
+function getList(silent = false) {
+  if (!silent) loading.value = true;
   listTask(queryParams.value).then(response => {
     const data = response.data || {};
     taskList.value = data.records || data.rows || [];
     total.value = Number(data.total) || 0;
     loading.value = false;
+    
+    // 检查是否需要开启轮询：如果存在正在运行、启动中或停止中的任务
+    const hasActiveTask = taskList.value.some(t => ['RUNNING', 'STARTING', 'STOPPING'].includes(t.status));
+    if (hasActiveTask) {
+      startPolling();
+    } else {
+      stopPolling();
+    }
   }).catch(() => {
     loading.value = false;
   });
 }
+
+/** 启动轮询 */
+function startPolling() {
+  if (refreshTimer.value) return;
+  refreshTimer.value = setInterval(() => {
+    getList(true);
+  }, 3000); // 每3秒刷新一次
+}
+
+/** 停止轮询 */
+function stopPolling() {
+  if (refreshTimer.value) {
+    clearInterval(refreshTimer.value);
+    refreshTimer.value = null;
+  }
+}
+
+onUnmounted(() => {
+  stopPolling();
+});
 
 /** 取消按钮 */
 function cancel() {
