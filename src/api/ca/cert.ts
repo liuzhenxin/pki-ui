@@ -85,11 +85,65 @@ export function issueDualCert(data: any): Promise<Result<any>> {
   }) as any;
 }
 
-// 吊销证书 (注意：后台 Controller 暂未列出 revoke 接口，保留此处以匹配 UI，如后端路径不同请调整)
-export function revokeCert(data: { id: string | number; reason: number }): Promise<Result<any>> {
+// 证书续期：使用原密钥签发新证书
+export function renewCert(data: any): Promise<Result<any>> {
+  return request({
+    url: '/ca/v1/certs/renew',
+    method: 'post',
+    data: data
+  }) as any;
+}
+
+// 证书更新：使用新密钥签发新证书
+export function updateCert(data: any): Promise<Result<any>> {
+  return request({
+    url: '/ca/v1/certs/update',
+    method: 'post',
+    data: data
+  }) as any;
+}
+
+// 证书重签/补办
+export function reissueCert(data: any): Promise<Result<any>> {
+  return request({
+    url: '/ca/v1/certs/reissue',
+    method: 'post',
+    data: data
+  }) as any;
+}
+
+// 密钥恢复
+export function recoverKey(data: any): Promise<Result<any>> {
+  return request({
+    url: '/ca/v1/certs/recover-key',
+    method: 'post',
+    data: data
+  }) as any;
+}
+
+// 挂起证书
+export function suspendCert(data: any): Promise<Result<any>> {
+  return request({
+    url: '/ca/v1/certs/suspend',
+    method: 'put',
+    data: data
+  }) as any;
+}
+
+// 恢复证书
+export function resumeCert(data: any): Promise<Result<any>> {
+  return request({
+    url: '/ca/v1/certs/resume',
+    method: 'put',
+    data: data
+  }) as any;
+}
+
+// 吊销证书
+export function revokeCert(data: any): Promise<Result<any>> {
   return request({
     url: '/ca/v1/certs/revoke',
-    method: 'post',
+    method: 'put',
     data: data
   }) as any;
 }

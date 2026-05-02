@@ -1,54 +1,46 @@
 <script setup name="CertProfileManagement" lang="ts">
-import { ref, reactive, toRefs, getCurrentInstance, ComponentInternalInstance, nextTick } from 'vue'
-import { ElMessage, ElMessageBox, FormInstance, FormRules, UploadProps, UploadUserFile } from 'element-plus'
-import { UploadFilled, View, Plus, Delete, Top, Bottom } from '@element-plus/icons-vue'
-import { to } from 'await-to-js'
-import { useRouter } from 'vue-router'
-import { parseJson, parseKeyAlgorithms } from '@/utils/json'
-import {
-  pageProfile,
-  getProfile,
-  saveProfile,
-  modifyProfile,
-  removeProfile,
-  importProfile,
-  exportProfile
-} from '@/api/ca/profile'
-import { ProfileForm, ProfileQuery } from '@/api/ca/profile/types'
-import CertProfile from '@/components/CertProfile/index.vue'
+import { ref, reactive, toRefs, getCurrentInstance, ComponentInternalInstance, nextTick } from 'vue';
+import { ElMessage, ElMessageBox, FormInstance, FormRules, UploadProps, UploadUserFile } from 'element-plus';
+import { UploadFilled, View, Plus, Delete, Top, Bottom } from '@element-plus/icons-vue';
+import { to } from 'await-to-js';
+import { useRouter } from 'vue-router';
+import { parseJson, parseKeyAlgorithms } from '@/utils/json';
+import { pageProfile, getProfile, saveProfile, modifyProfile, removeProfile, importProfile, exportProfile } from '@/api/ca/profile';
+import { ProfileForm, ProfileQuery } from '@/api/ca/profile/types';
+import CertProfile from '@/components/CertProfile/index.vue';
 
-const { proxy } = getCurrentInstance() as ComponentInternalInstance
-const router = useRouter()
+const { proxy } = getCurrentInstance() as ComponentInternalInstance;
+const router = useRouter();
 
-const profileList = ref<any[]>([])
-const loading = ref(true)
-const showSearch = ref(true)
-const ids = ref<Array<string | number>>([])
-const single = ref(true)
-const multiple = ref(true)
-const total = ref(0)
-const activeTab = ref('basic')
+const profileList = ref<any[]>([]);
+const loading = ref(true);
+const showSearch = ref(true);
+const ids = ref<Array<string | number>>([]);
+const single = ref(true);
+const multiple = ref(true);
+const total = ref(0);
+const activeTab = ref('basic');
 
-const queryFormRef = ref<FormInstance>()
-const profileFormRef = ref<FormInstance>()
-const formDialogRef = ref<any>()
+const queryFormRef = ref<FormInstance>();
+const profileFormRef = ref<FormInstance>();
+const formDialogRef = ref<any>();
 
 const dialog = reactive({
   visible: false,
   title: ''
-})
+});
 
 const detailDialog = reactive({
   visible: false,
   data: null as any,
   confData: null as any
-})
+});
 
 const uploadDialog = reactive({
   visible: false,
   loading: false,
   fileList: [] as UploadUserFile[]
-})
+});
 
 const initFormData: ProfileForm = {
   id: undefined,
@@ -59,7 +51,7 @@ const initFormData: ProfileForm = {
   conf: '',
   subjectItems: [] as any[],
   extensions: [] as any[]
-}
+};
 
 const extensionTypes = [
   { label: '基本约束', value: 'BasicConstraints' },
@@ -72,7 +64,7 @@ const extensionTypes = [
   { label: '主体备用名称', value: 'SubjectAlternativeName' },
   { label: '颁发者备用名称', value: 'IssuerAlternativeName' },
   { label: '证书策略', value: 'CertificatePolicies' }
-]
+];
 
 // 常用OID列表
 const commonOIDs = [
@@ -91,7 +83,7 @@ const commonOIDs = [
   { oid: '2.5.4.13', description: 'Description (描述)' },
   { oid: '2.5.4.9', description: 'streetAddress (街道地址)' },
   { oid: '2.5.4.17', description: 'postalCode (邮政编码)' }
-]
+];
 
 const data = reactive({
   form: { ...initFormData },
@@ -101,231 +93,231 @@ const data = reactive({
     name: '',
     type: ''
   } as ProfileQuery
-})
+});
 
-const { queryParams, form } = toRefs(data)
+const { queryParams, form } = toRefs(data);
 
 const profileRules: FormRules = {
   name: [{ required: true, message: '模板名称不能为空', trigger: 'blur' }],
   type: [{ required: true, message: '模板类型不能为空', trigger: 'change' }]
-}
+};
 
 /** 查询证书模板列表 */
 async function getList() {
-  loading.value = true
+  loading.value = true;
   try {
-    const res = await pageProfile(queryParams.value)
-    profileList.value = []
-    total.value = res.data.total || 0
-    await nextTick()
-    profileList.value = res.data.rows || res.data.records || []
-  } catch (error) {
-    console.error('获取列表失败', error)
+    const res = await pageProfile(queryParams.value);
+    profileList.value = [];
+    total.value = res.data.total || 0;
+    await nextTick();
+    profileList.value = res.data.rows || res.data.records || [];
+  } catch {
+    ElMessage.error('获取列表失败');
   } finally {
-    loading.value = false
+    loading.value = false;
   }
 }
 
 /** 搜索按钮操作 */
 function handleQuery() {
-  queryParams.value.pageNum = 1
-  getList()
+  queryParams.value.pageNum = 1;
+  getList();
 }
 
 /** 重置按钮操作 */
 function resetQuery() {
-  queryFormRef.value?.resetFields()
-  handleQuery()
+  queryFormRef.value?.resetFields();
+  handleQuery();
 }
 
 /** 多选框选中数据 */
 function handleSelectionChange(selection: any[]) {
-  ids.value = selection.map(item => item.id)
-  single.value = selection.length !== 1
-  multiple.value = !selection.length
+  ids.value = selection.map((item) => item.id);
+  single.value = selection.length !== 1;
+  multiple.value = !selection.length;
 }
 
 /** 新增按钮操作 */
 function handleAdd() {
-  router.push('/ca/profile/form')
+  router.push('/ca/profile/form');
 }
 
 /** 删除按钮操作 */
 async function handleDelete(row?: any) {
-  const profileIds = row?.id || ids.value
-  const [err] = await to(proxy?.$modal.confirm('是否确认删除证书模板编号为"' + profileIds + '"的数据项？') as any)
+  const profileIds = row?.id || ids.value;
+  const [err] = await to(proxy?.$modal.confirm('是否确认删除证书模板编号为"' + profileIds + '"的数据项？') as any);
   if (!err) {
     try {
-      await removeProfile(Array.isArray(profileIds) ? profileIds : [profileIds])
-      await getList()
-      proxy?.$modal.msgSuccess('删除成功')
-    } catch (error) {
-      console.error('删除失败', error)
+      await removeProfile(Array.isArray(profileIds) ? profileIds : [profileIds]);
+      await getList();
+      proxy?.$modal.msgSuccess('删除成功');
+    } catch {
+      ElMessage.error('删除失败');
     }
   }
 }
 
 /** 导入按钮操作 */
 function handleImport() {
-  uploadDialog.visible = true
-  uploadDialog.fileList = []
+  uploadDialog.visible = true;
+  uploadDialog.fileList = [];
 }
 
 /** 导入证书模板 */
 async function submitImport() {
   if (uploadDialog.fileList.length === 0) {
-    ElMessage.warning('请选择要导入的证书模板文件')
-    return
+    ElMessage.warning('请选择要导入的证书模板文件');
+    return;
   }
 
-  uploadDialog.loading = true
+  uploadDialog.loading = true;
   try {
-    const formData = new FormData()
-    uploadDialog.fileList.forEach(file => {
+    const formData = new FormData();
+    uploadDialog.fileList.forEach((file) => {
       if (file.raw) {
-        formData.append('files', file.raw)
+        formData.append('files', file.raw);
       }
-    })
-    await importProfile(formData)
-    ElMessage.success('导入成功')
-    uploadDialog.visible = false
-    await getList()
+    });
+    await importProfile(formData);
+    ElMessage.success('导入成功');
+    uploadDialog.visible = false;
+    await getList();
   } catch (error) {
-    ElMessage.error('导入失败')
+    ElMessage.error('导入失败');
   } finally {
-    uploadDialog.loading = false
+    uploadDialog.loading = false;
   }
 }
 
 /** 导出按钮操作 */
 async function handleExport() {
   if (ids.value.length === 0) {
-    ElMessage.warning('请选择要导出的证书模板')
-    return
+    ElMessage.warning('请选择要导出的证书模板');
+    return;
   }
 
   try {
-    const blob = await exportProfile(ids.value)
-    const url = window.URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `profiles_${new Date().getTime()}.zip`
-    link.click()
-    window.URL.revokeObjectURL(url)
-    ElMessage.success('导出成功')
+    const blob = await exportProfile(ids.value);
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `profiles_${new Date().getTime()}.zip`;
+    link.click();
+    window.URL.revokeObjectURL(url);
+    ElMessage.success('导出成功');
   } catch (error) {
-    ElMessage.error('导出失败')
+    ElMessage.error('导出失败');
   }
 }
 
 /** 重置操作表单 */
 function reset() {
-  form.value = { ...initFormData }
-  form.value.subjectItems = []
-  form.value.extensions = []
-  profileFormRef.value?.resetFields()
-  activeTab.value = 'basic'
+  form.value = { ...initFormData };
+  form.value.subjectItems = [];
+  form.value.extensions = [];
+  profileFormRef.value?.resetFields();
+  activeTab.value = 'basic';
 }
 
 /** 关闭对话框 */
 function cancel() {
-  dialog.visible = false
-  reset()
+  dialog.visible = false;
+  reset();
 }
 
 /** 获取扩展标签 */
 function getExtensionLabel(type: string): string {
-  const ext = extensionTypes.find(e => e.value === type)
-  return ext ? ext.label : type
+  const ext = extensionTypes.find((e) => e.value === type);
+  return ext ? ext.label : type;
 }
 
 /** 添加扩展 */
 function addExtension() {
   if (!form.value.extensions) {
-    form.value.extensions = []
+    form.value.extensions = [];
   }
   form.value.extensions.push({
     type: '',
     required: false,
     critical: false,
     config: ''
-  })
+  });
 }
 
 /** 删除扩展 */
 function removeExtension(index: number) {
-  form.value.extensions.splice(index, 1)
+  form.value.extensions.splice(index, 1);
 }
 
 /** 添加RDN */
 function addRdn() {
   if (!form.value.subjectItems) {
-    form.value.subjectItems = []
+    form.value.subjectItems = [];
   }
   form.value.subjectItems.push({
     type: {
       oid: '',
       description: ''
     }
-  })
+  });
 }
 
 /** 删除RDN */
 function removeRdn(index: number) {
-  form.value.subjectItems.splice(index, 1)
+  form.value.subjectItems.splice(index, 1);
 }
 
 /** 上移RDN */
 function moveUp(index: number) {
   if (index > 0) {
-    const temp = form.value.subjectItems[index]
-    form.value.subjectItems[index] = form.value.subjectItems[index - 1]
-    form.value.subjectItems[index - 1] = temp
+    const temp = form.value.subjectItems[index];
+    form.value.subjectItems[index] = form.value.subjectItems[index - 1];
+    form.value.subjectItems[index - 1] = temp;
   }
 }
 
 /** 下移RDN */
 function moveDown(index: number) {
   if (index < form.value.subjectItems.length - 1) {
-    const temp = form.value.subjectItems[index]
-    form.value.subjectItems[index] = form.value.subjectItems[index + 1]
-    form.value.subjectItems[index + 1] = temp
+    const temp = form.value.subjectItems[index];
+    form.value.subjectItems[index] = form.value.subjectItems[index + 1];
+    form.value.subjectItems[index + 1] = temp;
   }
 }
 
 /** 添加常用OID */
 function addCommonRdn(common: { oid: string; description: string }) {
   if (!form.value.subjectItems) {
-    form.value.subjectItems = []
+    form.value.subjectItems = [];
   }
   form.value.subjectItems.push({
     type: {
       oid: common.oid,
       description: common.description
     }
-  })
+  });
 }
 
 /** 修改按钮操作 */
 function handleUpdate(row?: any) {
-  const id = row?.id || ids.value[0]
+  const id = row?.id || ids.value[0];
   router.push({
     path: '/ca/profile/form',
     query: { id }
-  })
+  });
 }
 
 /** 详情按钮操作 */
 async function handleDetail(row: any) {
   try {
-    const res = await getProfile(row.id)
-    const profile = res.data
+    const res = await getProfile(row.id);
+    const profile = res.data;
     if (!profile) {
-      ElMessage.error('获取到的模板数据为空')
-      return
+      ElMessage.error('获取到的模板数据为空');
+      return;
     }
-    detailDialog.data = profile
-    
+    detailDialog.data = profile;
+
     // 解析conf字段
     if (profile.conf) {
       try {
@@ -333,19 +325,18 @@ async function handleDetail(row: any) {
         if (conf && conf.keyAlgorithms) {
           conf.keyAlgorithms = parseKeyAlgorithms(conf.keyAlgorithms);
         }
-        detailDialog.confData = conf
-      } catch (e) {
-        console.error('解析模板配置失败:', e)
-        detailDialog.confData = null
+        detailDialog.confData = conf;
+      } catch {
+        ElMessage.error('解析模板配置失败');
+        detailDialog.confData = null;
       }
     } else {
-      detailDialog.confData = null
+      detailDialog.confData = null;
     }
-    
-    detailDialog.visible = true
-  } catch (error) {
-    console.error('获取证书模板详情失败:', error)
-    ElMessage.error('获取证书模板详情失败')
+
+    detailDialog.visible = true;
+  } catch {
+    ElMessage.error('获取证书模板详情失败');
   }
 }
 
@@ -360,50 +351,49 @@ async function submitForm() {
             rdns: form.value.subjectItems || []
           },
           extensions: form.value.extensions || []
-        }
+        };
 
         const submitData = {
           ...form.value,
           conf: JSON.stringify(conf)
-        }
+        };
 
         if (form.value.id) {
-          await modifyProfile(submitData)
+          await modifyProfile(submitData);
         } else {
-          await saveProfile(submitData)
+          await saveProfile(submitData);
         }
-        proxy?.$modal.msgSuccess('操作成功')
-        dialog.visible = false
-        await getList()
-      } catch (error) {
-        console.error('操作失败', error)
+        proxy?.$modal.msgSuccess('操作成功');
+        dialog.visible = false;
+        await getList();
+      } catch {
+        ElMessage.error('操作失败');
       }
     }
-  })
+  });
 }
 
 /** 文件上传前校验 */
 const beforeUpload: UploadProps['beforeUpload'] = (file) => {
-  const isJson = file.name.endsWith('.json') || file.name.endsWith('.xml')
+  const isJson = file.name.endsWith('.json') || file.name.endsWith('.xml');
   if (!isJson) {
-    ElMessage.error('只支持上传JSON或XML文件')
-    return false
+    ElMessage.error('只支持上传JSON或XML文件');
+    return false;
   }
-  return true
-}
+  return true;
+};
 
 /** 文件上传 */
 const handleFileChange: UploadProps['onChange'] = (uploadFile, uploadFiles) => {
-  uploadDialog.fileList = uploadFiles
-}
+  uploadDialog.fileList = uploadFiles;
+};
 
-getList()
+getList();
 </script>
 
 <template>
   <div class="p-2">
-    <transition :enter-active-class="proxy?.animate.searchAnimate.enter"
-                :leave-active-class="proxy?.animate.searchAnimate.leave">
+    <transition :enter-active-class="proxy?.animate.searchAnimate.enter" :leave-active-class="proxy?.animate.searchAnimate.leave">
       <div v-show="showSearch" class="mb-10px">
         <el-card shadow="hover">
           <el-form ref="queryFormRef" :model="queryParams" :inline="true">
@@ -475,13 +465,11 @@ getList()
         </el-table-column>
       </el-table>
 
-      <pagination v-show="total > 0" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize"
-                  :total="total" @pagination="getList" />
+      <pagination v-show="total > 0" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" :total="total" @pagination="getList" />
     </el-card>
 
     <!-- 添加或修改证书模板对话框 -->
-    <el-dialog ref="formDialogRef" v-model="dialog.visible" :title="dialog.title" width="800px" append-to-body
-               @close="cancel">
+    <el-dialog ref="formDialogRef" v-model="dialog.visible" :title="dialog.title" width="800px" append-to-body @close="cancel">
       <el-form ref="profileFormRef" :model="form" :rules="profileRules" label-width="120px">
         <el-tabs v-model="activeTab" type="border-card">
           <!-- 基本信息 -->
@@ -520,7 +508,7 @@ getList()
                 <span>主题字段列表（RDNs）</span>
                 <el-button type="primary" size="small" icon="Plus" @click="addRdn">添加字段</el-button>
               </div>
-              
+
               <div v-if="form.subjectItems && form.subjectItems.length > 0" class="rdn-list">
                 <div v-for="(rdn, index) in form.subjectItems" :key="index" class="rdn-item">
                   <el-card shadow="hover">
@@ -529,12 +517,19 @@ getList()
                         <span class="rdn-title">{{ rdn.type?.description || '未命名字段' }}</span>
                         <div class="rdn-actions">
                           <el-button type="primary" size="small" icon="Top" @click="moveUp(index)" :disabled="index === 0">上移</el-button>
-                          <el-button type="primary" size="small" icon="Bottom" @click="moveDown(index)" :disabled="index === form.subjectItems.length - 1">下移</el-button>
+                          <el-button
+                            type="primary"
+                            size="small"
+                            icon="Bottom"
+                            @click="moveDown(index)"
+                            :disabled="index === form.subjectItems.length - 1"
+                            >下移</el-button
+                          >
                           <el-button type="danger" size="small" icon="Delete" @click="removeRdn(index)">删除</el-button>
                         </div>
                       </div>
                     </template>
-                    
+
                     <el-row :gutter="20">
                       <el-col :span="12">
                         <el-form-item label="OID" :prop="`subjectItems.${index}.type.oid`">
@@ -547,29 +542,17 @@ getList()
                         </el-form-item>
                       </el-col>
                     </el-row>
-                    
+
                     <el-row :gutter="20">
                       <el-col :span="12">
                         <el-form-item label="最小出现次数">
-                          <el-input-number 
-                            v-model="rdn.minOccurs" 
-                            :min="0" 
-                            :max="10" 
-                            controls-position="right" 
-                            style="width: 100%"
-                          />
+                          <el-input-number v-model="rdn.minOccurs" :min="0" :max="10" controls-position="right" style="width: 100%" />
                           <div class="field-tip">默认为1，0表示可选</div>
                         </el-form-item>
                       </el-col>
                       <el-col :span="12">
                         <el-form-item label="最大出现次数">
-                          <el-input-number 
-                            v-model="rdn.maxOccurs" 
-                            :min="1" 
-                            :max="10" 
-                            controls-position="right" 
-                            style="width: 100%"
-                          />
+                          <el-input-number v-model="rdn.maxOccurs" :min="1" :max="10" controls-position="right" style="width: 100%" />
                           <div class="field-tip">默认为1，可重复字段可设置大于1</div>
                         </el-form-item>
                       </el-col>
@@ -577,15 +560,15 @@ getList()
                   </el-card>
                 </div>
               </div>
-              
+
               <el-empty v-else description="暂无主题字段，请点击上方按钮添加" />
-              
+
               <!-- 常用OID快捷添加 -->
               <div class="quick-add-section">
                 <div class="quick-add-title">常用OID快捷添加：</div>
                 <el-space wrap>
-                  <el-tag 
-                    v-for="common in commonOIDs" 
+                  <el-tag
+                    v-for="common in commonOIDs"
                     :key="common.oid"
                     type="info"
                     effect="plain"
@@ -608,14 +591,12 @@ getList()
                     <template #header>
                       <div class="extension-header">
                         <span>{{ getExtensionLabel(ext.type) }}</span>
-                        <el-button type="danger" size="small" icon="Delete" @click="removeExtension(index)">删除
-                        </el-button>
+                        <el-button type="danger" size="small" icon="Delete" @click="removeExtension(index)">删除 </el-button>
                       </div>
                     </template>
                     <el-form-item label="扩展类型">
                       <el-select v-model="ext.type" placeholder="请选择扩展类型" style="width: 100%">
-                        <el-option v-for="item in extensionTypes" :key="item.value" :label="item.label"
-                                   :value="item.value" />
+                        <el-option v-for="item in extensionTypes" :key="item.value" :label="item.label" :value="item.value" />
                       </el-select>
                     </el-form-item>
                     <el-form-item label="是否必须">
@@ -673,7 +654,7 @@ getList()
 
     <!-- 查看详情对话框 -->
     <el-dialog v-model="detailDialog.visible" title="证书模板详情" width="1000px" append-to-body top="5vh">
-      <div style="max-height: 75vh; overflow-y: auto; padding-right: 10px;">
+      <div style="max-height: 75vh; overflow-y: auto; padding-right: 10px">
         <el-descriptions :column="2" border v-if="detailDialog.data" class="mb-4">
           <el-descriptions-item label="模板名称">{{ detailDialog.data.name }}</el-descriptions-item>
           <el-descriptions-item label="模板类型">

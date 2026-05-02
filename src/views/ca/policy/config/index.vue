@@ -103,7 +103,6 @@
                 <el-radio value="keep">永久保留</el-radio>
                 <el-radio value="delete">过期后删除</el-radio>
               </el-radio-group>
-
             </el-form-item>
             <el-form-item label="保留时长" v-if="archiveForm.enabled && archiveForm.policy === 'delete'">
               <el-input-number v-model="archiveForm.retentionTime" :min="1" />
@@ -185,25 +184,21 @@ const securityForm = reactive({
   whitelistIps: ''
 });
 
-// 保存方法 (模拟)
+// 保存方法
 const saveProtocol = () => {
-  console.log('Protocol Config:', protocolForm);
-  ElMessage.success('协议配置已保存');
+  ElMessage.warning('协议配置保存接口暂未接入');
 };
 
 const savePublish = () => {
-  console.log('Publish Config:', publishForm);
-  ElMessage.success('发布配置已保存');
+  ElMessage.warning('发布配置保存接口暂未接入');
 };
 
 const saveArchive = () => {
-  console.log('Archive Config:', archiveForm);
-  ElMessage.success('归档配置已保存');
+  ElMessage.warning('归档配置保存接口暂未接入');
 };
 
 const saveSecurity = () => {
-  console.log('Security Config:', securityForm);
-  ElMessage.success('安全配置已保存');
+  ElMessage.warning('安全配置保存接口暂未接入');
 };
 </script>
 

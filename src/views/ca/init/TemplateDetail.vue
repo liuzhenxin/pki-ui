@@ -7,7 +7,7 @@
       <el-descriptions-item label="最大大小">{{ templateData.maxSize || '-' }}</el-descriptions-item>
       <el-descriptions-item label="有效期">{{ templateData.validity || '-' }}</el-descriptions-item>
       <el-descriptions-item label="生效时间">{{ templateData.notBeforeTime || '-' }}</el-descriptions-item>
-      <el-descriptions-item label="密钥对生成">{{ templateData.keypairGeneration || '-' }}</el-descriptions-item>
+      <el-descriptions-item label="密钥对生成">{{ formatKeypairGeneration(templateData.keypairGeneration) }}</el-descriptions-item>
       <el-descriptions-item label="支持算法">
         <el-tag v-for="algo in parsedKeyAlgorithms" :key="algo" style="margin-right: 5px">{{ algo }}</el-tag>
       </el-descriptions-item>
@@ -45,7 +45,7 @@
           <el-descriptions-item v-if="ext.extendedKeyUsage" label="增强密钥用法">
             <pre>{{ JSON.stringify(ext.extendedKeyUsage, null, 2) }}</pre>
           </el-descriptions-item>
-           <!-- Add other specific extension fields as needed -->
+          <!-- Add other specific extension fields as needed -->
         </el-descriptions>
       </el-collapse-item>
     </el-collapse>
@@ -75,6 +75,22 @@ const subjectData = computed(() => {
   if (s.rdns && Array.isArray(s.rdns)) return s.rdns;
   return [];
 });
+
+function formatKeypairGeneration(value: any) {
+  if (!value) {
+    return '-';
+  }
+  if (typeof value === 'string') {
+    return value === 'InheritCA' || value === 'KMC' ? 'KMC' : '客户端';
+  }
+  if (value.inheritCA === true) {
+    return 'KMC';
+  }
+  if (value.forbidden === true) {
+    return '客户端';
+  }
+  return '-';
+}
 </script>
 
 <style scoped>

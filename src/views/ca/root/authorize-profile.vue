@@ -48,7 +48,9 @@
 
           <el-table-column label="授权状态" align="center" width="120">
             <template #default="scope">
-              <el-checkbox v-model="scope.row.authorized" @change="handleAuthorizeChange(scope.row)" />
+              <el-checkbox v-model="scope.row.authorized" class="auth-checkbox" @change="handleAuthorizeChange(scope.row)">
+                {{ scope.row.authorized ? '已授权' : '未授权' }}
+              </el-checkbox>
             </template>
           </el-table-column>
           <el-table-column label="操作" align="center" width="150">
@@ -62,9 +64,9 @@
 
     <!-- 模板详情对话框 -->
     <el-dialog v-model="showDetailDialog" title="模板详情" width="60%" append-to-body top="5vh">
-      <div style="max-height: 75vh; overflow-y: auto;">
+      <div style="max-height: 75vh; overflow-y: auto">
         <CertProfile v-if="currentProfile" :profile="currentProfile" />
-        
+
         <el-collapse v-if="currentProfile" style="margin-top: 20px">
           <el-collapse-item title="原始数据（调试用）">
             <pre class="debug-pre">{{ JSON.stringify(currentProfile, null, 2) }}</pre>
@@ -126,11 +128,10 @@ async function getRootCertInfo() {
         notAfter: cert.notAfter || '-',
         status: cert.status || '0'
       };
-      
+
       authorizedProfileIds.value = cert.profileIds || [];
     }
   } catch (error) {
-    console.error('获取根证书信息失败', error);
     ElMessage.error('获取根证书信息失败');
   }
 }
@@ -144,17 +145,14 @@ async function getAllProfiles() {
       return type !== 'RootCA';
     });
   } catch (error) {
-    console.error('获取模板列表失败', error);
     ElMessage.error('获取模板列表失败');
   }
 }
 
 /** 组装展示列表 */
 function buildProfileList() {
-  profileList.value = allProfiles.value.map(profile => {
-    const authorized = authorizedProfileIds.value.some(authId => 
-      String(authId) === String(profile.id)
-    );
+  profileList.value = allProfiles.value.map((profile) => {
+    const authorized = authorizedProfileIds.value.some((authId) => String(authId) === String(profile.id));
     return {
       ...profile,
       authorized
@@ -171,21 +169,18 @@ function handleAuthorizeChange(profile: any) {
 async function handleSubmitAuthorize() {
   loading.value = true;
   try {
-    const profileIds = profileList.value
-      .filter(p => p.authorized)
-      .map(p => p.id);
+    const profileIds = profileList.value.filter((p) => p.authorized).map((p) => p.id);
 
     await authorizeProfile({
       rootId: rootId.value,
       profileIds: profileIds
     });
-    
+
     hasChanges.value = false;
     ElMessage.success('授权保存成功');
     await getRootCertInfo();
     buildProfileList();
   } catch (error: any) {
-    console.error('保存授权失败', error);
     const errMsg = error.response?.data?.msg || error.message || '保存授权失败';
     ElMessage.error(errMsg);
   } finally {
@@ -198,8 +193,8 @@ async function handleViewProfile(profile: any) {
   try {
     const res = await getProfile(profile.id);
     const profileData = res.data;
-    const conf = parseJson(profileData.conf);    
-    
+    const conf = parseJson(profileData.conf);
+
     const parsedProfile = {
       ...profileData,
       metadata: {
@@ -215,11 +210,10 @@ async function handleViewProfile(profile: any) {
       subject: conf.subject || [],
       extensions: conf.extensions || []
     };
-    
+
     currentProfile.value = parsedProfile;
     showDetailDialog.value = true;
   } catch (error) {
-    console.error('获取模板详情失败', error);
     ElMessage.error('获取模板详情失败');
   }
 }
@@ -231,7 +225,7 @@ onMounted(async () => {
     goBack();
     return;
   }
-  
+
   loading.value = true;
   await getRootCertInfo();
   await getAllProfiles();
@@ -293,6 +287,47 @@ onMounted(async () => {
 
 .template-section {
   margin-top: 20px;
+}
+
+.auth-checkbox {
+  min-width: 86px;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  background: #fff;
+  justify-content: center;
+  transition:
+    border-color 0.2s,
+    background-color 0.2s,
+    color 0.2s;
+
+  :deep(.el-checkbox__inner) {
+    width: 18px;
+    height: 18px;
+    border-width: 2px;
+  }
+
+  :deep(.el-checkbox__inner::after) {
+    left: 5px;
+    top: 2px;
+    width: 5px;
+    height: 9px;
+  }
+
+  :deep(.el-checkbox__label) {
+    padding-left: 8px;
+    font-weight: 500;
+  }
+
+  &.is-checked {
+    border-color: var(--el-color-primary);
+    background: var(--el-color-primary-light-9);
+
+    :deep(.el-checkbox__label) {
+      color: var(--el-color-primary);
+    }
+  }
 }
 
 .section-header {

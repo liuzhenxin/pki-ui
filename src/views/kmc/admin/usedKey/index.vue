@@ -23,13 +23,13 @@
 
     <el-row :gutter="10" class="mb8">
       <el-col :span="1.5">
-        <el-button type="primary" plain icon="Plus" @click="handleAdd" v-hasPermi="['kmc:usedKey:add']">新增</el-button>
+        <el-button type="primary" plain icon="Plus" @click="handleAdd" v-hasPermi="['sys:usedkey:save']">新增</el-button>
       </el-col>
       <el-col :span="1.5">
-        <el-button type="success" plain icon="Edit" :disabled="single" @click="handleUpdate()" v-hasPermi="['kmc:usedKey:edit']">修改</el-button>
+        <el-button type="success" plain icon="Edit" :disabled="single" @click="handleUpdate()" v-hasPermi="['sys:usedkey:modify']">修改</el-button>
       </el-col>
       <el-col :span="1.5">
-        <el-button type="danger" plain icon="Delete" :disabled="multiple" @click="handleDelete()" v-hasPermi="['kmc:usedKey:remove']">删除</el-button>
+        <el-button type="danger" plain icon="Delete" :disabled="multiple" @click="handleDelete()" v-hasPermi="['sys:usedkey:remove']">删除</el-button>
       </el-col>
       <right-toolbar v-model:showSearch="showSearch" @queryTable="getList" />
     </el-row>
@@ -57,10 +57,10 @@
       <el-table-column label="操作" align="center" class-name="small-padding fixed-width">
         <template #default="scope">
           <el-tooltip content="修改" placement="top">
-            <el-button link type="primary" icon="Edit" @click="handleUpdate(scope.row)" v-hasPermi="['kmc:usedKey:edit']" />
+            <el-button link type="primary" icon="Edit" @click="handleUpdate(scope.row)" v-hasPermi="['sys:usedkey:modify']" />
           </el-tooltip>
           <el-tooltip content="删除" placement="top">
-            <el-button link type="primary" icon="Delete" @click="handleDelete(scope.row)" v-hasPermi="['kmc:usedKey:remove']" />
+            <el-button link type="primary" icon="Delete" @click="handleDelete(scope.row)" v-hasPermi="['sys:usedkey:remove']" />
           </el-tooltip>
         </template>
       </el-table-column>
@@ -106,10 +106,11 @@
 </template>
 
 <script setup name="UsedKey" lang="ts">
-import { ref, reactive, toRefs, onMounted } from 'vue';
+import { ref, reactive, toRefs, onMounted, getCurrentInstance, ComponentInternalInstance } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { listUsedKey, getUsedKey, delUsedKey, addUsedKey, updateUsedKey } from '@/api/kmc/usedKey/index';
 import { UsedKeyVO, UsedKeyQuery, UsedKeyForm } from '@/api/kmc/usedKey/types';
+import { readKmcPage, unwrapKmcData } from '@/api/kmc/common';
 
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
 
@@ -156,17 +157,9 @@ const getList = async () => {
   loading.value = true;
   try {
     const res = await listUsedKey(queryParams.value);
-    const responseData = res.data;
-    if (responseData && responseData.data) {
-      const pageInfo = responseData.data;
-      usedKeyList.value = pageInfo.data || pageInfo.records || responseData.data;
-      total.value = pageInfo.totalCount || pageInfo.total || 0;
-    } else if (res.rows) {
-      usedKeyList.value = res.rows;
-      total.value = res.total;
-    } else {
-      usedKeyList.value = responseData as any;
-    }
+    const page = readKmcPage<UsedKeyVO>(res);
+    usedKeyList.value = page.records;
+    total.value = page.total;
   } catch (e) {
     console.error(e);
   } finally {
@@ -219,11 +212,7 @@ const handleUpdate = async (row?: UsedKeyVO) => {
   const id = row?.id || ids.value[0];
   const res = await getUsedKey(id);
 
-  if (res.data && res.data.data) {
-    Object.assign(form.value, res.data.data);
-  } else {
-    Object.assign(form.value, res.data);
-  }
+  Object.assign(form.value, unwrapKmcData(res));
 
   dialog.visible = true;
   dialog.title = '修改在用密钥';

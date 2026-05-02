@@ -4,9 +4,12 @@
 export interface CrlQuery {
   pageNum?: number;
   pageSize?: number;
-  crlName?: string;     // CRL名称
-  issuer?: string;      // 颁发者
-  status?: string;      // 状态
+  rootId?: string | number;
+  crlNo?: string;
+  deltaCrl?: number | string;
+  crlName?: string; // 兼容旧字段
+  issuer?: string; // 兼容旧字段
+  status?: string; // 兼容旧字段
 }
 
 /**
@@ -14,11 +17,29 @@ export interface CrlQuery {
  */
 export interface CrlForm {
   id?: string | number;
-  crlName?: string;     // CRL名称
-  issuer?: string;      // 颁发者
-  crl?: string;         // CRL内容
-  status?: string;      // 状态
-  thisUpdate?: string;  // 本次更新时间
-  nextUpdate?: string;  // 下次更新时间
-  remark?: string;      // 备注
+  rootId?: string | number;
+  crlScope?: number;
+  crlNo?: string;
+  crlName?: string; // 兼容旧字段
+  issuer?: string; // 兼容旧字段
+  crl?: string;
+  status?: string; // 兼容旧字段
+  thisUpdate?: string;
+  nextBefore?: string;
+  nextUpdate?: string; // 兼容旧字段
+  deltaCrl?: number;
+  baseCrlNo?: string | number;
+  sha1?: string;
+  remark?: string;
+}
+
+export interface CrlGenForm {
+  rootId?: string | number;
+  crlScope?: number;
+  deltaCrl?: boolean;
+}
+
+export interface CrlPublishForm {
+  crlId?: string | number;
+  publisherId?: string | number;
 }

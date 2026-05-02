@@ -102,6 +102,19 @@ export const constantRoutes: RouteRecordRaw[] = [
     name: 'ProfileForm',
     hidden: true,
     meta: { title: '证书模板表单' }
+  },
+  {
+    path: '/ca/init',
+    hidden: true,
+    component: Layout,
+    children: [
+      {
+        path: '',
+        component: () => import('@/views/ca/init/index.vue'),
+        name: 'CaInit',
+        meta: { title: 'CA系统初始化' }
+      }
+    ]
   }
 ];
 

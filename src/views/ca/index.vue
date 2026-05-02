@@ -1,161 +1,183 @@
 <template>
   <div class="ca-dashboard">
-    <!-- 数据概览 -->
-    <el-row :gutter="20">
-      <el-col :span="6">
-        <el-card shadow="hover" class="stat-card">
-          <div class="stat-content">
-            <div class="stat-icon bg-blue">
-              <el-icon><Document /></el-icon>
-            </div>
-            <div class="stat-info">
-              <div class="stat-label">总签发证书</div>
-              <div class="stat-value">{{ stats.totalCerts }}</div>
-            </div>
-          </div>
-          <div class="stat-footer">
-            <div class="footer-desc">累计签发总量</div>
-          </div>
-        </el-card>
-      </el-col>
-      <el-col :span="6">
-        <el-card shadow="hover" class="stat-card">
-          <div class="stat-content">
-            <div class="stat-icon bg-green">
-              <el-icon><CircleCheck /></el-icon>
-            </div>
-            <div class="stat-info">
-              <div class="stat-label">有效证书</div>
-              <div class="stat-value">{{ stats.validCerts }}</div>
-            </div>
-          </div>
-          <div class="stat-footer">
-            <el-progress :percentage="Math.round((stats.validCerts / stats.totalCerts) * 100) || 0" :stroke-width="4" status="success" />
-            <div class="footer-desc">占比 {{ Math.round((stats.validCerts / stats.totalCerts) * 100) || 0 }}%</div>
-          </div>
-        </el-card>
-      </el-col>
-      <el-col :span="6">
-        <el-card shadow="hover" class="stat-card">
-          <div class="stat-content">
-            <div class="stat-icon bg-red">
-              <el-icon><CircleClose /></el-icon>
-            </div>
-            <div class="stat-info">
-              <div class="stat-label">已吊销证书</div>
-              <div class="stat-value">{{ stats.revokedCerts }}</div>
-            </div>
-          </div>
-          <div class="stat-footer">
-            <div class="footer-desc">包含手动吊销及异常证书</div>
-          </div>
-        </el-card>
-      </el-col>
-      <el-col :span="6">
-        <el-card shadow="hover" class="stat-card">
-          <div class="stat-content">
-            <div class="stat-icon bg-orange">
-              <el-icon><Warning /></el-icon>
-            </div>
-            <div class="stat-info">
-              <div class="stat-label">即将过期</div>
-              <div class="stat-value">{{ stats.expiringSoon }}</div>
-            </div>
-          </div>
-          <div class="stat-footer">
-            <div class="footer-desc">未来30天内到期</div>
-          </div>
-        </el-card>
-      </el-col>
-    </el-row>
+    <div
+      v-if="loadingStatus"
+      v-loading="true"
+      style="height: 500px; display: flex; align-items: center; justify-content: center; flex-direction: column"
+    >
+      <span style="margin-top: 15px; color: #909399">正在检查系统状态...</span>
+    </div>
 
-    <!-- 图表展示 -->
-    <el-row :gutter="20" class="mt20">
-      <el-col :span="16">
-        <el-card shadow="hover">
-          <template #header>
-            <div class="card-header">
-              <span>证书签发趋势</span>
-              <el-radio-group v-model="timeRange" size="small">
-                <el-radio-button value="week">近一周</el-radio-button>
-                <el-radio-button value="month">近一月</el-radio-button>
-              </el-radio-group>
-            </div>
+    <div v-else-if="!isInitialized" class="uninitialized-container">
+      <el-card class="init-card" shadow="never">
+        <el-result icon="warning" title="CA 系统尚未初始化" sub-title="检测到当前租户尚未完成 CA 系统的初始化配置，请先完成初始化向导。">
+          <template #extra>
+            <el-button type="primary" size="large" @click="goInit"> 前往初始化向导 </el-button>
           </template>
-          <div ref="trendChartRef" style="height: 350px;"></div>
-        </el-card>
-      </el-col>
-      <el-col :span="8">
-        <el-card shadow="hover">
-          <template #header>
-            <div class="card-header">
-              <span>算法分布</span>
-            </div>
-          </template>
-          <div ref="algoChartRef" style="height: 350px;"></div>
-        </el-card>
-      </el-col>
-    </el-row>
+        </el-result>
+      </el-card>
+    </div>
 
-    <!-- 底部：近期证书与审计日志 -->
-    <el-row :gutter="20" class="mt20">
-      <el-col :span="14">
-        <el-card shadow="hover">
-          <template #header>
-            <div class="card-header">
-              <span>最新签发证书</span>
-              <el-button link type="primary" @click="goCertList">查看全部</el-button>
+    <div v-else>
+      <!-- 数据概览 -->
+      <el-row :gutter="20">
+        <el-col :span="6">
+          <el-card shadow="hover" class="stat-card">
+            <div class="stat-content">
+              <div class="stat-icon bg-blue">
+                <el-icon><Document /></el-icon>
+              </div>
+              <div class="stat-info">
+                <div class="stat-label">总签发证书</div>
+                <div class="stat-value">{{ stats.totalCerts }}</div>
+              </div>
             </div>
-          </template>
-          <el-table :data="recentCerts" size="small" style="width: 100%">
-            <el-table-column prop="serialNumber" label="序列号" width="120" show-overflow-tooltip />
-            <el-table-column prop="subject" label="主题" show-overflow-tooltip />
-            <el-table-column prop="status" label="状态" width="100" align="center">
-              <template #default="scope">
-                <el-tag :type="getStatusType(scope.row.status)" size="small">
-                  {{ getStatusLabel(scope.row.status) }}
-                </el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column prop="createTime" label="签发时间" width="160" />
-          </el-table>
-        </el-card>
-      </el-col>
-      <el-col :span="10">
-        <el-card shadow="hover">
-          <template #header>
-            <div class="card-header">
-              <span>安全审计事件</span>
+            <div class="stat-footer">
+              <div class="footer-desc">累计签发总量</div>
             </div>
-          </template>
-          <el-timeline size="small">
-            <el-timeline-item
-              v-for="(log, index) in securityLogs"
-              :key="index"
-              :type="log.type"
-              :timestamp="log.time"
-            >
-              {{ log.content }}
-            </el-timeline-item>
-          </el-timeline>
-        </el-card>
-      </el-col>
-    </el-row>
+          </el-card>
+        </el-col>
+        <el-col :span="6">
+          <el-card shadow="hover" class="stat-card">
+            <div class="stat-content">
+              <div class="stat-icon bg-green">
+                <el-icon><CircleCheck /></el-icon>
+              </div>
+              <div class="stat-info">
+                <div class="stat-label">有效证书</div>
+                <div class="stat-value">{{ stats.validCerts }}</div>
+              </div>
+            </div>
+            <div class="stat-footer">
+              <el-progress :percentage="Math.round((stats.validCerts / stats.totalCerts) * 100) || 0" :stroke-width="4" status="success" />
+              <div class="footer-desc">占比 {{ Math.round((stats.validCerts / stats.totalCerts) * 100) || 0 }}%</div>
+            </div>
+          </el-card>
+        </el-col>
+        <el-col :span="6">
+          <el-card shadow="hover" class="stat-card">
+            <div class="stat-content">
+              <div class="stat-icon bg-red">
+                <el-icon><CircleClose /></el-icon>
+              </div>
+              <div class="stat-info">
+                <div class="stat-label">已吊销证书</div>
+                <div class="stat-value">{{ stats.revokedCerts }}</div>
+              </div>
+            </div>
+            <div class="stat-footer">
+              <div class="footer-desc">包含手动吊销及异常证书</div>
+            </div>
+          </el-card>
+        </el-col>
+        <el-col :span="6">
+          <el-card shadow="hover" class="stat-card">
+            <div class="stat-content">
+              <div class="stat-icon bg-orange">
+                <el-icon><Warning /></el-icon>
+              </div>
+              <div class="stat-info">
+                <div class="stat-label">即将过期</div>
+                <div class="stat-value">{{ stats.expiringSoon }}</div>
+              </div>
+            </div>
+            <div class="stat-footer">
+              <div class="footer-desc">未来30天内到期</div>
+            </div>
+          </el-card>
+        </el-col>
+      </el-row>
+
+      <!-- 图表展示 -->
+      <el-row :gutter="20" class="mt20">
+        <el-col :span="16">
+          <el-card shadow="hover">
+            <template #header>
+              <div class="card-header">
+                <span>证书签发趋势</span>
+                <el-radio-group v-model="timeRange" size="small">
+                  <el-radio-button value="week">近一周</el-radio-button>
+                  <el-radio-button value="month">近一月</el-radio-button>
+                </el-radio-group>
+              </div>
+            </template>
+            <div ref="trendChartRef" style="height: 350px"></div>
+          </el-card>
+        </el-col>
+        <el-col :span="8">
+          <el-card shadow="hover">
+            <template #header>
+              <div class="card-header">
+                <span>算法分布</span>
+              </div>
+            </template>
+            <div ref="algoChartRef" style="height: 350px"></div>
+          </el-card>
+        </el-col>
+      </el-row>
+
+      <!-- 底部：近期证书与审计日志 -->
+      <el-row :gutter="20" class="mt20">
+        <el-col :span="14">
+          <el-card shadow="hover">
+            <template #header>
+              <div class="card-header">
+                <span>最新签发证书</span>
+                <el-button link type="primary" @click="goCertList">查看全部</el-button>
+              </div>
+            </template>
+            <el-table :data="recentCerts" size="small" style="width: 100%">
+              <el-table-column prop="serialNumber" label="序列号" width="120" show-overflow-tooltip />
+              <el-table-column prop="subject" label="主题" show-overflow-tooltip />
+              <el-table-column prop="status" label="状态" width="100" align="center">
+                <template #default="scope">
+                  <el-tag :type="getStatusType(scope.row.status)" size="small">
+                    {{ getStatusLabel(scope.row.status) }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column prop="createTime" label="签发时间" width="160" />
+            </el-table>
+          </el-card>
+        </el-col>
+        <el-col :span="10">
+          <el-card shadow="hover">
+            <template #header>
+              <div class="card-header">
+                <span>安全审计事件</span>
+              </div>
+            </template>
+            <el-timeline size="small">
+              <el-timeline-item v-for="(log, index) in securityLogs" :key="index" :type="log.type" :timestamp="log.time">
+                {{ log.content }}
+              </el-timeline-item>
+            </el-timeline>
+          </el-card>
+        </el-col>
+      </el-row>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, reactive, nextTick } from 'vue';
+import { ref, onMounted, onUnmounted, reactive, nextTick, getCurrentInstance, ComponentInternalInstance } from 'vue';
 import * as echarts from 'echarts';
 import { useRouter } from 'vue-router';
 import { pageCert } from '@/api/ca/cert';
+import { getTenant } from '@/api/system/tenant';
+import { useUserStore } from '@/store/modules/user';
 
 const router = useRouter();
+const { proxy } = getCurrentInstance() as ComponentInternalInstance;
+const userStore = useUserStore();
 const timeRange = ref('week');
 const trendChartRef = ref<HTMLElement | null>(null);
 const algoChartRef = ref<HTMLElement | null>(null);
 let trendChart: echarts.ECharts | null = null;
 let algoChart: echarts.ECharts | null = null;
+
+const isInitialized = ref(false);
+const loadingStatus = ref(true);
 
 const stats = reactive({
   totalCerts: 1250,
@@ -174,6 +196,20 @@ const securityLogs = ref([
   { time: '2026-04-22 14:22:55', content: '检测到非授权 IP 尝试访问管理接口 (已拦截)', type: 'danger' }
 ]);
 
+const checkInitialization = async () => {
+  try {
+    const tenantId = userStore.tenantId || localStorage.getItem('tenantId');
+    if (tenantId) {
+      const res = await getTenant(tenantId);
+      // 根据系统逻辑，status === -1 表示已完成初始化
+      isInitialized.value = res.data.status === -1;
+    }
+  } catch (error) {
+  } finally {
+    loadingStatus.value = false;
+  }
+};
+
 const getStatusType = (status: string) => {
   const types: any = { 'VALID': 'success', 'REVOKED': 'danger', 'EXPIRED': 'warning' };
   return types[status] || 'info';
@@ -186,6 +222,10 @@ const getStatusLabel = (status: string) => {
 
 const goCertList = () => {
   router.push('/ca/cert');
+};
+
+const goInit = () => {
+  proxy?.$tab.openPage('/ca/init', 'CA系统初始化');
 };
 
 const initTrendChart = () => {
@@ -245,9 +285,7 @@ const fetchRecentCerts = async () => {
   try {
     const res = await pageCert({ pageNum: 1, pageSize: 5 });
     recentCerts.value = res.data.rows || res.data.records || [];
-  } catch (error) {
-    console.error('获取证书列表失败:', error);
-  }
+  } catch (error) {}
 };
 
 const handleResize = () => {
@@ -255,12 +293,15 @@ const handleResize = () => {
   algoChart?.resize();
 };
 
-onMounted(() => {
-  fetchRecentCerts();
-  nextTick(() => {
-    initTrendChart();
-    initAlgoChart();
-  });
+onMounted(async () => {
+  await checkInitialization();
+  if (isInitialized.value) {
+    fetchRecentCerts();
+    nextTick(() => {
+      initTrendChart();
+      initAlgoChart();
+    });
+  }
   window.addEventListener('resize', handleResize);
 });
 
@@ -273,14 +314,16 @@ onUnmounted(() => {
 
 <style lang="scss" scoped>
 .ca-dashboard {
-  .mt20 { margin-top: 20px; }
-  
+  .mt20 {
+    margin-top: 20px;
+  }
+
   .stat-card {
     .stat-content {
       display: flex;
       align-items: center;
       margin-bottom: 15px;
-      
+
       .stat-icon {
         width: 48px;
         height: 48px;
@@ -292,22 +335,42 @@ onUnmounted(() => {
         color: #fff;
         margin-right: 15px;
       }
-      
-      .bg-blue { background-color: #409EFF; }
-      .bg-green { background-color: #67C23A; }
-      .bg-red { background-color: #F56C6C; }
-      .bg-orange { background-color: #E6A23C; }
-      
+
+      .bg-blue {
+        background-color: #409eff;
+      }
+      .bg-green {
+        background-color: #67c23a;
+      }
+      .bg-red {
+        background-color: #f56c6c;
+      }
+      .bg-orange {
+        background-color: #e6a23c;
+      }
+
       .stat-info {
-        .stat-label { font-size: 14px; color: #909399; margin-bottom: 5px; }
-        .stat-value { font-size: 20px; font-weight: bold; color: #303133; }
+        .stat-label {
+          font-size: 14px;
+          color: #909399;
+          margin-bottom: 5px;
+        }
+        .stat-value {
+          font-size: 20px;
+          font-weight: bold;
+          color: #303133;
+        }
       }
     }
-    
+
     .stat-footer {
-      border-top: 1px solid #EBEEF5;
+      border-top: 1px solid #ebeef5;
       padding-top: 10px;
-      .footer-desc { font-size: 12px; color: #909399; margin-top: 5px; }
+      .footer-desc {
+        font-size: 12px;
+        color: #909399;
+        margin-top: 5px;
+      }
     }
   }
 
@@ -316,6 +379,20 @@ onUnmounted(() => {
     justify-content: space-between;
     align-items: center;
     font-weight: bold;
+  }
+
+  .uninitialized-container {
+    padding: 40px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 500px;
+
+    .init-card {
+      width: 100%;
+      max-width: 600px;
+      border-radius: 12px;
+    }
   }
 }
 </style>

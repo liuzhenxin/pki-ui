@@ -16,6 +16,26 @@ const activeTab = ref('basic');
 const profileFormRef = ref<FormInstance>();
 const isEdit = ref(false);
 
+type TemplateIssueLevel = 'error' | 'warning';
+
+interface TemplateIssue {
+  level: TemplateIssueLevel;
+  tab: string;
+  message: string;
+}
+
+interface TemplateConstraint {
+  label: string;
+  maxValidityDays: number;
+  subjectFields: string[];
+  requiredSubjectFields: string[];
+  keyUsages: string[];
+  requiredKeyUsages: string[];
+  extendedKeyUsages: string[];
+  requiredExtendedKeyUsages: string[];
+  subjectAltNameModes: string[];
+}
+
 const initFormData: ProfileForm = {
   id: undefined,
   name: '',
@@ -31,6 +51,10 @@ const initFormData: ProfileForm = {
   notBeforeTime: 'current',
   keyAlgorithms: ['RSA-2048'],
   signatureAlgorithms: [],
+  keypairGeneration: {
+    inheritCA: false,
+    forbidden: true
+  },
   conf: '',
   subjectItems: [] as any[],
   subjectToSubjectAltNames: [] as any[],
@@ -80,11 +104,35 @@ const presetTemplates = [
     keyAlgorithms: ['RSA-2048', 'RSA-4096', 'SM2P256V1']
   },
   {
+    name: 'TLS服务器加密证书模板',
+    type: 'EndEntity',
+    certLevel: 'EndEntity',
+    category: 'TLS服务器加密证书模板',
+    validity: '2y',
+    keyAlgorithms: ['RSA-2048', 'RSA-4096', 'SM2P256V1']
+  },
+  {
+    name: 'TLS客户端加密证书模板',
+    type: 'EndEntity',
+    certLevel: 'EndEntity',
+    category: 'TLS客户端加密证书模板',
+    validity: '2y',
+    keyAlgorithms: ['RSA-2048', 'RSA-4096', 'SM2P256V1']
+  },
+  {
     name: 'S/MIME证书模板',
     type: 'EndEntity',
     certLevel: 'EndEntity',
     category: 'S/MIME证书模板',
     validity: '5y',
+    keyAlgorithms: ['RSA-2048', 'RSA-4096', 'SM2P256V1']
+  },
+  {
+    name: 'Email证书模板',
+    type: 'EndEntity',
+    certLevel: 'EndEntity',
+    category: 'Email证书模板',
+    validity: '2y',
     keyAlgorithms: ['RSA-2048', 'RSA-4096', 'SM2P256V1']
   },
   {
@@ -119,7 +167,10 @@ const categoryOptions = [
   { label: '子CA证书模板', value: '子CA证书模板' },
   { label: 'TLS服务器证书模板', value: 'TLS服务器证书模板' },
   { label: 'TLS客户端证书模板', value: 'TLS客户端证书模板' },
+  { label: 'TLS服务器加密证书模板', value: 'TLS服务器加密证书模板' },
+  { label: 'TLS客户端加密证书模板', value: 'TLS客户端加密证书模板' },
   { label: 'S/MIME证书模板', value: 'S/MIME证书模板' },
+  { label: 'Email证书模板', value: 'Email证书模板' },
   { label: 'OCSP证书模板', value: 'OCSP证书模板' },
   { label: '多用途证书模板', value: '多用途证书模板' },
   { label: '扩展证书模板', value: '扩展证书模板' }
@@ -142,34 +193,73 @@ const keyAlgorithmOptions = [
 
 const form = reactive<ProfileForm>({ ...initFormData });
 
+const keypairGenerationOptions = [
+  { label: '客户端', value: 'CLIENT', description: '由客户端产生密钥对并提交 CSR/公钥' },
+  { label: 'KMC', value: 'KMC', description: '由 KMC 产生密钥对' }
+];
+
+function buildKeypairGeneration(location: string) {
+  return location === 'KMC' ? { inheritCA: true, forbidden: false } : { inheritCA: false, forbidden: true };
+}
+
+function normalizeKeypairGeneration(value: any) {
+  if (typeof value === 'string') {
+    return buildKeypairGeneration(value === 'InheritCA' || value === 'KMC' ? 'KMC' : 'CLIENT');
+  }
+  if (value?.inheritCA === true) {
+    return buildKeypairGeneration('KMC');
+  }
+  return buildKeypairGeneration('CLIENT');
+}
+
+const keypairGenerationLocation = computed({
+  get() {
+    return form.keypairGeneration?.inheritCA ? 'KMC' : 'CLIENT';
+  },
+  set(value: string) {
+    form.keypairGeneration = buildKeypairGeneration(value);
+  }
+});
+
 // 计算属性：解析validity字符串为数值和单位
 const validityValue = computed(() => {
   const validity = form.validity || '1y';
-  const match = validity.match(/^(\d+)([dy])$/);
+  const match = validity.match(/^(\d+)([ymd])$/);
   return match ? parseInt(match[1]) : 1;
 });
 
 const validityUnit = computed({
   get() {
     const validity = form.validity || '1y';
-    const match = validity.match(/^(\d+)([dy])$/);
-    return match ? (match[2] === 'y' ? 'year' : 'day') : 'year';
+    const match = validity.match(/^(\d+)([ymd])$/);
+    if (!match) {
+      return 'year';
+    }
+    if (match[2] === 'y') {
+      return 'year';
+    }
+    return match[2] === 'm' ? 'month' : 'day';
   },
   set(value: string) {
-    const numValue = value === 'year' ? 1 : 365;
-    form.validity = `${numValue}${value === 'year' ? 'y' : 'd'}`;
+    const numValue = value === 'year' ? 1 : value === 'month' ? 12 : 365;
+    const unit = value === 'year' ? 'y' : value === 'month' ? 'm' : 'd';
+    form.validity = `${numValue}${unit}`;
   }
 });
 
 // 计算属性：根据单位返回最大值
 const validityMax = computed(() => {
-  return validityUnit.value === 'year' ? 50 : 3650;
+  if (validityUnit.value === 'year') {
+    return 50;
+  }
+  return validityUnit.value === 'month' ? 600 : 3650;
 });
 
 // 更新validity字符串
 function updateValidity(numValue?: number) {
   const value = numValue ?? validityValue.value;
-  form.validity = `${value}${validityUnit.value === 'year' ? 'y' : 'd'}`;
+  const unit = validityUnit.value === 'year' ? 'y' : validityUnit.value === 'month' ? 'm' : 'd';
+  form.validity = `${value}${unit}`;
 }
 
 // 跟踪每个扩展选中的密钥用法
@@ -331,13 +421,108 @@ extendedKeyUsageOptions.forEach((opt) => {
 // 主体备用名称模式选项列表
 const subjectAltNameModeOptions = [
   { value: 'rfc822Name', label: '电子邮件地址' },
+  { value: 'RFC822Name', label: 'RFC822名称' },
   { value: 'dNSName', label: 'DNS名称' },
+  { value: 'DNSName', label: 'DNS名称(标准)' },
   { value: 'directoryName', label: '目录名称' },
   { value: 'ediPartyName', label: 'EDI参与方名称' },
   { value: 'uniformResourceIdentifier', label: 'URI' },
   { value: 'iPAddress', label: 'IP地址' },
+  { value: 'IPAddress', label: 'IP地址(标准)' },
   { value: 'registeredID', label: '注册ID' }
 ];
+
+const defaultConstraint: TemplateConstraint = {
+  label: '通用终端证书',
+  maxValidityDays: 3650,
+  subjectFields: commonOIDs.map((item) => item.value),
+  requiredSubjectFields: ['commonName'],
+  keyUsages: keyUsageOptions.map((item) => item.value),
+  requiredKeyUsages: ['digitalSignature'],
+  extendedKeyUsages: extendedKeyUsageOptions.map((item) => item.value),
+  requiredExtendedKeyUsages: [],
+  subjectAltNameModes: subjectAltNameModeOptions.map((item) => item.value)
+};
+
+const templateConstraints: Record<string, TemplateConstraint> = {
+  RootCA: {
+    label: '根 CA',
+    maxValidityDays: 3650 * 3,
+    subjectFields: ['country', 'organization', 'organizationalUnit', 'commonName'],
+    requiredSubjectFields: ['country', 'organization', 'commonName'],
+    keyUsages: ['keyCertSign', 'cRLSign'],
+    requiredKeyUsages: ['keyCertSign', 'cRLSign'],
+    extendedKeyUsages: [],
+    requiredExtendedKeyUsages: [],
+    subjectAltNameModes: []
+  },
+  SubCA: {
+    label: '子 CA',
+    maxValidityDays: 3650,
+    subjectFields: ['country', 'organization', 'organizationalUnit', 'commonName'],
+    requiredSubjectFields: ['country', 'organization', 'commonName'],
+    keyUsages: ['keyCertSign', 'cRLSign'],
+    requiredKeyUsages: ['keyCertSign', 'cRLSign'],
+    extendedKeyUsages: [],
+    requiredExtendedKeyUsages: [],
+    subjectAltNameModes: []
+  },
+  TLS_SERVER: {
+    label: 'TLS 服务器',
+    maxValidityDays: 1825,
+    subjectFields: ['country', 'organization', 'organizationalUnit', 'serialNumber', 'commonName'],
+    requiredSubjectFields: ['commonName'],
+    keyUsages: ['digitalSignature', 'keyEncipherment', 'dataEncipherment', 'keyAgreement'],
+    requiredKeyUsages: ['digitalSignature'],
+    extendedKeyUsages: ['serverAuth'],
+    requiredExtendedKeyUsages: ['serverAuth'],
+    subjectAltNameModes: ['DNSName', 'IPAddress', 'dNSName', 'iPAddress']
+  },
+  TLS_CLIENT: {
+    label: 'TLS 客户端',
+    maxValidityDays: 1825,
+    subjectFields: ['country', 'organization', 'organizationalUnit', 'serialNumber', 'commonName', 'userId', 'emailAddress'],
+    requiredSubjectFields: ['commonName'],
+    keyUsages: ['digitalSignature', 'keyEncipherment', 'nonRepudiation'],
+    requiredKeyUsages: ['digitalSignature'],
+    extendedKeyUsages: ['clientAuth'],
+    requiredExtendedKeyUsages: ['clientAuth'],
+    subjectAltNameModes: ['RFC822Name', 'rfc822Name']
+  },
+  TLS_ENC: {
+    label: 'TLS 加密',
+    maxValidityDays: 730,
+    subjectFields: ['country', 'organization', 'organizationalUnit', 'serialNumber', 'commonName'],
+    requiredSubjectFields: ['commonName'],
+    keyUsages: ['keyEncipherment', 'dataEncipherment', 'keyAgreement'],
+    requiredKeyUsages: ['keyEncipherment'],
+    extendedKeyUsages: ['serverAuth', 'clientAuth'],
+    requiredExtendedKeyUsages: [],
+    subjectAltNameModes: ['DNSName', 'IPAddress', 'dNSName', 'iPAddress', 'RFC822Name', 'rfc822Name']
+  },
+  EMAIL: {
+    label: 'Email',
+    maxValidityDays: 730,
+    subjectFields: ['country', 'organization', 'organizationalUnit', 'commonName', 'emailAddress'],
+    requiredSubjectFields: ['commonName', 'emailAddress'],
+    keyUsages: ['digitalSignature', 'nonRepudiation', 'keyEncipherment'],
+    requiredKeyUsages: ['digitalSignature'],
+    extendedKeyUsages: ['emailProtection'],
+    requiredExtendedKeyUsages: ['emailProtection'],
+    subjectAltNameModes: ['rfc822Name', 'RFC822Name']
+  },
+  OCSP: {
+    label: 'OCSP',
+    maxValidityDays: 1825,
+    subjectFields: ['country', 'organization', 'organizationalUnit', 'commonName'],
+    requiredSubjectFields: ['commonName'],
+    keyUsages: ['digitalSignature'],
+    requiredKeyUsages: ['digitalSignature'],
+    extendedKeyUsages: ['OCSPSigning'],
+    requiredExtendedKeyUsages: ['OCSPSigning'],
+    subjectAltNameModes: []
+  }
+};
 
 const profileRules: FormRules = {
   name: [{ required: true, message: '模板名称不能为空', trigger: 'blur' }],
@@ -345,7 +530,7 @@ const profileRules: FormRules = {
   validity: [
     {
       validator: (rule: any, value: any, callback: any) => {
-        const match = value ? value.match(/^(\d+)([dy])$/) : null;
+        const match = value ? value.match(/^(\d+)([ymd])$/) : null;
         if (!match) {
           callback(new Error('有效期格式不正确'));
           return;
@@ -363,6 +548,11 @@ const profileRules: FormRules = {
           return;
         }
 
+        if (unit === 'm' && numValue > 600) {
+          callback(new Error('以月为单位的有效期不能超过600个月'));
+          return;
+        }
+
         if (unit === 'd' && numValue > 3650) {
           callback(new Error('以天为单位的有效期不能超过3650天'));
           return;
@@ -375,6 +565,289 @@ const profileRules: FormRules = {
   ]
 };
 
+const templateConstraintKey = computed(() => {
+  const category = form.metadata?.category || form.name || '';
+  const name = form.name || '';
+  const source = `${category} ${name}`.toLowerCase();
+  if (form.certLevel === 'RootCA' || form.type === 'RootCA' || source.includes('rootca') || source.includes('根')) {
+    return 'RootCA';
+  }
+  if (form.certLevel === 'SubCA' || form.type === 'SubCA' || source.includes('subca') || source.includes('子ca')) {
+    return 'SubCA';
+  }
+  if (source.includes('ocsp')) {
+    return 'OCSP';
+  }
+  if (source.includes('email') || source.includes('邮件') || source.includes('smime') || source.includes('s/mime')) {
+    return 'EMAIL';
+  }
+  if (source.includes('加密') || source.includes('enc')) {
+    return 'TLS_ENC';
+  }
+  if (source.includes('客户端') || source.includes('tls-c')) {
+    return 'TLS_CLIENT';
+  }
+  if (source.includes('tls') || source.includes('服务器')) {
+    return 'TLS_SERVER';
+  }
+  return 'DEFAULT';
+});
+
+const activeConstraint = computed(() => templateConstraints[templateConstraintKey.value] || defaultConstraint);
+
+const allowedSubjectOptions = computed(() => {
+  const allowed = new Set(activeConstraint.value.subjectFields);
+  return commonOIDs.filter((item) => allowed.has(item.value));
+});
+
+const availableKeyUsageOptions = computed(() => {
+  const allowed = new Set(activeConstraint.value.keyUsages);
+  return keyUsageOptions.filter((item) => allowed.has(item.value));
+});
+
+const availableExtendedKeyUsageOptions = computed(() => {
+  const allowed = new Set(activeConstraint.value.extendedKeyUsages);
+  return extendedKeyUsageOptions.filter((item) => allowed.has(item.value));
+});
+
+const availableSubjectAltNameModeOptions = computed(() => {
+  const allowed = new Set(activeConstraint.value.subjectAltNameModes);
+  return subjectAltNameModeOptions.filter((item) => allowed.has(item.value));
+});
+
+function parseValidityDays(validity?: string) {
+  const match = (validity || '').match(/^(\d+)([ymd])$/);
+  if (!match) {
+    return 0;
+  }
+  const value = Number(match[1]);
+  const unit = match[2];
+  if (unit === 'y') {
+    return value * 365;
+  }
+  if (unit === 'm') {
+    return value * 30;
+  }
+  return value;
+}
+
+function normalizeUsageValue(usage: any) {
+  if (!usage) {
+    return '';
+  }
+  if (usage.value) {
+    return usage.value;
+  }
+  if (usage.oid) {
+    const keyUsage = Object.entries(keyUsageOIDMap).find(([_, info]) => info.oid === usage.oid);
+    const extendedKeyUsage = Object.entries(extendedKeyUsageOIDMap).find(([_, info]) => info.oid === usage.oid);
+    return keyUsage?.[0] || extendedKeyUsage?.[0] || usage.oid;
+  }
+  return '';
+}
+
+function findExtension(type: string) {
+  return (form.extensions || []).find((ext: any) => ext.type === type);
+}
+
+function getSelectedKeyUsageValues() {
+  const keyUsage = findExtension('KeyUsage');
+  return (keyUsage?.keyUsage?.usages || []).map(normalizeUsageValue).filter(Boolean);
+}
+
+function getSelectedExtendedKeyUsageValues() {
+  const extendedKeyUsage = findExtension('ExtendedKeyUsage');
+  return (extendedKeyUsage?.extendedKeyUsage?.usages || []).map(normalizeUsageValue).filter(Boolean);
+}
+
+function getSelectedSubjectAltNameModes() {
+  const subjectAltName = findExtension('SubjectAlternativeName');
+  return subjectAltName?.subjectAltName?.modes || [];
+}
+
+function buildProfileConf() {
+  return {
+    metadata: {
+      category: form.metadata?.category || form.name || '',
+      details: form.metadata?.details || form.description || ''
+    },
+    version: 'v3',
+    certLevel: form.certLevel || form.type || 'EndEntity',
+    maxSize: form.maxSize || 8400,
+    validity: form.validity || '1y',
+    notBeforeTime: form.notBeforeTime || 'current',
+    keypairGeneration: normalizeKeypairGeneration(form.keypairGeneration),
+    keyAlgorithms: form.keyAlgorithms || ['RSA-2048'],
+    signatureAlgorithms: form.signatureAlgorithms || [],
+    subject: (form.subjectItems || []).map((item: any) => ({
+      type: {
+        oid: commonOIDs.find((oid) => oid.value === item.type)?.oid || '',
+        description: subjectDescriptionToValueMap[item.type] || item.type
+      },
+      minOccurs: item.minOccurs,
+      maxOccurs: item.maxOccurs,
+      regex: item.regex
+    })),
+    subjectToSubjectAltNames: form.subjectToSubjectAltNames || [],
+    extensions: (form.extensions || [])
+      .filter((ext) => {
+        if (!ext.type || !ext.type.trim()) {
+          return false;
+        }
+        if (ext.type === 'KeyUsage') {
+          return Array.isArray(ext.keyUsage?.usages) && ext.keyUsage.usages.length > 0;
+        }
+        if (ext.type === 'ExtendedKeyUsage') {
+          return Array.isArray(ext.extendedKeyUsage?.usages) && ext.extendedKeyUsage.usages.length > 0;
+        }
+        if (ext.type === 'SubjectAlternativeName') {
+          return Array.isArray(ext.subjectAltName?.modes) && ext.subjectAltName.modes.length > 0;
+        }
+        return true;
+      })
+      .map((ext) => {
+        const extConfig: any = {
+          type: extensionTypeOIDMap[ext.type] || { oid: '', description: ext.type },
+          required: ext.required
+        };
+        if (ext.critical !== undefined) {
+          extConfig.critical = ext.critical;
+        }
+        if (ext.type === 'KeyUsage' && ext.keyUsage) {
+          extConfig.critical = true;
+          extConfig.required = true;
+          extConfig.inRequest = 'optional';
+          extConfig.keyUsage = {
+            usages: ext.keyUsage.usages.map((u: any) => {
+              const oidInfo = keyUsageOIDMap[normalizeUsageValue(u)] || { oid: normalizeUsageValue(u), description: normalizeUsageValue(u) };
+              return {
+                required: u.required || false,
+                value: normalizeUsageValue(u),
+                oid: oidInfo.oid,
+                description: oidInfo.description
+              };
+            })
+          };
+        }
+        if (ext.type === 'ExtendedKeyUsage' && ext.extendedKeyUsage) {
+          extConfig.inRequest = 'optional';
+          extConfig.extendedKeyUsage = {
+            usages: ext.extendedKeyUsage.usages.map((u: any) => {
+              const oidInfo = extendedKeyUsageOIDMap[normalizeUsageValue(u)] || { oid: normalizeUsageValue(u), description: normalizeUsageValue(u) };
+              return {
+                required: u.required || false,
+                oid: oidInfo.oid,
+                description: oidInfo.description
+              };
+            })
+          };
+        }
+        if (ext.type === 'SubjectAlternativeName' && ext.subjectAltName) {
+          extConfig.inRequest = 'optional';
+          extConfig.subjectAltName = ext.subjectAltName;
+        }
+        if (ext.type === 'BasicConstraints' && ext.config) {
+          extConfig.basicConstraints = parseJson(ext.config);
+        }
+        if (ext.type === 'AuthorityInfoAccess' && ext.config) {
+          extConfig.authorityInfoAccess = parseJson(ext.config);
+        }
+        return extConfig;
+      })
+  };
+}
+
+const previewJson = computed(() => {
+  try {
+    return JSON.stringify(buildProfileConf(), null, 2);
+  } catch (error: any) {
+    return `模板配置生成失败：${error?.message || error}`;
+  }
+});
+
+function validateTemplate() {
+  const issues: TemplateIssue[] = [];
+  const constraint = activeConstraint.value;
+  const subjectFields = (form.subjectItems || []).map((item: any) => item.type).filter(Boolean);
+  const keyUsages = getSelectedKeyUsageValues();
+  const extendedKeyUsages = getSelectedExtendedKeyUsageValues();
+  const subjectAltNameModes = getSelectedSubjectAltNameModes();
+  const allowedSubjects = new Set(constraint.subjectFields);
+  const allowedKeyUsages = new Set(constraint.keyUsages);
+  const allowedExtendedKeyUsages = new Set(constraint.extendedKeyUsages);
+  const allowedSubjectAltNameModes = new Set(constraint.subjectAltNameModes);
+
+  constraint.requiredSubjectFields.forEach((field) => {
+    if (!subjectFields.includes(field)) {
+      issues.push({ level: 'error', tab: 'subject', message: `主题字段缺少 ${getSubjectLabel(field)}` });
+    }
+  });
+  subjectFields.forEach((field) => {
+    if (!allowedSubjects.has(field)) {
+      issues.push({ level: 'warning', tab: 'subject', message: `${getSubjectLabel(field)} 不属于 ${constraint.label} 模板建议字段` });
+    }
+  });
+  constraint.requiredKeyUsages.forEach((usage) => {
+    if (!keyUsages.includes(usage)) {
+      issues.push({ level: 'error', tab: 'extensions', message: `密钥用法缺少 ${keyUsageOIDMap[usage]?.description || usage}` });
+    }
+  });
+  keyUsages.forEach((usage) => {
+    if (!allowedKeyUsages.has(usage)) {
+      issues.push({
+        level: 'warning',
+        tab: 'extensions',
+        message: `${keyUsageOIDMap[usage]?.description || usage} 不属于 ${constraint.label} 模板建议 KU`
+      });
+    }
+  });
+  constraint.requiredExtendedKeyUsages.forEach((usage) => {
+    if (!extendedKeyUsages.includes(usage)) {
+      issues.push({ level: 'error', tab: 'extensions', message: `增强密钥用法缺少 ${extendedKeyUsageOIDMap[usage]?.description || usage}` });
+    }
+  });
+  extendedKeyUsages.forEach((usage) => {
+    if (!allowedExtendedKeyUsages.has(usage)) {
+      issues.push({
+        level: 'warning',
+        tab: 'extensions',
+        message: `${extendedKeyUsageOIDMap[usage]?.description || usage} 不属于 ${constraint.label} 模板建议 EKU`
+      });
+    }
+  });
+  subjectAltNameModes.forEach((mode: string) => {
+    if (!allowedSubjectAltNameModes.has(mode)) {
+      issues.push({ level: 'warning', tab: 'extensions', message: `${mode} 不属于 ${constraint.label} 模板建议 SAN 类型` });
+    }
+  });
+  if (parseValidityDays(form.validity) > constraint.maxValidityDays) {
+    issues.push({ level: 'error', tab: 'basic', message: `${constraint.label} 模板有效期不能超过 ${constraint.maxValidityDays} 天` });
+  }
+  (form.extensions || []).forEach((ext: any, index: number) => {
+    if ((ext.type === 'BasicConstraints' || ext.type === 'AuthorityInfoAccess') && ext.config) {
+      try {
+        parseJson(ext.config);
+      } catch (error: any) {
+        issues.push({ level: 'error', tab: 'extensions', message: `第 ${index + 1} 个扩展 JSON 配置错误：${error?.message || '无法解析'}` });
+      }
+    }
+  });
+  try {
+    buildProfileConf();
+  } catch (error: any) {
+    issues.push({ level: 'error', tab: 'preview', message: `最终配置生成失败：${error?.message || error}` });
+  }
+  return issues;
+}
+
+const templateIssues = computed(() => validateTemplate());
+const templateErrorCount = computed(() => templateIssues.value.filter((item) => item.level === 'error').length);
+const templateWarningCount = computed(() => templateIssues.value.filter((item) => item.level === 'warning').length);
+
+function locateIssue(issue: TemplateIssue) {
+  activeTab.value = issue.tab;
+}
+
 /** 选择预设模板 */
 function handlePresetTemplateChange(templateName: string) {
   const template = presetTemplates.find((t) => t.name === templateName);
@@ -385,6 +858,7 @@ function handlePresetTemplateChange(templateName: string) {
     form.metadata.category = template.category;
     form.validity = template.validity;
     form.keyAlgorithms = [...template.keyAlgorithms];
+    form.keypairGeneration = buildKeypairGeneration('CLIENT');
     ElMessage.success(`已加载预设模板：${template.name}`);
   }
 }
@@ -631,163 +1105,14 @@ async function submitForm() {
     if (valid) {
       loading.value = true;
       try {
-        console.log('开始提交表单数据...');
-
-        // 构建最终JSON格式的conf对象
-        const conf = {
-          metadata: {
-            category: form.name || '',
-            details: form.metadata?.details || ''
-          },
-          certLevel: form.certLevel || form.type || 'EndEntity',
-          maxSize: form.maxSize || 8400,
-          validity: form.validity || '1y',
-          notBeforeTime: form.notBeforeTime || 'current',
-          keyAlgorithms: form.keyAlgorithms || ['RSA-2048'],
-          signatureAlgorithms: form.signatureAlgorithms || [],
-          subject: (form.subjectItems || []).map((item: any) => ({
-            type: {
-              oid: commonOIDs.find((oid) => oid.value === item.type)?.oid || '',
-              description: subjectDescriptionToValueMap[item.type] || item.type
-            },
-            minOccurs: item.minOccurs,
-            regex: item.regex
-          })),
-          subjectToSubjectAltNames: form.subjectToSubjectAltNames || [],
-          extensions: form.extensions
-            .filter((ext) => {
-              // 必须有 type
-              if (!ext.type || !ext.type.trim()) {
-                return false;
-              }
-
-              // 对于 KeyUsage，必须有 keyUsage 配置
-              if (ext.type === 'KeyUsage') {
-                if (!ext.keyUsage) {
-                  return false;
-                }
-                // 检查是否有任何 usages
-                if (ext.keyUsage.usages && Array.isArray(ext.keyUsage.usages)) {
-                  return ext.keyUsage.usages.length > 0;
-                }
-                return false;
-              }
-
-              // 对于 ExtendedKeyUsage，必须有 extendedKeyUsage 配置
-              if (ext.type === 'ExtendedKeyUsage') {
-                if (!ext.extendedKeyUsage) {
-                  return false;
-                }
-                // 检查是否有任何 usages
-                if (ext.extendedKeyUsage.usages && Array.isArray(ext.extendedKeyUsage.usages)) {
-                  return ext.extendedKeyUsage.usages.length > 0;
-                }
-                return false;
-              }
-
-              // 对于 SubjectAlternativeName，必须有 subjectAltName 配置
-              if (ext.type === 'SubjectAlternativeName' && !ext.subjectAltName) {
-                return false;
-              }
-
-              // 对于 BasicConstraints，必须有 config 配置
-              if (ext.type === 'BasicConstraints' && !ext.config) {
-                return false;
-              }
-
-              // 对于 AuthorityInfoAccess，必须有 config 配置
-              if (ext.type === 'AuthorityInfoAccess' && !ext.config) {
-                return false;
-              }
-
-              return true;
-            })
-            .map((ext) => {
-              const extConfig: any = {
-                type: extensionTypeOIDMap[ext.type] || { oid: '', description: ext.type },
-                required: ext.required
-              };
-
-              // 设置critical属性
-              if (ext.critical !== undefined) {
-                extConfig.critical = ext.critical;
-              }
-
-              // 对于KeyUsage，添加keyUsage配置
-              if (ext.type === 'KeyUsage' && ext.keyUsage) {
-                extConfig.critical = true;
-                extConfig.required = true;
-                extConfig.inRequest = 'optional';
-                // 将usages数组转换为usages数组格式（每个项包含required, oid, description）
-                if (ext.keyUsage.usages && Array.isArray(ext.keyUsage.usages)) {
-                  const usages = ext.keyUsage.usages.map((u: any) => {
-                    const oidInfo = keyUsageOIDMap[u.value] || { oid: u.value, description: u.value };
-                    return {
-                      required: u.required || false,
-                      oid: oidInfo.oid,
-                      description: oidInfo.description
-                    };
-                  });
-                  extConfig.keyUsage = {
-                    usages: usages
-                  };
-                } else {
-                  extConfig.keyUsage = ext.keyUsage;
-                }
-              }
-
-              // 对于ExtendedKeyUsage，添加extendedKeyUsage配置
-              if (ext.type === 'ExtendedKeyUsage' && ext.extendedKeyUsage) {
-                extConfig.inRequest = 'optional';
-                // 将usages数组转换为usages数组格式（每个项包含required, oid, description）
-                if (ext.extendedKeyUsage.usages && Array.isArray(ext.extendedKeyUsage.usages)) {
-                  const usages = ext.extendedKeyUsage.usages.map((u: any) => {
-                    const oidInfo = extendedKeyUsageOIDMap[u.value] || { oid: u.value, description: u.value };
-                    return {
-                      required: u.required || false,
-                      oid: oidInfo.oid,
-                      description: oidInfo.description
-                    };
-                  });
-                  extConfig.extendedKeyUsage = {
-                    usages: usages
-                  };
-                } else {
-                  extConfig.extendedKeyUsage = ext.extendedKeyUsage;
-                }
-              }
-
-              // 对于SubjectAlternativeName，添加subjectAltName配置
-              if (ext.type === 'SubjectAlternativeName' && ext.subjectAltName) {
-                extConfig.inRequest = 'optional';
-                extConfig.subjectAltName = ext.subjectAltName;
-              }
-
-              // 对于BasicConstraints，添加basicConstraints配置
-              if (ext.type === 'BasicConstraints' && ext.config) {
-                try {
-                  const config = parseJson(ext.config);
-                  extConfig.basicConstraints = config;
-                } catch (e) {
-                  console.error('解析BasicConstraints配置失败', e);
-                }
-              }
-
-              // 对于AuthorityInfoAccess，添加authorityInfoAccess配置
-              if (ext.type === 'AuthorityInfoAccess' && ext.config) {
-                try {
-                  const config = parseJson(ext.config);
-                  extConfig.authorityInfoAccess = config;
-                } catch (e) {
-                  console.error('解析AuthorityInfoAccess配置失败', e);
-                }
-              }
-
-              return extConfig;
-            })
-        };
-
-        console.log('构建的conf对象:', conf);
+        const issues = validateTemplate();
+        const firstError = issues.find((item) => item.level === 'error');
+        if (firstError) {
+          locateIssue(firstError);
+          ElMessage.error(firstError.message);
+          return;
+        }
+        const conf = buildProfileConf();
 
         // 只提交必要的字段，避免包含原始的 subjectItems 和 extensions
         const submitData = {
@@ -803,32 +1128,23 @@ async function submitForm() {
           conf: JSON.stringify(conf)
         };
 
-        console.log('提交的数据:', submitData);
-
-        // 将数据包装在 co 字段中以匹配后端 ProfileSaveCmd 结构
         const commandData = {
           co: submitData
         };
 
-        console.log('最终提交的命令数据:', commandData);
-
         if (form.id) {
-          console.log('调用 modifyProfile API');
           await modifyProfile(commandData);
         } else {
-          console.log('调用 saveProfile API');
           await saveProfile(commandData);
         }
         ElMessage.success('操作成功');
         router.back();
       } catch (error: any) {
-        console.error('操作失败', error);
         ElMessage.error(error?.message || '操作失败，请检查数据');
       } finally {
         loading.value = false;
       }
     } else {
-      console.log('表单验证失败');
       ElMessage.warning('请检查表单填写是否完整');
     }
   });
@@ -860,6 +1176,7 @@ async function getProfileDetail(id: string | number) {
       form.maxSize = conf.maxSize || 8400;
       form.validity = conf.validity || '1y';
       form.notBeforeTime = conf.notBeforeTime || 'current';
+      form.keypairGeneration = normalizeKeypairGeneration(conf.keypairGeneration);
       form.keyAlgorithms = conf.keyAlgorithms ? parseKeyAlgorithms(conf.keyAlgorithms) : ['RSA-2048'];
       form.signatureAlgorithms = conf.signatureAlgorithms || [];
 
@@ -884,103 +1201,104 @@ async function getProfileDetail(id: string | number) {
           regex: item.regex
         };
       });
-      
+
       // 解析主题到备用名称映射
       form.subjectToSubjectAltNames = conf.subjectToSubjectAltNames || [];
 
       // 解析扩展信息
       if (conf.extensions && Array.isArray(conf.extensions)) {
-        form.extensions = conf.extensions.map((ext: any) => {
-          if (!ext) return null;
-          
-          // 处理type字段：可能是对象 {oid, description} 或字符串
-          let typeValue = '';
-          const rawType = ext.type;
-          if (rawType && typeof rawType === 'object' && rawType.description) {
-            // 从description反推type值
-            const typeEntry = Object.entries(extensionTypeOIDMap).find(([_, info]) => info.description === rawType.description);
-            typeValue = typeEntry ? typeEntry[0] : rawType.description;
-          } else {
-            typeValue = rawType;
-          }
+        form.extensions = conf.extensions
+          .map((ext: any) => {
+            if (!ext) return null;
 
-          const extData: any = {
-            type: typeValue,
-            required: !!ext.required,
-            critical: !!ext.critical,
-            keyUsage: ext.keyUsage,
-            extendedKeyUsage: ext.extendedKeyUsage,
-            subjectAltName: ext.subjectAltName
-          };
-
-          // 对于BasicConstraints，将basicConstraints转为config字符串
-          if (extData.type === 'BasicConstraints' && ext.basicConstraints) {
-            extData.config = typeof ext.basicConstraints === 'object' ? JSON.stringify(ext.basicConstraints) : ext.basicConstraints;
-          }
-
-          // 对于AuthorityInfoAccess，将authorityInfoAccess转为config字符串
-          if (extData.type === 'AuthorityInfoAccess' && ext.authorityInfoAccess) {
-            extData.config = typeof ext.authorityInfoAccess === 'object' ? JSON.stringify(ext.authorityInfoAccess) : ext.authorityInfoAccess;
-          }
-
-          // 对于其他扩展，如果有config字段且不是特殊处理的类型，转换为JSON字符串
-          if (
-            !['BasicConstraints', 'KeyUsage', 'ExtendedKeyUsage', 'SubjectAlternativeName', 'AuthorityInfoAccess'].includes(extData.type) &&
-            ext.config
-          ) {
-            extData.config = typeof ext.config === 'object' ? JSON.stringify(ext.config) : ext.config;
-          }
-
-          // 处理KeyUsage：标准化 usages 格式
-          if (extData.type === 'KeyUsage' && ext.keyUsage) {
-            if (ext.keyUsage.usages && Array.isArray(ext.keyUsage.usages)) {
-              const usages = ext.keyUsage.usages.map((u: any) => {
-                const val = u.value || u.oid || '';
-                // 从oid或value反推key
-                const entry = Object.entries(keyUsageOIDMap).find(([key, info]) => info.oid === val || key === val);
-                return {
-                  required: !!u.required,
-                  value: entry ? entry[0] : val
-                };
-              });
-              extData.keyUsage = { usages };
+            // 处理type字段：可能是对象 {oid, description} 或字符串
+            let typeValue = '';
+            const rawType = ext.type;
+            if (rawType && typeof rawType === 'object' && rawType.description) {
+              // 从description反推type值
+              const typeEntry = Object.entries(extensionTypeOIDMap).find(([_, info]) => info.description === rawType.description);
+              typeValue = typeEntry ? typeEntry[0] : rawType.description;
+            } else {
+              typeValue = rawType;
             }
-          }
 
-          // 处理ExtendedKeyUsage：标准化 usages 格式
-          if (extData.type === 'ExtendedKeyUsage' && ext.extendedKeyUsage) {
-            if (ext.extendedKeyUsage.usages && Array.isArray(ext.extendedKeyUsage.usages)) {
-              const usages = ext.extendedKeyUsage.usages.map((u: any) => {
-                const val = u.oid || u.value || '';
-                const entry = Object.entries(extendedKeyUsageOIDMap).find(([key, info]) => info.oid === val || key === val);
-                return {
-                  required: !!u.required,
-                  value: entry ? entry[0] : val
-                };
-              });
-              extData.extendedKeyUsage = { usages };
+            const extData: any = {
+              type: typeValue,
+              required: !!ext.required,
+              critical: !!ext.critical,
+              keyUsage: ext.keyUsage,
+              extendedKeyUsage: ext.extendedKeyUsage,
+              subjectAltName: ext.subjectAltName
+            };
+
+            // 对于BasicConstraints，将basicConstraints转为config字符串
+            if (extData.type === 'BasicConstraints' && ext.basicConstraints) {
+              extData.config = typeof ext.basicConstraints === 'object' ? JSON.stringify(ext.basicConstraints) : ext.basicConstraints;
             }
-          }
 
-          return extData;
-        }).filter(Boolean);
+            // 对于AuthorityInfoAccess，将authorityInfoAccess转为config字符串
+            if (extData.type === 'AuthorityInfoAccess' && ext.authorityInfoAccess) {
+              extData.config = typeof ext.authorityInfoAccess === 'object' ? JSON.stringify(ext.authorityInfoAccess) : ext.authorityInfoAccess;
+            }
+
+            // 对于其他扩展，如果有config字段且不是特殊处理的类型，转换为JSON字符串
+            if (
+              !['BasicConstraints', 'KeyUsage', 'ExtendedKeyUsage', 'SubjectAlternativeName', 'AuthorityInfoAccess'].includes(extData.type) &&
+              ext.config
+            ) {
+              extData.config = typeof ext.config === 'object' ? JSON.stringify(ext.config) : ext.config;
+            }
+
+            // 处理KeyUsage：标准化 usages 格式
+            if (extData.type === 'KeyUsage' && ext.keyUsage) {
+              if (ext.keyUsage.usages && Array.isArray(ext.keyUsage.usages)) {
+                const usages = ext.keyUsage.usages.map((u: any) => {
+                  const val = u.value || u.oid || '';
+                  // 从oid或value反推key
+                  const entry = Object.entries(keyUsageOIDMap).find(([key, info]) => info.oid === val || key === val);
+                  return {
+                    required: !!u.required,
+                    value: entry ? entry[0] : val
+                  };
+                });
+                extData.keyUsage = { usages };
+              }
+            }
+
+            // 处理ExtendedKeyUsage：标准化 usages 格式
+            if (extData.type === 'ExtendedKeyUsage' && ext.extendedKeyUsage) {
+              if (ext.extendedKeyUsage.usages && Array.isArray(ext.extendedKeyUsage.usages)) {
+                const usages = ext.extendedKeyUsage.usages.map((u: any) => {
+                  const val = u.oid || u.value || '';
+                  const entry = Object.entries(extendedKeyUsageOIDMap).find(([key, info]) => info.oid === val || key === val);
+                  return {
+                    required: !!u.required,
+                    value: entry ? entry[0] : val
+                  };
+                });
+                extData.extendedKeyUsage = { usages };
+              }
+            }
+
+            return extData;
+          })
+          .filter(Boolean);
 
         // 同步辅助状态
-        selectedKeyUsages.value = form.extensions.map((ext: any) => 
+        selectedKeyUsages.value = form.extensions.map((ext: any) =>
           ext.type === 'KeyUsage' && ext.keyUsage?.usages ? ext.keyUsage.usages.map((u: any) => u.value) : []
         );
 
-        selectedExtendedKeyUsages.value = form.extensions.map((ext: any) => 
+        selectedExtendedKeyUsages.value = form.extensions.map((ext: any) =>
           ext.type === 'ExtendedKeyUsage' && ext.extendedKeyUsage?.usages ? ext.extendedKeyUsage.usages.map((u: any) => u.value) : []
         );
 
-        selectedSubjectAltNameModes.value = form.extensions.map((ext: any) => 
+        selectedSubjectAltNameModes.value = form.extensions.map((ext: any) =>
           ext.type === 'SubjectAlternativeName' && ext.subjectAltName?.modes ? ext.subjectAltName.modes : []
         );
       }
     }
   } catch (error: any) {
-    console.error('获取或解析证书模板信息失败:', error);
     ElMessage.error('获取证书模板信息失败: ' + (error.message || '未知错误'));
     router.back();
   } finally {
@@ -1069,6 +1387,9 @@ onMounted(() => {
                   </el-form-item>
                 </el-col>
               </el-row>
+              <el-alert type="info" :closable="false" show-icon class="constraint-alert">
+                <template #title> 当前按 {{ activeConstraint.label }} 模板约束校验，最多有效期 {{ activeConstraint.maxValidityDays }} 天 </template>
+              </el-alert>
               <el-row :gutter="20">
                 <el-col :span="12">
                   <el-form-item label="证书级别" prop="type">
@@ -1140,6 +1461,26 @@ onMounted(() => {
               </el-row>
               <el-row>
                 <el-col :span="24">
+                  <el-form-item label="密钥对生成">
+                    <template #label>
+                      <div class="custom-form-label">
+                        <el-icon><Key /></el-icon>
+                        <span>密钥对生成</span>
+                      </div>
+                    </template>
+                    <el-radio-group v-model="keypairGenerationLocation" class="keypair-generation-group">
+                      <el-radio-button v-for="item in keypairGenerationOptions" :key="item.value" :label="item.value">
+                        {{ item.label }}
+                      </el-radio-button>
+                    </el-radio-group>
+                    <div class="form-tip">
+                      {{ keypairGenerationOptions.find((item) => item.value === keypairGenerationLocation)?.description }}
+                    </div>
+                  </el-form-item>
+                </el-col>
+              </el-row>
+              <el-row>
+                <el-col :span="24">
                   <el-form-item label="签名算法">
                     <template #label>
                       <div class="custom-form-label">
@@ -1149,10 +1490,11 @@ onMounted(() => {
                     </template>
                     <div class="algo-selection-wrapper">
                       <el-checkbox-group v-model="form.signatureAlgorithms" class="custom-checkbox-group">
-                      <el-checkbox-button v-for="algo in signatureAlgorithmOptions" :key="algo.value" :value="algo.value">
-                        {{ algo.label }}
-                      </el-checkbox-button>
-                      </el-checkbox-group>                    </div>
+                        <el-checkbox-button v-for="algo in signatureAlgorithmOptions" :key="algo.value" :value="algo.value">
+                          {{ algo.label }}
+                        </el-checkbox-button>
+                      </el-checkbox-group>
+                    </div>
                   </el-form-item>
                 </el-col>
               </el-row>
@@ -1176,6 +1518,7 @@ onMounted(() => {
                       />
                       <el-select v-model="validityUnit" class="validity-unit">
                         <el-option label="天" value="day" />
+                        <el-option label="月" value="month" />
                         <el-option label="年" value="year" />
                       </el-select>
                     </div>
@@ -1232,7 +1575,12 @@ onMounted(() => {
                       <el-col :span="24">
                         <el-form-item label="字段类型" :prop="`subjectItems.${index}.type`">
                           <el-select v-model="rdn.type" placeholder="请选择字段类型" style="width: 100%" filterable>
-                            <el-option v-for="oid in commonOIDs" :key="oid.value" :label="`${oid.label} (${oid.oid})`" :value="oid.value" />
+                            <el-option
+                              v-for="oid in allowedSubjectOptions"
+                              :key="oid.value"
+                              :label="`${oid.label} (${oid.oid})`"
+                              :value="oid.value"
+                            />
                           </el-select>
                         </el-form-item>
                       </el-col>
@@ -1271,7 +1619,7 @@ onMounted(() => {
                 <div class="quick-add-title">常用字段快捷添加：</div>
                 <el-space wrap>
                   <el-tag
-                    v-for="common in commonOIDs"
+                    v-for="common in allowedSubjectOptions"
                     :key="common.value"
                     type="info"
                     effect="plain"
@@ -1357,14 +1705,14 @@ onMounted(() => {
                       <el-divider content-position="left" style="margin: 15px 0">密钥用法配置</el-divider>
                       <div class="keyusages-checkbox-list">
                         <div class="keyusage-grid">
-                          <div v-for="opt in keyUsageOptions" :key="opt.value" class="keyusage-checkbox-item">
+                          <div v-for="opt in availableKeyUsageOptions" :key="opt.value" class="keyusage-checkbox-item">
                             <el-row :gutter="8" align="middle">
                               <el-col :span="16">
                                 <el-checkbox
-                                  :model-value="selectedKeyUsages[index].includes(opt.value)"
+                                  :model-value="selectedKeyUsages[index]?.includes(opt.value)"
                                   @change="
                                     (checked: boolean) => {
-                                      const newValues = [...selectedKeyUsages[index]];
+                                      const newValues = [...(selectedKeyUsages[index] || [])];
                                       if (checked) {
                                         newValues.push(opt.value);
                                       } else {
@@ -1381,7 +1729,7 @@ onMounted(() => {
                               <el-col :span="8">
                                 <el-checkbox
                                   :model-value="isKeyUsageRequired(index, opt.value)"
-                                  :disabled="!selectedKeyUsages[index].includes(opt.value)"
+                                  :disabled="!selectedKeyUsages[index]?.includes(opt.value)"
                                   @change="handleKeyUsageRequiredChange(index, opt.value, $event)"
                                   size="small"
                                 >
@@ -1399,14 +1747,14 @@ onMounted(() => {
                       <el-divider content-position="left" style="margin: 15px 0">增强密钥用法配置</el-divider>
                       <div class="keyusages-checkbox-list">
                         <div class="keyusage-grid">
-                          <div v-for="opt in extendedKeyUsageOptions" :key="opt.value" class="keyusage-checkbox-item">
+                          <div v-for="opt in availableExtendedKeyUsageOptions" :key="opt.value" class="keyusage-checkbox-item">
                             <el-row :gutter="8" align="middle">
                               <el-col :span="16">
                                 <el-checkbox
-                                  :model-value="selectedExtendedKeyUsages[index].includes(opt.value)"
+                                  :model-value="selectedExtendedKeyUsages[index]?.includes(opt.value)"
                                   @change="
                                     (checked: boolean) => {
-                                      const newValues = [...selectedExtendedKeyUsages[index]];
+                                      const newValues = [...(selectedExtendedKeyUsages[index] || [])];
                                       if (checked) {
                                         newValues.push(opt.value);
                                       } else {
@@ -1423,7 +1771,7 @@ onMounted(() => {
                               <el-col :span="8">
                                 <el-checkbox
                                   :model-value="isExtendedKeyUsageRequired(index, opt.value)"
-                                  :disabled="!selectedExtendedKeyUsages[index].includes(opt.value)"
+                                  :disabled="!selectedExtendedKeyUsages[index]?.includes(opt.value)"
                                   @change="handleExtendedKeyUsageRequiredChange(index, opt.value, $event)"
                                   size="small"
                                 >
@@ -1442,7 +1790,7 @@ onMounted(() => {
                       <div class="keyusages-checkbox-list">
                         <el-checkbox-group v-model="selectedSubjectAltNameModes[index]" @change="handleSubjectAltNameModeGroupChange(index, $event)">
                           <div class="keyusage-grid">
-                            <div v-for="opt in subjectAltNameModeOptions" :key="opt.value" class="keyusage-checkbox-item">
+                            <div v-for="opt in availableSubjectAltNameModeOptions" :key="opt.value" class="keyusage-checkbox-item">
                               <el-checkbox :value="opt.value">
                                 {{ opt.label }}
                               </el-checkbox>
@@ -1456,6 +1804,89 @@ onMounted(() => {
               </div>
               <el-empty v-else description="无扩展信息" />
               <el-button type="primary" icon="Plus" @click="addExtension" style="margin-top: 10px">添加扩展</el-button>
+            </div>
+          </el-tab-pane>
+
+          <el-tab-pane label="约束视图" name="constraints">
+            <div class="constraints-container">
+              <el-descriptions :column="2" border>
+                <el-descriptions-item label="约束类型">{{ activeConstraint.label }}</el-descriptions-item>
+                <el-descriptions-item label="最大有效期">{{ activeConstraint.maxValidityDays }} 天</el-descriptions-item>
+                <el-descriptions-item label="密钥对生成">
+                  {{ keypairGenerationLocation === 'KMC' ? 'KMC 产生密钥对' : '客户端产生密钥对' }}
+                </el-descriptions-item>
+                <el-descriptions-item label="当前有效期">{{ form.validity }}</el-descriptions-item>
+              </el-descriptions>
+
+              <div class="constraint-block">
+                <div class="constraint-title">允许的主题字段</div>
+                <el-space wrap>
+                  <el-tag
+                    v-for="item in allowedSubjectOptions"
+                    :key="item.value"
+                    :type="activeConstraint.requiredSubjectFields.includes(item.value) ? 'danger' : 'info'"
+                    effect="plain"
+                  >
+                    {{ item.label }}
+                  </el-tag>
+                </el-space>
+              </div>
+
+              <div class="constraint-block">
+                <div class="constraint-title">允许的 KU</div>
+                <el-space wrap>
+                  <el-tag
+                    v-for="item in availableKeyUsageOptions"
+                    :key="item.value"
+                    :type="activeConstraint.requiredKeyUsages.includes(item.value) ? 'danger' : 'info'"
+                    effect="plain"
+                  >
+                    {{ item.label }}
+                  </el-tag>
+                </el-space>
+              </div>
+
+              <div class="constraint-block">
+                <div class="constraint-title">允许的 EKU</div>
+                <el-space v-if="availableExtendedKeyUsageOptions.length" wrap>
+                  <el-tag
+                    v-for="item in availableExtendedKeyUsageOptions"
+                    :key="item.value"
+                    :type="activeConstraint.requiredExtendedKeyUsages.includes(item.value) ? 'danger' : 'info'"
+                    effect="plain"
+                  >
+                    {{ item.label }}
+                  </el-tag>
+                </el-space>
+                <el-text v-else type="info">当前模板不建议配置 EKU</el-text>
+              </div>
+            </div>
+          </el-tab-pane>
+
+          <el-tab-pane name="preview">
+            <template #label>
+              <span>
+                预览与校验
+                <el-badge v-if="templateErrorCount + templateWarningCount > 0" :value="templateErrorCount + templateWarningCount" class="tab-badge" />
+              </span>
+            </template>
+            <div class="preview-container">
+              <el-alert
+                v-if="templateErrorCount === 0 && templateWarningCount === 0"
+                title="模板校验通过"
+                type="success"
+                :closable="false"
+                show-icon
+              />
+              <div v-else class="issue-list">
+                <div v-for="(issue, index) in templateIssues" :key="index" class="issue-item" @click="locateIssue(issue)">
+                  <el-tag :type="issue.level === 'error' ? 'danger' : 'warning'" size="small">
+                    {{ issue.level === 'error' ? '错误' : '提示' }}
+                  </el-tag>
+                  <span>{{ issue.message }}</span>
+                </div>
+              </div>
+              <el-input :model-value="previewJson" type="textarea" :rows="24" readonly class="preview-json" />
             </div>
           </el-tab-pane>
         </el-tabs>
@@ -1603,6 +2034,19 @@ onMounted(() => {
       font-size: 12px;
       color: #909399;
       margin-top: 4px;
+      line-height: 1.4;
+    }
+
+    .keypair-generation-group {
+      margin-right: 12px;
+    }
+
+    .form-tip {
+      display: inline-flex;
+      align-items: center;
+      min-height: 32px;
+      color: #909399;
+      font-size: 12px;
       line-height: 1.4;
     }
   }

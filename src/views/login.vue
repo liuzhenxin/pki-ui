@@ -6,7 +6,13 @@
         <lang-select />
       </div>
       <el-form-item v-if="tenantEnabled" prop="tenantId">
-        <el-select v-model="loginForm.tenantId" filterable :placeholder="proxy.$t('login.selectPlaceholder')" style="width: 100%" @change="handleTenantChange">
+        <el-select
+          v-model="loginForm.tenantId"
+          filterable
+          :placeholder="proxy.$t('login.selectPlaceholder')"
+          style="width: 100%"
+          @change="handleTenantChange"
+        >
           <el-option v-for="item in tenantList" :key="item.tenantId" :label="item.companyName" :value="item.tenantId"></el-option>
           <template #prefix><svg-icon icon-class="company" class="el-input__icon input-icon" /></template>
         </el-select>
@@ -169,9 +175,9 @@ const handleLogin = () => {
         localStorage.setItem('password', String(loginForm.value.password));
         localStorage.setItem('rememberMe', String(loginForm.value.rememberMe));
       } else {
-        // 否则移除
-        localStorage.removeItem('tenantId');
-        localStorage.removeItem('tenantCode');
+        // 租户用于刷新后恢复系统上下文，不随“记住密码”清理。
+        localStorage.setItem('tenantId', String(loginForm.value.tenantId));
+        localStorage.setItem('tenantCode', String(loginForm.value.tenantCode));
         localStorage.removeItem('username');
         localStorage.removeItem('password');
         localStorage.removeItem('rememberMe');

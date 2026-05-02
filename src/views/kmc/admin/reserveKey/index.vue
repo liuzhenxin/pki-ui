@@ -18,13 +18,13 @@
 
     <el-row :gutter="10" class="mb8">
       <el-col :span="1.5">
-        <el-button type="primary" plain icon="Plus" @click="handleAdd" v-hasPermi="['kmc:reserveKey:add']">新增</el-button>
+        <el-button type="primary" plain icon="Plus" @click="handleAdd" v-hasPermi="['sys:reservekey:save']">新增</el-button>
       </el-col>
       <el-col :span="1.5">
-        <el-button type="success" plain icon="Edit" :disabled="single" @click="handleUpdate()" v-hasPermi="['kmc:reserveKey:edit']">修改</el-button>
+        <el-button type="success" plain icon="Edit" :disabled="single" @click="handleUpdate()" v-hasPermi="['sys:reservekey:modify']">修改</el-button>
       </el-col>
       <el-col :span="1.5">
-        <el-button type="danger" plain icon="Delete" :disabled="multiple" @click="handleDelete()" v-hasPermi="['kmc:reserveKey:remove']">删除</el-button>
+        <el-button type="danger" plain icon="Delete" :disabled="multiple" @click="handleDelete()" v-hasPermi="['sys:reservekey:remove']">删除</el-button>
       </el-col>
       <right-toolbar v-model:showSearch="showSearch" @queryTable="getList" />
     </el-row>
@@ -49,10 +49,10 @@
       <el-table-column label="操作" align="center" class-name="small-padding fixed-width">
         <template #default="scope">
           <el-tooltip content="修改" placement="top">
-            <el-button link type="primary" icon="Edit" @click="handleUpdate(scope.row)" v-hasPermi="['kmc:reserveKey:edit']" />
+            <el-button link type="primary" icon="Edit" @click="handleUpdate(scope.row)" v-hasPermi="['sys:reservekey:modify']" />
           </el-tooltip>
           <el-tooltip content="删除" placement="top">
-            <el-button link type="primary" icon="Delete" @click="handleDelete(scope.row)" v-hasPermi="['kmc:reserveKey:remove']" />
+            <el-button link type="primary" icon="Delete" @click="handleDelete(scope.row)" v-hasPermi="['sys:reservekey:remove']" />
           </el-tooltip>
         </template>
       </el-table-column>
@@ -97,6 +97,7 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { listReserveKey, getReserveKey, delReserveKey, addReserveKey, updateReserveKey } from '@/api/kmc/reserveKey/index';
 import { listPoolStrategy } from '@/api/kmc/poolStrategy/index';
 import { ReserveKeyVO, ReserveKeyQuery, ReserveKeyForm } from '@/api/kmc/reserveKey/types';
+import { readKmcPage, unwrapKmcData } from '@/api/kmc/common';
 
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
 
@@ -141,13 +142,7 @@ const { queryParams, form, rules } = toRefs(data);
 const getStrategies = async () => {
   try {
     const res = await listPoolStrategy({ pageNum: 1, pageSize: 100 } as any);
-    const responseData = res.data;
-    if (responseData && responseData.data) {
-      const pageInfo = responseData.data;
-      strategies.value = pageInfo.data || pageInfo.records || responseData.data;
-    } else if (res.rows) {
-      strategies.value = res.rows;
-    }
+    strategies.value = readKmcPage(res).records;
   } catch (e) {}
 };
 
@@ -168,17 +163,9 @@ const getList = async () => {
   loading.value = true;
   try {
     const res = await listReserveKey(queryParams.value);
-    const responseData = res.data;
-    if (responseData && responseData.data) {
-      const pageInfo = responseData.data;
-      reserveKeyList.value = pageInfo.data || pageInfo.records || responseData.data;
-      total.value = pageInfo.totalCount || pageInfo.total || 0;
-    } else if (res.rows) {
-      reserveKeyList.value = res.rows;
-      total.value = res.total;
-    } else {
-      reserveKeyList.value = responseData as any;
-    }
+    const page = readKmcPage<ReserveKeyVO>(res);
+    reserveKeyList.value = page.records;
+    total.value = page.total;
   } catch (e) {
     console.error(e);
   } finally {
@@ -229,11 +216,7 @@ const handleUpdate = async (row?: ReserveKeyVO) => {
   const id = row?.id || ids.value[0];
   const res = await getReserveKey(id);
 
-  if (res.data && res.data.data) {
-    Object.assign(form.value, res.data.data);
-  } else {
-    Object.assign(form.value, res.data);
-  }
+  Object.assign(form.value, unwrapKmcData(res));
 
   dialog.visible = true;
   dialog.title = '修改备用密钥';

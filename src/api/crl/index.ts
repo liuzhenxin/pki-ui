@@ -1,6 +1,6 @@
 import request from '@/utils/request';
 import { Result } from '@/api/types';
-import { CrlForm, CrlQuery } from './types';
+import { CrlForm, CrlGenForm, CrlPublishForm, CrlQuery } from './types';
 
 // 分页查询CRL列表
 export function pageCrl(query: CrlQuery): Promise<Result<any>> {
@@ -59,11 +59,29 @@ export function importCrl(formData: FormData): Promise<Result<any>> {
 }
 
 // 导出CRL
-export function exportCrl(ids: (string | number)[]): Promise<any> {
+export function exportCrl(query: CrlQuery): Promise<any> {
   return request({
     url: '/ca/v1/crls/export',
     method: 'post',
-    data: ids,
+    data: query,
     responseType: 'blob'
+  }) as any;
+}
+
+// 立即签发CRL
+export function genCrl(data: CrlGenForm): Promise<Result<any>> {
+  return request({
+    url: '/ca/v1/crls/gen',
+    method: 'post',
+    data
+  }) as any;
+}
+
+// 发布CRL
+export function publishCrl(data: CrlPublishForm): Promise<Result<any>> {
+  return request({
+    url: '/ca/v1/crls/publish',
+    method: 'post',
+    data
   }) as any;
 }

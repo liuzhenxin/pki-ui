@@ -3,11 +3,11 @@ import { ProfileCO } from './types';
 import { Result } from '@/api/types';
 
 // 查询证书模板列表
-export function listProfile(params?: { type?: string }): Promise<Result<ProfileCO[]>> {
+export function listProfile(data?: { type?: string }): Promise<Result<ProfileCO[]>> {
   return request({
     url: '/ca/v1/profiles/list',
-    method: 'get',
-    params: params
+    method: 'post',
+    data: data || {}
   }) as any;
 }
 
@@ -98,6 +98,7 @@ export function initProfiles(data: { ids: string[] }): Promise<Result<any>> {
 export function listInitProfile(): Promise<Result<ProfileCO[]>> {
   return request({
     url: '/ca/v1/profiles/init-list',
-    method: 'get'
+    method: 'post',
+    data: {}
   }) as any;
 }

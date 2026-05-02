@@ -14,9 +14,59 @@ import setting from '@/settings';
 
 NProgress.configure({ showSpinner: false });
 const whiteList = ['/login', '/register', '/social-callback', '/register*', '/register/*'];
+const initPath = '/ca/init';
 
 const isWhiteList = (path: string) => {
   return whiteList.some((pattern) => isPathMatch(pattern, path));
+};
+
+const getCurrentTenantId = () => useUserStore().tenantId || localStorage.getItem('tenantId') || '';
+
+const isInitRoute = (path: string) => path === initPath || path.includes('/setup');
+
+const isTenantInitialized = (status: unknown) => Number(status) === -1;
+
+const loadCurrentTenant = async () => {
+  const tenantId = getCurrentTenantId();
+  if (!tenantId) {
+    return undefined;
+  }
+  return getTenant(tenantId);
+};
+
+const syncTenantContext = async () => {
+  const tenantId = getCurrentTenantId();
+  const res = await loadCurrentTenant();
+  if (res?.data) {
+    let appTitle = res.data.name;
+    const idStr = String(tenantId);
+    if (idStr === '3') {
+      appTitle += ' (KMC密钥管理中心)';
+    } else if (idStr === '10') {
+      appTitle += ' (NAS网络存储管理系统)';
+    } else {
+      appTitle += ' (CA证书认证系统)';
+    }
+    useSettingsStore().setAppTitle(appTitle);
+    useUserStore().setTenantInitStatus(Number(res.data.status));
+  }
+  return res;
+};
+
+const ensureTenantBoundary = async (path: string) => {
+  const userStore = useUserStore();
+  let status = userStore.tenantInitStatus;
+  if (status === undefined) {
+    const res = await syncTenantContext();
+    status = Number(res?.data?.status);
+  }
+  if (!isTenantInitialized(status) && !isInitRoute(path)) {
+    return initPath;
+  }
+  if (isTenantInitialized(status) && isInitRoute(path)) {
+    return '/';
+  }
+  return '';
 };
 
 router.beforeEach(async (to, from, next) => {
@@ -40,46 +90,35 @@ router.beforeEach(async (to, from, next) => {
           next({ path: '/' });
         } else {
           isRelogin.show = false;
-          const tenantId = useUserStore().tenantId || localStorage.getItem('tenantId') || '';
-          const res = await getTenant(tenantId);
-          if (res?.data) {
-            let appTitle = res.data.name;
-            const idStr = String(tenantId);
-            if (idStr === '3') {
-              appTitle += ' (KMC密钥管理中心)';
-            } else if (idStr === '10') {
-              appTitle += ' (NAS网络存储管理系统)';
-            } else {
-              appTitle += ' (CA证书认证系统)';
-            }
-            useSettingsStore().setAppTitle(appTitle);
-          }
-          if (res?.data?.status != -1) {
-            //未初始化
+          const res = await syncTenantContext();
+          const tenantInitialized = isTenantInitialized(res?.data?.status);
+          if (res?.data && !tenantInitialized) {
             const accessRoutes = await usePermissionStore().generateInitRoutes();
-            // 根据roles权限生成可访问的路由表
             accessRoutes.forEach((route) => {
               if (!isHttp(route.path)) {
-                router.addRoute(route); // 动态添加可访问路由表
+                router.addRoute(route);
               }
             });
-            // @ts-expect-error hack方法 确保addRoutes已完成
-            next({ path: to.path, replace: true, params: to.params, query: to.query, hash: to.hash, name: to.name as string }); // hack方法 确保addRoutes已完成
+            const targetPath = isInitRoute(to.path) ? to.path : initPath;
+            next({ path: targetPath, replace: true, params: to.params, query: targetPath === initPath ? {} : to.query, hash: to.hash });
           } else {
             const accessRoutes = await usePermissionStore().generateRoutes();
-            // 根据roles权限生成可访问的路由表
             accessRoutes.forEach((route) => {
               if (!isHttp(route.path)) {
-                router.addRoute(route); // 动态添加可访问路由表
+                router.addRoute(route);
               }
             });
-            // @ts-expect-error hack方法 确保addRoutes已完成
-            const targetPath = (to.path.includes('/init') || to.path.includes('/setup')) ? '/' : to.path;
-            next({ path: targetPath, replace: true, params: to.params, query: to.query, hash: to.hash, name: to.name as string }); // hack方法 确保addRoutes已完成
+            const targetPath = isInitRoute(to.path) ? '/' : to.path;
+            next({ path: targetPath, replace: true, params: to.params, query: to.query, hash: to.hash });
           }
         }
       } else {
-        next();
+        const boundaryPath = await ensureTenantBoundary(to.path);
+        if (boundaryPath) {
+          next({ path: boundaryPath, replace: true });
+        } else {
+          next();
+        }
       }
     }
   } else {
@@ -103,7 +142,7 @@ router.beforeEach(async (to, from, next) => {
               useSettingsStore().setAppTitle(appTitle);
             }
           })
-          .catch(() => { });
+          .catch(() => {});
       }
       next();
     } else {

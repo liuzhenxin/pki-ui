@@ -1,8 +1,8 @@
 <template>
   <div class="app-container">
     <el-form :model="queryParams" ref="queryForm" :inline="true" v-show="showSearch" label-width="68px">
-      <el-form-item label="证书名称" prop="name">
-        <el-input v-model="queryParams.name" placeholder="请输入证书名称" clearable style="width: 240px" @keyup.enter="handleQuery" />
+      <el-form-item label="证书主题" prop="subject">
+        <el-input v-model="queryParams.subject" placeholder="请输入证书主题" clearable style="width: 240px" @keyup.enter="handleQuery" />
       </el-form-item>
       <el-form-item label="序列号" prop="serialNumber">
         <el-input v-model="queryParams.serialNumber" placeholder="请输入序列号" clearable style="width: 240px" @keyup.enter="handleQuery" />
@@ -22,7 +22,7 @@
           <template #dropdown>
             <el-dropdown-menu>
               <el-dropdown-item command="key">USB Key 签发</el-dropdown-item>
-              <el-dropdown-item command="dualKey">国密双证书签发 (USB Key)</el-dropdown-item>
+              <el-dropdown-item v-hasPermi="['ca:cert:issue-dual']" command="dualKey">国密双证书签发 (USB Key)</el-dropdown-item>
               <el-dropdown-item command="p10">PKCS10 签发</el-dropdown-item>
             </el-dropdown-menu>
           </template>
@@ -39,21 +39,47 @@
 
     <el-table v-loading="loading" :data="certList" @selection-change="handleSelectionChange">
       <el-table-column type="selection" width="55" align="center" />
-      <el-table-column label="证书名称" align="center" prop="name" :show-overflow-tooltip="true" />
-      <el-table-column label="序列号" align="center" prop="serialNumber" width="120" />
+      <el-table-column label="序列号" align="center" prop="serialNumber" width="150" :show-overflow-tooltip="true" />
       <el-table-column label="颁发者" align="center" prop="issuer" :show-overflow-tooltip="true" />
       <el-table-column label="主题" align="center" prop="subject" :show-overflow-tooltip="true" />
+      <el-table-column label="证书类型" align="center" prop="certType" width="120">
+        <template #default="scope">
+          <el-tag type="info">{{ getCertTypeLabel(scope.row.certType) }}</el-tag>
+        </template>
+      </el-table-column>
       <el-table-column label="有效期结束" align="center" prop="notAfter" width="160" />
-      <el-table-column label="状态" align="center" prop="status" width="100">
+      <el-table-column label="状态" align="center" prop="status" width="110">
         <template #default="scope">
           <el-tag :type="getStatusType(scope.row.status)">{{ getStatusLabel(scope.row.status) }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="操作" align="center" class-name="small-padding fixed-width">
+      <el-table-column label="操作" align="center" width="260" class-name="small-padding fixed-width">
         <template #default="scope">
-          <el-button link type="primary" icon="View" @click="handleView(scope.row)" v-hasPermi="['ca:cert:list']">详情</el-button>
+          <el-button link type="primary" icon="View" @click="handleView(scope.row)" v-hasPermi="['ca:cert:detail']">详情</el-button>
           <el-button link type="primary" icon="Download" @click="handleDownload(scope.row)" v-hasPermi="['ca:cert:download']">下载</el-button>
-          <el-button v-if="scope.row.status === 'VALID'" link type="danger" icon="CircleClose" @click="handleRevoke(scope.row)" v-hasPermi="['ca:cert:revoke']">吊销</el-button>
+          <el-dropdown trigger="click" @command="(command: string) => handleLifecycleCommand(command, scope.row)">
+            <el-button link type="primary">
+              生命周期<el-icon class="el-icon--right"><arrow-down /></el-icon>
+            </el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item v-hasPermi="['ca:cert:renew']" command="renew">续期</el-dropdown-item>
+                <el-dropdown-item v-hasPermi="['ca:cert:update']" command="update">更新</el-dropdown-item>
+                <el-dropdown-item v-hasPermi="['ca:cert:reissue']" command="reissue">重签/补办</el-dropdown-item>
+                <el-dropdown-item v-hasPermi="['ca:cert:recover']" command="recover">密钥恢复</el-dropdown-item>
+                <el-dropdown-item v-if="scope.row.status === 'VALID'" v-hasPermi="['ca:cert:suspend']" command="suspend">挂起</el-dropdown-item>
+                <el-dropdown-item v-if="scope.row.status === 'SUSPENDED'" v-hasPermi="['ca:cert:suspend']" command="resume">恢复</el-dropdown-item>
+                <el-dropdown-item
+                  v-if="scope.row.status === 'VALID' || scope.row.status === 'SUSPENDED'"
+                  v-hasPermi="['ca:cert:revoke']"
+                  command="revoke"
+                  divided
+                >
+                  吊销
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
         </template>
       </el-table-column>
     </el-table>
@@ -92,6 +118,9 @@
             <el-option label="证书持有" :value="6" />
           </el-select>
         </el-form-item>
+        <el-form-item label="无效时间">
+          <el-date-picker v-model="revokeForm.invalidityDate" type="datetime" value-format="YYYYMMDDHHmmss" placeholder="可选" style="width: 100%" />
+        </el-form-item>
       </el-form>
       <template #footer>
         <div class="dialog-footer">
@@ -124,12 +153,30 @@
                     <el-option v-for="item in profileList" :key="item.id" :label="item.name" :value="item.id" />
                   </el-select>
                 </el-form-item>
-                <el-form-item label="加密证书模板" prop="encryptProfileId">
-                  <el-select v-model="issueForm.encryptProfileId" placeholder="请选择加密模板" style="width: 100%">
+                <el-form-item label="加密证书模板" prop="encProfileId">
+                  <el-select v-model="issueForm.encProfileId" placeholder="请选择加密模板" style="width: 100%">
                     <el-option v-for="item in profileList" :key="item.id" :label="item.name" :value="item.id" />
                   </el-select>
                 </el-form-item>
               </template>
+              <el-form-item label="生效时间">
+                <el-date-picker
+                  v-model="issueForm.notBefore"
+                  type="datetime"
+                  value-format="YYYYMMDDHHmmss"
+                  placeholder="默认当前时间"
+                  style="width: 100%"
+                />
+              </el-form-item>
+              <el-form-item label="过期时间">
+                <el-date-picker
+                  v-model="issueForm.notAfter"
+                  type="datetime"
+                  value-format="YYYYMMDDHHmmss"
+                  placeholder="默认模板有效期"
+                  style="width: 100%"
+                />
+              </el-form-item>
             </div>
 
             <div class="form-section" v-if="issueForm.subjectItems.length > 0">
@@ -191,37 +238,138 @@
         </div>
       </template>
     </el-dialog>
+
+    <!-- 生命周期操作对话框 -->
+    <el-dialog v-model="lifecycleOpen" :title="lifecycleTitle" width="640px" append-to-body @close="resetLifecycleForm">
+      <el-form ref="lifecycleFormRef" :model="lifecycleForm" :rules="lifecycleRules" label-width="110px">
+        <el-form-item label="证书序列号">
+          <el-input :model-value="lifecycleRow?.serialNumber || '-'" disabled />
+        </el-form-item>
+        <template v-if="lifecycleAction === 'renew'">
+          <el-form-item label="生效时间">
+            <el-date-picker
+              v-model="lifecycleForm.notBefore"
+              type="datetime"
+              value-format="YYYYMMDDHHmmss"
+              placeholder="默认当前时间"
+              style="width: 100%"
+            />
+          </el-form-item>
+          <el-form-item label="过期时间">
+            <el-date-picker
+              v-model="lifecycleForm.notAfter"
+              type="datetime"
+              value-format="YYYYMMDDHHmmss"
+              placeholder="默认沿用模板策略"
+              style="width: 100%"
+            />
+          </el-form-item>
+        </template>
+        <template v-if="lifecycleAction === 'update'">
+          <el-form-item label="新CSR" prop="csr">
+            <el-input v-model="lifecycleForm.csr" type="textarea" :rows="8" placeholder="-----BEGIN CERTIFICATE REQUEST----- ..." />
+          </el-form-item>
+          <el-form-item label="生效时间">
+            <el-date-picker
+              v-model="lifecycleForm.notBefore"
+              type="datetime"
+              value-format="YYYYMMDDHHmmss"
+              placeholder="默认当前时间"
+              style="width: 100%"
+            />
+          </el-form-item>
+          <el-form-item label="过期时间">
+            <el-date-picker
+              v-model="lifecycleForm.notAfter"
+              type="datetime"
+              value-format="YYYYMMDDHHmmss"
+              placeholder="默认沿用模板策略"
+              style="width: 100%"
+            />
+          </el-form-item>
+        </template>
+        <template v-if="lifecycleAction === 'reissue'">
+          <el-form-item label="新CSR">
+            <el-input v-model="lifecycleForm.csr" type="textarea" :rows="8" placeholder="可选；不填时由后端按原证书或备份密钥处理" />
+          </el-form-item>
+          <el-form-item label="补办原因">
+            <el-input v-model="lifecycleForm.reason" type="textarea" :rows="3" placeholder="请输入补办原因" />
+          </el-form-item>
+        </template>
+        <template v-if="lifecycleAction === 'recover'">
+          <el-form-item label="授权码">
+            <el-input v-model="lifecycleForm.authCode" placeholder="可选，按系统配置填写" show-password />
+          </el-form-item>
+        </template>
+      </el-form>
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button type="primary" :loading="lifecycleLoading" @click="submitLifecycle">确 定</el-button>
+          <el-button @click="lifecycleOpen = false">取 消</el-button>
+        </div>
+      </template>
+    </el-dialog>
+
+    <!-- 生命周期签发结果 -->
+    <el-dialog v-model="issueResultOpen" title="证书操作结果" width="760px" append-to-body>
+      <el-descriptions :column="2" border>
+        <el-descriptions-item label="证书ID">{{ issueResult.certId || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="序列号">{{ issueResult.serialNumber || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="主体" :span="2">{{ issueResult.subject || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="颁发者" :span="2">{{ issueResult.issuer || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="生效时间">{{ issueResult.notBefore || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="过期时间">{{ issueResult.notAfter || '-' }}</el-descriptions-item>
+      </el-descriptions>
+      <div class="result-actions">
+        <el-button
+          v-if="issueResult.cert"
+          type="primary"
+          plain
+          icon="Download"
+          @click="downloadPem(issueResult.cert, issueResult.serialNumber || 'cert')"
+        >
+          下载证书
+        </el-button>
+        <el-button
+          v-if="issueResult.encryptionCert"
+          type="success"
+          plain
+          icon="Download"
+          @click="downloadPem(issueResult.encryptionCert, issueResult.encryptionSerialNumber || 'encryption-cert')"
+        >
+          下载加密证书
+        </el-button>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
 <script setup name="CertManagement" lang="ts">
 import { ref, reactive, toRefs, getCurrentInstance, ComponentInternalInstance, onMounted } from 'vue';
 import { ElMessage, ElMessageBox, FormInstance } from 'element-plus';
-import {
-  ArrowDown,
-  Plus,
-  View,
-  Download,
-  Delete,
-  CircleClose,
-  Refresh,
-  Search,
-  Document,
-  Key,
-  QuestionFilled,
-  Cpu,
-  InfoFilled,
-  Warning
-} from '@element-plus/icons-vue';
+import { ArrowDown, Refresh } from '@element-plus/icons-vue';
 import X509Cert from '@/components/X509Cert/index.vue';
 import SecurityConfirm from '@/components/SecurityConfirm/index.vue';
 import CertSubject, { typeMapping, sortSubjectItems } from '@/components/CertSubject/index.vue';
-import { pageCert, getCert, revokeCert, removeCert, exportCert, issueCert, issueDualCert } from '@/api/ca/cert';
+import {
+  pageCert,
+  getCert,
+  revokeCert,
+  removeCert,
+  exportCert,
+  issueCert,
+  issueDualCert,
+  renewCert,
+  updateCert,
+  reissueCert,
+  recoverKey,
+  suspendCert,
+  resumeCert
+} from '@/api/ca/cert';
 import { listRootCa, getRootCa } from '@/api/ca/root';
 import { listProfile, getProfile } from '@/api/ca/profile';
 import { X509 } from 'jsrsasign';
-import { parseJson, parseKeyAlgorithms } from '@/utils/json';
-import { parseTime } from '@/utils/ruoyi';
+import { parseJson } from '@/utils/json';
 import SKFClient from '@/api/skf/skf_api';
 
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
@@ -260,6 +408,14 @@ const multiple = ref(true);
 const showDetail = ref(false);
 const currentCertPem = ref('');
 const revokeOpen = ref(false);
+const lifecycleOpen = ref(false);
+const lifecycleLoading = ref(false);
+const lifecycleTitle = ref('');
+const lifecycleAction = ref('');
+const lifecycleRow = ref<any>(null);
+const lifecycleFormRef = ref<FormInstance>();
+const issueResultOpen = ref(false);
+const issueResult = ref<any>({});
 
 // 签发相关状态
 const issueOpen = ref(false);
@@ -276,11 +432,13 @@ const certApps = ref<string[]>([]);
 const issueFormRef = ref<FormInstance>();
 
 const data = reactive({
-  queryParams: { pageNum: 1, pageSize: 10, name: undefined, serialNumber: undefined },
-  revokeForm: { id: undefined as string | number | undefined, reason: 0 },
+  queryParams: { pageNum: 1, pageSize: 10, subject: undefined, serialNumber: undefined },
+  revokeForm: { certId: undefined as string | number | undefined, reason: 0, invalidityDate: undefined as string | undefined },
   issueForm: {
     rootId: undefined as string | number | undefined,
     profileId: undefined as string | number | undefined,
+    signProfileId: undefined as string | number | undefined,
+    encProfileId: undefined as string | number | undefined,
     name: '',
     subjectItems: [] as any[],
     provider: '',
@@ -288,7 +446,9 @@ const data = reactive({
     appName: '',
     containerName: '',
     pin: '123456',
-    csr: ''
+    csr: '',
+    notBefore: undefined as string | undefined,
+    notAfter: undefined as string | undefined
   }
 });
 
@@ -298,13 +458,25 @@ const issueRules = {
   rootId: [{ required: true, message: '请选择颁发者', trigger: 'change' }],
   profileId: [{ required: true, message: '请选择证书模板', trigger: 'change' }],
   signProfileId: [{ required: true, message: '请选择签名模板', trigger: 'change' }],
-  encryptProfileId: [{ required: true, message: '请选择加密模板', trigger: 'change' }],
+  encProfileId: [{ required: true, message: '请选择加密模板', trigger: 'change' }],
   provider: [{ required: true, message: '请选择厂商', trigger: 'change' }],
   device: [{ required: true, message: '请选择设备', trigger: 'change' }],
   appName: [{ required: true, message: '请选择应用', trigger: 'change' }],
   containerName: [{ required: true, message: '请输入容器名称', trigger: 'blur' }],
   pin: [{ required: true, message: '请输入PIN码', trigger: 'blur' }],
   csr: [{ required: true, message: '请输入CSR', trigger: 'blur' }]
+};
+
+const lifecycleForm = reactive({
+  csr: '',
+  reason: '',
+  authCode: '',
+  notBefore: undefined as string | undefined,
+  notAfter: undefined as string | undefined
+});
+
+const lifecycleRules = {
+  csr: [{ required: true, message: '请输入新CSR', trigger: 'blur' }]
 };
 
 async function loadRoots() {
@@ -337,7 +509,6 @@ async function refreshCertProviders() {
     }
     if (issueOpen.value && !monitoring.value && issueType.value === 'key') startDeviceMonitoring();
   } catch (e: any) {
-    console.error('SKF Service Error:', e);
     const errorMsg = e?.message || (typeof e === 'string' ? e : 'SKF 服务连接异常');
     ElMessage.error('无法连接到 SKF 服务: ' + errorMsg);
   }
@@ -365,7 +536,6 @@ async function startDeviceMonitoring() {
         }
       } catch (e: any) {
         if (e.message && !e.message.includes('timeout')) {
-          console.warn('设备监控异常:', e);
           await new Promise((resolve) => setTimeout(resolve, 5000));
         }
       }
@@ -471,7 +641,7 @@ function resetIssueForm() {
     rootId: undefined,
     profileId: undefined,
     signProfileId: undefined,
-    encryptProfileId: undefined,
+    encProfileId: undefined,
     name: '',
     subjectItems: [],
     provider: '',
@@ -479,7 +649,9 @@ function resetIssueForm() {
     appName: '',
     containerName: '',
     pin: '123456',
-    csr: ''
+    csr: '',
+    notBefore: undefined,
+    notAfter: undefined
   };
   if (issueFormRef.value) issueFormRef.value.resetFields();
 }
@@ -487,6 +659,23 @@ function resetIssueForm() {
 function closeIssueDialog() {
   issueOpen.value = false;
   monitoring.value = false;
+}
+
+function pemToBase64(pem: string) {
+  return (pem || '')
+    .replace(/-----BEGIN[^-]+-----/g, '')
+    .replace(/-----END[^-]+-----/g, '')
+    .replace(/\s+/g, '');
+}
+
+function compactLifecyclePayload(payload: Record<string, any>) {
+  return Object.fromEntries(Object.entries(payload).filter(([, value]) => value !== undefined && value !== null && value !== ''));
+}
+
+function showIssueResult(result: any) {
+  if (!result) return;
+  issueResult.value = result;
+  issueResultOpen.value = true;
 }
 
 async function submitIssue() {
@@ -522,7 +711,13 @@ async function submitIssue() {
             issueForm.value.containerName
           );
           ElMessage.info('正在签发证书...');
-          const res = await issueCert({ rootId: issueForm.value.rootId, profileId: issueForm.value.profileId, csrPem: p10Res.pem });
+          const res = await issueCert({
+            rootId: issueForm.value.rootId,
+            profileId: issueForm.value.profileId,
+            csrBase64: pemToBase64(p10Res.pem),
+            notBefore: issueForm.value.notBefore,
+            notAfter: issueForm.value.notAfter
+          });
           if (res.data && res.data.cert) {
             ElMessage.info('正在写入 USB Key...');
             await skf.importCertificate(
@@ -534,6 +729,7 @@ async function submitIssue() {
               res.data.cert
             );
             ElMessage.success('签发成功');
+            showIssueResult(res.data);
           } else {
             throw new Error(res.msg || '后端签发结果异常');
           }
@@ -552,11 +748,13 @@ async function submitIssue() {
           const res = await issueDualCert({
             rootId: issueForm.value.rootId,
             signProfileId: issueForm.value.signProfileId,
-            encryptProfileId: issueForm.value.encryptProfileId,
-            csrPem: p10Res.pem
+            encProfileId: issueForm.value.encProfileId,
+            signCsrBase64: pemToBase64(p10Res.pem),
+            notBefore: issueForm.value.notBefore,
+            notAfter: issueForm.value.notAfter
           });
 
-          if (res.data && res.data.signCert && res.data.encryptCert && res.data.encKeyPair) {
+          if (res.data && res.data.cert && res.data.encryptionCert) {
             ElMessage.info('正在写入签名证书...');
             await skf.importCertificate(
               issueForm.value.provider,
@@ -564,20 +762,21 @@ async function submitIssue() {
               issueForm.value.appName,
               issueForm.value.containerName,
               true,
-              res.data.signCert
+              res.data.cert
             );
 
-            ElMessage.info('正在写入加密密钥对...');
-            // 后端应返回数字信封保护的加密密钥对，对应 SKF 的 ImportKeyPair
-            await skf.importKeyPair(
-              issueForm.value.provider,
-              issueForm.value.device,
-              issueForm.value.appName,
-              issueForm.value.containerName,
-              'SM2',
-              res.data.encKeyPair,
-              res.data.wrapKey || ''
-            );
+            if (res.data.encryptionPrivateKey) {
+              ElMessage.info('正在写入加密密钥对...');
+              await skf.importKeyPair(
+                issueForm.value.provider,
+                issueForm.value.device,
+                issueForm.value.appName,
+                issueForm.value.containerName,
+                'SM2',
+                res.data.encryptionPrivateKey,
+                res.data.wrapKey || ''
+              );
+            }
 
             ElMessage.info('正在写入加密证书...');
             await skf.importCertificate(
@@ -586,19 +785,27 @@ async function submitIssue() {
               issueForm.value.appName,
               issueForm.value.containerName,
               false,
-              res.data.encryptCert
+              res.data.encryptionCert
             );
 
             ElMessage.success('双证书签发并导入成功');
+            showIssueResult(res.data);
           } else {
             throw new Error(res.msg || '后端签发双证书结果不完整');
           }
         } else {
           // p10
           ElMessage.info('正在签发证书...');
-          const res = await issueCert({ rootId: issueForm.value.rootId, profileId: issueForm.value.profileId, csrPem: issueForm.value.csr });
+          const res = await issueCert({
+            rootId: issueForm.value.rootId,
+            profileId: issueForm.value.profileId,
+            csrBase64: pemToBase64(issueForm.value.csr),
+            notBefore: issueForm.value.notBefore,
+            notAfter: issueForm.value.notAfter
+          });
           if (res.data && res.data.cert) {
             ElMessage.success('签发成功');
+            showIssueResult(res.data);
           } else {
             throw new Error(res.msg || '后端签发结果异常');
           }
@@ -607,7 +814,6 @@ async function submitIssue() {
         issueOpen.value = false;
         getList();
       } catch (e: any) {
-        console.error('Issue Error:', e);
         const errorMsg = e?.message || (typeof e === 'string' ? e : '操作失败');
         ElMessage.error('签发失败: ' + errorMsg);
       } finally {
@@ -617,10 +823,25 @@ async function submitIssue() {
   });
 }
 
+function getCertTypeLabel(certType: string) {
+  switch (certType) {
+    case 'ROOT_CA':
+      return '根CA';
+    case 'SUB_CA':
+      return '子CA';
+    case 'END_ENTITY':
+      return '终端实体';
+    default:
+      return certType || '-';
+  }
+}
+
 function getStatusType(status: string) {
   switch (status) {
     case 'VALID':
       return 'success';
+    case 'SUSPENDED':
+      return 'warning';
     case 'REVOKED':
       return 'danger';
     case 'EXPIRED':
@@ -633,6 +854,8 @@ function getStatusLabel(status: string) {
   switch (status) {
     case 'VALID':
       return '有效';
+    case 'SUSPENDED':
+      return '已挂起';
     case 'REVOKED':
       return '已吊销';
     case 'EXPIRED':
@@ -664,20 +887,24 @@ function handleDownload(row: any) {
     ElMessage.error('内容为空');
     return;
   }
+  downloadPem(pem, row.serialNumber || 'cert');
+}
+function downloadPem(pem: string, filename: string) {
   const blob = new Blob([pem], { type: 'application/x-pem-file' });
   const link = document.createElement('a');
   link.href = window.URL.createObjectURL(blob);
-  link.download = `${row.serialNumber}.crt`;
+  link.download = `${filename}.crt`;
   link.click();
 }
 function handleRevoke(row: any) {
-  revokeForm.value.id = row.id;
+  revokeForm.value.certId = row.id;
   revokeForm.value.reason = 0;
+  revokeForm.value.invalidityDate = undefined;
   revokeOpen.value = true;
 }
 async function submitRevoke() {
   // 设置安全确认动作并触发
-  securityConfirm.action = `吊销证书 (序列号: ${revokeForm.value.id})`;
+  securityConfirm.action = `吊销证书 (ID: ${revokeForm.value.certId})`;
   securityConfirm.onConfirm = async () => {
     try {
       await revokeCert(revokeForm.value as any);
@@ -689,6 +916,89 @@ async function submitRevoke() {
     }
   };
   securityConfirm.visible = true;
+}
+
+function resetLifecycleForm() {
+  lifecycleForm.csr = '';
+  lifecycleForm.reason = '';
+  lifecycleForm.authCode = '';
+  lifecycleForm.notBefore = undefined;
+  lifecycleForm.notAfter = undefined;
+  lifecycleFormRef.value?.resetFields();
+}
+
+function handleLifecycleCommand(command: string, row: any) {
+  if (command === 'revoke') {
+    handleRevoke(row);
+    return;
+  }
+  if (command === 'suspend' || command === 'resume') {
+    submitQuickLifecycle(command, row);
+    return;
+  }
+  lifecycleAction.value = command;
+  lifecycleRow.value = row;
+  resetLifecycleForm();
+  lifecycleTitle.value = command === 'renew' ? '证书续期' : command === 'update' ? '证书更新' : command === 'reissue' ? '证书重签/补办' : '密钥恢复';
+  lifecycleOpen.value = true;
+}
+
+function submitQuickLifecycle(command: string, row: any) {
+  const isSuspend = command === 'suspend';
+  securityConfirm.action = `${isSuspend ? '挂起' : '恢复'}证书 (序列号: ${row.serialNumber || row.id})`;
+  securityConfirm.onConfirm = async () => {
+    try {
+      if (isSuspend) {
+        await suspendCert({ certId: row.id });
+      } else {
+        await resumeCert({ certId: row.id });
+      }
+      ElMessage.success(isSuspend ? '挂起成功' : '恢复成功');
+      getList();
+    } catch (e) {
+      ElMessage.error(isSuspend ? '挂起失败' : '恢复失败');
+    }
+  };
+  securityConfirm.visible = true;
+}
+
+function submitLifecycle() {
+  lifecycleFormRef.value?.validate(async (valid) => {
+    if (!valid || !lifecycleRow.value) return;
+    securityConfirm.action = `${lifecycleTitle.value} (序列号: ${lifecycleRow.value.serialNumber || lifecycleRow.value.id})`;
+    securityConfirm.onConfirm = async () => {
+      lifecycleLoading.value = true;
+      try {
+        const certId = lifecycleRow.value.id;
+        let res: any;
+        if (lifecycleAction.value === 'renew') {
+          res = await renewCert(compactLifecyclePayload({ certId, notBefore: lifecycleForm.notBefore, notAfter: lifecycleForm.notAfter }));
+        } else if (lifecycleAction.value === 'update') {
+          res = await updateCert(
+            compactLifecyclePayload({
+              certId,
+              csrBase64: pemToBase64(lifecycleForm.csr),
+              notBefore: lifecycleForm.notBefore,
+              notAfter: lifecycleForm.notAfter
+            })
+          );
+        } else if (lifecycleAction.value === 'reissue') {
+          res = await reissueCert(compactLifecyclePayload({ certId, csrBase64: pemToBase64(lifecycleForm.csr), reason: lifecycleForm.reason }));
+        } else {
+          res = await recoverKey(compactLifecyclePayload({ certId, authCode: lifecycleForm.authCode }));
+        }
+        ElMessage.success('操作成功');
+        lifecycleOpen.value = false;
+        showIssueResult(res?.data);
+        getList();
+      } catch (e) {
+        ElMessage.error('操作失败');
+      } finally {
+        lifecycleLoading.value = false;
+      }
+    };
+    securityConfirm.visible = true;
+  });
 }
 function handleDelete(row: any) {
   const certIds = row.id || ids.value;
@@ -751,6 +1061,14 @@ function formatX509Date(zStr: string): string {
   }
 }
 
+function resolveCertStatus(item: any) {
+  if (item.certStatus) return item.certStatus;
+  if (item.status) return item.status;
+  if (item.isRevoked === 1) return 'REVOKED';
+  if (item.notAfter && new Date(item.notAfter).getTime() < Date.now()) return 'EXPIRED';
+  return 'VALID';
+}
+
 async function getList() {
   loading.value = true;
   try {
@@ -759,7 +1077,7 @@ async function getList() {
     total.value = res.data?.total || 0;
     certList.value = rawList.map((item: any) => {
       const info = parseCertInfo(item.cert);
-      return { ...item, ...info };
+      return { ...item, ...info, status: resolveCertStatus(item) };
     });
   } catch (error: any) {
     ElMessage.error('获取列表失败');

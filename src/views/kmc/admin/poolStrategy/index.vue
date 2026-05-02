@@ -18,13 +18,13 @@
 
     <el-row :gutter="10" class="mb8">
       <el-col :span="1.5">
-        <el-button type="primary" plain icon="Plus" @click="handleAdd" v-hasPermi="['kmc:strategy:add']">新增</el-button>
+        <el-button type="primary" plain icon="Plus" @click="handleAdd" v-hasPermi="['sys:poolstrategy:save']">新增</el-button>
       </el-col>
       <el-col :span="1.5">
-        <el-button type="success" plain icon="Edit" :disabled="single" @click="handleUpdate()" v-hasPermi="['kmc:strategy:edit']">修改</el-button>
+        <el-button type="success" plain icon="Edit" :disabled="single" @click="handleUpdate()" v-hasPermi="['sys:poolstrategy:modify']">修改</el-button>
       </el-col>
       <el-col :span="1.5">
-        <el-button type="danger" plain icon="Delete" :disabled="multiple" @click="handleDelete()" v-hasPermi="['kmc:strategy:remove']">删除</el-button>
+        <el-button type="danger" plain icon="Delete" :disabled="multiple" @click="handleDelete()" v-hasPermi="['sys:poolstrategy:remove']">删除</el-button>
       </el-col>
       <right-toolbar v-model:showSearch="showSearch" @queryTable="getList" />
     </el-row>
@@ -46,10 +46,10 @@
       <el-table-column label="操作" align="center" class-name="small-padding fixed-width">
         <template #default="scope">
           <el-tooltip content="修改" placement="top">
-            <el-button link type="primary" icon="Edit" @click="handleUpdate(scope.row)" v-hasPermi="['kmc:strategy:edit']" />
+            <el-button link type="primary" icon="Edit" @click="handleUpdate(scope.row)" v-hasPermi="['sys:poolstrategy:modify']" />
           </el-tooltip>
           <el-tooltip content="删除" placement="top">
-            <el-button link type="primary" icon="Delete" @click="handleDelete(scope.row)" v-hasPermi="['kmc:strategy:remove']" />
+            <el-button link type="primary" icon="Delete" @click="handleDelete(scope.row)" v-hasPermi="['sys:poolstrategy:remove']" />
           </el-tooltip>
         </template>
       </el-table-column>
@@ -94,6 +94,7 @@ import { ref, reactive, toRefs, onMounted, getCurrentInstance, ComponentInternal
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { listPoolStrategy, getPoolStrategy, delPoolStrategy, addPoolStrategy, updatePoolStrategy } from '@/api/kmc/poolStrategy/index';
 import { PoolStrategyVO, PoolStrategyQuery, PoolStrategyForm } from '@/api/kmc/poolStrategy/types';
+import { readKmcPage, unwrapKmcData } from '@/api/kmc/common';
 
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
 
@@ -166,21 +167,9 @@ const getList = async () => {
   loading.value = true;
   try {
     const res = await listPoolStrategy(queryParams.value);
-    // RuoYi-Vue-Plus backend format: res.data.rows or res.data.data depends on how Page is serialized
-    // Typically Result.buildSuccess(Page<...>) means standard nested data shape.
-    const responseData = res.data;
-    if (responseData && responseData.data) {
-      // In liuzx framework it is usually res.data.data.data or res.data.data.records
-      const pageInfo = responseData.data;
-      poolStrategyList.value = pageInfo.data || pageInfo.records || responseData.data;
-      total.value = pageInfo.totalCount || pageInfo.total || 0;
-    } else if (res.rows) {
-      poolStrategyList.value = res.rows;
-      total.value = res.total;
-    } else {
-      // Fallback
-      poolStrategyList.value = responseData as any;
-    }
+    const page = readKmcPage<PoolStrategyVO>(res);
+    poolStrategyList.value = page.records;
+    total.value = page.total;
   } catch (e) {
     console.error(e);
   } finally {
@@ -239,11 +228,7 @@ const handleUpdate = async (row?: PoolStrategyVO) => {
   const id = row?.id || ids.value[0];
   const res = await getPoolStrategy(id);
 
-  if (res.data && res.data.data) {
-    Object.assign(form.value, res.data.data);
-  } else {
-    Object.assign(form.value, res.data);
-  }
+  Object.assign(form.value, unwrapKmcData(res));
 
   dialog.visible = true;
   dialog.title = '修改备用密钥池策略';

@@ -13,7 +13,10 @@ export const listUser = (query: UserQuery): AxiosPromise<UserVO[]> => {
   return request({
     url: '/admin/v1/users/page',
     method: 'post',
-    data: query
+    data: {
+      params: {},
+      ...query
+    }
   });
 };
 

@@ -48,14 +48,15 @@
         <el-table-column label="邮箱" align="center" prop="mail" width="200" :show-overflow-tooltip="true" />
         <el-table-column label="状态" align="center" width="80">
           <template #default="scope">
-            <el-switch 
-  v-model="scope.row.status" 
-  :active-value="0" 
-  :inactive-value="1" 
-  active-color="#13ce66" 
-  inactive-color="#ff4949" 
-  @change="(val) => handleStatusChange(scope.row, val)">
-</el-switch>
+            <el-switch
+              v-model="scope.row.status"
+              :active-value="0"
+              :inactive-value="1"
+              active-color="#13ce66"
+              inactive-color="#ff4949"
+              @change="(val) => handleStatusChange(scope.row, val)"
+            >
+            </el-switch>
           </template>
         </el-table-column>
         <el-table-column label="证书状态" align="center" prop="certSn" width="100">
@@ -173,39 +174,33 @@
         <div style="margin-top: 20px; border-top: 1px dashed #eee; padding-top: 20px; margin-bottom: 20px">
           <h4 style="margin-top: 0; color: #606266; font-size: 14px">证书主题信息</h4>
           <CertSubject v-model="certForm.subjectItems" propPrefix="subjectItems" />
+          <el-form-item label="证书有效期" prop="validityValue">
+            <div class="validity-input-group">
+              <el-input-number v-model="certForm.validityValue" :min="1" :max="certForm.validityUnit === 'y' ? 50 : 3650" controls-position="right" />
+              <el-select v-model="certForm.validityUnit" class="validity-unit">
+                <el-option label="年" value="y" />
+                <el-option label="天" value="d" />
+              </el-select>
+            </div>
+          </el-form-item>
         </div>
         <div style="margin-top: 20px; border-top: 1px dashed #eee; padding-top: 20px; margin-bottom: 20px">
           <h4 style="margin-top: 0; color: #606266; font-size: 14px">USBKey 证书设置</h4>
           <el-form-item label="设备提供商" prop="provider">
             <div class="flex-row" style="display: flex; gap: 10px; width: 100%">
-              <el-select
-                v-model="certForm.provider"
-                placeholder="请选择或刷新"
-                style="flex: 1"
-                @change="onCertProviderChange"
-              >
+              <el-select v-model="certForm.provider" placeholder="请选择或刷新" style="flex: 1" @change="onCertProviderChange">
                 <el-option v-for="p in certProviders" :key="p" :label="p" :value="p" />
               </el-select>
               <el-button @click="refreshCertProviders" :icon="Refresh" circle />
             </div>
           </el-form-item>
           <el-form-item label="设备列表" prop="device">
-            <el-select
-              v-model="certForm.device"
-              placeholder="请选择设备"
-              style="width: 100%"
-              @change="onCertDeviceChange"
-            >
+            <el-select v-model="certForm.device" placeholder="请选择设备" style="width: 100%" @change="onCertDeviceChange">
               <el-option v-for="d in certDevices" :key="d" :label="d" :value="d" />
             </el-select>
           </el-form-item>
           <el-form-item label="应用" prop="appName">
-            <el-select
-              v-model="certForm.appName"
-              placeholder="请选择应用"
-              style="width: 100%"
-              @change="onCertAppChange"
-            >
+            <el-select v-model="certForm.appName" placeholder="请选择应用" style="width: 100%" @change="onCertAppChange">
               <el-option v-for="a in certApps" :key="a" :label="a" :value="a" />
             </el-select>
           </el-form-item>
@@ -282,6 +277,8 @@ const certForm = reactive({
   appName: '',
   containerName: '',
   pin: '',
+  validityValue: 5,
+  validityUnit: 'y',
   subjectItems: [] as any[]
 });
 
@@ -290,7 +287,8 @@ const certRules: FormRules = {
   device: [{ required: true, message: '请选择设备', trigger: 'change' }],
   appName: [{ required: true, message: '请选择应用', trigger: 'change' }],
   containerName: [{ required: true, message: '请输入容器名', trigger: 'blur' }],
-  pin: [{ required: true, message: '请输入User PIN', trigger: 'blur' }]
+  pin: [{ required: true, message: '请输入User PIN', trigger: 'blur' }],
+  validityValue: [{ required: true, message: '请输入证书有效期', trigger: 'blur' }]
 };
 
 const initFormData: UserForm = {
@@ -326,13 +324,13 @@ const data = reactive({
       { pattern: /^[^<>"'|\\]+$/, message: '不能包含非法字符：< > " \' \\ |', trigger: 'blur' }
     ],
     mail: [{ type: 'email', message: '请输入正确的邮箱地址', trigger: ['blur', 'change'] }],
-        mobile: [
-          {
-            pattern: /^1[3456789][0-9]\d{8}$/,
-            message: '请输入正确的手机号码',
-            trigger: 'blur'
-          }
-        ],
+    mobile: [
+      {
+        pattern: /^1[3456789][0-9]\d{8}$/,
+        message: '请输入正确的手机号码',
+        trigger: 'blur'
+      }
+    ],
     roleIds: [{ required: true, message: '用户角色不能为空', trigger: 'blur' }]
   }
 });
@@ -356,7 +354,6 @@ async function getList() {
       isDataLoaded.value = true;
     }, 200);
   } catch (error) {
-    console.error('获取列表失败', error);
   } finally {
     loading.value = false;
   }
@@ -387,10 +384,10 @@ async function handleStatusChange(row: any, newStatus: number) {
   if (!isDataLoaded.value) {
     return;
   }
-  
+
   // 根据新状态确定操作文本：0->1是停用，1->0是启用
   const text = newStatus === 0 ? '启用' : '停用';
-  
+
   try {
     await proxy?.$modal.confirm('确认要"' + text + '""' + row.username + '"用户吗?');
     await changeStatus(row.id, newStatus);
@@ -453,9 +450,7 @@ async function submitForm() {
         proxy?.$modal.msgSuccess('操作成功');
         dialog.visible = false;
         await getList();
-      } catch (error) {
-        console.error('操作失败', error);
-      }
+      } catch (error) {}
     }
   });
 }
@@ -469,9 +464,7 @@ async function handleDelete(row?: any) {
       await delUser(userIds);
       await getList();
       proxy?.$modal.msgSuccess('删除成功');
-    } catch (error) {
-      console.error('删除失败', error);
-    }
+    } catch (error) {}
   }
 }
 
@@ -495,9 +488,7 @@ async function handleResetPwd(row: any) {
     try {
       await resetUserPwd(row.id, res.value);
       proxy?.$modal.msgSuccess('修改成功，新密码是：' + res.value);
-    } catch (error) {
-      console.error('重置密码失败', error);
-    }
+    } catch (error) {}
   }
 }
 
@@ -513,13 +504,16 @@ async function handleIssueCert(row: any) {
     certForm.appName = '';
     certForm.containerName = row.username;
     certForm.pin = '';
-    
+    certForm.validityValue = 5;
+    certForm.validityUnit = 'y';
+
     // 获取"通用证书模板"配置
     ElMessage.info('正在加载证书模板...');
     const profileRes = await getProfileByName('通用证书模板');
     const profile = profileRes.data;
     const conf = parseJson(profile.conf);
-    
+    applyCertValidity(conf?.validity);
+
     // 根据模板配置和用户信息填充主题字段
     if (conf && conf.subject) {
       const items: any[] = [];
@@ -530,7 +524,7 @@ async function handleIssueCert(row: any) {
         organizationalUnit: '业务管理员',
         emailAddress: row.mail || ''
       };
-      
+
       const rdns = conf.subject.rdns || (Array.isArray(conf.subject) ? conf.subject : []);
       rdns.forEach((rdn: any) => {
         const rdnType = (typeof rdn.type === 'object' ? rdn.type.description : rdn.type) || '';
@@ -545,7 +539,7 @@ async function handleIssueCert(row: any) {
         if (!val && defaultValues[compType]) {
           val = defaultValues[compType];
         }
-        
+
         const count = Math.max(1, rdn.minOccurs === undefined ? 1 : rdn.minOccurs);
         for (let i = 0; i < count; i++) {
           items.push({
@@ -567,7 +561,7 @@ async function handleIssueCert(row: any) {
         { type: 'emailAddress', value: row.mail || '' }
       ]);
     }
-    
+
     certDialog.visible = true;
     await refreshCertProviders();
   } catch (error: any) {
@@ -646,6 +640,15 @@ function onCertAppChange() {
   // 应用变更时的处理
 }
 
+function applyCertValidity(validity?: string) {
+  const match = (validity || '').match(/^(\d+)([dy])$/);
+  if (!match) {
+    return;
+  }
+  certForm.validityValue = Number(match[1]);
+  certForm.validityUnit = match[2];
+}
+
 /** 提交签发证书表单 */
 async function submitCertForm() {
   certFormRef.value?.validate(async (valid: boolean) => {
@@ -653,7 +656,7 @@ async function submitCertForm() {
       try {
         certDialog.loading = true;
         const skf = await getSkfClient();
-        
+
         // 构建主题信息
         const subject = certForm.subjectItems
           .filter((item: any) => item.value)
@@ -668,22 +671,17 @@ async function submitCertForm() {
         await skf.checkPIN(`${certForm.provider}/${certForm.device}/${certForm.appName}`, certForm.pin);
 
         ElMessage.info('正在从 USBKey 生成 CSR...');
-        const csrRes = await skf.createPKCS10(
-          certForm.provider,
-          certForm.device,
-          certForm.appName,
-          subject,
-          'SM2',
-          256,
-          certForm.containerName
-        );
+        const csrRes = await skf.createPKCS10(certForm.provider, certForm.device, certForm.appName, subject, 'SM2', 256, certForm.containerName);
 
         // 2. 调用后端API签发证书
         ElMessage.info('正在请求后端签发证书...');
         const issueRes = await issueAdminCert({
-          userId: certForm.userId,
-          username: certForm.username,
-          csrPem: csrRes.pem
+          co: {
+            userId: certForm.userId,
+            username: certForm.username,
+            csrPem: csrRes.pem,
+            validity: `${certForm.validityValue}${certForm.validityUnit}`
+          }
         });
 
         if (!issueRes.data || !issueRes.data.cert) {
@@ -692,14 +690,7 @@ async function submitCertForm() {
 
         // 3. 导入证书到USBKey
         ElMessage.info('正在将证书写入 USBKey...');
-        await skf.importCertificate(
-          certForm.provider,
-          certForm.device,
-          certForm.appName,
-          csrRes.container,
-          true,
-          issueRes.data.cert
-        );
+        await skf.importCertificate(certForm.provider, certForm.device, certForm.appName, csrRes.container, true, issueRes.data.cert);
 
         // 4. 更新用户信息，将证书和证书序列号写入用户表
         ElMessage.info('正在更新用户证书信息...');
@@ -787,5 +778,16 @@ onMounted(() => {
 
 .fixed-width {
   min-width: 180px;
+}
+
+.validity-input-group {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 88px;
+  gap: 8px;
+  width: 100%;
+
+  .validity-unit {
+    width: 88px;
+  }
 }
 </style>

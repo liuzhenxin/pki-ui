@@ -13,6 +13,7 @@
       <el-descriptions-item label="最大大小">{{ profile.maxSize || '-' }}</el-descriptions-item>
       <el-descriptions-item label="有效期">{{ profile.validity || '-' }}</el-descriptions-item>
       <el-descriptions-item label="生效时间">{{ profile.notBeforeTime || '-' }}</el-descriptions-item>
+      <el-descriptions-item label="密钥对生成">{{ formatKeypairGeneration(profile.keypairGeneration) }}</el-descriptions-item>
       <el-descriptions-item label="密钥算法" :span="2">
         <el-tag v-for="algo in parsedKeyAlgorithms" :key="algo" class="mr-1" type="info" effect="plain">
           {{ algo }}
@@ -225,6 +226,22 @@ const subjectData = computed(() => {
   if (s.rdns && Array.isArray(s.rdns)) return s.rdns;
   return [];
 });
+
+function formatKeypairGeneration(value: any) {
+  if (!value) {
+    return '-';
+  }
+  if (typeof value === 'string') {
+    return value === 'InheritCA' || value === 'KMC' ? 'KMC' : '客户端';
+  }
+  if (value.inheritCA === true) {
+    return 'KMC';
+  }
+  if (value.forbidden === true) {
+    return '客户端';
+  }
+  return '-';
+}
 
 /** 获取类型标识，支持字符串或 { description: string } 对象 */
 const getTypeLabel = (type: any): string => {

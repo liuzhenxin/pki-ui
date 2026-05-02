@@ -152,7 +152,7 @@
 import { ref, reactive, toRefs, getCurrentInstance } from 'vue';
 import { ElMessage, ElMessageBox, type UploadInstance, type UploadProgressEvent, type UploadRawFile } from 'element-plus';
 import { Search, Refresh, Plus, Upload, Download, Edit, Delete, UploadFilled, Document } from '@element-plus/icons-vue';
-import { list as listProfile } from '@/api/ca/profile';
+import { listProfile } from '@/api/ca/profile';
 import { pageRequestor, getRequestor, saveRequestor, modifyRequestor, removeRequestor, importRequestor, exportRequestor } from '@/api/ca/requestor';
 import { RequestorForm, RequestorQuery } from '@/api/ca/requestor/types';
 import X509Cert from '@/components/X509Cert/index.vue';

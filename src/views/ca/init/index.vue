@@ -4,6 +4,7 @@
       <el-steps :active="active" finish-status="success" simple>
         <el-step title="协议" />
         <el-step title="初始化模板" />
+        <el-step title="创建签名者" />
         <el-step title="初始化根证书" />
         <el-step title="管理员设置" />
         <el-step title="审计员设置" />
@@ -96,7 +97,84 @@
           </div>
         </div>
 
-        <div v-if="active === 2" class="step-content">
+        <div v-if="active === 2" class="step-content" style="width: 80%; margin: auto">
+          <div class="step-header" style="display: flex; justify-content: space-between; align-items: center; width: 100%">
+            <h2>创建签名者</h2>
+            <el-button type="primary" :icon="Plus" @click="handleAddSigner">新增签名者</el-button>
+          </div>
+
+          <el-table
+            :data="signerList"
+            style="width: 100%; margin-top: 20px"
+            border
+            :header-cell-style="{ background: '#f8f9fa', color: '#606266', fontWeight: 600 }"
+          >
+            <el-table-column prop="name" label="名称" min-width="150" show-overflow-tooltip>
+              <template #default="{ row }">
+                <span style="font-weight: 500; color: #303133">{{ row.name }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="algo" label="密钥算法" width="100" align="center">
+              <template #default="{ row }">
+                <el-tag size="small" effect="plain">{{ row.algo }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="signerType" label="签名器类型" width="120" align="center">
+              <template #default="{ row }">
+                <el-tag :type="row.signerType === 'SDF' ? 'warning' : 'info'" size="small" effect="light">
+                  {{ row.signerType }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="keyIndex" label="密钥索引" width="100" align="center">
+              <template #default="{ row }">
+                <span>{{ row.signerType === 'SDF' ? row.keyIndex : '-' }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="150" align="center">
+              <template #default="{ row, $index }">
+                <el-button type="primary" link :icon="Edit" @click="handleEditSigner(row, $index)">编辑</el-button>
+                <el-button type="danger" link :icon="Delete" @click="handleDeleteSigner($index)">删除</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+
+          <!-- 签名者表单弹窗 -->
+          <el-dialog v-model="signerDialog.visible" :title="signerDialog.title" width="500px" append-to-body>
+            <el-form :model="signerForm" :rules="signerRules" ref="signerFormRef" label-width="100px">
+              <el-form-item label="名称" prop="name">
+                <el-input v-model="signerForm.name" placeholder="请输入签名者名称" />
+              </el-form-item>
+              <el-form-item label="密钥算法" prop="algo">
+                <el-select v-model="signerForm.algo" style="width: 100%">
+                  <el-option label="SM2" value="SM2" />
+                  <el-option label="RSA" value="RSA" />
+                </el-select>
+              </el-form-item>
+              <el-form-item label="签名器类型" prop="signerType">
+                <el-select v-model="signerForm.signerType" style="width: 100%">
+                  <el-option label="PKCS12" value="PKCS12" />
+                  <el-option label="JKS" value="JKS" />
+                  <el-option label="SDF" value="SDF" />
+                </el-select>
+              </el-form-item>
+              <el-form-item v-if="signerForm.signerType === 'SDF'" label="密钥索引" prop="keyIndex">
+                <el-input-number v-model="signerForm.keyIndex" :min="1" :step="1" style="width: 100%" />
+              </el-form-item>
+              <el-form-item label="密码" prop="password">
+                <el-input v-model="signerForm.password" type="password" show-password placeholder="请输入签名器密码" />
+              </el-form-item>
+            </el-form>
+            <template #footer>
+              <div class="dialog-footer">
+                <el-button @click="signerDialog.visible = false">取 消</el-button>
+                <el-button type="primary" @click="submitSignerForm">确 定</el-button>
+              </div>
+            </template>
+          </el-dialog>
+        </div>
+
+        <div v-if="active === 3" class="step-content">
           <div class="step-header" style="display: flex; justify-content: space-between; align-items: center; width: 100%">
             <h2>初始化根证书</h2>
             <el-button type="info" text circle style="font-size: 24px; padding: 12px" :icon="QuestionFilled" @click="showRootCaHelp = true" />
@@ -156,25 +234,12 @@
                 <el-form-item label="CA名称" prop="name">
                   <el-input v-model="rootCaForm.name" placeholder="请输入CA名称" />
                 </el-form-item>
+                <el-form-item label="关联签名者" prop="signerId">
+                  <el-select v-model="rootCaForm.signerId" placeholder="请选择签名者" @change="onSignerChange" style="width: 100%">
+                    <el-option v-for="s in signerList" :key="s.id" :label="s.name" :value="s.id" />
+                  </el-select>
+                </el-form-item>
                 <CertSubject v-model="rootCaForm.subjectItems" propPrefix="subjectItems" />
-                <el-form-item label="密钥算法" prop="algo">
-                  <el-select v-model="rootCaForm.algo">
-                    <el-option v-for="a in rootCaAlgos" :key="a" :label="a" :value="a" />
-                  </el-select>
-                </el-form-item>
-                <el-form-item label="签名器类型" prop="signerType">
-                  <el-select v-model="rootCaForm.signerType">
-                    <el-option label="PKCS12" value="PKCS12" />
-                    <el-option label="JKS" value="JKS" />
-                    <el-option label="SDF" value="SDF" />
-                  </el-select>
-                </el-form-item>
-                <el-form-item v-if="rootCaForm.signerType === 'SDF'" label="密钥索引" prop="keyIndex">
-                  <el-input-number v-model="rootCaForm.keyIndex" :min="1" :step="1" placeholder="正整数" />
-                </el-form-item>
-                <el-form-item label="密码" prop="password">
-                  <el-input v-model="rootCaForm.password" type="password" show-password placeholder="请输入签名器密码" />
-                </el-form-item>
 
                 <div v-if="rootType === 'external'" style="margin-top: 20px; border-top: 1px dashed #eee; padding-top: 20px">
                   <el-form-item label="CSR操作">
@@ -235,6 +300,15 @@
                 <el-form-item label="全量CRL间隔" prop="crlFullIntervals">
                   <el-input-number v-model="rootCaForm.crlFullIntervals" :min="1" />
                 </el-form-item>
+                <el-form-item label="增量CRL间隔" prop="deltaCrlIntervals">
+                  <el-input-number v-model="rootCaForm.deltaCrlIntervals" :min="0" />
+                </el-form-item>
+                <el-form-item label="全量CRL签发线程" prop="fullCrlThreads">
+                  <el-input-number v-model="rootCaForm.fullCrlThreads" :min="1" :max="100" />
+                </el-form-item>
+                <el-form-item label="增量CRL签发线程" prop="deltaCrlThreads">
+                  <el-input-number v-model="rootCaForm.deltaCrlThreads" :min="1" :max="100" />
+                </el-form-item>
                 <el-form-item label="重叠时间" prop="crlOverlap">
                   <el-input v-model="rootCaForm.crlOverlap" placeholder="例如: 90d" />
                 </el-form-item>
@@ -274,6 +348,19 @@
                 </el-form-item>
 
                 <el-form-item
+                  v-for="(item, index) in rootCaForm.deltaCrlUris"
+                  :key="'delta-crl-' + index"
+                  :label="index === 0 ? 'Delta CRL URI' : ' '"
+                  :prop="'deltaCrlUris.' + index + '.value'"
+                >
+                  <div style="display: flex; width: 100%">
+                    <el-input v-model="item.value" style="flex: 1; margin-right: 10px" />
+                    <el-button v-if="index === 0" @click="addUri('deltaCrlUris')" type="primary" :icon="Plus" circle size="small" />
+                    <el-button v-if="index !== 0" @click="removeUri('deltaCrlUris', index)" type="danger" :icon="Minus" circle size="small" />
+                  </div>
+                </el-form-item>
+
+                <el-form-item
                   v-for="(item, index) in rootCaForm.ocspUris"
                   :key="'ocsp-' + index"
                   :label="index === 0 ? 'OCSP URI' : ' '"
@@ -302,7 +389,7 @@
           </el-form>
         </div>
 
-        <div v-if="active === 3" class="step-content">
+        <div v-if="active === 4" class="step-content">
           <div class="step-header" style="display: flex; justify-content: space-between; align-items: center; width: 100%">
             <div style="display: flex; align-items: center; gap: 20px">
               <h2 style="margin: 0">管理员设置</h2>
@@ -352,6 +439,20 @@
             <div style="margin-top: 20px; border-top: 1px dashed #eee; padding-top: 20px; margin-bottom: 20px">
               <h4 style="margin-top: 0; color: #606266; font-size: 14px">证书主题信息</h4>
               <CertSubject v-model="adminForm.subjectItems" propPrefix="subjectItems" />
+              <el-form-item label="证书有效期" prop="validityValue">
+                <div class="validity-input-group">
+                  <el-input-number
+                    v-model="adminForm.validityValue"
+                    :min="1"
+                    :max="adminForm.validityUnit === 'y' ? 50 : 3650"
+                    controls-position="right"
+                  />
+                  <el-select v-model="adminForm.validityUnit" class="validity-unit">
+                    <el-option label="年" value="y" />
+                    <el-option label="天" value="d" />
+                  </el-select>
+                </div>
+              </el-form-item>
             </div>
 
             <div style="margin-top: 20px; border-top: 1px dashed #eee; padding-top: 20px; margin-bottom: 20px">
@@ -405,7 +506,7 @@
           </el-form>
         </div>
 
-        <div v-if="active === 4" class="step-content">
+        <div v-if="active === 5" class="step-content">
           <div class="step-header" style="display: flex; justify-content: space-between; align-items: center; width: 100%">
             <div style="display: flex; align-items: center; gap: 20px">
               <h2 style="margin: 0">审计员设置</h2>
@@ -441,6 +542,20 @@
             <div style="margin-top: 20px; border-top: 1px dashed #eee; padding-top: 20px; margin-bottom: 20px">
               <h4 style="margin-top: 0; color: #606266; font-size: 14px">证书主题信息</h4>
               <CertSubject v-model="auditorForm.subjectItems" propPrefix="subjectItems" />
+              <el-form-item label="证书有效期" prop="validityValue">
+                <div class="validity-input-group">
+                  <el-input-number
+                    v-model="auditorForm.validityValue"
+                    :min="1"
+                    :max="auditorForm.validityUnit === 'y' ? 50 : 3650"
+                    controls-position="right"
+                  />
+                  <el-select v-model="auditorForm.validityUnit" class="validity-unit">
+                    <el-option label="年" value="y" />
+                    <el-option label="天" value="d" />
+                  </el-select>
+                </div>
+              </el-form-item>
             </div>
 
             <div style="margin-top: 20px; border-top: 1px dashed #eee; padding-top: 20px; margin-bottom: 20px">
@@ -494,14 +609,14 @@
           </el-form>
         </div>
 
-        <div v-if="active === 5" class="step-content">
+        <div v-if="active === 6" class="step-content">
           <h2>安装完成</h2>
           <el-result icon="success" title="初始化成功" sub-title="您可以点击下方按钮进入系统"> </el-result>
         </div>
       </div>
 
       <div class="wizard-actions">
-        <el-button @click="prev" :disabled="active === 0 || active === 5 || loading">上一步</el-button>
+        <el-button @click="prev" :disabled="active === 0 || active === 6 || loading">上一步</el-button>
         <el-button type="primary" :loading="loading" @click="next" :disabled="!canNext">{{ nextButtonText }}</el-button>
       </div>
     </el-card>
@@ -543,6 +658,7 @@ import { ref, computed, reactive, onMounted, onUnmounted, watch, getCurrentInsta
 import { ElMessage, FormInstance, FormRules, UploadInstance, UploadUserFile, UploadProps, UploadRawFile, genFileId } from 'element-plus';
 import { useRouter } from 'vue-router';
 import { listProfile, listInitProfile, getProfile, initProfiles } from '@/api/ca/profile';
+import { listSigner, saveSigner, removeSigner, modifySigner } from '@/api/ca/signer';
 import { uploadUserCert, resetUserPwd } from '@/api/system/user';
 import { getTenant, updateTenant } from '@/api/system/tenant';
 import { genRootCa, importExternalCert, issueAdminCert, deleteAllRootCa } from '@/api/ca/root';
@@ -556,7 +672,7 @@ import { parseJson, parseKeyAlgorithms } from '@/utils/json';
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
 const userStore = useUserStore();
 import * as forge from 'node-forge';
-import { Plus, Minus, QuestionFilled, Warning, Refresh, View } from '@element-plus/icons-vue';
+import { Plus, Minus, QuestionFilled, Warning, Refresh, View, Edit, Delete } from '@element-plus/icons-vue';
 
 // 引入 SKFClient
 import SKFClient from '@/api/skf/skf_api';
@@ -586,14 +702,12 @@ const getSkfClient = (): Promise<any> => {
         });
 
       client.on('error', (err: any) => {
-        console.error('SKF Client Error', err);
         if (!client.isConnected()) {
           skfClientPromise = null;
         }
       });
 
       client.on('disconnect', () => {
-        console.log('SKF Client Disconnected');
         skfClientPromise = null;
       });
     });
@@ -608,7 +722,6 @@ const isSkfMonitoring = ref(false);
 
 const stopUsbMonitoring = async (forceDisconnect = false) => {
   if (usbMonitoringActive || forceDisconnect) {
-    console.log(`Stopping USB monitoring (force=${forceDisconnect})...`);
     usbMonitoringActive = false;
     monitoredProviders.clear();
     isSkfMonitoring.value = false;
@@ -650,7 +763,6 @@ const monitorLoop = async () => {
       await new Promise((r) => setTimeout(r, 10000));
     } catch (e) {
       if (usbMonitoringActive) {
-        console.warn('USB monitor loop error:', e);
         isSkfMonitoring.value = false;
         await new Promise((r) => setTimeout(r, 5000));
       } else {
@@ -661,12 +773,10 @@ const monitorLoop = async () => {
 };
 
 const monitorProvider = async (provider: string) => {
-  console.log(`Starting monitor for provider: ${provider}`);
   while (usbMonitoringActive) {
     try {
       const skf = await getSkfClient();
       const event = await skf.waitForDevEvent(provider);
-      console.log(`USB Event on ${provider}:`, event);
 
       if (usbMonitoringActive) {
         // Refresh appropriate lists
@@ -699,7 +809,6 @@ const monitorProvider = async (provider: string) => {
 
 const startUsbMonitoring = async () => {
   if (usbMonitoringActive) return;
-  console.log('Starting USB monitoring...');
   usbMonitoringActive = true;
   isSkfMonitoring.value = true;
 
@@ -707,11 +816,91 @@ const startUsbMonitoring = async () => {
 };
 
 const router = useRouter();
-const userStore = useUserStore();
 const tagsViewStore = useTagsViewStore();
 const active = ref(0);
 const agree = ref(false);
 const loading = ref(false);
+
+// 签名者管理
+const signerList = ref<any[]>([]);
+const signerFormRef = ref<FormInstance>();
+const signerForm = reactive({
+  id: undefined as string | number | undefined,
+  name: '',
+  algo: 'SM2',
+  signerType: 'PKCS12',
+  keyIndex: 1,
+  password: ''
+});
+const signerRules = reactive<FormRules>({
+  name: [{ required: true, message: '请输入名称', trigger: 'blur' }],
+  password: [{ required: true, message: '请输入密码', trigger: 'blur' }]
+});
+const signerDialog = reactive({
+  visible: false,
+  title: '',
+  index: -1
+});
+
+const fetchSignerList = async () => {
+  try {
+    const res = await listSigner();
+    signerList.value = res.data || [];
+  } catch (error) {}
+};
+
+const handleAddSigner = () => {
+  Object.assign(signerForm, {
+    id: undefined,
+    name: '',
+    algo: 'SM2',
+    signerType: 'PKCS12',
+    keyIndex: 1,
+    password: ''
+  });
+  signerDialog.title = '新增签名者';
+  signerDialog.index = -1;
+  signerDialog.visible = true;
+};
+
+const handleEditSigner = (row: any, index: number) => {
+  Object.assign(signerForm, row);
+  signerDialog.title = '编辑签名者';
+  signerDialog.index = index;
+  signerDialog.visible = true;
+};
+
+const handleDeleteSigner = async (index: number) => {
+  const signer = signerList.value[index];
+  if (signer.id) {
+    try {
+      await removeSigner([signer.id]);
+      ElMessage.success('删除成功');
+    } catch (error) {
+      return;
+    }
+  }
+  signerList.value.splice(index, 1);
+};
+
+const submitSignerForm = async () => {
+  if (!signerFormRef.value) return;
+  await signerFormRef.value.validate(async (valid) => {
+    if (valid) {
+      try {
+        if (signerForm.id) {
+          await modifySigner(signerForm);
+          ElMessage.success('修改成功');
+        } else {
+          await saveSigner(signerForm);
+          ElMessage.success('保存成功');
+        }
+        await fetchSignerList();
+        signerDialog.visible = false;
+      } catch (error) {}
+    }
+  });
+};
 
 // 常量定义
 const ADMIN_USER_ID = '401';
@@ -733,7 +922,6 @@ const showAuditorHelp = ref(false);
 const currentTemplate = ref({});
 
 const loadTemplateData = async () => {
-  console.log('loadTemplateData: Fetching profiles...');
   try {
     const res = await listInitProfile();
     templateData.value = res.data.map((p: any) => ({
@@ -741,17 +929,11 @@ const loadTemplateData = async () => {
       // Normalize type from certLevel if type is missing or generic
       type: p.type || p.certLevel || 'EndEntity'
     }));
-    console.log('loadTemplateData: Profiles fetched and normalized:', templateData.value?.length);
-    if (templateData.value) {
-      templateData.value.forEach((p: any) => console.log(`  - [${p.id}] ${p.name} (${p.type})`));
-    }
     // If we are already past step 1, assume all returned profiles were selected
     if (active.value > 1 && selectedTemplates.value.length === 0) {
       selectedTemplates.value = templateData.value;
-      console.log('loadTemplateData: Automatically selected all profiles at step', active.value);
     }
   } catch (error) {
-    console.error('loadTemplateData: Error', error);
     ElMessage.error('获取模板列表失败');
   }
 };
@@ -761,43 +943,24 @@ watch(active, async (newActive) => {
     await loadTemplateData();
   }
   if (newActive === 2) {
-    console.log('Step 2: Starting initialization', selectedTemplates.value.length);
-    // 先删除所有根证书
-    try {
-      await deleteAllRootCa();
-      console.log('Step 2: Deleted all existing root certificates');
-    } catch (error) {
-      console.error('Step 2: Failed to delete root certificates', error);
-      ElMessage.warning('删除旧根证书失败，但继续初始化流程');
-    }
+    await fetchSignerList();
+  }
+  if (newActive === 3) {
+    await fetchSignerList();
 
     if (selectedTemplates.value.length === 0) {
       await loadTemplateData();
-      console.log('Step 2: Templates loaded', selectedTemplates.value.length);
     }
     const rootCaTemplate = selectedTemplates.value.find((t: any) => t.name === 'RootCA证书模板') || rootCaTemplates.value[0];
-    console.log('Step 2: Target template', rootCaTemplate?.name, rootCaTemplate?.id);
-    console.log(
-      'Step 2: All selected templates',
-      selectedTemplates.value.map((t: any) => ({ id: t.id, name: t.name, type: t.type }))
-    );
-    console.log(
-      'Step 2: RootCA templates',
-      rootCaTemplates.value.map((t: any) => ({ id: t.id, name: t.name }))
-    );
     if (rootCaTemplate) {
       rootCaForm.profileId = (rootCaTemplate as any).id;
-      console.log('Step 2: Loading profile with ID', rootCaForm.profileId);
       await loadProfileToForm(rootCaForm.profileId, rootCaForm);
-      console.log('Step 2: Template applied', rootCaForm.subjectItems.length);
     } else {
-      console.error('Step 2: No RootCA template found!');
       ElMessage.error('未找到RootCA证书模板，请确保已选择至少一个RootCA证书模板');
     }
 
     // Ensure subjectItems is at least initialized with basic structure if still empty
     if (!rootCaForm.subjectItems || rootCaForm.subjectItems.length === 0) {
-      console.log('Step 2: No template data for subject, using default');
       rootCaForm.subjectItems = sortSubjectItems([
         { type: 'country', value: 'CN' },
         { type: 'organization', value: '' },
@@ -805,7 +968,7 @@ watch(active, async (newActive) => {
       ]);
     }
   }
-  if (newActive === 3) {
+  if (newActive === 4) {
     if (selectedTemplates.value.length === 0) {
       await loadTemplateData();
     }
@@ -832,8 +995,8 @@ watch(active, async (newActive) => {
     }
     await refreshAdminProviders();
   }
-  if (newActive === 4) {
-    // 强制断开 SK F连接，确保在步骤4时重新建立连接
+  if (newActive === 5) {
+    // 强制断开 SKF 连接，确保在步骤5时重新建立连接
     await stopUsbMonitoring(true);
 
     if (selectedTemplates.value.length === 0) {
@@ -860,13 +1023,13 @@ watch(active, async (newActive) => {
         { type: 'commonName', value: 'auditor' }
       ]);
     }
-    // 等待一小段时间，确保 SK F连接断开
+    // 等待一小段时间，确保 SKF 连接断开
     await new Promise((r) => setTimeout(r, 500));
     await refreshAuditorProviders();
   }
 
   // Handle USB Monitoring Lifecycle
-  if (newActive === 3 || newActive === 4) {
+  if (newActive === 4 || newActive === 5) {
     await startUsbMonitoring();
   } else {
     await stopUsbMonitoring();
@@ -919,6 +1082,7 @@ const formatToPem = (base64: string) => {
 
 const rootCaFormRef = ref<FormInstance>();
 const rootCaForm = reactive({
+  signerId: '' as string | number,
   profileId: '' as string | number,
   rootcaProfileName: '', // Template name for backend
   name: '',
@@ -941,6 +1105,9 @@ const rootCaForm = reactive({
   // CRL
   crlIntervalHours: 24,
   crlFullIntervals: 90,
+  deltaCrlIntervals: 0,
+  fullCrlThreads: 1,
+  deltaCrlThreads: 1,
   crlOverlap: '90d',
   crlIntervalTime: '01:00',
   nextCrlNo: 2,
@@ -948,6 +1115,7 @@ const rootCaForm = reactive({
   // URIs
   cacertUris: [{ value: 'https://myorg.org/rootca1.der' }],
   crlUris: [{ value: 'https://localhost:8081/dummy/crl/?type=crl&name=rootca1' }],
+  deltaCrlUris: [{ value: '' }],
   ocspUris: [{ value: 'https://localhost:8080/ocsp/responder1' }],
 
   // Advanced
@@ -955,28 +1123,41 @@ const rootCaForm = reactive({
   status: 'active'
 });
 
+const onSignerChange = (val: string | number) => {
+  const signer = signerList.value.find((s) => s.id === val);
+  if (signer) {
+    rootCaForm.algo = signer.algo;
+    rootCaForm.signerType = signer.signerType;
+    rootCaForm.keyIndex = signer.keyIndex;
+    rootCaForm.password = signer.password;
+  }
+};
+
 const rootCaAlgos = ref<string[]>([]);
 
 const rootCaTemplates = computed(() => {
   const filtered = selectedTemplates.value.filter((t: any) => (t as any).type === 'RootCA');
-  console.log('Computed rootCaTemplates:', filtered.length, 'from total selected:', selectedTemplates.value.length);
   return filtered;
 });
 
 const loadProfileToForm = async (id: string | number, form: any, defaultValues?: any) => {
-  console.log('loadProfileToForm start', id, form === rootCaForm ? 'RootCA' : 'Other');
   if (!typeMapping) {
-    console.error('typeMapping is NOT defined in index.vue!');
   }
   loading.value = true;
   try {
-    const res = await getProfile(id);
-    console.log('getProfile response', res);
-    const profile = res.data;
+    // Prefer data from templateData if it already has the conf (populated by listInitProfile)
+    // This avoids Forbidden error on getProfile during the initialization phase
+    let profile = templateData.value.find((t: any) => String(t.id) === String(id));
+
+    if (!profile || !profile.conf) {
+      const res = await getProfile(id);
+      profile = res.data;
+    } else {
+    }
+
     if (!profile) {
       throw new Error('Profile data is empty');
     }
-    console.log('Profile loaded', profile.name, profile.id);
     // Remove JSON comments before parsing
     const parseConf = (confStr: string) => {
       // Remove single-line comments (// ...)
@@ -987,7 +1168,6 @@ const loadProfileToForm = async (id: string | number, form: any, defaultValues?:
     };
     const conf = typeof profile.conf === 'string' ? parseConf(profile.conf) : profile.conf;
     if (conf) {
-      console.log('Profile config parsed', !!conf.subject);
       // 1. Subject Items
       if (conf.subject) {
         const items: any[] = [];
@@ -1023,7 +1203,6 @@ const loadProfileToForm = async (id: string | number, form: any, defaultValues?:
           }
         });
         form.subjectItems = sortSubjectItems(items);
-        console.log('Subject items set from template', form.subjectItems.length);
       }
 
       // 2. Profile Name
@@ -1031,7 +1210,7 @@ const loadProfileToForm = async (id: string | number, form: any, defaultValues?:
         form.rootcaProfileName = profile.name || '';
       }
 
-      // 3. Validity (only for Root CA)
+      // 3. Validity
       if (form === rootCaForm && conf.validity) {
         const v = conf.validity;
         const unit = v.slice(-1);
@@ -1040,6 +1219,9 @@ const loadProfileToForm = async (id: string | number, form: any, defaultValues?:
           form.maxValidity = val;
           form.maxValidityUnit = unit || 'y';
         }
+      }
+      if (form !== rootCaForm && conf.validity) {
+        applyCertValidity(form, conf.validity);
       }
 
       // 4. Algorithms (only for Root CA)
@@ -1052,7 +1234,6 @@ const loadProfileToForm = async (id: string | number, form: any, defaultValues?:
       }
     }
   } catch (e) {
-    console.error('Failed to load template details', e);
     ElMessage.error('获取模板详情失败');
   } finally {
     loading.value = false;
@@ -1061,11 +1242,7 @@ const loadProfileToForm = async (id: string | number, form: any, defaultValues?:
 
 const rootCaRules = reactive<FormRules>({
   name: [{ required: true, message: '请输入CA名称', trigger: 'blur' }],
-  password: [{ required: true, message: '请输入签名器密码', trigger: 'blur' }],
-  keyIndex: [
-    { required: true, message: '请输入密钥索引', trigger: 'blur' },
-    { type: 'integer', message: '必须为正整数', trigger: 'blur', min: 1 }
-  ],
+  signerId: [{ required: true, message: '请选择关联签名者', trigger: 'change' }],
   maxValidity: [
     { required: true, message: '请输入最大有效期', trigger: 'blur' },
     { type: 'integer', message: '必须为正整数', trigger: 'blur', min: 1 }
@@ -1083,11 +1260,11 @@ watch(
   }
 );
 
-const addUri = (field: 'cacertUris' | 'crlUris' | 'ocspUris') => {
+const addUri = (field: 'cacertUris' | 'crlUris' | 'deltaCrlUris' | 'ocspUris') => {
   rootCaForm[field].push({ value: '' });
 };
 
-const removeUri = (field: 'cacertUris' | 'crlUris' | 'ocspUris', index: number) => {
+const removeUri = (field: 'cacertUris' | 'crlUris' | 'deltaCrlUris' | 'ocspUris', index: number) => {
   rootCaForm[field].splice(index, 1);
 };
 
@@ -1134,7 +1311,6 @@ const handleDownloadCsr = async () => {
   // 这里应该调用后端接口生成CSR，或者在前端生成
   // 暂时模拟
   ElMessage.success('CSR 生成请求已发送（模拟），请检查下载');
-  console.log('Generating CSR for:', rootCaForm);
 };
 
 // 证书解析相关
@@ -1169,7 +1345,6 @@ const readFileContent = async (file: File): Promise<string | null> => {
           }
         }
       } catch (error) {
-        console.error('File reading error:', error);
         resolve(null);
       }
     };
@@ -1194,9 +1369,20 @@ const adminForm = reactive({
   appName: '',
   containerName: 'admin',
   pin: '',
+  validityValue: 5,
+  validityUnit: 'y',
   subjectItems: [] as any[],
   profileId: '' as string | number
 });
+
+function applyCertValidity(form: any, validity?: string) {
+  const match = (validity || '').match(/^(\d+)([dy])$/);
+  if (!match) {
+    return;
+  }
+  form.validityValue = Number(match[1]);
+  form.validityUnit = match[2];
+}
 
 const adminProviders = ref<string[]>([]);
 const adminDevices = ref<string[]>([]);
@@ -1269,13 +1455,13 @@ const handleGenerateAdminCert = async () => {
     'appName',
     'containerName',
     'pin',
+    'validityValue',
     ...adminForm.subjectItems.map((_, i) => `subjectItems.${i}.value`)
   ];
 
   try {
     await adminFormRef.value.validateField(fieldsToValidate);
   } catch (error) {
-    console.warn('Form validation failed for CSR generation', error);
     return;
   }
 
@@ -1304,8 +1490,6 @@ const handleGenerateAdminCert = async () => {
 
     const keyType = rootCaForm.algo === 'RSA' ? 'RSA' : 'SM2';
     const keyLength = keyType === 'RSA' ? 2048 : 256;
-
-    console.log('Creating PKCS10:', { subject, keyType, keyLength, container: adminForm.containerName });
     const csrRes = await skf.createPKCS10(
       adminForm.provider,
       adminForm.device,
@@ -1319,8 +1503,11 @@ const handleGenerateAdminCert = async () => {
     // 2. 调用后端接口签发证书
     ElMessage.info({ message: '正在请求后端签发管理员证书...', duration: 2000 });
     const issueRes = await issueAdminCert({
-      csrPem: csrRes.pem,
-      profileId: adminForm.profileId
+      co: {
+        csrPem: csrRes.pem,
+        profileId: adminForm.profileId,
+        validity: `${adminForm.validityValue}${adminForm.validityUnit}`
+      }
     });
     if (!issueRes.data || !issueRes.data.cert) {
       throw new Error('签发证书失败: 无返回数据');
@@ -1341,7 +1528,6 @@ const handleGenerateAdminCert = async () => {
     adminCertPem.value = signedCertPem;
     ElMessage.success('管理员证书生成并写入成功');
   } catch (e: any) {
-    console.error('管理员证书生成失败', e);
     ElMessage.error('管理员证书生成失败: ' + (e.message || e));
   } finally {
     adminGeneratingCert.value = false;
@@ -1369,7 +1555,8 @@ const adminRules = reactive<FormRules>({
   device: [{ required: true, message: '请选择设备', trigger: 'change' }],
   appName: [{ required: true, message: '请选择应用', trigger: 'change' }],
   containerName: [{ required: true, message: '请输入容器名', trigger: 'blur' }],
-  pin: [{ required: true, message: '请输入 User PIN', trigger: 'blur' }]
+  pin: [{ required: true, message: '请输入 User PIN', trigger: 'blur' }],
+  validityValue: [{ required: true, message: '请输入证书有效期', trigger: 'blur' }]
 });
 
 // 审计员设置
@@ -1387,6 +1574,8 @@ const auditorForm = reactive({
   appName: '',
   containerName: 'auditor',
   pin: '',
+  validityValue: 5,
+  validityUnit: 'y',
   subjectItems: [] as any[],
   profileId: '' as string | number
 });
@@ -1396,25 +1585,19 @@ const auditorDevices = ref<string[]>([]);
 const auditorApps = ref<string[]>([]);
 
 const refreshAuditorProviders = async () => {
-  console.log('refreshAuditorProviders: Starting...');
   try {
     const skf = await getSkfClient();
-    console.log('refreshAuditorProviders: Connected to SKF');
     const providers = await skf.enumProvider();
-    console.log('refreshAuditorProviders: Providers:', providers);
     auditorProviders.value = providers;
     if (providers.length > 0) {
       auditorForm.provider = providers[0];
-      console.log('refreshAuditorProviders: Selected provider:', providers[0]);
       await onAuditorProviderChange();
     } else {
       auditorForm.provider = '';
       auditorDevices.value = [];
       auditorForm.device = '';
-      console.log('refreshAuditorProviders: No providers found');
     }
   } catch (e: any) {
-    console.error('refreshAuditorProviders: Error', e);
     ElMessage.error('SKF 服务连接失败: ' + (e.message || e));
   }
 };
@@ -1468,13 +1651,13 @@ const handleGenerateAuditorCert = async () => {
     'appName',
     'containerName',
     'pin',
+    'validityValue',
     ...auditorForm.subjectItems.map((_, i) => `subjectItems.${i}.value`)
   ];
 
   try {
     await auditorFormRef.value.validateField(fieldsToValidate);
   } catch (error) {
-    console.warn('Form validation failed for CSR generation', error);
     return;
   }
 
@@ -1503,8 +1686,6 @@ const handleGenerateAuditorCert = async () => {
 
     const keyType = rootCaForm.algo === 'RSA' ? 'RSA' : 'SM2';
     const keyLength = keyType === 'RSA' ? 2048 : 256;
-
-    console.log('Creating PKCS10 for auditor:', { subject, keyType, keyLength, container: auditorForm.containerName });
     const csrRes = await skf.createPKCS10(
       auditorForm.provider,
       auditorForm.device,
@@ -1518,8 +1699,11 @@ const handleGenerateAuditorCert = async () => {
     // 2. 调用后端接口签发证书
     ElMessage.info({ message: '正在请求后端签发审计员证书...', duration: 2000 });
     const issueRes = await issueAdminCert({
-      csrPem: csrRes.pem,
-      profileId: auditorForm.profileId
+      co: {
+        csrPem: csrRes.pem,
+        profileId: auditorForm.profileId,
+        validity: `${auditorForm.validityValue}${auditorForm.validityUnit}`
+      }
     });
     if (!issueRes.data || !issueRes.data.cert) {
       throw new Error('签发证书失败: 无返回数据');
@@ -1542,7 +1726,6 @@ const handleGenerateAuditorCert = async () => {
     // Resume monitoring
     await startUsbMonitoring();
   } catch (e: any) {
-    console.error('审计员证书生成失败', e);
     ElMessage.error('审计员证书生成失败: ' + (e.message || e));
     // Resume monitoring
     await startUsbMonitoring();
@@ -1570,11 +1753,12 @@ const auditorRules = reactive<FormRules>({
   device: [{ required: true, message: '请选择设备', trigger: 'change' }],
   appName: [{ required: true, message: '请选择应用', trigger: 'change' }],
   containerName: [{ required: true, message: '请输入容器名', trigger: 'blur' }],
-  pin: [{ required: true, message: '请输入 User PIN', trigger: 'blur' }]
+  pin: [{ required: true, message: '请输入 User PIN', trigger: 'blur' }],
+  validityValue: [{ required: true, message: '请输入证书有效期', trigger: 'blur' }]
 });
 
 const nextButtonText = computed(() => {
-  if (active.value === 5) {
+  if (active.value === 6) {
     return '进入系统';
   }
   return '下一步';
@@ -1592,6 +1776,9 @@ const canNext = computed(() => {
     return selectedTemplates.value.length > 0 && hasRootCASelected.value;
   }
   if (active.value === 2) {
+    return signerList.value.length > 0;
+  }
+  if (active.value === 3) {
     const basicValid =
       rootCaForm.subjectItems.every((item: any) => {
         const isRequired = item.minOccurs === undefined || item.minOccurs > 0;
@@ -1603,17 +1790,16 @@ const canNext = computed(() => {
     }
     return true;
   }
-  if (active.value === 3) {
+  if (active.value === 4) {
     return adminForm.password && adminForm.confirmPassword && adminCertPem.value;
   }
-  if (active.value === 4) {
+  if (active.value === 5) {
     return auditorForm.password && auditorForm.confirmPassword && auditorCertPem.value;
   }
   return true;
 });
 
 const saveTenantStatus = async (statusValue: number) => {
-  console.log(`saveTenantStatus: Updating status to ${statusValue} for tenant ${userStore.tenantId || localStorage.getItem('tenantId') || ''}`);
   try {
     const tenantId = userStore.tenantId || localStorage.getItem('tenantId') || '';
     const tenantRes = await getTenant(tenantId);
@@ -1631,14 +1817,12 @@ const saveTenantStatus = async (statusValue: number) => {
           companyName: tenantInfo.companyName
         }
       };
-      console.log('saveTenantStatus: Sending updateData', updateData);
       await updateTenant(updateData);
-      console.log('saveTenantStatus: Status updated successfully');
+      userStore.setTenantInitStatus(statusValue);
     } else {
       throw new Error('获取租户信息为空，无法更新状态');
     }
   } catch (error: any) {
-    console.error('更新租户状态失败', error);
     ElMessage.error('更新租户状态失败: ' + (error.message || error));
     throw error; // Rethrow so caller knows it failed
   }
@@ -1650,7 +1834,7 @@ const updateTenantStep = async () => {
 };
 
 const next = async () => {
-  if (active.value < 5) {
+  if (active.value < 6) {
     if (active.value === 1) {
       if (selectedTemplates.value.length === 0) return;
       loading.value = true;
@@ -1664,6 +1848,12 @@ const next = async () => {
         loading.value = false;
       }
     } else if (active.value === 2) {
+      if (signerList.value.length === 0) {
+        ElMessage.warning('请至少创建一个签名者');
+        return;
+      }
+      await updateTenantStep();
+    } else if (active.value === 3) {
       if (!rootCaFormRef.value) return;
       try {
         const valid = await rootCaFormRef.value.validate();
@@ -1671,7 +1861,18 @@ const next = async () => {
           loading.value = true;
           try {
             // map form to GenRootCaCO
+            const crlControlArr = [
+              `interval.hours=${rootCaForm.crlIntervalHours}`,
+              `fullcrl.intervals=${rootCaForm.crlFullIntervals}`,
+              `deltacrl.intervals=${rootCaForm.deltaCrlIntervals}`,
+              `fullcrl.threads=${rootCaForm.fullCrlThreads}`,
+              `deltacrl.threads=${rootCaForm.deltaCrlThreads}`,
+              `overlap=${rootCaForm.crlOverlap}`,
+              `interval.time=${rootCaForm.crlIntervalTime}`
+            ];
+
             const reqData = {
+              signerId: rootCaForm.signerId,
               name: rootCaForm.name,
               rootcaProfile: rootCaForm.rootcaProfileName,
               subject: rootCaForm.subjectItems
@@ -1692,8 +1893,10 @@ const next = async () => {
               caStatus: rootCaForm.status,
               snLen: rootCaForm.snSize,
               nextCrlNumber: rootCaForm.nextCrlNo,
+              crlControl: crlControlArr.join(','),
               caCertUris: rootCaForm.cacertUris.map((u) => u.value).filter((v) => v),
               crlUris: rootCaForm.crlUris.map((u) => u.value).filter((v) => v),
+              deltaCrlUris: rootCaForm.deltaCrlUris.map((u) => u.value).filter((v) => v),
               ocspUris: rootCaForm.ocspUris.map((u) => u.value).filter((v) => v)
             };
 
@@ -1723,15 +1926,12 @@ const next = async () => {
               }
             }
           } catch (error) {
-            console.error('初始化根证书失败', error);
           } finally {
             loading.value = false;
           }
         }
-      } catch (error) {
-        console.error('表单验证失败', error);
-      }
-    } else if (active.value === 3) {
+      } catch (error) {}
+    } else if (active.value === 4) {
       if (!adminFormRef.value) return;
       try {
         const valid = await adminFormRef.value.validate();
@@ -1762,10 +1962,8 @@ const next = async () => {
             loading.value = false;
           }
         }
-      } catch (error) {
-        console.error('表单验证失败', error);
-      }
-    } else if (active.value === 4) {
+      } catch (error) {}
+    } else if (active.value === 5) {
       if (!auditorFormRef.value) return;
       try {
         const valid = await auditorFormRef.value.validate();
@@ -1789,15 +1987,12 @@ const next = async () => {
             ElMessage.success('审计员设置成功');
             await updateTenantStep();
           } catch (error) {
-            console.error('审计员设置或激活租户失败', error);
             ElMessage.error('审计员设置或激活租户失败');
           } finally {
             loading.value = false;
           }
         }
-      } catch (error) {
-        console.error('表单验证失败', error);
-      }
+      } catch (error) {}
     } else {
       loading.value = true;
       try {
@@ -1850,29 +2045,33 @@ onMounted(async () => {
       tenantCode.value = (tenantRes.data.code || '').toUpperCase();
       tenantName.value = tenantRes.data.name;
       companyName.value = tenantRes.data.companyName || '';
+      userStore.setTenantInitStatus(Number(tenantRes.data.status));
+
+      if (Number(tenantRes.data.status) === -1) {
+        router.replace('/index');
+        return;
+      }
 
       // 根据 tenant 的 status 恢复到对应步骤
       if (tenantRes.data.status !== undefined && tenantRes.data.status !== null) {
         if ((tenantRes.data.status as any) === 'active') {
           // 如果是原始的 'active' 状态，直接跳到最后一步
-          active.value = 5;
+          active.value = 6;
         } else {
           const parsedStatus = Number(tenantRes.data.status);
-          if (!isNaN(parsedStatus) && parsedStatus >= 0 && parsedStatus <= 5) {
+          if (!isNaN(parsedStatus) && parsedStatus >= 0 && parsedStatus <= 6) {
             active.value = parsedStatus;
           }
         }
       }
     }
-  } catch (error) {
-    console.error('获取租户信息失败', error);
-  }
+  } catch (error) {}
 
   // 预加载设备列表，如果当前在管理员页面或根证书配置
   setTimeout(() => {
-    if (active.value === 3) {
+    if (active.value === 4) {
       refreshAdminProviders();
-    } else if (active.value === 4) {
+    } else if (active.value === 5) {
       refreshAuditorProviders();
     }
   }, 1000);
@@ -2058,6 +2257,18 @@ onMounted(async () => {
     word-break: break-all;
   }
 }
+
+.validity-input-group {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 88px;
+  gap: 8px;
+  width: 100%;
+
+  .validity-unit {
+    width: 88px;
+  }
+}
+
 .step-header {
   display: flex;
   justify-content: space-between;

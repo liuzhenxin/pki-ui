@@ -54,6 +54,15 @@ export function issueAdminCert(data: any): Promise<Result<any>> {
   }) as any;
 }
 
+// 签发 CA 身份证书
+export function issueCaIdentityCert(data: any): Promise<Result<any>> {
+  return request({
+    url: '/ca/v1/roots/identity-cert',
+    method: 'post',
+    data: data
+  }) as any;
+}
+
 // 删除所有根证书
 export function deleteAllRootCa(): Promise<Result<any>> {
   return request({
@@ -102,5 +111,47 @@ export function genSubCaOnline(data: any): Promise<Result<any>> {
     url: '/ca/v1/roots/sub-ca/gen',
     method: 'post',
     data: data
+  }) as any;
+}
+
+// 获取根证书 CRL 配置
+export function getRootCrlConfig(id: string | number): Promise<Result<any>> {
+  return request({
+    url: `/ca/v1/roots/${id}/crl-config`,
+    method: 'get'
+  }) as any;
+}
+
+// 保存根证书 CRL 配置
+export function saveRootCrlConfig(id: string | number, data: any): Promise<Result<any>> {
+  return request({
+    url: `/ca/v1/roots/${id}/crl-config`,
+    method: 'put',
+    data
+  }) as any;
+}
+
+// 立即签发根证书 CRL
+export function issueRootCrl(id: string | number, data: any): Promise<Result<any>> {
+  return request({
+    url: `/ca/v1/roots/${id}/crl/issue`,
+    method: 'post',
+    data
+  }) as any;
+}
+
+// 启动根证书 CRL 签发线程
+export function startRootCrlScheduler(id: string | number): Promise<Result<any>> {
+  return request({
+    url: `/ca/v1/roots/${id}/crl-scheduler/start`,
+    method: 'post'
+  }) as any;
+}
+
+// 停止根证书 CRL 签发线程
+export function stopRootCrlScheduler(id: string | number): Promise<Result<any>> {
+  return request({
+    url: `/ca/v1/roots/${id}/crl-scheduler/stop`,
+    method: 'post'
   }) as any;
 }

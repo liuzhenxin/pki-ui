@@ -15,13 +15,13 @@
 
     <el-row :gutter="10" class="mb8">
       <el-col :span="1.5">
-        <el-button type="primary" plain icon="Plus" @click="handleAdd" v-hasPermi="['kmc:archiveKey:add']">新增</el-button>
+        <el-button type="primary" plain icon="Plus" @click="handleAdd" v-hasPermi="['sys:archivekey:save']">新增</el-button>
       </el-col>
       <el-col :span="1.5">
-        <el-button type="success" plain icon="Edit" :disabled="single" @click="handleUpdate()" v-hasPermi="['kmc:archiveKey:edit']">修改</el-button>
+        <el-button type="success" plain icon="Edit" :disabled="single" @click="handleUpdate()" v-hasPermi="['sys:archivekey:modify']">修改</el-button>
       </el-col>
       <el-col :span="1.5">
-        <el-button type="danger" plain icon="Delete" :disabled="multiple" @click="handleDelete()" v-hasPermi="['kmc:archiveKey:remove']">删除</el-button>
+        <el-button type="danger" plain icon="Delete" :disabled="multiple" @click="handleDelete()" v-hasPermi="['sys:archivekey:remove']">删除</el-button>
       </el-col>
       <right-toolbar v-model:showSearch="showSearch" @queryTable="getList" />
     </el-row>
@@ -40,10 +40,10 @@
       <el-table-column label="操作" align="center" class-name="small-padding fixed-width">
         <template #default="scope">
           <el-tooltip content="修改" placement="top">
-            <el-button link type="primary" icon="Edit" @click="handleUpdate(scope.row)" v-hasPermi="['kmc:archiveKey:edit']" />
+            <el-button link type="primary" icon="Edit" @click="handleUpdate(scope.row)" v-hasPermi="['sys:archivekey:modify']" />
           </el-tooltip>
           <el-tooltip content="删除" placement="top">
-            <el-button link type="primary" icon="Delete" @click="handleDelete(scope.row)" v-hasPermi="['kmc:archiveKey:remove']" />
+            <el-button link type="primary" icon="Delete" @click="handleDelete(scope.row)" v-hasPermi="['sys:archivekey:remove']" />
           </el-tooltip>
         </template>
       </el-table-column>
@@ -85,6 +85,7 @@ import { ref, reactive, toRefs, onMounted, getCurrentInstance, ComponentInternal
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { listArchiveKey, getArchiveKey, delArchiveKey, addArchiveKey, updateArchiveKey } from '@/api/kmc/archiveKey/index';
 import { ArchiveKeyVO, ArchiveKeyQuery, ArchiveKeyForm } from '@/api/kmc/archiveKey/types';
+import { readKmcPage, unwrapKmcData } from '@/api/kmc/common';
 
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
 
@@ -130,17 +131,9 @@ const getList = async () => {
   loading.value = true;
   try {
     const res = await listArchiveKey(queryParams.value);
-    const responseData = res.data;
-    if (responseData && responseData.data) {
-      const pageInfo = responseData.data;
-      archiveKeyList.value = pageInfo.data || pageInfo.records || responseData.data;
-      total.value = pageInfo.totalCount || pageInfo.total || 0;
-    } else if (res.rows) {
-      archiveKeyList.value = res.rows;
-      total.value = res.total;
-    } else {
-      archiveKeyList.value = responseData as any;
-    }
+    const page = readKmcPage<ArchiveKeyVO>(res);
+    archiveKeyList.value = page.records;
+    total.value = page.total;
   } catch (e) {
     console.error(e);
   } finally {
@@ -192,11 +185,7 @@ const handleUpdate = async (row?: ArchiveKeyVO) => {
   const id = row?.id || ids.value[0];
   const res = await getArchiveKey(id);
 
-  if (res.data && res.data.data) {
-    Object.assign(form.value, res.data.data);
-  } else {
-    Object.assign(form.value, res.data);
-  }
+  Object.assign(form.value, unwrapKmcData(res));
 
   dialog.visible = true;
   dialog.title = '修改归档密钥';

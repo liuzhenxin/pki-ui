@@ -9,12 +9,14 @@ const privateKey = import.meta.env.VITE_APP_RSA_PRIVATE_KEY;
 // 加密
 export const encrypt = (txt: string) => {
   const encryptor = new JSEncrypt();
+  console.log('RSA Encryption Public Key (Env):', publicKey);
   encryptor.setPublicKey(publicKey); // 设置公钥
   return encryptor.encrypt(txt); // 对数据进行加密
 };
 
 export const encryptExt = (txt: string, publicKeyExt: string) => {
   const encryptor = new JSEncrypt();
+  console.log('RSA Encryption Public Key (Ext):', publicKeyExt);
   encryptor.setPublicKey(publicKeyExt); // 设置公钥
   return encryptor.encrypt(txt); // 对数据进行加密
 };
