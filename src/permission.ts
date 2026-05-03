@@ -14,7 +14,8 @@ import setting from '@/settings';
 
 NProgress.configure({ showSpinner: false });
 const whiteList = ['/login', '/register', '/social-callback', '/register*', '/register/*'];
-const initPath = '/ca/init';
+const caInitPath = '/ca/init';
+const kmcInitPath = '/position/setup';
 
 const isWhiteList = (path: string) => {
   return whiteList.some((pattern) => isPathMatch(pattern, path));
@@ -22,7 +23,9 @@ const isWhiteList = (path: string) => {
 
 const getCurrentTenantId = () => useUserStore().tenantId || localStorage.getItem('tenantId') || '';
 
-const isInitRoute = (path: string) => path === initPath || path.includes('/setup');
+const getCurrentInitPath = () => (String(getCurrentTenantId()) === '3' ? kmcInitPath : caInitPath);
+
+const isInitRoute = (path: string) => path === caInitPath || path === kmcInitPath || path.includes('/setup');
 
 const isTenantInitialized = (status: unknown) => Number(status) === -1;
 
@@ -61,7 +64,7 @@ const ensureTenantBoundary = async (path: string) => {
     status = Number(res?.data?.status);
   }
   if (!isTenantInitialized(status) && !isInitRoute(path)) {
-    return initPath;
+    return getCurrentInitPath();
   }
   if (isTenantInitialized(status) && isInitRoute(path)) {
     return '/';
@@ -99,8 +102,9 @@ router.beforeEach(async (to, from, next) => {
                 router.addRoute(route);
               }
             });
-            const targetPath = isInitRoute(to.path) ? to.path : initPath;
-            next({ path: targetPath, replace: true, params: to.params, query: targetPath === initPath ? {} : to.query, hash: to.hash });
+            const targetInitPath = getCurrentInitPath();
+            const targetPath = isInitRoute(to.path) ? to.path : targetInitPath;
+            next({ path: targetPath, replace: true, params: to.params, query: targetPath === targetInitPath ? {} : to.query, hash: to.hash });
           } else {
             const accessRoutes = await usePermissionStore().generateRoutes();
             accessRoutes.forEach((route) => {
