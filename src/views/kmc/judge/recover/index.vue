@@ -9,7 +9,7 @@
               <el-input v-model="submitForm.archiveKeyId" />
             </el-form-item>
             <el-form-item>
-              <el-button type="primary" icon="Promotion" :loading="loading" v-hasPermi="['sys:keyrecovery:submit']" @click="submitRequest">
+              <el-button type="primary" icon="Promotion" :loading="loading" v-hasPermi="['kmc:keyrecovery:submit']" @click="submitRequest">
                 提交恢复申请
               </el-button>
             </el-form-item>
@@ -24,8 +24,8 @@
               <el-input v-model="statusForm.judgeId" />
             </el-form-item>
             <el-form-item>
-              <el-button icon="Search" v-hasPermi="['sys:keyrecovery:status']" @click="loadStatus">查询状态</el-button>
-              <el-button type="danger" plain icon="Close" v-hasPermi="['sys:keyrecovery:cancel']" @click="cancelRequest">取消申请</el-button>
+              <el-button icon="Search" v-hasPermi="['kmc:keyrecovery:status']" @click="loadStatus">查询状态</el-button>
+              <el-button type="danger" plain icon="Close" v-hasPermi="['kmc:keyrecovery:cancel']" @click="cancelRequest">取消申请</el-button>
             </el-form-item>
           </el-form>
           <el-alert v-if="statusResult !== null" :title="statusResult ? '审批已通过' : '审批未通过或仍在处理中'" :type="statusResult ? 'success' : 'warning'" show-icon />
@@ -43,7 +43,7 @@
           <el-input v-model="recoverForm.judgeId" />
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" icon="Key" :loading="recoverLoading" v-hasPermi="['sys:keyrecovery:recover']" @click="recoverKey">恢复密钥</el-button>
+          <el-button type="primary" icon="Key" :loading="recoverLoading" v-hasPermi="['kmc:keyrecovery:recover']" @click="recoverKey">恢复密钥</el-button>
         </el-form-item>
       </el-form>
       <el-input v-model="recoverResult" type="textarea" :rows="6" readonly placeholder="恢复成功后显示 Base64 密钥数据" />

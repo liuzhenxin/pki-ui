@@ -1,15 +1,15 @@
 <template>
-  <div :class="{ hidden: hidden }" class="pagination-container">
+  <div v-if="!hidden && normalizedTotal > 0" class="pagination-container">
     <el-pagination
-      v-model:current-page="currentPage"
-      v-model:page-size="pageSize"
+      :key="paginationKey"
+      :default-current-page="normalizedPage"
+      :default-page-size="normalizedLimit"
       :background="background"
       :layout="layout"
       :page-sizes="pageSizes"
       :pager-count="pagerCount"
-      :total="total"
-      @size-change="handleSizeChange"
-      @current-change="handleCurrentChange"
+      :total="normalizedTotal"
+      @change="handlePaginationChange"
     />
   </div>
 </template>
@@ -33,33 +33,18 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['update:page', 'update:limit', 'pagination']);
-const currentPage = computed({
-  get() {
-    return props.page;
-  },
-  set(val) {
-    emit('update:page', val);
+const normalizedPage = computed(() => Number(props.page) || 1);
+const normalizedLimit = computed(() => Number(props.limit) || 20);
+const normalizedTotal = computed(() => Number(props.total) || 0);
+const paginationKey = computed(() => `${normalizedPage.value}-${normalizedLimit.value}-${normalizedTotal.value}`);
+
+function handlePaginationChange(page: number, limit: number) {
+  if (page * limit > normalizedTotal.value) {
+    page = 1;
   }
-});
-const pageSize = computed({
-  get() {
-    return props.limit;
-  },
-  set(val) {
-    emit('update:limit', val);
-  }
-});
-function handleSizeChange(val: number) {
-  if (currentPage.value * val > props.total) {
-    currentPage.value = 1;
-  }
-  emit('pagination', { page: currentPage.value, limit: val });
-  if (props.autoScroll) {
-    scrollTo(0, 800);
-  }
-}
-function handleCurrentChange(val: number) {
-  emit('pagination', { page: val, limit: pageSize.value });
+  emit('update:page', page);
+  emit('update:limit', limit);
+  emit('pagination', { page, limit });
   if (props.autoScroll) {
     scrollTo(0, 800);
   }
@@ -71,8 +56,5 @@ function handleCurrentChange(val: number) {
   .el-pagination {
     float: v-bind(float);
   }
-}
-.pagination-container.hidden {
-  display: none;
 }
 </style>

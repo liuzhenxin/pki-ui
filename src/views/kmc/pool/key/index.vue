@@ -5,10 +5,10 @@
       <el-form ref="formRef" :model="form" :rules="rules" label-width="120px" class="pool-key-form">
         <el-form-item label="分配方式">
           <el-radio-group v-model="mode">
-            <el-radio-button label="strategy">按策略ID</el-radio-button>
-            <el-radio-button label="type">按算法用途</el-radio-button>
-            <el-radio-button label="batch">批量分配</el-radio-button>
-            <el-radio-button label="release">释放密钥</el-radio-button>
+            <el-radio-button value="strategy">按策略ID</el-radio-button>
+            <el-radio-button value="type">按算法用途</el-radio-button>
+            <el-radio-button value="batch">批量分配</el-radio-button>
+            <el-radio-button value="release">释放密钥</el-radio-button>
           </el-radio-group>
         </el-form-item>
         <el-form-item v-if="mode === 'strategy' || mode === 'batch'" label="策略ID" prop="strategyId">
@@ -27,7 +27,7 @@
           <el-input v-model="form.keyId" />
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" icon="Connection" :loading="loading" v-hasPermi="['sys:poolkey:allocate', 'sys:poolkey:batch-allocate', 'sys:poolkey:release']" @click="submit">
+          <el-button type="primary" icon="Connection" :loading="loading" v-hasPermi="['kmc:poolkey:allocate', 'kmc:poolkey:batch-allocate', 'kmc:poolkey:release']" @click="submit">
             执行
           </el-button>
         </el-form-item>
@@ -115,4 +115,3 @@ const submit = async () => {
   white-space: pre-wrap;
 }
 </style>
-

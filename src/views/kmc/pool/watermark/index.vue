@@ -6,7 +6,7 @@
           <span>密钥池水位管理</span>
           <div>
             <el-button icon="Refresh" :loading="loading" @click="loadStatus">刷新</el-button>
-            <el-button type="primary" icon="Operation" :loading="actionLoading" v-hasPermi="['sys:poolwatermark:check']" @click="handleCheckAll">
+            <el-button type="primary" icon="Operation" :loading="actionLoading" v-hasPermi="['kmc:poolwatermark:check']" @click="handleCheckAll">
               全量检查补齐
             </el-button>
           </div>
@@ -28,8 +28,8 @@
         </el-table-column>
         <el-table-column label="操作" width="220" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" icon="Operation" v-hasPermi="['sys:poolwatermark:check']" @click="handleCheck(row.strategyId)">检查补齐</el-button>
-            <el-button link type="primary" icon="Plus" v-hasPermi="['sys:poolwatermark:generate']" @click="handleGenerate(row.strategyId)">生成</el-button>
+            <el-button link type="primary" icon="Operation" v-hasPermi="['kmc:poolwatermark:check']" @click="handleCheck(row.strategyId)">检查补齐</el-button>
+            <el-button link type="primary" icon="Plus" v-hasPermi="['kmc:poolwatermark:generate']" @click="handleGenerate(row.strategyId)">生成</el-button>
           </template>
         </el-table-column>
       </el-table>

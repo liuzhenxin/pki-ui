@@ -97,9 +97,9 @@
                 </el-form-item>
                 <el-form-item label="存储方式">
                   <el-radio-group v-model="identityForm.signerType">
-                    <el-radio-button label="PKCS12" />
-                    <el-radio-button label="JKS" />
-                    <el-radio-button label="SDF" />
+                    <el-radio-button value="PKCS12">PKCS12</el-radio-button>
+                    <el-radio-button value="JKS">JKS</el-radio-button>
+                    <el-radio-button value="SDF">SDF</el-radio-button>
                   </el-radio-group>
                 </el-form-item>
                 <el-form-item v-if="identityForm.signerType === 'PKCS12' || identityForm.signerType === 'JKS'" label="密钥密码">
@@ -143,7 +143,6 @@
               <el-select v-model="archiveForm.mode" placeholder="请选择归档方式" style="width: 100%">
                 <el-option label="数据库" value="DATABASE" />
                 <el-option label="文件系统" value="FILE" />
-                <el-option label="KMC" value="KMC" />
               </el-select>
             </el-form-item>
             <el-form-item label="保留天数">
@@ -218,6 +217,8 @@ const archiveForm = reactive<any>({
   path: ''
 });
 
+const archiveModeValues = ['DATABASE', 'FILE'];
+
 const activePayload = computed(() => {
   if (activeType.value === 'KMC_SERVER') {
     return kmcForm;
@@ -249,6 +250,12 @@ function assignForm(target: any, source: any, id?: string | number) {
   target.id = id;
 }
 
+function normalizeArchiveMode() {
+  if (!archiveModeValues.includes(archiveForm.mode)) {
+    archiveForm.mode = 'DATABASE';
+  }
+}
+
 function syncValidityFieldsFromValue() {
   const matched = String(identityForm.validity || '')
     .trim()
@@ -278,6 +285,7 @@ function loadConfig(type: string) {
       assignForm(kmcForm, parsed, data.id);
     } else if (type === 'ARCHIVE_POLICY') {
       assignForm(archiveForm, parsed, data.id);
+      normalizeArchiveMode();
     } else {
       assignForm(identityForm, parsed, data.id);
       syncValidityFieldsFromValue();
@@ -497,6 +505,8 @@ function buildSaveData() {
     if (!syncValidityValueFromFields()) {
       throw new Error('INVALID_VALIDITY');
     }
+  } else if (activeType.value === 'ARCHIVE_POLICY') {
+    normalizeArchiveMode();
   }
   const { id, ...config } = payload;
   return {

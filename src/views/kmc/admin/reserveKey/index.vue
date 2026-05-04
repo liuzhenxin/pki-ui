@@ -18,13 +18,13 @@
 
     <el-row :gutter="10" class="mb8">
       <el-col :span="1.5">
-        <el-button type="primary" plain icon="Plus" @click="handleAdd" v-hasPermi="['sys:reservekey:save']">新增</el-button>
+        <el-button type="primary" plain icon="Plus" @click="handleAdd" v-hasPermi="['kmc:reservekey:save']">新增</el-button>
       </el-col>
       <el-col :span="1.5">
-        <el-button type="success" plain icon="Edit" :disabled="single" @click="handleUpdate()" v-hasPermi="['sys:reservekey:modify']">修改</el-button>
+        <el-button type="success" plain icon="Edit" :disabled="single" @click="handleUpdate()" v-hasPermi="['kmc:reservekey:modify']">修改</el-button>
       </el-col>
       <el-col :span="1.5">
-        <el-button type="danger" plain icon="Delete" :disabled="multiple" @click="handleDelete()" v-hasPermi="['sys:reservekey:remove']">删除</el-button>
+        <el-button type="danger" plain icon="Delete" :disabled="multiple" @click="handleDelete()" v-hasPermi="['kmc:reservekey:remove']">删除</el-button>
       </el-col>
       <right-toolbar v-model:showSearch="showSearch" @queryTable="getList" />
     </el-row>
@@ -49,10 +49,10 @@
       <el-table-column label="操作" align="center" class-name="small-padding fixed-width">
         <template #default="scope">
           <el-tooltip content="修改" placement="top">
-            <el-button link type="primary" icon="Edit" @click="handleUpdate(scope.row)" v-hasPermi="['sys:reservekey:modify']" />
+            <el-button link type="primary" icon="Edit" @click="handleUpdate(scope.row)" v-hasPermi="['kmc:reservekey:modify']" />
           </el-tooltip>
           <el-tooltip content="删除" placement="top">
-            <el-button link type="primary" icon="Delete" @click="handleDelete(scope.row)" v-hasPermi="['sys:reservekey:remove']" />
+            <el-button link type="primary" icon="Delete" @click="handleDelete(scope.row)" v-hasPermi="['kmc:reservekey:remove']" />
           </el-tooltip>
         </template>
       </el-table-column>
@@ -92,15 +92,16 @@
 </template>
 
 <script setup name="ReserveKey" lang="ts">
-import { ref, reactive, toRefs, onMounted, getCurrentInstance, ComponentInternalInstance } from 'vue';
+import { ref, reactive, toRefs, onMounted } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
+import type { FormInstance } from 'element-plus';
 import { listReserveKey, getReserveKey, delReserveKey, addReserveKey, updateReserveKey } from '@/api/kmc/reserveKey/index';
 import { listPoolStrategy } from '@/api/kmc/poolStrategy/index';
 import { ReserveKeyVO, ReserveKeyQuery, ReserveKeyForm } from '@/api/kmc/reserveKey/types';
 import { readKmcPage, unwrapKmcData } from '@/api/kmc/common';
 
-const { proxy } = getCurrentInstance() as ComponentInternalInstance;
-
+const queryFormRef = ref<FormInstance>();
+const reserveKeyFormRef = ref<FormInstance>();
 const reserveKeyList = ref<ReserveKeyVO[]>([]);
 const strategies = ref<any[]>([]);
 const loading = ref(true);
@@ -186,7 +187,7 @@ const reset = () => {
     keyBits: 256,
     keyStatus: 0
   };
-  proxy?.resetForm('reserveKeyFormRef');
+  reserveKeyFormRef.value?.resetFields();
 };
 
 const handleQuery = () => {
@@ -195,7 +196,7 @@ const handleQuery = () => {
 };
 
 const resetQuery = () => {
-  proxy?.resetForm('queryFormRef');
+  queryFormRef.value?.resetFields();
   handleQuery();
 };
 
@@ -223,7 +224,7 @@ const handleUpdate = async (row?: ReserveKeyVO) => {
 };
 
 const submitForm = () => {
-  proxy?.$refs['reserveKeyFormRef'].validate(async (valid: boolean) => {
+  reserveKeyFormRef.value?.validate(async (valid: boolean) => {
     if (valid) {
       if (form.value.id) {
         await updateReserveKey(form.value);

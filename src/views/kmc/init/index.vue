@@ -1,7 +1,15 @@
 <template>
-  <div class="app-container">
-    <el-card v-loading="loading">
-      <el-steps :active="activeStep" finish-status="success" simple>
+  <div class="app-container kmc-init-page">
+    <el-card v-loading="loading" class="init-card" shadow="never">
+      <div class="init-heading">
+        <div>
+          <p class="heading-label">密钥管理中心</p>
+          <h1>KMC 初始化向导</h1>
+        </div>
+        <el-tag effect="plain" size="large">租户 {{ tenantCode.toUpperCase() || 'KMC' }}</el-tag>
+      </div>
+
+      <el-steps :active="activeStep" finish-status="success" simple class="init-steps">
         <el-step title="协议" />
         <el-step title="环境检查" />
         <el-step title="账号初始化" />
@@ -10,17 +18,25 @@
 
       <div class="wizard-content">
         <div v-if="activeStep === 0" class="step-content">
-          <h2>欢迎使用 {{ tenantCode.toUpperCase() || 'KMC' }}</h2>
+          <div class="step-title">
+            <h2>欢迎使用 {{ tenantCode.toUpperCase() || 'KMC' }}</h2>
+            <p>请阅读并确认用户协议后继续初始化。</p>
+          </div>
           <div class="agreement-text">
             <Agreement :tenant-code="tenantCode" :tenant-name="tenantName" :company-name="companyName" />
           </div>
-          <el-checkbox v-model="agree" class="agree-checkbox">我已阅读并同意用户协议</el-checkbox>
+          <div class="agreement-footer">
+            <el-checkbox v-model="agree" class="agree-checkbox">我已阅读并同意用户协议</el-checkbox>
+          </div>
         </div>
 
-        <div v-if="activeStep === 1" class="step-content" style="width: 80%; margin: auto">
+        <div v-if="activeStep === 1" class="step-content env-step">
           <div class="step-header">
-            <h2>环境检查</h2>
             <div>
+              <h2>环境检查</h2>
+              <p>确认初始化所需的业务库、租户和默认账号状态。</p>
+            </div>
+            <div class="header-actions">
               <el-button type="info" text circle class="help-button" :icon="QuestionFilled" @click="showEnvHelp = true" />
               <el-button type="primary" plain :icon="Refresh" :loading="envLoading" @click="loadEnvInfo">重新检测</el-button>
             </div>
@@ -55,53 +71,63 @@
             </div>
           </el-drawer>
 
-          <el-table
-            v-loading="envLoading"
-            :data="envRows"
-            border
-            style="width: 100%"
-            class="env-table"
-            :header-cell-style="{ background: '#f8f9fa', color: '#606266', fontWeight: 600 }"
-          >
-            <template #empty>
-              <div class="empty-state">
-                <el-empty description="暂无环境检查结果" :image-size="120" />
-              </div>
-            </template>
-            <el-table-column prop="name" label="检测项" min-width="160" />
-            <el-table-column prop="value" label="当前值" min-width="220" show-overflow-tooltip />
-            <el-table-column prop="message" label="说明" min-width="220" show-overflow-tooltip />
-            <el-table-column label="状态" width="120" align="center">
-              <template #default="{ row }">
-                <el-tag :type="row.ok ? 'success' : 'danger'">{{ row.ok ? '正常' : '异常' }}</el-tag>
+          <div class="table-panel">
+            <el-table
+              v-loading="envLoading"
+              :data="envRows"
+              border
+              style="width: 100%"
+              class="env-table"
+              :header-cell-style="{ background: '#f8f9fa', color: '#606266', fontWeight: 600 }"
+            >
+              <template #empty>
+                <div class="empty-state">
+                  <el-empty description="暂无环境检查结果" :image-size="120" />
+                </div>
               </template>
-            </el-table-column>
-          </el-table>
+              <el-table-column prop="name" label="检测项" min-width="160" />
+              <el-table-column prop="value" label="当前值" min-width="220" show-overflow-tooltip />
+              <el-table-column prop="message" label="说明" min-width="220" show-overflow-tooltip />
+              <el-table-column label="状态" width="120" align="center">
+                <template #default="{ row }">
+                  <el-tag :type="row.ok ? 'success' : 'danger'" effect="light">{{ row.ok ? '正常' : '异常' }}</el-tag>
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
         </div>
 
         <div v-if="activeStep === 2" class="step-content">
+          <div class="step-title">
+            <h2>账号初始化</h2>
+            <p>设置管理员和审计员的初始登录凭据。</p>
+          </div>
           <el-form ref="formRef" :model="form" :rules="rules" label-width="120px" class="init-form">
-            <el-divider content-position="left">管理员账号</el-divider>
-            <el-form-item label="用户名" prop="adminUsername">
-              <el-input v-model="form.adminUsername" />
-            </el-form-item>
-            <el-form-item label="登录密码" prop="adminPassword">
-              <el-input v-model="form.adminPassword" type="password" show-password />
-            </el-form-item>
-            <el-form-item label="证书 PEM" prop="adminCertPem">
-              <el-input v-model="form.adminCertPem" type="textarea" :rows="4" placeholder="可粘贴管理员证书 PEM，后端未强制时可留空" />
-            </el-form-item>
+            <div class="form-section">
+              <div class="form-section-title">管理员账号</div>
+              <el-form-item label="用户名" prop="adminUsername">
+                <el-input v-model="form.adminUsername" />
+              </el-form-item>
+              <el-form-item label="登录密码" prop="adminPassword">
+                <el-input v-model="form.adminPassword" type="password" show-password />
+              </el-form-item>
+              <el-form-item label="证书 PEM" prop="adminCertPem">
+                <el-input v-model="form.adminCertPem" type="textarea" :rows="4" placeholder="可粘贴管理员证书 PEM，后端未强制时可留空" />
+              </el-form-item>
+            </div>
 
-            <el-divider content-position="left">审计员账号</el-divider>
-            <el-form-item label="用户名" prop="auditorUsername">
-              <el-input v-model="form.auditorUsername" />
-            </el-form-item>
-            <el-form-item label="登录密码" prop="auditorPassword">
-              <el-input v-model="form.auditorPassword" type="password" show-password />
-            </el-form-item>
-            <el-form-item label="证书 PEM" prop="auditorCertPem">
-              <el-input v-model="form.auditorCertPem" type="textarea" :rows="4" placeholder="可粘贴审计员证书 PEM，后端未强制时可留空" />
-            </el-form-item>
+            <div class="form-section">
+              <div class="form-section-title">审计员账号</div>
+              <el-form-item label="用户名" prop="auditorUsername">
+                <el-input v-model="form.auditorUsername" />
+              </el-form-item>
+              <el-form-item label="登录密码" prop="auditorPassword">
+                <el-input v-model="form.auditorPassword" type="password" show-password />
+              </el-form-item>
+              <el-form-item label="证书 PEM" prop="auditorCertPem">
+                <el-input v-model="form.auditorCertPem" type="textarea" :rows="4" placeholder="可粘贴审计员证书 PEM，后端未强制时可留空" />
+              </el-form-item>
+            </div>
           </el-form>
         </div>
 
@@ -114,7 +140,7 @@
         <el-button :disabled="activeStep === 0 || activeStep === 3 || loading" @click="prev">上一步</el-button>
         <el-button v-if="activeStep < 2" type="primary" :disabled="!canGoNext" @click="next">下一步</el-button>
         <el-button v-else-if="activeStep === 2" type="primary" :loading="loading" @click="submitInit">提交初始化</el-button>
-        <el-button v-else type="primary" @click="router.push('/')">进入系统</el-button>
+        <el-button v-else type="primary" :loading="loading" @click="enterSystem">进入系统</el-button>
       </div>
     </el-card>
   </div>
@@ -301,6 +327,22 @@ const submitInit = async () => {
   }
 };
 
+const enterSystem = async () => {
+  loading.value = true;
+  try {
+    ElMessage.success('初始化完成，请重新登录');
+    await userStore.logout();
+    await router.replace({
+      path: '/login',
+      query: {
+        redirect: encodeURIComponent('/index')
+      }
+    });
+  } finally {
+    loading.value = false;
+  }
+};
+
 onMounted(async () => {
   try {
     const tenantId = userStore.tenantId || localStorage.getItem('tenantId') || '';
@@ -330,15 +372,49 @@ onMounted(async () => {
 </script>
 
 <style scoped lang="scss">
-.wizard-actions {
+.kmc-init-page {
+  min-height: calc(100vh - 84px);
+  padding: 20px;
+  background: var(--el-fill-color-lighter);
+}
+
+.init-card {
+  max-width: 1180px;
+  margin: 0 auto;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+}
+
+.init-heading {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+}
+
+.heading-label {
+  margin: 0 0 6px;
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
+}
+
+.init-heading h1 {
+  margin: 0;
+  color: var(--el-text-color-primary);
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.init-steps {
+  margin-top: 18px;
 }
 
 .wizard-content {
   min-height: 520px;
-  padding: 24px 0;
+  padding: 28px 0 24px;
 }
 
 .step-content {
@@ -346,35 +422,66 @@ onMounted(async () => {
   margin: 0 auto;
 }
 
+.env-step {
+  max-width: 1000px;
+}
+
+.step-title {
+  margin-bottom: 18px;
+}
+
+.step-title h2,
+.step-header h2 {
+  margin: 0;
+  color: var(--el-text-color-primary);
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.step-title p,
+.step-header p {
+  margin: 6px 0 0;
+  color: var(--el-text-color-secondary);
+  line-height: 1.6;
+}
+
 .agreement-text {
   max-height: 360px;
   overflow-y: auto;
-  border: 1px solid var(--el-border-color);
-  border-radius: 4px;
-  padding: 16px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+  padding: 20px;
   background: var(--el-fill-color-blank);
 }
 
+.agreement-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 16px;
+}
+
 .agree-checkbox {
-  margin-top: 16px;
+  height: auto;
 }
 
 .step-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  width: 100%;
+  align-items: flex-start;
+  gap: 16px;
   margin-bottom: 20px;
 }
 
-.step-header h2 {
-  margin: 0;
+.header-actions {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
 }
 
 .help-button {
-  font-size: 24px;
-  padding: 12px;
   margin-right: 8px;
+  font-size: 22px;
 }
 
 .env-help-container {
@@ -389,8 +496,8 @@ onMounted(async () => {
 
 .help-card {
   border: 1px solid var(--el-border-color-light);
-  border-radius: 4px;
-  padding: 14px;
+  border-radius: 8px;
+  padding: 16px;
   background: var(--el-fill-color-blank);
 }
 
@@ -410,13 +517,87 @@ onMounted(async () => {
   line-height: 1.6;
 }
 
+.table-panel {
+  overflow: hidden;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+  background: var(--el-fill-color-blank);
+}
+
+.env-table {
+  :deep(.el-table__cell) {
+    padding: 12px 0;
+  }
+}
+
+.empty-state {
+  padding: 20px 0;
+}
+
 .wizard-actions {
+  display: flex;
+  align-items: center;
   justify-content: center;
   gap: 12px;
+  padding-top: 20px;
+  border-top: 1px solid var(--el-border-color-lighter);
 }
 
 .init-form {
   max-width: 720px;
   margin: 0 auto;
+}
+
+.form-section {
+  padding: 18px 20px 4px;
+  margin-bottom: 18px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+  background: var(--el-fill-color-blank);
+}
+
+.form-section-title {
+  margin-bottom: 18px;
+  padding-left: 10px;
+  border-left: 3px solid var(--el-color-primary);
+  color: var(--el-text-color-primary);
+  font-weight: 600;
+  line-height: 1;
+}
+
+@media (max-width: 768px) {
+  .kmc-init-page {
+    padding: 12px;
+  }
+
+  .init-heading,
+  .step-header {
+    flex-direction: column;
+  }
+
+  .header-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .wizard-content {
+    min-height: 460px;
+  }
+
+  .init-form {
+    :deep(.el-form-item) {
+      display: block;
+    }
+
+    :deep(.el-form-item__label) {
+      justify-content: flex-start;
+      width: auto !important;
+      margin-bottom: 6px;
+    }
+
+    :deep(.el-form-item__content) {
+      margin-left: 0 !important;
+    }
+  }
 }
 </style>

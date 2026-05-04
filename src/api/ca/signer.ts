@@ -44,7 +44,8 @@ const toSignerCmd = (data: any = {}) => ({
     cert: data.cert,
     alias: data.alias,
     password: data.password,
-    conf: data.conf || JSON.stringify({
+    conf: JSON.stringify({
+      ...parseConf(data.conf),
       algo: data.algo,
       keyIndex: data.keyIndex
     })

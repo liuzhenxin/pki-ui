@@ -1469,7 +1469,7 @@ onMounted(() => {
                       </div>
                     </template>
                     <el-radio-group v-model="keypairGenerationLocation" class="keypair-generation-group">
-                      <el-radio-button v-for="item in keypairGenerationOptions" :key="item.value" :label="item.value">
+                      <el-radio-button v-for="item in keypairGenerationOptions" :key="item.value" :value="item.value">
                         {{ item.label }}
                       </el-radio-button>
                     </el-radio-group>

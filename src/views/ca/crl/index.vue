@@ -399,8 +399,8 @@ getList();
         </el-form-item>
         <el-form-item label="CRL类型">
           <el-radio-group v-model="issueForm.deltaCrl">
-            <el-radio-button :label="false">全量CRL</el-radio-button>
-            <el-radio-button :label="true">增量CRL</el-radio-button>
+            <el-radio-button :value="false">全量CRL</el-radio-button>
+            <el-radio-button :value="true">增量CRL</el-radio-button>
           </el-radio-group>
         </el-form-item>
       </el-form>

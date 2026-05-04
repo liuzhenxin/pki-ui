@@ -18,13 +18,13 @@
 
     <el-row :gutter="10" class="mb8">
       <el-col :span="1.5">
-        <el-button type="primary" plain icon="Plus" @click="handleAdd" v-hasPermi="['sys:poolstrategy:save']">新增</el-button>
+        <el-button type="primary" plain icon="Plus" @click="handleAdd" v-hasPermi="['kmc:poolstrategy:save']">新增</el-button>
       </el-col>
       <el-col :span="1.5">
-        <el-button type="success" plain icon="Edit" :disabled="single" @click="handleUpdate()" v-hasPermi="['sys:poolstrategy:modify']">修改</el-button>
+        <el-button type="success" plain icon="Edit" :disabled="single" @click="handleUpdate()" v-hasPermi="['kmc:poolstrategy:modify']">修改</el-button>
       </el-col>
       <el-col :span="1.5">
-        <el-button type="danger" plain icon="Delete" :disabled="multiple" @click="handleDelete()" v-hasPermi="['sys:poolstrategy:remove']">删除</el-button>
+        <el-button type="danger" plain icon="Delete" :disabled="multiple" @click="handleDelete()" v-hasPermi="['kmc:poolstrategy:remove']">删除</el-button>
       </el-col>
       <right-toolbar v-model:showSearch="showSearch" @queryTable="getList" />
     </el-row>
@@ -46,10 +46,10 @@
       <el-table-column label="操作" align="center" class-name="small-padding fixed-width">
         <template #default="scope">
           <el-tooltip content="修改" placement="top">
-            <el-button link type="primary" icon="Edit" @click="handleUpdate(scope.row)" v-hasPermi="['sys:poolstrategy:modify']" />
+            <el-button link type="primary" icon="Edit" @click="handleUpdate(scope.row)" v-hasPermi="['kmc:poolstrategy:modify']" />
           </el-tooltip>
           <el-tooltip content="删除" placement="top">
-            <el-button link type="primary" icon="Delete" @click="handleDelete(scope.row)" v-hasPermi="['sys:poolstrategy:remove']" />
+            <el-button link type="primary" icon="Delete" @click="handleDelete(scope.row)" v-hasPermi="['kmc:poolstrategy:remove']" />
           </el-tooltip>
         </template>
       </el-table-column>
@@ -90,14 +90,15 @@
 </template>
 
 <script setup name="PoolStrategy" lang="ts">
-import { ref, reactive, toRefs, onMounted, getCurrentInstance, ComponentInternalInstance } from 'vue';
+import { ref, reactive, toRefs, onMounted } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
+import type { FormInstance } from 'element-plus';
 import { listPoolStrategy, getPoolStrategy, delPoolStrategy, addPoolStrategy, updatePoolStrategy } from '@/api/kmc/poolStrategy/index';
 import { PoolStrategyVO, PoolStrategyQuery, PoolStrategyForm } from '@/api/kmc/poolStrategy/types';
 import { readKmcPage, unwrapKmcData } from '@/api/kmc/common';
 
-const { proxy } = getCurrentInstance() as ComponentInternalInstance;
-
+const queryFormRef = ref<FormInstance>();
+const poolStrategyFormRef = ref<FormInstance>();
 const poolStrategyList = ref<PoolStrategyVO[]>([]);
 const loading = ref(true);
 const showSearch = ref(true);
@@ -193,7 +194,7 @@ const reset = () => {
     highWatermark: 50,
     status: 1
   };
-  proxy?.resetForm('poolStrategyFormRef');
+  poolStrategyFormRef.value?.resetFields();
 };
 
 /** 搜索按钮操作 */
@@ -204,7 +205,7 @@ const handleQuery = () => {
 
 /** 重置按钮操作 */
 const resetQuery = () => {
-  proxy?.resetForm('queryFormRef');
+  queryFormRef.value?.resetFields();
   handleQuery();
 };
 
@@ -236,7 +237,7 @@ const handleUpdate = async (row?: PoolStrategyVO) => {
 
 /** 提交按钮 */
 const submitForm = () => {
-  proxy?.$refs['poolStrategyFormRef'].validate(async (valid: boolean) => {
+  poolStrategyFormRef.value?.validate(async (valid: boolean) => {
     if (valid) {
       if (form.value.id) {
         await updatePoolStrategy(form.value);

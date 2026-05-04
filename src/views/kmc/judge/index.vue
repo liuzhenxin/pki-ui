@@ -26,7 +26,7 @@
       <template #header>
         <div class="card-header">
           <span>三员审批记录</span>
-          <el-button type="primary" plain icon="Plus" v-hasPermi="['sys:judge:save']" @click="handleAdd">新增</el-button>
+          <el-button type="primary" plain icon="Plus" v-hasPermi="['kmc:judge:save']" @click="handleAdd">新增</el-button>
         </div>
       </template>
       <el-table v-loading="loading" :data="rows" border>
@@ -47,9 +47,9 @@
         </el-table-column>
         <el-table-column label="操作" width="180" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" icon="Edit" v-hasPermi="['sys:judge:modify']" @click="handleUpdate(row)">修改</el-button>
-            <el-button link type="primary" icon="CircleCheck" v-hasPermi="['sys:judge:approve']" @click="openApprove(row)">审批</el-button>
-            <el-button link type="danger" icon="Delete" v-hasPermi="['sys:judge:remove']" @click="handleDelete(row)">删除</el-button>
+            <el-button link type="primary" icon="Edit" v-hasPermi="['kmc:judge:modify']" @click="handleUpdate(row)">修改</el-button>
+            <el-button link type="primary" icon="CircleCheck" v-hasPermi="['kmc:judge:approve']" @click="openApprove(row)">审批</el-button>
+            <el-button link type="danger" icon="Delete" v-hasPermi="['kmc:judge:remove']" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -114,15 +114,13 @@
 </template>
 
 <script setup name="KmcJudge" lang="ts">
-import { getCurrentInstance, onMounted, reactive, ref } from 'vue';
-import type { ComponentInternalInstance } from 'vue';
+import { onMounted, reactive, ref } from 'vue';
 import type { FormInstance, FormRules } from 'element-plus';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { addJudge, approveJudge, delJudge, getJudge, listJudge, updateJudge } from '@/api/kmc/judge';
 import type { JudgeForm, JudgeQuery, JudgeVO } from '@/api/kmc/judge/types';
 import { readKmcPage, unwrapKmcData } from '@/api/kmc/common';
 
-const { proxy } = getCurrentInstance() as ComponentInternalInstance;
 const queryFormRef = ref<FormInstance>();
 const formRef = ref<FormInstance>();
 const approveFormRef = ref<FormInstance>();
@@ -170,7 +168,7 @@ const statusText = (status?: string) => ({ APPROVED: '通过', REJECTED: '拒绝
 
 const resetForm = () => {
   Object.assign(form, { id: undefined, targetId: undefined, targetType: 'ARCHIVE_KEY', operator: '', status: 'PENDING', reason: '' });
-  proxy?.resetForm('formRef');
+  formRef.value?.resetFields();
 };
 
 const getList = async () => {
@@ -260,4 +258,3 @@ onMounted(getList);
   justify-content: space-between;
 }
 </style>
-
