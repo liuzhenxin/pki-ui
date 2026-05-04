@@ -20,19 +20,13 @@
 
     <el-row :gutter="10" class="mb8">
       <el-col :span="1.5">
-        <el-button type="primary" plain icon="Plus" @click="handleAdd">新增</el-button>
+        <el-button type="primary" plain icon="Plus" @click="handleAdd" v-hasPermi="['system:user:add']">新增</el-button>
       </el-col>
       <el-col :span="1.5">
         <el-button type="success" plain icon="Edit" :disabled="single" @click="handleUpdate" v-hasPermi="['system:user:edit']">修改</el-button>
       </el-col>
       <el-col :span="1.5">
         <el-button type="danger" plain icon="Delete" :disabled="multiple" @click="handleDelete" v-hasPermi="['system:user:remove']">删除</el-button>
-      </el-col>
-      <el-col :span="1.5">
-        <el-button type="info" plain icon="Upload" @click="handleImport" v-hasPermi="['system:user:import']">导入</el-button>
-      </el-col>
-      <el-col :span="1.5">
-        <el-button type="warning" plain icon="Download" @click="handleExport" v-hasPermi="['system:user:export']">导出</el-button>
       </el-col>
       <right-toolbar v-model:showSearch="showSearch" @queryTable="getList" :columns="columns"></right-toolbar>
     </el-row>
@@ -58,7 +52,7 @@
           <span>{{ parseTime(scope.row.createTime) }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="操作" align="center" width="150" class-name="small-padding fixed-width">
+      <el-table-column label="操作" align="center" width="120" class-name="small-padding fixed-width">
         <template #default="scope">
           <el-tooltip content="修改" placement="top" v-if="scope.row.id !== 1">
             <el-button link type="primary" icon="Edit" @click="handleUpdate(scope.row)" v-hasPermi="['system:user:edit']"></el-button>
@@ -69,16 +63,12 @@
           <el-tooltip content="重置密码" placement="top" v-if="scope.row.id !== 1">
             <el-button link type="primary" icon="Key" @click="handleResetPwd(scope.row)" v-hasPermi="['system:user:resetPwd']"></el-button>
           </el-tooltip>
-          <el-tooltip content="分配角色" placement="top" v-if="scope.row.id !== 1">
-            <el-button link type="primary" icon="CircleCheck" @click="handleAuthRole(scope.row)" v-hasPermi="['system:user:edit']"></el-button>
-          </el-tooltip>
         </template>
       </el-table-column>
     </el-table>
 
     <pagination v-show="total > 0" :total="total" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" @pagination="getList" />
 
-    <!-- 添加或修改用户配置对话框 -->
     <el-dialog :title="title" v-model="open" width="600px" append-to-body>
       <el-form ref="userRef" :model="form" :rules="rules" label-width="80px">
         <el-row>
@@ -155,48 +145,14 @@
       </template>
     </el-dialog>
 
-    <!-- 用户导入对话框 -->
-    <el-dialog :title="upload.title" v-model="upload.open" width="400px" append-to-body>
-      <el-upload
-        ref="uploadRef"
-        :limit="1"
-        accept=".xlsx, .xls"
-        :headers="upload.headers"
-        :action="upload.url + '?updateSupport=' + upload.updateSupport"
-        :disabled="upload.isUploading"
-        :on-progress="handleFileUploadProgress"
-        :on-success="handleFileSuccess"
-        :auto-upload="false"
-        drag
-      >
-        <el-icon class="el-icon--upload"><upload-filled /></el-icon>
-        <div class="el-upload__text">将文件拖到此处，或<em>点击上传</em></div>
-        <template #tip>
-          <div class="el-upload__tip text-center">
-            <div class="el-upload__tip"><el-checkbox v-model="upload.updateSupport" />是否更新已经存在的用户数据</div>
-            <span>仅允许导入xls、xlsx格式文件。</span>
-            <el-link type="primary" :underline="false" style="font-size: 12px; vertical-align: baseline" @click="importTemplate">下载模板</el-link>
-          </div>
-        </template>
-      </el-upload>
-      <template #footer>
-        <div class="dialog-footer">
-          <el-button type="primary" @click="submitFileForm">确 定</el-button>
-          <el-button @click="upload.open = false">取 消</el-button>
-        </div>
-      </template>
-    </el-dialog>
-
-    <!-- 证书详情弹窗 -->
     <el-dialog v-model="showCertDialog" title="证书详情" width="60%">
       <X509Cert v-if="showCertDialog" :certPem="certPem" />
     </el-dialog>
   </div>
 </template>
 
-<script setup name="User" lang="ts">
+<script setup name="KmcOperatorAdmin" lang="ts">
 import { listUser, getUser, delUser, updateUser, resetUserPwd, changeStatus, saveUserWithCert } from '@/api/system/user';
-import { getToken } from '@/utils/auth';
 import { UserForm, UserQuery, UserVO } from '@/api/system/user/types';
 import { FormInstance, UploadInstance, UploadUserFile, UploadProps, UploadRawFile, genFileId } from 'element-plus';
 import X509Cert from '@/components/X509Cert/index.vue';
@@ -215,35 +171,16 @@ const multiple = ref(true);
 const total = ref(0);
 const title = ref('');
 const dateRange = ref<[Date, Date]>();
-const initPassword = ref<string | undefined>(undefined);
 const isDataLoaded = ref(false);
 const KMC_BIZ_DEPT_ID = 301;
-const KMC_BIZ_ROLE_ID = '303';
+const KMC_OPERATOR_ROLE_ID = '304';
 
 const userRef = ref<FormInstance>();
 const queryForm = ref<FormInstance>();
-
-// 证书上传相关
 const uploadCertRef = ref<UploadInstance>();
 const certFileList = ref<UploadUserFile[]>([]);
 const certPem = ref<string>('');
 const showCertDialog = ref(false);
-
-/*** 用户导入参数 */
-const upload = reactive({
-  // 是否显示弹出层（用户导入）
-  open: false,
-  // 弹出层标题（用户导入）
-  title: '',
-  // 是否禁用上传
-  isUploading: false,
-  // 是否更新已经存在的用户数据
-  updateSupport: 0,
-  // 设置上传的请求头部
-  headers: { Authorization: 'Bearer ' + getToken() },
-  // 上传的地址
-  url: import.meta.env.VITE_APP_BASE_API + '/system/user/importData'
-});
 
 const columns = ref([
   { key: 0, label: `用户编号`, visible: true },
@@ -266,7 +203,7 @@ const data = reactive<{
     username: undefined,
     mobile: undefined,
     status: undefined,
-    roleId: KMC_BIZ_ROLE_ID // 固定角色ID
+    roleId: KMC_OPERATOR_ROLE_ID
   },
   rules: {
     username: [
@@ -284,7 +221,6 @@ const data = reactive<{
 
 const { queryParams, form, rules } = toRefs(data);
 
-/** 查询用户列表 */
 function getList() {
   loading.value = true;
   isDataLoaded.value = false;
@@ -302,21 +238,18 @@ function getList() {
   });
 }
 
-/** 搜索按钮操作 */
 function handleQuery() {
   queryParams.value.pageNum = 1;
   getList();
 }
 
-/** 重置按钮操作 */
 function resetQuery() {
   dateRange.value = [];
   queryForm.value?.resetFields();
-  queryParams.value.roleId = KMC_BIZ_ROLE_ID;
+  queryParams.value.roleId = KMC_OPERATOR_ROLE_ID;
   handleQuery();
 }
 
-/** 删除按钮操作 */
 function handleDelete(row: any) {
   const userIds = row.id || ids.value;
   proxy?.$modal
@@ -331,18 +264,6 @@ function handleDelete(row: any) {
     .catch(() => {});
 }
 
-/** 导出按钮操作 */
-function handleExport() {
-  proxy?.download(
-    'system/user/export',
-    {
-      ...queryParams.value
-    },
-    `user_${new Date().getTime()}.xlsx`
-  );
-}
-
-/** 用户状态修改  */
 function handleStatusChange(row: any, newStatus: number) {
   if (!isDataLoaded.value) {
     return;
@@ -362,21 +283,6 @@ function handleStatusChange(row: any, newStatus: number) {
     });
 }
 
-/** 更多操作 */
-function handleCommand(command: string, row: any) {
-  switch (command) {
-    case 'handleResetPwd':
-      handleResetPwd(row);
-      break;
-    case 'handleAuthRole':
-      handleAuthRole(row);
-      break;
-    default:
-      break;
-  }
-}
-
-/** 重置密码按钮操作 */
 function handleResetPwd(row: any) {
   proxy
     ?.$prompt('请输入"' + row.username + '"的新密码', '提示', {
@@ -394,52 +300,12 @@ function handleResetPwd(row: any) {
     .catch(() => {});
 }
 
-/** 分配角色 */
-function handleAuthRole(row: any) {
-  const userId = row.id;
-  proxy?.$router.push('/system/user-auth/role/' + userId);
-}
-
-/** 选择条数  */
 function handleSelectionChange(selection: any) {
   ids.value = selection.map((item: any) => item.id);
   single.value = selection.length != 1;
   multiple.value = !selection.length;
 }
 
-/** 导入按钮操作 */
-function handleImport() {
-  upload.title = '用户导入';
-  upload.open = true;
-}
-
-/** 下载模板操作 */
-function importTemplate() {
-  proxy?.download('system/user/importTemplate', {}, `user_template_${new Date().getTime()}.xlsx`);
-}
-
-/**文件上传中处理 */
-const handleFileUploadProgress = (event: any, file: any, fileList: any) => {
-  upload.isUploading = true;
-};
-
-/** 文件上传成功处理 */
-const handleFileSuccess = (response: any, file: any, fileList: any) => {
-  upload.open = false;
-  upload.isUploading = false;
-  proxy?.$refs['uploadRef'].clearFiles();
-  proxy?.$alert("<div style='overflow: auto;overflow-x: hidden;max-height: 70vh;padding: 10px 20px 0;'>" + response.msg + '</div>', '导入结果', {
-    dangerouslyUseHTMLString: true
-  });
-  getList();
-};
-
-/** 提交上传文件 */
-function submitFileForm() {
-  proxy?.$refs['uploadRef'].submit();
-}
-
-/** 重置操作表单 */
 function reset() {
   form.value = {
     id: undefined,
@@ -453,131 +319,107 @@ function reset() {
     status: 0,
     remark: undefined,
     postIds: [],
-    roleIds: [KMC_BIZ_ROLE_ID]
+    roleIds: [KMC_OPERATOR_ROLE_ID]
   };
   userRef.value?.resetFields();
   certFileList.value = [];
   certPem.value = '';
 }
 
-/** 取消按钮 */
 function cancel() {
   open.value = false;
   reset();
 }
 
-/** 新增按钮操作 */
 function handleAdd() {
   reset();
   open.value = true;
-  title.value = '添加业务管理员';
-  form.value.password = initPassword.value || '';
+  title.value = '添加业务操作员';
 }
 
-/** 修改按钮操作 */
 function handleUpdate(row: any) {
   reset();
   const userId = row.id || ids.value[0];
   getUser(userId).then((response) => {
     form.value = response.data as any;
     form.value.postIds = [];
-    form.value.roleIds = form.value.roleIds?.length ? form.value.roleIds : [KMC_BIZ_ROLE_ID];
+    form.value.roleIds = [KMC_OPERATOR_ROLE_ID];
     form.value.deptId = KMC_BIZ_DEPT_ID;
     open.value = true;
-    title.value = '修改业务管理员';
+    title.value = '修改业务操作员';
     form.value.password = '';
   });
 }
 
-/** 提交按钮 */
 function submitForm() {
   proxy?.$refs['userRef'].validate(async (valid: any) => {
-    if (valid) {
-      form.value.deptId = KMC_BIZ_DEPT_ID;
-      form.value.roleIds = [KMC_BIZ_ROLE_ID];
-      if (form.value.id != undefined) {
-        updateUser(form.value).then(() => {
-          proxy?.$modal.msgSuccess('修改成功');
-          open.value = false;
-          getList();
-        });
-      } else {
-        // 校验是否上传了证书
-        if (certFileList.value.length === 0) {
-          ElMessage.error('请上传证书文件');
-          return;
-        }
+    if (!valid) {
+      return;
+    }
 
-        // 使用 saveUserWithCert 接口
-        const formData = new FormData();
-        // 将 form 数据转换为 JSON 字符串并作为 'co' 参数传递
-        // 注意：后端 @RequestPart("co") UserCO co，通常需要 Content-Type: application/json
-        // 但 FormData 中 append 对象通常会被转为字符串。
-        // 如果后端需要 JSON，我们需要 Blob
-        const coBlob = new Blob([JSON.stringify(form.value)], { type: 'application/json' });
-        formData.append('co', coBlob);
-
-        if (certFileList.value.length > 0 && certFileList.value[0].raw) {
-          formData.append('file', certFileList.value[0].raw);
-        } else {
-          // 如果没有文件，可能需要传递一个空的 Blob 或者不传，取决于后端是否允许 file 为空
-          // 假设后端允许 file 为空或者必须传
-          // 如果必须传，这里可能需要处理。如果非必须，不 append 即可。
-          // 根据之前的逻辑，证书是可选的吗？之前的逻辑是先 addUser 再 uploadUserCert。
-          // 现在是合并。如果用户没选证书，file 参数怎么办？
-          // 假设没选证书就传一个空的 Blob
-          formData.append('file', new Blob(), '');
-        }
-
-        await saveUserWithCert(formData);
-        proxy?.$modal.msgSuccess('新增成功');
+    form.value.deptId = KMC_BIZ_DEPT_ID;
+    form.value.roleIds = [KMC_OPERATOR_ROLE_ID];
+    if (form.value.id != undefined) {
+      updateUser(form.value).then(() => {
+        proxy?.$modal.msgSuccess('修改成功');
         open.value = false;
         getList();
-      }
+      });
+      return;
     }
+
+    if (certFileList.value.length === 0) {
+      ElMessage.error('请上传证书文件');
+      return;
+    }
+
+    const formData = new FormData();
+    const coBlob = new Blob([JSON.stringify(form.value)], { type: 'application/json' });
+    formData.append('co', coBlob);
+
+    if (certFileList.value[0].raw) {
+      formData.append('file', certFileList.value[0].raw);
+    }
+
+    await saveUserWithCert(formData);
+    proxy?.$modal.msgSuccess('新增成功');
+    open.value = false;
+    getList();
   });
 }
 
-// 证书解析相关
 const readFileContent = async (file: File): Promise<string | null> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
         const content = e.target?.result as string;
-        // 检查是否是 PEM 格式
         if (content.includes('-----BEGIN CERTIFICATE-----')) {
           resolve(content);
-        } else {
-          // 检查是否是 DER 格式 (二进制)
-          // 简单的检查：DER 编码的证书通常以 0x30 (SEQUENCE) 开头
-          const firstByte = content.charCodeAt(0);
-          if (firstByte === 0x30) {
-            // 尝试将 DER 转换为 PEM
-            try {
-              const derBuffer = forge.util.createBuffer(content, 'binary');
-              const asn1 = forge.asn1.fromDer(derBuffer);
-              const cert = forge.pki.certificateFromAsn1(asn1);
-              const pem = forge.pki.certificateToPem(cert);
-              resolve(pem);
-            } catch (derError) {
-              // 如果 forge 无法解析（如 SM2），尝试手动包装成 PEM
-              // 假设它是有效的 DER，只是 forge 不支持
-              const base64 = forge.util.encode64(content);
-              const pem = `-----BEGIN CERTIFICATE-----\n${base64.match(/.{1,64}/g)?.join('\n')}\n-----END CERTIFICATE-----`;
-              resolve(pem);
-            }
-          } else {
-            // 既不是 PEM 也不是 DER
-            resolve(null);
-          }
+          return;
+        }
+
+        const firstByte = content.charCodeAt(0);
+        if (firstByte !== 0x30) {
+          resolve(null);
+          return;
+        }
+
+        try {
+          const derBuffer = forge.util.createBuffer(content, 'binary');
+          const asn1 = forge.asn1.fromDer(derBuffer);
+          const cert = forge.pki.certificateFromAsn1(asn1);
+          resolve(forge.pki.certificateToPem(cert));
+        } catch (derError) {
+          const base64 = forge.util.encode64(content);
+          const pem = `-----BEGIN CERTIFICATE-----\n${base64.match(/.{1,64}/g)?.join('\n')}\n-----END CERTIFICATE-----`;
+          resolve(pem);
         }
       } catch (error) {
         console.error('File reading error:', error);
         resolve(null);
       }
     };
-    // 读取为二进制字符串以兼容 DER
     reader.readAsBinaryString(file);
     reader.onerror = () => reject(null);
   });
@@ -590,20 +432,21 @@ const handleCertExceed: UploadProps['onExceed'] = (files) => {
   uploadCertRef.value!.handleStart(file);
 };
 
-const handleCertFileChange: UploadProps['onChange'] = async (uploadFile, uploadFiles) => {
-  if (uploadFile.raw) {
-    const pem = await readFileContent(uploadFile.raw);
-    if (pem) {
-      certPem.value = pem;
-      // showCertDialog.value = true; // 上传成功后自动弹出详情
-    } else {
-      ElMessage.error('无法解析证书文件，请确认文件为正确的X.509证书格式（PEM或DER）');
-      certPem.value = '';
-      uploadCertRef.value!.clearFiles(); // 清除错误文件
-    }
-  } else {
+const handleCertFileChange: UploadProps['onChange'] = async (uploadFile) => {
+  if (!uploadFile.raw) {
     certPem.value = '';
+    return;
   }
+
+  const pem = await readFileContent(uploadFile.raw);
+  if (pem) {
+    certPem.value = pem;
+    return;
+  }
+
+  ElMessage.error('无法解析证书文件，请确认文件为正确的X.509证书格式（PEM或DER）');
+  certPem.value = '';
+  uploadCertRef.value!.clearFiles();
 };
 
 const handleCertRemove: UploadProps['onRemove'] = () => {
