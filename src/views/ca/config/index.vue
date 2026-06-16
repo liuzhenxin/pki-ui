@@ -129,7 +129,27 @@
               <el-switch v-model="kmcForm.enabled" />
             </el-form-item>
             <el-form-item label="服务地址">
-              <el-input v-model="kmcForm.baseUrl" placeholder="http://localhost:8080" />
+              <el-input v-model="kmcForm.kmcBaseUrl" placeholder="http://kmc:3443/api">
+                <template #append>
+                  <el-button icon="Connection" :loading="testingKmc" @click="testKmcCommunication">KMP通信测试</el-button>
+                </template>
+              </el-input>
+              <div class="form-tip">Docker 部署默认使用容器网络地址：http://kmc:3443/api</div>
+            </el-form-item>
+            <el-form-item v-if="kmcTestResult" label="测试结果">
+              <el-alert
+                :title="kmcTestResult.passed ? 'KMP通信测试通过' : 'KMP通信测试未通过'"
+                :type="kmcTestResult.passed ? 'success' : 'error'"
+                :closable="false"
+                show-icon
+              >
+                <ul class="test-checks">
+                  <li v-for="item in kmcTestResult.checks" :key="item.name" :class="{ passed: item.passed, failed: !item.passed }">
+                    <span class="check-name">{{ item.name }}</span>
+                    <span>{{ item.message || '-' }}</span>
+                  </li>
+                </ul>
+              </el-alert>
             </el-form-item>
           </el-form>
         </el-tab-pane>
@@ -165,13 +185,16 @@
 <script setup name="CaConfig" lang="ts">
 import { computed, reactive, ref, watch } from 'vue';
 import { ElMessage } from 'element-plus';
-import { getCaConfig, saveCaConfig } from '@/api/ca/config';
+import { getCaConfig, saveCaConfig, testCaConfig } from '@/api/ca/config';
+import type { CaConfigTestCO } from '@/api/ca/config';
 import { issueCaIdentityCert, listRootCa } from '@/api/ca/root';
 import { listProfile } from '@/api/ca/profile';
 import X509Cert from '@/components/X509Cert/index.vue';
 
 const activeType = ref('CA_IDENTITY');
 const saving = ref(false);
+const testingKmc = ref(false);
+const kmcTestResult = ref<CaConfigTestCO>();
 const issuingIdentityCert = ref(false);
 const identityIssueMode = ref(false);
 const showIdentityCertDetail = ref(false);
@@ -206,7 +229,7 @@ const identityForm = reactive<any>({
 const kmcForm = reactive<any>({
   id: undefined,
   enabled: false,
-  baseUrl: ''
+  kmcBaseUrl: 'http://kmc:3443/api'
 });
 
 const archiveForm = reactive<any>({
@@ -250,6 +273,13 @@ function assignForm(target: any, source: any, id?: string | number) {
   target.id = id;
 }
 
+function normalizeKmcForm(source: any = {}) {
+  kmcForm.kmcBaseUrl = source.kmcBaseUrl || source.baseUrl || kmcForm.kmcBaseUrl || 'http://kmc:3443/api';
+  if (!kmcForm.kmcBaseUrl) {
+    kmcForm.kmcBaseUrl = 'http://kmc:3443/api';
+  }
+}
+
 function normalizeArchiveMode() {
   if (!archiveModeValues.includes(archiveForm.mode)) {
     archiveForm.mode = 'DATABASE';
@@ -283,6 +313,8 @@ function loadConfig(type: string) {
     const parsed = parseConfig(data.config);
     if (type === 'KMC_SERVER') {
       assignForm(kmcForm, parsed, data.id);
+      normalizeKmcForm(parsed);
+      kmcTestResult.value = undefined;
     } else if (type === 'ARCHIVE_POLICY') {
       assignForm(archiveForm, parsed, data.id);
       normalizeArchiveMode();
@@ -507,11 +539,23 @@ function buildSaveData() {
     }
   } else if (activeType.value === 'ARCHIVE_POLICY') {
     normalizeArchiveMode();
+  } else if (activeType.value === 'KMC_SERVER') {
+    normalizeKmcForm(payload);
   }
   const { id, ...config } = payload;
   return {
     id,
     type: activeType.value,
+    config: JSON.stringify(config)
+  };
+}
+
+function buildKmcTestData() {
+  normalizeKmcForm(kmcForm);
+  const { id, ...config } = kmcForm;
+  return {
+    id,
+    type: 'KMC_SERVER',
     config: JSON.stringify(config)
   };
 }
@@ -536,6 +580,28 @@ function saveActiveConfig() {
     })
     .finally(() => {
       saving.value = false;
+    });
+}
+
+function testKmcCommunication() {
+  if (!String(kmcForm.kmcBaseUrl || '').trim()) {
+    ElMessage.warning('请输入KMC服务地址');
+    return;
+  }
+  testingKmc.value = true;
+  kmcTestResult.value = undefined;
+  testCaConfig(buildKmcTestData())
+    .then((response: any) => {
+      const result = response.data as CaConfigTestCO;
+      kmcTestResult.value = result;
+      if (result?.passed) {
+        ElMessage.success('KMP通信测试通过');
+      } else {
+        ElMessage.error('KMP通信测试未通过');
+      }
+    })
+    .finally(() => {
+      testingKmc.value = false;
     });
 }
 
@@ -735,6 +801,38 @@ watch(
 
 .identity-cert-detail {
   width: 100%;
+}
+
+.form-tip {
+  margin-top: 6px;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.test-checks {
+  padding-left: 0;
+  margin: 8px 0 0;
+  list-style: none;
+}
+
+.test-checks li {
+  display: flex;
+  gap: 8px;
+  line-height: 22px;
+}
+
+.check-name {
+  flex: 0 0 88px;
+  font-weight: 600;
+}
+
+.test-checks .passed {
+  color: var(--el-color-success);
+}
+
+.test-checks .failed {
+  color: var(--el-color-danger);
 }
 
 @media (max-width: 960px) {

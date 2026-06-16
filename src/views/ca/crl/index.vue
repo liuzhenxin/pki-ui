@@ -1,33 +1,18 @@
 <script setup name="CrlManagement" lang="ts">
-import { ComponentInternalInstance, getCurrentInstance, nextTick, reactive, ref, toRefs } from 'vue';
-import { ElMessage, FormInstance, FormRules, UploadProps, UploadUserFile } from 'element-plus';
-import { UploadFilled } from '@element-plus/icons-vue';
-import { to } from 'await-to-js';
-import { exportCrl, genCrl, getCrl, importCrl, pageCrl, publishCrl, removeCrl } from '@/api/crl';
-import { CrlGenForm, CrlPublishForm, CrlQuery } from '@/api/crl/types';
+import { computed, nextTick, reactive, ref, toRefs } from 'vue';
+import { ElMessage } from 'element-plus';
+import { getCrl, pageCrl, publishCrl } from '@/api/crl';
+import { CrlPublishForm, CrlQuery } from '@/api/crl/types';
 import { listRootCa } from '@/api/ca/root';
 import { pagePublisher } from '@/api/ca/publisher';
 import { parseTime } from '@/utils/ruoyi';
-
-const { proxy } = getCurrentInstance() as ComponentInternalInstance;
 
 const crlList = ref<any[]>([]);
 const rootList = ref<any[]>([]);
 const publisherList = ref<any[]>([]);
 const publishRecords = ref<any[]>([]);
 const loading = ref(true);
-const showSearch = ref(true);
-const ids = ref<Array<string | number>>([]);
-const multiple = ref(true);
 const total = ref(0);
-
-const queryFormRef = ref<FormInstance>();
-const issueFormRef = ref<FormInstance>();
-
-const issueDialog = reactive({
-  visible: false,
-  loading: false
-});
 
 const publishDialog = reactive({
   visible: false,
@@ -40,43 +25,39 @@ const detailDialog = reactive({
   data: {} as any
 });
 
-const uploadDialog = reactive({
-  visible: false,
-  loading: false,
-  fileList: [] as UploadUserFile[]
-});
-
 const data = reactive({
   queryParams: {
     pageNum: 1,
-    pageSize: 10,
-    rootId: undefined,
-    crlNo: '',
-    deltaCrl: ''
+    pageSize: 10
   } as CrlQuery,
-  issueForm: {
-    rootId: undefined,
-    crlScope: 0,
-    deltaCrl: false
-  } as CrlGenForm,
   publishForm: {
     crlId: undefined,
     publisherId: undefined
   } as CrlPublishForm
 });
 
-const { queryParams, issueForm, publishForm } = toRefs(data);
-
-const issueRules: FormRules = {
-  rootId: [{ required: true, message: '请选择根CA', trigger: 'change' }]
-};
+const { queryParams, publishForm } = toRefs(data);
 
 function formatCrlType(row: any) {
   return Number(row.deltaCrl) === 1 || row.deltaCrl === true ? '增量CRL' : '全量CRL';
 }
 
+function getCrlTagType(row: any) {
+  return Number(row.deltaCrl) === 1 || row.deltaCrl === true ? 'warning' : 'success';
+}
+
+function formatScopeLabel(scope?: number | string) {
+  const scopeValue = Number(scope || 0);
+  const scopeMap: Record<number, string> = {
+    0: '默认',
+    1: '用户证书',
+    2: '二级CA'
+  };
+  return scopeMap[scopeValue] || `Scope ${scopeValue}`;
+}
+
 function getRootName(rootId: string | number) {
-  const root = rootList.value.find((item: any) => item.id === rootId);
+  const root = rootList.value.find((item: any) => String(item.id) === String(rootId));
   return root?.name || rootId;
 }
 
@@ -96,6 +77,37 @@ function addPublishRecord(record: any) {
   publishRecords.value = publishRecords.value.slice(0, 10);
 }
 
+const fullCrlCount = computed(() => crlList.value.filter((item) => Number(item.deltaCrl) !== 1 && item.deltaCrl !== true).length);
+const deltaCrlCount = computed(() => crlList.value.filter((item) => Number(item.deltaCrl) === 1 || item.deltaCrl === true).length);
+const latestCrl = computed(() => {
+  return [...crlList.value].sort((a, b) => new Date(b.thisUpdate || 0).getTime() - new Date(a.thisUpdate || 0).getTime())[0];
+});
+
+function formatTimeValue(value?: string) {
+  if (!value) {
+    return '-';
+  }
+  return parseTime(value) || value;
+}
+
+function getFreshness(row: any) {
+  if (!row?.nextBefore) {
+    return { label: '未知', type: 'info' };
+  }
+  const nextTime = new Date(row.nextBefore).getTime();
+  if (Number.isNaN(nextTime)) {
+    return { label: '未知', type: 'info' };
+  }
+  const diffHours = (nextTime - Date.now()) / 36e5;
+  if (diffHours < 0) {
+    return { label: '已过期', type: 'danger' };
+  }
+  if (diffHours <= 24) {
+    return { label: '临近到期', type: 'warning' };
+  }
+  return { label: '有效', type: 'success' };
+}
+
 async function loadOptions() {
   try {
     const [rootRes, publisherRes] = await Promise.all([
@@ -110,67 +122,26 @@ async function loadOptions() {
   }
 }
 
-/** 查询CRL列表 */
+/** 加载CRL列表 */
 async function getList() {
   loading.value = true;
   try {
-    const res = await pageCrl(queryParams.value);
+    const pageNum = Number(queryParams.value.pageNum) || 1;
+    const pageSize = Number(queryParams.value.pageSize) || 10;
+    const res = await pageCrl({
+      ...queryParams.value,
+      pageNum,
+      pageSize,
+      pageIndex: (pageNum - 1) * pageSize
+    } as any);
     crlList.value = [];
-    total.value = res.data?.total || 0;
+    total.value = Number(res.data?.total || 0);
     await nextTick();
     crlList.value = res.data?.rows || res.data?.records || [];
   } catch (error) {
   } finally {
     loading.value = false;
   }
-}
-
-function handleQuery() {
-  queryParams.value.pageNum = 1;
-  getList();
-}
-
-function resetQuery() {
-  queryFormRef.value?.resetFields();
-  handleQuery();
-}
-
-function handleSelectionChange(selection: any[]) {
-  ids.value = selection.map((item) => item.id);
-  multiple.value = !selection.length;
-}
-
-function handleIssue() {
-  issueForm.value = {
-    rootId: queryParams.value.rootId,
-    crlScope: 0,
-    deltaCrl: false
-  };
-  issueDialog.visible = true;
-}
-
-async function submitIssue() {
-  issueFormRef.value?.validate(async (valid: boolean) => {
-    if (!valid) return;
-    issueDialog.loading = true;
-    try {
-      const res = await genCrl(issueForm.value);
-      ElMessage.success(issueForm.value.deltaCrl ? '增量CRL签发成功' : '全量CRL签发成功');
-      addPublishRecord({
-        action: issueForm.value.deltaCrl ? '签发增量' : '签发全量',
-        crlNo: res.data?.crlNo || res.data?.id || '-',
-        publisherName: '-',
-        status: '成功',
-        message: 'CRL已生成'
-      });
-      issueDialog.visible = false;
-      await getList();
-    } catch (error: any) {
-      ElMessage.error(error.response?.data?.msg || error.message || '签发CRL失败');
-    } finally {
-      issueDialog.loading = false;
-    }
-  });
 }
 
 function handlePublish(row: any) {
@@ -221,160 +192,112 @@ async function handleDetail(row: any) {
   detailDialog.visible = true;
 }
 
-async function handleDelete(row?: any) {
-  const crlIds = row?.id || ids.value;
-  const [err] = await to(proxy?.$modal.confirm('是否确认删除CRL编号为"' + crlIds + '"的数据项？') as any);
-  if (!err) {
-    try {
-      await removeCrl(Array.isArray(crlIds) ? crlIds : [crlIds]);
-      await getList();
-      proxy?.$modal.msgSuccess('删除成功');
-    } catch (error) {}
-  }
-}
-
-function handleImport() {
-  uploadDialog.visible = true;
-  uploadDialog.fileList = [];
-}
-
-async function submitImport() {
-  if (uploadDialog.fileList.length === 0) {
-    ElMessage.warning('请选择要导入的CRL文件');
-    return;
-  }
-
-  uploadDialog.loading = true;
-  try {
-    const formData = new FormData();
-    uploadDialog.fileList.forEach((file) => {
-      if (file.raw) {
-        formData.append('files', file.raw);
-      }
-    });
-    await importCrl(formData);
-    ElMessage.success('导入成功');
-    uploadDialog.visible = false;
-    await getList();
-  } catch (error) {
-    ElMessage.error('导入失败');
-  } finally {
-    uploadDialog.loading = false;
-  }
-}
-
-async function handleExport() {
-  try {
-    const blob = await exportCrl(queryParams.value);
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `crl_${new Date().getTime()}.zip`;
-    link.click();
-    window.URL.revokeObjectURL(url);
-    ElMessage.success('导出成功');
-  } catch (error) {
-    ElMessage.error('导出失败');
-  }
-}
-
-const beforeUpload: UploadProps['beforeUpload'] = (file) => {
-  const isCrl = file.name.endsWith('.crl') || file.name.endsWith('.pem') || file.name.endsWith('.der');
-  if (!isCrl) {
-    ElMessage.error('只支持上传CRL文件');
-    return false;
-  }
-  return true;
-};
-
-const handleFileChange: UploadProps['onChange'] = (_uploadFile, uploadFiles) => {
-  uploadDialog.fileList = uploadFiles;
-};
-
 loadOptions();
 getList();
 </script>
 
 <template>
-  <div class="p-2">
-    <transition :enter-active-class="proxy?.animate.searchAnimate.enter" :leave-active-class="proxy?.animate.searchAnimate.leave">
-      <div v-show="showSearch" class="mb-10px">
-        <el-card shadow="hover">
-          <el-form ref="queryFormRef" :model="queryParams" :inline="true">
-            <el-form-item label="根CA" prop="rootId">
-              <el-select v-model="queryParams.rootId" placeholder="请选择根CA" clearable filterable style="width: 220px">
-                <el-option v-for="item in rootList" :key="item.id" :label="item.name" :value="item.id" />
-              </el-select>
-            </el-form-item>
-            <el-form-item label="CRL编号" prop="crlNo">
-              <el-input v-model="queryParams.crlNo" placeholder="请输入CRL编号" clearable @keyup.enter="handleQuery" />
-            </el-form-item>
-            <el-form-item label="CRL类型" prop="deltaCrl">
-              <el-select v-model="queryParams.deltaCrl" placeholder="CRL类型" clearable style="width: 140px">
-                <el-option label="全量CRL" :value="0" />
-                <el-option label="增量CRL" :value="1" />
-              </el-select>
-            </el-form-item>
-            <el-form-item>
-              <el-button type="primary" icon="Search" @click="handleQuery">搜索</el-button>
-              <el-button icon="Refresh" @click="resetQuery">重置</el-button>
-            </el-form-item>
-          </el-form>
-        </el-card>
-      </div>
-    </transition>
+  <div class="p-2 crl-page">
+    <el-row :gutter="12" class="mb-10px">
+      <el-col :xs="24" :sm="12" :lg="6">
+        <div class="metric-tile">
+          <div class="metric-label">根CA数量</div>
+          <div class="metric-value">{{ rootList.length }}</div>
+          <div class="metric-note">{{ rootList.length }} 个可用根CA</div>
+        </div>
+      </el-col>
+      <el-col :xs="24" :sm="12" :lg="6">
+        <div class="metric-tile">
+          <div class="metric-label">CRL记录</div>
+          <div class="metric-value">{{ total }}</div>
+          <div class="metric-note">当前列表记录总数</div>
+        </div>
+      </el-col>
+      <el-col :xs="24" :sm="12" :lg="6">
+        <div class="metric-tile">
+          <div class="metric-label">本页类型</div>
+          <div class="metric-value">{{ fullCrlCount }} / {{ deltaCrlCount }}</div>
+          <div class="metric-note">全量 / 增量</div>
+        </div>
+      </el-col>
+      <el-col :xs="24" :sm="12" :lg="6">
+        <div class="metric-tile">
+          <div class="metric-label">最新CRL</div>
+          <div class="metric-value">{{ latestCrl?.crlNo || '-' }}</div>
+          <div class="metric-note">{{ latestCrl ? formatTimeValue(latestCrl.thisUpdate) : '暂无签发记录' }}</div>
+        </div>
+      </el-col>
+    </el-row>
 
-    <el-card shadow="hover">
+    <el-card shadow="never">
       <template #header>
-        <el-row :gutter="10">
-          <el-col :span="1.5">
-            <el-button type="primary" plain icon="Stamp" @click="handleIssue" v-hasPermi="['ca:crl:issue']">签发CRL</el-button>
-          </el-col>
-          <el-col :span="1.5">
-            <el-button type="danger" plain icon="Delete" :disabled="multiple" @click="handleDelete" v-hasPermi="['ca:crl:remove']">删除</el-button>
-          </el-col>
-          <el-col :span="1.5">
-            <el-button type="warning" plain icon="Upload" @click="handleImport" v-hasPermi="['ca:crl:import']">导入</el-button>
-          </el-col>
-          <el-col :span="1.5">
-            <el-button type="info" plain icon="Download" @click="handleExport" v-hasPermi="['ca:crl:export']">导出查询</el-button>
-          </el-col>
-          <right-toolbar v-model:show-search="showSearch" @query-table="getList"></right-toolbar>
-        </el-row>
+        <div class="table-toolbar">
+          <div class="toolbar-actions">
+            <span class="toolbar-note">CRL 由根证书管理中的 CRL 配置和签发线程生成</span>
+          </div>
+          <el-button icon="Refresh" @click="getList">刷新</el-button>
+        </div>
       </template>
 
-      <el-table v-loading="loading" border :data="crlList" @selection-change="handleSelectionChange">
-        <el-table-column type="selection" width="50" align="center" />
-        <el-table-column label="CRL编号" align="center" prop="crlNo" width="130" :show-overflow-tooltip="true" />
-        <el-table-column label="根CA" align="center" prop="rootId" min-width="180" :show-overflow-tooltip="true">
-          <template #default="scope">{{ getRootName(scope.row.rootId) }}</template>
-        </el-table-column>
-        <el-table-column label="类型" align="center" prop="deltaCrl" width="100">
+      <el-table v-loading="loading" :data="crlList" stripe>
+        <el-table-column label="CRL编号" prop="crlNo" min-width="150" :show-overflow-tooltip="true">
           <template #default="scope">
-            <el-tag :type="Number(scope.row.deltaCrl) === 1 ? 'warning' : 'success'">{{ formatCrlType(scope.row) }}</el-tag>
+            <span class="mono-text">{{ scope.row.crlNo || scope.row.id }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="Scope" align="center" prop="crlScope" width="90" />
-        <el-table-column label="本次更新时间" align="center" prop="thisUpdate" width="180" />
-        <el-table-column label="下次更新时间" align="center" prop="nextBefore" width="180" />
-        <el-table-column label="Base CRL编号" align="center" prop="baseCrlNo" width="130" />
-        <el-table-column label="SHA1" align="center" prop="sha1" min-width="220" :show-overflow-tooltip="true" />
-        <el-table-column label="操作" fixed="right" width="190" class-name="small-padding fixed-width">
+        <el-table-column label="根CA" prop="rootId" min-width="180" :show-overflow-tooltip="true">
+          <template #default="scope">{{ getRootName(scope.row.rootId) }}</template>
+        </el-table-column>
+        <el-table-column label="类型" prop="deltaCrl" width="110">
+          <template #default="scope">
+            <el-tag :type="getCrlTagType(scope.row)" effect="light">{{ formatCrlType(scope.row) }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="范围" prop="crlScope" width="110">
+          <template #default="scope">{{ formatScopeLabel(scope.row.crlScope) }}</template>
+        </el-table-column>
+        <el-table-column label="状态" width="110">
+          <template #default="scope">
+            <el-tag :type="getFreshness(scope.row).type" effect="plain">{{ getFreshness(scope.row).label }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="本次更新" prop="thisUpdate" width="170">
+          <template #default="scope">{{ formatTimeValue(scope.row.thisUpdate) }}</template>
+        </el-table-column>
+        <el-table-column label="下次更新" prop="nextBefore" width="170">
+          <template #default="scope">{{ formatTimeValue(scope.row.nextBefore) }}</template>
+        </el-table-column>
+        <el-table-column label="Base CRL" prop="baseCrlNo" width="120">
+          <template #default="scope">{{ scope.row.baseCrlNo || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="SHA1 指纹" prop="sha1" min-width="220" :show-overflow-tooltip="true">
+          <template #default="scope">
+            <span class="mono-text">{{ scope.row.sha1 || '-' }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" fixed="right" width="130" class-name="small-padding fixed-width">
           <template #default="scope">
             <el-button link type="primary" icon="View" @click="handleDetail(scope.row)" v-hasPermi="['ca:crl:detail']">详情</el-button>
             <el-button link type="success" icon="Promotion" @click="handlePublish(scope.row)" v-hasPermi="['ca:crl:publish']">发布</el-button>
-            <el-button link type="danger" icon="Delete" @click="handleDelete(scope.row)" v-hasPermi="['ca:crl:remove']">删除</el-button>
           </template>
         </el-table-column>
+        <template #empty>
+          <el-empty description="暂无CRL记录，请在根证书管理中配置并启动CRL签发线程" />
+        </template>
       </el-table>
 
       <pagination v-show="total > 0" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" :total="total" @pagination="getList" />
     </el-card>
 
-    <el-card class="mt-10px" shadow="hover">
-      <template #header>发布记录</template>
-      <el-table :data="publishRecords" border size="small" empty-text="暂无本次操作记录">
-        <el-table-column label="时间" prop="time" width="150" />
+    <el-card class="mt-10px" shadow="never">
+      <template #header>
+        <div class="card-header">
+          <span>本次操作记录</span>
+          <el-button link type="primary" :disabled="publishRecords.length === 0" @click="publishRecords = []">清空</el-button>
+        </div>
+      </template>
+      <el-table :data="publishRecords" size="small" empty-text="暂无本次操作记录">
+        <el-table-column label="时间" prop="time" width="110" />
         <el-table-column label="操作" prop="action" width="120" />
         <el-table-column label="CRL编号" prop="crlNo" width="130" />
         <el-table-column label="发布目标" prop="publisherName" min-width="180" show-overflow-tooltip />
@@ -386,31 +309,6 @@ getList();
         <el-table-column label="说明" prop="message" min-width="220" show-overflow-tooltip />
       </el-table>
     </el-card>
-
-    <el-dialog v-model="issueDialog.visible" title="签发CRL" width="560px" append-to-body>
-      <el-form ref="issueFormRef" :model="issueForm" :rules="issueRules" label-width="120px">
-        <el-form-item label="根CA" prop="rootId">
-          <el-select v-model="issueForm.rootId" placeholder="请选择根CA" filterable style="width: 100%">
-            <el-option v-for="item in rootList" :key="item.id" :label="item.name" :value="item.id" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="CRL Scope">
-          <el-input-number v-model="issueForm.crlScope" :min="0" style="width: 100%" />
-        </el-form-item>
-        <el-form-item label="CRL类型">
-          <el-radio-group v-model="issueForm.deltaCrl">
-            <el-radio-button :value="false">全量CRL</el-radio-button>
-            <el-radio-button :value="true">增量CRL</el-radio-button>
-          </el-radio-group>
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <div class="dialog-footer">
-          <el-button type="primary" :loading="issueDialog.loading" @click="submitIssue">签 发</el-button>
-          <el-button @click="issueDialog.visible = false">取 消</el-button>
-        </div>
-      </template>
-    </el-dialog>
 
     <el-dialog v-model="publishDialog.visible" title="发布CRL" width="560px" append-to-body>
       <el-form :model="publishForm" label-width="120px">
@@ -431,44 +329,82 @@ getList();
       </template>
     </el-dialog>
 
-    <el-dialog v-model="detailDialog.visible" :title="detailDialog.title" width="760px" append-to-body>
-      <el-descriptions :column="2" border>
+    <el-drawer v-model="detailDialog.visible" :title="detailDialog.title" size="760px" append-to-body>
+      <el-descriptions :column="2" border class="detail-descriptions">
         <el-descriptions-item label="CRL编号">{{ detailDialog.data?.crlNo }}</el-descriptions-item>
         <el-descriptions-item label="根CA">{{ getRootName(detailDialog.data?.rootId) }}</el-descriptions-item>
         <el-descriptions-item label="CRL类型">{{ formatCrlType(detailDialog.data || {}) }}</el-descriptions-item>
-        <el-descriptions-item label="CRL Scope">{{ detailDialog.data?.crlScope }}</el-descriptions-item>
-        <el-descriptions-item label="本次更新时间">{{ detailDialog.data?.thisUpdate }}</el-descriptions-item>
-        <el-descriptions-item label="下次更新时间">{{ detailDialog.data?.nextBefore }}</el-descriptions-item>
+        <el-descriptions-item label="CRL Scope">{{ formatScopeLabel(detailDialog.data?.crlScope) }}</el-descriptions-item>
+        <el-descriptions-item label="本次更新时间">{{ formatTimeValue(detailDialog.data?.thisUpdate) }}</el-descriptions-item>
+        <el-descriptions-item label="下次更新时间">{{ formatTimeValue(detailDialog.data?.nextBefore) }}</el-descriptions-item>
         <el-descriptions-item label="Base CRL编号">{{ detailDialog.data?.baseCrlNo || '-' }}</el-descriptions-item>
         <el-descriptions-item label="SHA1">{{ detailDialog.data?.sha1 }}</el-descriptions-item>
       </el-descriptions>
-      <el-input class="mt-10px" :model-value="detailDialog.data?.crl" type="textarea" :rows="12" readonly placeholder="暂无CRL内容" />
-    </el-dialog>
+      <el-input class="mt-10px crl-content" :model-value="detailDialog.data?.crl" type="textarea" :rows="18" readonly placeholder="暂无CRL内容" />
+    </el-drawer>
 
-    <el-dialog v-model="uploadDialog.visible" title="导入CRL" width="600px" append-to-body>
-      <el-upload
-        drag
-        :auto-upload="false"
-        :file-list="uploadDialog.fileList"
-        :on-change="handleFileChange"
-        :before-upload="beforeUpload"
-        multiple
-        accept=".crl,.pem,.der"
-      >
-        <el-icon class="el-icon--upload">
-          <upload-filled />
-        </el-icon>
-        <div class="el-upload__text">将文件拖到此处，或<em>点击上传</em></div>
-        <template #tip>
-          <div class="el-upload__tip">支持 .crl, .pem, .der 格式的CRL文件</div>
-        </template>
-      </el-upload>
-      <template #footer>
-        <div class="dialog-footer">
-          <el-button type="primary" :loading="uploadDialog.loading" @click="submitImport">确 定</el-button>
-          <el-button @click="uploadDialog.visible = false">取 消</el-button>
-        </div>
-      </template>
-    </el-dialog>
   </div>
 </template>
+
+<style scoped lang="scss">
+.crl-page {
+  .metric-tile {
+    min-height: 96px;
+    padding: 16px;
+    background: #fff;
+    border: 1px solid #ebeef5;
+    border-radius: 6px;
+  }
+
+  .metric-label {
+    color: #909399;
+    font-size: 13px;
+  }
+
+  .metric-value {
+    margin-top: 8px;
+    color: #303133;
+    font-size: 22px;
+    font-weight: 600;
+    line-height: 28px;
+    word-break: break-all;
+  }
+
+  .metric-note {
+    margin-top: 8px;
+    color: #909399;
+    font-size: 12px;
+  }
+
+  .table-toolbar,
+  .card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .toolbar-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .mono-text {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+    font-size: 12px;
+  }
+
+  .detail-descriptions {
+    margin-bottom: 12px;
+  }
+
+  .crl-content {
+    :deep(textarea) {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+  }
+}
+</style>

@@ -49,9 +49,9 @@ export const usePermissionStore = defineStore('permission', () => {
   const generateRoutes = async (): Promise<RouteRecordRaw[]> => {
     const res = await getRouters({ types: ['M', 'C'] });
     const { data } = res;
-    const sdata = JSON.parse(JSON.stringify(data));
-    const rdata = JSON.parse(JSON.stringify(data));
-    const defaultData = JSON.parse(JSON.stringify(data));
+    const sdata = removeRetiredKmcRoutes(JSON.parse(JSON.stringify(data)));
+    const rdata = removeRetiredKmcRoutes(JSON.parse(JSON.stringify(data)));
+    const defaultData = removeRetiredKmcRoutes(JSON.parse(JSON.stringify(data)));
     const sidebarRoutes = filterAsyncRouter(sdata);
     const rewriteRoutes = filterAsyncRouter(rdata, undefined, true);
     const defaultRoutes = filterAsyncRouter(defaultData);
@@ -71,9 +71,9 @@ export const usePermissionStore = defineStore('permission', () => {
   const generateInitRoutes = async (): Promise<RouteRecordRaw[]> => {
     const res = await getInitRouters({ types: ['M', 'C'] });
     // const { data } = res.data;
-    const sdata = JSON.parse(JSON.stringify(res.data));
-    const rdata = JSON.parse(JSON.stringify(res.data));
-    const defaultData = JSON.parse(JSON.stringify(res.data));
+    const sdata = removeRetiredKmcRoutes(JSON.parse(JSON.stringify(res.data)));
+    const rdata = removeRetiredKmcRoutes(JSON.parse(JSON.stringify(res.data)));
+    const defaultData = removeRetiredKmcRoutes(JSON.parse(JSON.stringify(res.data)));
     const sidebarRoutes = filterAsyncRouter(sdata);
     const rewriteRoutes = filterAsyncRouter(rdata, undefined, true);
     const defaultRoutes = filterAsyncRouter(defaultData);
@@ -173,16 +173,36 @@ export const filterDynamicRoutes = (routes: RouteRecordRaw[]) => {
 
 export const loadView = (view: any, name: string) => {
   let res;
+  const viewStr = String(view ?? '');
   for (const path in modules) {
     const viewsIndex = path.indexOf('/views/');
     let dir = path.substring(viewsIndex + 7);
     dir = dir.substring(0, dir.lastIndexOf('.vue'));
-    if (dir === view) {
+    // 精确匹配 或 双向去除 /index 后缀匹配
+    if (dir === viewStr || dir.replace(/\/index$/, '') === viewStr || dir === viewStr.replace(/\/index$/, '')) {
       res = createCustomNameComponent(modules[path], { name });
       return res;
     }
   }
   return res;
+};
+
+const isRetiredKmcRoute = (route: RouteRecordRaw): boolean => {
+  const rawRoute = route as any;
+  const path = String(rawRoute.path ?? '');
+  const component = String(rawRoute.component ?? '');
+  return path === 'kmc-key-recovery' || path === '/kmc-key-recovery' || component === 'kmc/judge/recover/index';
+};
+
+const removeRetiredKmcRoutes = (routes: RouteRecordRaw[]): RouteRecordRaw[] => {
+  return routes
+    .filter((route) => !isRetiredKmcRoute(route))
+    .map((route) => {
+      if (route.children?.length) {
+        route.children = removeRetiredKmcRoutes(route.children);
+      }
+      return route;
+    });
 };
 
 // 非setup

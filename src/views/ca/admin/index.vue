@@ -337,6 +337,42 @@ const data = reactive({
 
 const { queryParams, form, rules } = toRefs(data);
 
+function normalizeUserForm() {
+  form.value.username = form.value.username?.trim() || '';
+  form.value.mail = form.value.mail?.trim() || undefined;
+  form.value.mobile = form.value.mobile?.trim() || undefined;
+  form.value.remark = form.value.remark?.trim() || '';
+}
+
+function getSaveUserErrorMessage(error: any) {
+  if (error?.response?.data?.msg) {
+    return error.response.data.msg;
+  }
+  if (error instanceof Error && error.message && error.message !== 'error') {
+    return error.message;
+  }
+  if (typeof error === 'string' && error !== 'error') {
+    return error;
+  }
+  return '保存业务管理员失败';
+}
+
+async function checkUsernameExists(username: string) {
+  try {
+    const res = await listUser({
+      pageNum: 1,
+      pageSize: 10,
+      username,
+      deptId: 401,
+      roleId: '403'
+    } as any);
+    const rows = res.data?.rows || res.data?.records || [];
+    return rows.some((item: any) => String(item.username).trim() === username);
+  } catch (error) {
+    return false;
+  }
+}
+
 /** 查询列表 */
 async function getList() {
   loading.value = true;
@@ -436,6 +472,7 @@ async function handleUpdate(row?: any) {
 async function submitForm() {
   userFormRef.value?.validate(async (valid: boolean) => {
     if (valid) {
+      normalizeUserForm();
       // 强制设置部门ID为401
       form.value.deptId = 401;
       // 强制设置角色ID为403
@@ -445,12 +482,19 @@ async function submitForm() {
         if (form.value.userId) {
           await updateUser(form.value);
         } else {
+          const usernameExists = await checkUsernameExists(form.value.username);
+          if (usernameExists) {
+            ElMessage.error(`用户名 ${form.value.username} 已存在，请更换用户名或修改已有用户`);
+            return;
+          }
           await addUser(form.value);
         }
         proxy?.$modal.msgSuccess('操作成功');
         dialog.visible = false;
         await getList();
-      } catch (error) {}
+      } catch (error) {
+        ElMessage.error(getSaveUserErrorMessage(error));
+      }
     }
   });
 }
@@ -507,9 +551,9 @@ async function handleIssueCert(row: any) {
     certForm.validityValue = 5;
     certForm.validityUnit = 'y';
 
-    // 获取"通用证书模板"配置
+    // 获取"管理员证书模板"配置
     ElMessage.info('正在加载证书模板...');
-    const profileRes = await getProfileByName('通用证书模板');
+    const profileRes = await getProfileByName('管理员证书模板');
     const profile = profileRes.data;
     const conf = parseJson(profile.conf);
     applyCertValidity(conf?.validity);

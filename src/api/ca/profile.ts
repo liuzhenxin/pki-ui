@@ -1,5 +1,5 @@
 import request from '@/utils/request';
-import { ProfileCO } from './types';
+import { DualCertProfileCO, ProfileCO } from './types';
 import { Result } from '@/api/types';
 
 // 查询证书模板列表
@@ -13,10 +13,17 @@ export function listProfile(data?: { type?: string }): Promise<Result<ProfileCO[
 
 // 分页查询证书模板列表
 export function pageProfile(query: any): Promise<Result<any>> {
+  const pageNum = Number(query?.pageNum || 1);
+  const pageSize = Number(query?.pageSize || 10);
   return request({
     url: '/ca/v1/profiles/page',
     method: 'post',
-    data: query
+    data: {
+      ...query,
+      pageNum,
+      pageSize,
+      pageIndex: (pageNum - 1) * pageSize
+    }
   }) as any;
 }
 
@@ -98,6 +105,15 @@ export function initProfiles(data: { ids: string[] }): Promise<Result<any>> {
 export function listInitProfile(): Promise<Result<ProfileCO[]>> {
   return request({
     url: '/ca/v1/profiles/init-list',
+    method: 'post',
+    data: {}
+  }) as any;
+}
+
+// 查询双证书模板对列表
+export function listDualCertProfiles(): Promise<Result<DualCertProfileCO[]>> {
+  return request({
+    url: '/ca/v1/profiles/dual-pairs',
     method: 'post',
     data: {}
   }) as any;

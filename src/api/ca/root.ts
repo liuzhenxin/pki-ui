@@ -127,7 +127,10 @@ export function saveRootCrlConfig(id: string | number, data: any): Promise<Resul
   return request({
     url: `/ca/v1/roots/${id}/crl-config`,
     method: 'put',
-    data
+    data: {
+      ...data,
+      rootId: id
+    }
   }) as any;
 }
 

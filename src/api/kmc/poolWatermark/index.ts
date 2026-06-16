@@ -21,10 +21,10 @@ export const checkAndReplenishPool = (strategyId: string | number) => {
   });
 };
 
-export const generatePoolKeys = (strategyId: string | number) => {
+export const generatePoolKeys = (strategyId: string | number, count: number) => {
   return request({
     url: `/kmc/v1/pool-watermark/generate/${strategyId}`,
-    method: 'post'
+    method: 'post',
+    params: { count }
   });
 };
-

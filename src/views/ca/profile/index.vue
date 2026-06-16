@@ -5,14 +5,17 @@ import { UploadFilled, View, Plus, Delete, Top, Bottom } from '@element-plus/ico
 import { to } from 'await-to-js';
 import { useRouter } from 'vue-router';
 import { parseJson, parseKeyAlgorithms } from '@/utils/json';
-import { pageProfile, getProfile, saveProfile, modifyProfile, removeProfile, importProfile, exportProfile } from '@/api/ca/profile';
+import { pageProfile, getProfile, saveProfile, modifyProfile, removeProfile, importProfile, exportProfile, listDualCertProfiles } from '@/api/ca/profile';
 import { ProfileForm, ProfileQuery } from '@/api/ca/profile/types';
+import { DualCertProfileCO } from '@/api/ca/types';
+import { Connection } from '@element-plus/icons-vue';
 import CertProfile from '@/components/CertProfile/index.vue';
 
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
 const router = useRouter();
 
 const profileList = ref<any[]>([]);
+const dualProfilePairs = ref<DualCertProfileCO[]>([]);
 const loading = ref(true);
 const showSearch = ref(true);
 const ids = ref<Array<string | number>>([]);
@@ -103,6 +106,15 @@ const profileRules: FormRules = {
 };
 
 /** 查询证书模板列表 */
+async function loadDualProfilePairs() {
+  try {
+    const res = await listDualCertProfiles();
+    dualProfilePairs.value = res?.data || [];
+  } catch (e) {
+    dualProfilePairs.value = [];
+  }
+}
+
 async function getList() {
   loading.value = true;
   try {
@@ -389,6 +401,7 @@ const handleFileChange: UploadProps['onChange'] = (uploadFile, uploadFiles) => {
 };
 
 getList();
+loadDualProfilePairs();
 </script>
 
 <template>
@@ -468,6 +481,25 @@ getList();
       <pagination v-show="total > 0" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" :total="total" @pagination="getList" />
     </el-card>
 
+    <!-- 双证书模板对 -->
+    <el-card v-if="dualProfilePairs.length > 0" shadow="never" style="margin-top: 16px">
+      <template #header>
+        <div style="display: flex; justify-content: space-between; align-items: center">
+          <span style="font-weight: bold; font-size: 15px"><el-icon><Connection /></el-icon> 双证书模板对</span>
+          <el-button link type="primary" @click="loadDualProfilePairs">刷新</el-button>
+        </div>
+      </template>
+      <el-row :gutter="16">
+        <el-col v-for="pair in dualProfilePairs" :key="pair.pairName" :span="12">
+          <el-card shadow="hover" style="margin-bottom: 12px">
+            <div style="font-weight: bold; font-size: 14px; margin-bottom: 4px">{{ pair.pairDisplayName || pair.pairName }}</div>
+            <div style="color: #909399; font-size: 12px; margin-bottom: 8px">{{ pair.pairDescription }}</div>
+            <el-tag type="warning" effect="plain" size="small" style="margin-right: 8px">签名: {{ pair.signProfile?.name }}</el-tag>
+            <el-tag type="success" effect="plain" size="small">加密: {{ pair.encProfile?.name }}</el-tag>
+          </el-card>
+        </el-col>
+      </el-row>
+    </el-card>
     <!-- 添加或修改证书模板对话框 -->
     <el-dialog ref="formDialogRef" v-model="dialog.visible" :title="dialog.title" width="800px" append-to-body @close="cancel">
       <el-form ref="profileFormRef" :model="form" :rules="profileRules" label-width="120px">

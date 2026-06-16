@@ -623,9 +623,9 @@ async function handleIssueCert(row: any) {
     certForm.validityValue = 5;
     certForm.validityUnit = 'y';
 
-    // 获取"通用证书模板"配置
+    // 获取"管理员证书模板"配置
     ElMessage.info('正在加载证书模板...');
-    const profileRes = await getProfileByName('通用证书模板');
+    const profileRes = await getProfileByName('管理员证书模板');
     const profile = profileRes.data;
     const conf = parseJson(profile.conf);
     applyCertValidity(conf?.validity);

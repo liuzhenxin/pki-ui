@@ -2,8 +2,7 @@
   <el-menu :default-active="activeMenu" mode="horizontal" :ellipsis="false" @select="handleSelect">
     <template v-for="(item, index) in topMenus">
       <el-menu-item v-if="index < visibleNumber" :key="index" :style="{ '--theme': theme }" :index="item.path"
-        ><svg-icon v-if="item.meta && item.meta.icon && item.meta.icon !== '#'" :icon-class="item.meta.icon" />
-        {{ item.meta?.title }}</el-menu-item
+        ><svg-icon v-if="item.meta && item.meta.icon && item.meta.icon !== '#'" :icon-class="item.meta.icon" /> {{ item.meta?.title }}</el-menu-item
       >
     </template>
 

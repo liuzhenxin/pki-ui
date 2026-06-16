@@ -1,21 +1,7 @@
 <template>
-  <el-dialog
-    :title="title"
-    v-model="visible"
-    width="400px"
-    append-to-body
-    :close-on-click-modal="false"
-    @close="handleCancel"
-  >
+  <el-dialog :title="title" v-model="visible" width="400px" append-to-body :close-on-click-modal="false" @close="handleCancel">
     <div class="security-confirm-content">
-      <el-alert
-        v-if="action"
-        :title="`正在执行敏感操作: ${action}`"
-        type="warning"
-        :closable="false"
-        show-icon
-        style="margin-bottom: 20px"
-      />
+      <el-alert v-if="action" :title="`正在执行敏感操作: ${action}`" type="warning" :closable="false" show-icon style="margin-bottom: 20px" />
       <p style="margin-bottom: 15px; color: #606266">为了您的账户安全，请验证登录密码以继续：</p>
       <el-form ref="confirmFormRef" :model="form" :rules="rules" label-width="0" @submit.prevent>
         <el-form-item prop="password">
@@ -79,20 +65,26 @@ const rules = {
   password: [{ required: true, message: '密码不能为空', trigger: 'blur' }]
 };
 
-watch(() => props.modelValue, (val) => {
-  visible.value = val;
-  if (val) {
-    form.password = '';
+watch(
+  () => props.modelValue,
+  (val) => {
+    visible.value = val;
+    if (val) {
+      form.password = '';
+    }
   }
-});
+);
 
-watch(() => visible.value, (val) => {
-  emit('update:modelValue', val);
-});
+watch(
+  () => visible.value,
+  (val) => {
+    emit('update:modelValue', val);
+  }
+);
 
 async function handleConfirm() {
   if (!confirmFormRef.value) return;
-  
+
   await confirmFormRef.value.validate(async (valid) => {
     if (valid) {
       loading.value = true;

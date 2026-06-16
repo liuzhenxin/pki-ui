@@ -37,4 +37,3 @@ export interface JudgeApproveForm {
   operatorIp: string;
   operatorUkeySn: string;
 }
-

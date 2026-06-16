@@ -14,7 +14,7 @@
       </div>
 
       <el-row :gutter="16">
-        <el-col :lg="8" :md="24">
+        <el-col :lg="6" :md="24">
           <el-card shadow="never" class="config-section">
             <template #header>
               <div class="section-title">
@@ -29,7 +29,6 @@
               <el-select v-model="form.keyGeneration.defaultKeyType" style="width: 100%">
                 <el-option label="SM2" value="SM2" />
                 <el-option label="RSA" value="RSA" />
-                <el-option label="SM4" value="SM4" />
               </el-select>
             </el-form-item>
             <el-form-item label="默认长度" prop="keyGeneration.defaultKeySize">
@@ -46,7 +45,7 @@
           </el-card>
         </el-col>
 
-        <el-col :lg="8" :md="24">
+        <el-col :lg="6" :md="24">
           <el-card shadow="never" class="config-section">
             <template #header>
               <div class="section-title">
@@ -68,7 +67,7 @@
           </el-card>
         </el-col>
 
-        <el-col :lg="8" :md="24">
+        <el-col :lg="6" :md="24">
           <el-card shadow="never" class="config-section">
             <template #header>
               <div class="section-title">
@@ -85,6 +84,26 @@
             </el-form-item>
           </el-card>
         </el-col>
+
+        <el-col :lg="6" :md="24">
+          <el-card shadow="never" class="config-section">
+            <template #header>
+              <div class="section-title">
+                <el-icon><Lock /></el-icon>
+                <span>密钥恢复</span>
+              </div>
+            </template>
+            <el-form-item label="密钥恢复" prop="keyRecovery.enabled">
+              <el-switch v-model="form.keyRecovery.enabled" active-text="启用" inactive-text="停用" />
+            </el-form-item>
+            <el-form-item label="取证员总数" prop="keyRecovery.totalApprovers">
+              <el-input-number v-model="form.keyRecovery.totalApprovers" :min="1" :max="100" controls-position="right" />
+            </el-form-item>
+            <el-form-item label="必需审批人数" prop="keyRecovery.requiredApprovers">
+              <el-input-number v-model="form.keyRecovery.requiredApprovers" :min="1" :max="form.keyRecovery.totalApprovers || 1" controls-position="right" />
+            </el-form-item>
+          </el-card>
+        </el-col>
       </el-row>
     </el-form>
   </div>
@@ -93,7 +112,7 @@
 <script setup name="KmcPolicyConfig" lang="ts">
 import { reactive, ref } from 'vue';
 import { ElMessage, FormInstance, FormRules } from 'element-plus';
-import { DocumentChecked, Key, Operation } from '@element-plus/icons-vue';
+import { DocumentChecked, Key, Lock, Operation } from '@element-plus/icons-vue';
 import { getKmcRuntimeConfig, refreshKmcRuntimeConfig, updateKmcRuntimeConfig } from '@/api/kmc/config';
 import { KmcRuntimeConfig } from '@/api/kmc/config/types';
 import { unwrapKmcData } from '@/api/kmc/common';
@@ -119,15 +138,32 @@ const defaultConfig = (): KmcRuntimeConfig => ({
   audit: {
     enabled: true,
     retentionDays: 90
+  },
+  keyRecovery: {
+    enabled: true,
+    totalApprovers: 5,
+    requiredApprovers: 3
   }
 });
 
 const form = reactive<KmcRuntimeConfig>(defaultConfig());
 
 const assignForm = (config: KmcRuntimeConfig) => {
-  Object.assign(form.keyGeneration, config.keyGeneration);
-  Object.assign(form.reservePool, config.reservePool);
-  Object.assign(form.audit, config.audit);
+  const normalized = {
+    ...defaultConfig(),
+    ...config,
+    keyGeneration: { ...defaultConfig().keyGeneration, ...config.keyGeneration },
+    reservePool: { ...defaultConfig().reservePool, ...config.reservePool },
+    audit: { ...defaultConfig().audit, ...config.audit },
+    keyRecovery: { ...defaultConfig().keyRecovery, ...config.keyRecovery }
+  };
+  if (normalized.keyGeneration.defaultKeyType === 'SM4') {
+    normalized.keyGeneration.defaultKeyType = 'SM2';
+  }
+  Object.assign(form.keyGeneration, normalized.keyGeneration);
+  Object.assign(form.reservePool, normalized.reservePool);
+  Object.assign(form.audit, normalized.audit);
+  Object.assign(form.keyRecovery, normalized.keyRecovery);
 };
 
 const numberRule = (min: number, label: string) => ({
@@ -147,7 +183,21 @@ const rules = reactive<FormRules<KmcRuntimeConfig>>({
   'keyGeneration.batchSize': [numberRule(1, '批量大小')],
   'reservePool.watermarkCheckInterval': [numberRule(10, '检查间隔')],
   'reservePool.generationRateLimit': [numberRule(1, '生成限速')],
-  'audit.retentionDays': [numberRule(1, '保留天数')]
+  'audit.retentionDays': [numberRule(1, '保留天数')],
+  'keyRecovery.totalApprovers': [numberRule(1, '取证员总数')],
+  'keyRecovery.requiredApprovers': [
+    numberRule(1, '必需审批人数'),
+    {
+      validator: (_rule: unknown, value: number, callback: (error?: Error) => void) => {
+        if (Number.isInteger(value) && value > form.keyRecovery.totalApprovers) {
+          callback(new Error('必需审批人数不能大于取证员总数'));
+          return;
+        }
+        callback();
+      },
+      trigger: 'blur'
+    }
+  ]
 });
 
 const loadConfig = async () => {

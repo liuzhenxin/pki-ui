@@ -59,11 +59,157 @@ const formatDateString = (zStr: string) => {
 
 const formatDN = (array: any[]) => {
   if (!array || array.length === 0) return '';
-  return array.map((e: any) => {
-    let type = e[0].type;
-    let val = e[0].value;
-    return `${type} = ${val}`;
-  }).join(', ');
+  return array
+    .map((e: any) => {
+      const type = e[0].type;
+      const val = e[0].value;
+      return `${type} = ${val}`;
+    })
+    .join(', ');
+};
+
+const extensionNameMap: Record<string, string> = {
+  subjectKeyIdentifier: 'X509v3 Subject Key Identifier',
+  keyUsage: 'X509v3 Key Usage',
+  subjectAltName: 'X509v3 Subject Alternative Name',
+  issuerAltName: 'X509v3 Issuer Alternative Name',
+  basicConstraints: 'X509v3 Basic Constraints',
+  nameConstraints: 'X509v3 Name Constraints',
+  cRLDistributionPoints: 'X509v3 CRL Distribution Points',
+  certificatePolicies: 'X509v3 Certificate Policies',
+  policyMappings: 'X509v3 Policy Mappings',
+  authorityKeyIdentifier: 'X509v3 Authority Key Identifier',
+  policyConstraints: 'X509v3 Policy Constraints',
+  extKeyUsage: 'X509v3 Extended Key Usage',
+  inhibitAnyPolicy: 'X509v3 Inhibit Any Policy',
+  authorityInfoAccess: 'Authority Information Access',
+  cRLNumber: 'X509v3 CRL Number',
+  cRLReason: 'X509v3 CRL Reason',
+  subjectDirectoryAttributes: 'X509v3 Subject Directory Attributes',
+  ocspNonce: 'OCSP Nonce',
+  ocspNoCheck: 'OCSP No Check',
+  adobeTimeStamp: 'Adobe Timestamp',
+  '1.3.6.1.5.5.7.1.11': 'Subject Information Access',
+  '2.5.29.46': 'X509v3 Freshest CRL'
+};
+
+const generalNameToString = (name: any) => {
+  if (!name) return '';
+  if (name.dns) return `DNS:${name.dns}`;
+  if (name.ip) return `IP Address:${name.ip}`;
+  if (name.rfc822) return `email:${name.rfc822}`;
+  if (name.uri) return `URI:${name.uri}`;
+  if (name.dn?.str) return `DirName:${name.dn.str}`;
+  if (name.dn) return `DirName:${JSON.stringify(name.dn)}`;
+  if (name.other) return `otherName:${name.other.oid || ''}:${JSON.stringify(name.other.value || '')}`;
+  return JSON.stringify(name);
+};
+
+const formatJsonBlock = (value: any, indent: string) => {
+  const text = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+  return text
+    .split('\n')
+    .map((line) => `${indent}${line}`)
+    .join('\n');
+};
+
+const formatUnknownExtensionValue = (ext: any, indent = '                ') => {
+  if (typeof ext.extn === 'string') {
+    return `${indent}${formatHexWithColonLines(ext.extn, indent, 15)}`;
+  }
+  if (ext.extn !== undefined) {
+    return formatJsonBlock(ext.extn, indent);
+  }
+  return formatJsonBlock(ext, indent);
+};
+
+const formatGenericExtension = (ext: any) => {
+  const name = extensionNameMap[ext.extname] || ext.extname || 'Unknown Extension';
+  const critical = ext.critical ? ' critical' : '';
+  let text = `            ${name}:${critical}\n`;
+
+  try {
+    if (ext.extname === 'issuerAltName' && ext.array) {
+      text += `                ${ext.array.map(generalNameToString).filter(Boolean).join(', ')}\n`;
+      return text;
+    }
+
+    if (ext.extname === 'certificatePolicies' && ext.array) {
+      ext.array.forEach((policy: any) => {
+        text += `                Policy: ${policy.policyoid || '-'}\n`;
+        (policy.array || []).forEach((qualifier: any) => {
+          if (qualifier.cps) text += `                  CPS: ${qualifier.cps}\n`;
+          if (qualifier.unotice) text += `                  User Notice: ${JSON.stringify(qualifier.unotice)}\n`;
+        });
+      });
+      return text;
+    }
+
+    if (ext.extname === 'policyMappings' && ext.array) {
+      ext.array.forEach((mapping: any[]) => {
+        text += `                ${mapping[0]}:${mapping[1]}\n`;
+      });
+      return text;
+    }
+
+    if (ext.extname === 'policyConstraints') {
+      const values = [];
+      if (ext.reqexp !== undefined) values.push(`Require Explicit Policy:${ext.reqexp}`);
+      if (ext.inhibit !== undefined) values.push(`Inhibit Policy Mapping:${ext.inhibit}`);
+      text += `                ${values.join(', ') || '-'}\n`;
+      return text;
+    }
+
+    if (ext.extname === 'inhibitAnyPolicy') {
+      text += `                Skip Certs:${ext.skip ?? '-'}\n`;
+      return text;
+    }
+
+    if (ext.extname === 'nameConstraints') {
+      if (ext.permit) text += `                Permitted:\n${formatJsonBlock(ext.permit, '                  ')}\n`;
+      if (ext.exclude) text += `                Excluded:\n${formatJsonBlock(ext.exclude, '                  ')}\n`;
+      if (!ext.permit && !ext.exclude) text += `${formatUnknownExtensionValue(ext)}\n`;
+      return text;
+    }
+
+    if (ext.extname === 'subjectDirectoryAttributes' && ext.array) {
+      ext.array.forEach((attr: any) => {
+        text += `                ${attr.attr}: ${JSON.stringify(attr.array || [])}\n`;
+      });
+      return text;
+    }
+
+    if (ext.extname === 'cRLNumber') {
+      text += `                ${ext.num?.hex || ext.num || '-'}\n`;
+      return text;
+    }
+
+    if (ext.extname === 'cRLReason') {
+      text += `                Reason Code:${ext.code ?? '-'}\n`;
+      return text;
+    }
+
+    if (ext.extname === 'ocspNonce') {
+      text += `                ${formatHexWithColonLines(ext.hex || '', '                ', 15)}\n`;
+      return text;
+    }
+
+    if (ext.extname === 'ocspNoCheck') {
+      text += `                Yes\n`;
+      return text;
+    }
+
+    if (ext.extname === 'adobeTimeStamp') {
+      if (ext.uri) text += `                URI:${ext.uri}\n`;
+      if (ext.reqauth !== undefined) text += `                Requires Auth:${ext.reqauth}\n`;
+      return text;
+    }
+  } catch (e) {
+    // fall back to raw rendering below
+  }
+
+  text += `${formatUnknownExtensionValue(ext)}\n`;
+  return text;
 };
 
 const certText = computed(() => {
@@ -79,17 +225,25 @@ const certText = computed(() => {
 
   let text = 'Certificate:\n';
   text += '    Data:\n';
-  
+
   let version = 3;
-  try { version = x509.getVersion(); } catch(e) {}
-  
+  try {
+    version = x509.getVersion();
+  } catch (e) {}
+
   text += `        Version: ${version} (0x${version - 1})\n`;
 
   let serialHex = '';
-  try { serialHex = x509.getSerialNumberHex(); } catch(e) {}
-  
+  try {
+    serialHex = x509.getSerialNumberHex();
+  } catch (e) {}
+
   if (serialHex) {
-    const formattedSerial = serialHex.toLowerCase().match(/.{1,2}/g)?.join(':') || '';
+    const formattedSerial =
+      serialHex
+        .toLowerCase()
+        .match(/.{1,2}/g)
+        ?.join(':') || '';
     text += `        Serial Number:\n            ${formattedSerial}\n`;
   }
 
@@ -109,7 +263,7 @@ const certText = computed(() => {
   try {
     sigAlgName = x509.getSignatureAlgorithmName();
   } catch (e) {}
-  
+
   if (algMap[sigAlgName]) {
     sigAlgName = algMap[sigAlgName];
   } else if (sigAlgName === 'Unknown' || props.certPem.includes('SM2')) {
@@ -119,20 +273,25 @@ const certText = computed(() => {
   text += `        Signature Algorithm: ${sigAlgName}\n`;
 
   let issuerStr = '';
-  try { issuerStr = formatDN(x509.getIssuer().array); } catch(e) {}
+  try {
+    issuerStr = formatDN(x509.getIssuer().array);
+  } catch (e) {}
   text += `        Issuer: ${issuerStr}\n`;
 
   text += `        Validity\n`;
-  let notBefore = '', notAfter = '';
+  let notBefore = '',
+    notAfter = '';
   try {
     notBefore = formatDateString(x509.getNotBefore());
     notAfter = formatDateString(x509.getNotAfter());
-  } catch(e) {}
+  } catch (e) {}
   text += `            Not Before: ${notBefore}\n`;
   text += `            Not After : ${notAfter}\n`;
 
   let subjectStr = '';
-  try { subjectStr = formatDN(x509.getSubject().array); } catch(e) {}
+  try {
+    subjectStr = formatDN(x509.getSubject().array);
+  } catch (e) {}
   text += `        Subject: ${subjectStr}\n`;
 
   text += `        Subject Public Key Info:\n`;
@@ -146,7 +305,7 @@ const certText = computed(() => {
     if (!oidHex || oidHex.length < 2) {
       oidHex = ASN1HEX.getVbyList(x509.hex, 0, [0, 5, 0, 0]);
     }
-    
+
     if (oidHex) {
       pubKeyOID = ASN1HEX.hextooidstr(oidHex);
       pubKeyAlg = algMap[pubKeyOID] || pubKeyOID || 'Unknown';
@@ -163,7 +322,7 @@ const certText = computed(() => {
   }
 
   text += `            Public Key Algorithm: ${pubKeyAlg}\n`;
-  
+
   if (pubKeyAlg === 'id-ecPublicKey' || pubKeyOID === '1.2.156.10197.1.301' || (pubKeyAlg === 'Unknown' && props.certPem.includes('SM2'))) {
     text += `                Public-Key: (256 bit)\n`;
   } else if (pubKeyAlg === 'rsaEncryption') {
@@ -190,90 +349,109 @@ const certText = computed(() => {
   // Extensions
   try {
     const hex = x509.hex;
-    const hasExts = hex.includes('0603551d') || hex.includes('0603551D'); 
+    const hasExts = hex.includes('0603551d') || hex.includes('0603551D');
     if (hasExts) {
       text += `        X509v3 extensions:\n`;
-      
-      try { 
-        const bc = x509.getExtBasicConstraints(); 
+      const renderedExtNames = new Set<string>();
+
+      try {
+        const bc = x509.getExtBasicConstraints();
         if (bc) {
+          renderedExtNames.add('basicConstraints');
           text += `            X509v3 Basic Constraints:\n`;
-          let pathLen = bc.pathLen !== undefined ? `, pathlen:${bc.pathLen}` : '';
+          const pathLen = bc.pathLen !== undefined ? `, pathlen:${bc.pathLen}` : '';
           text += `                CA:${String(bc.cA).toUpperCase()}${pathLen}\n`;
-        } 
-      } catch(e) {}
-      
-      try { 
-        const ku = x509.getExtKeyUsageString(); 
+        }
+      } catch (e) {}
+
+      try {
+        const ku = x509.getExtKeyUsageString();
         if (ku) {
+          renderedExtNames.add('keyUsage');
           text += `            X509v3 Key Usage:\n                ${ku}\n`;
-        } 
-      } catch(e) {}
-      
-      try { 
-        const eku = x509.getExtExtKeyUsageName(); 
+        }
+      } catch (e) {}
+
+      try {
+        const eku = x509.getExtExtKeyUsageName();
         if (eku) {
+          renderedExtNames.add('extKeyUsage');
           text += `            X509v3 Extended Key Usage:\n                ${eku.join(', ')}\n`;
-        } 
-      } catch(e) {}
-      
-      try { 
-        const ski = x509.getExtSubjectKeyIdentifier(); 
+        }
+      } catch (e) {}
+
+      try {
+        const ski = x509.getExtSubjectKeyIdentifier();
         if (ski) {
+          renderedExtNames.add('subjectKeyIdentifier');
           text += `            X509v3 Subject Key Identifier:\n                ${formatHexWithColonLines(ski.kid || ski, '                ', 15)}\n`;
-        } 
-      } catch(e) {}
-      
-      try { 
-        const aki = x509.getExtAuthorityKeyIdentifier(); 
+        }
+      } catch (e) {}
+
+      try {
+        const aki = x509.getExtAuthorityKeyIdentifier();
         if (aki && aki.kid) {
+          renderedExtNames.add('authorityKeyIdentifier');
           text += `            X509v3 Authority Key Identifier:\n                keyid:${formatHexWithColonLines(aki.kid, '                ', 15)}\n`;
-        } 
-      } catch(e) {}
-      
-      try { 
-        const san = x509.getExtSubjectAltName2(); 
+        }
+      } catch (e) {}
+
+      try {
+        const san = x509.getExtSubjectAltName2();
         if (san && san.length > 0) {
+          renderedExtNames.add('subjectAltName');
           text += `            X509v3 Subject Alternative Name:\n`;
-          const sanStr = san.map(s => {
-            if (s.dns) return `DNS:${s.dns}`;
-            if (s.ip) return `IP Address:${s.ip}`;
-            if (s.rfc822) return `email:${s.rfc822}`;
-            if (s.uri) return `URI:${s.uri}`;
-            return Object.values(s)[0] || JSON.stringify(s);
-          }).join(', ');
+          const sanStr = san
+            .map((s) => {
+              if (s.dns) return `DNS:${s.dns}`;
+              if (s.ip) return `IP Address:${s.ip}`;
+              if (s.rfc822) return `email:${s.rfc822}`;
+              if (s.uri) return `URI:${s.uri}`;
+              return Object.values(s)[0] || JSON.stringify(s);
+            })
+            .join(', ');
           text += `                ${sanStr}\n`;
-        } 
-      } catch(e) {}
+        }
+      } catch (e) {}
 
       try {
         const cdp = x509.getExtCRLDistributionPointsURI();
         if (cdp && cdp.length > 0) {
+          renderedExtNames.add('cRLDistributionPoints');
           text += `            X509v3 CRL Distribution Points:\n`;
           text += `                Full Name:\n`;
-          text += cdp.map(uri => `                  URI:${uri}`).join('\n') + '\n';
+          text += cdp.map((uri) => `                  URI:${uri}`).join('\n') + '\n';
         }
-      } catch(e) {}
+      } catch (e) {}
 
       try {
         const aia = x509.getExtAuthorityInfoAccess();
         if (aia && (aia.ocsp || aia.caissuer)) {
+          renderedExtNames.add('authorityInfoAccess');
           text += `            Authority Information Access:\n`;
           if (aia.ocsp) {
-             text += aia.ocsp.map(uri => `                OCSP - URI:${uri}`).join('\n') + '\n';
+            text += aia.ocsp.map((uri) => `                OCSP - URI:${uri}`).join('\n') + '\n';
           }
           if (aia.caissuer) {
-             text += aia.caissuer.map(uri => `                CA Issuers - URI:${uri}`).join('\n') + '\n';
+            text += aia.caissuer.map((uri) => `                CA Issuers - URI:${uri}`).join('\n') + '\n';
           }
         }
-      } catch(e) {}
+      } catch (e) {}
 
+      try {
+        const extParams = (x509 as any).getExtParamArray?.() || [];
+        extParams
+          .filter((ext: any) => ext?.extname && !renderedExtNames.has(ext.extname))
+          .forEach((ext: any) => {
+            text += formatGenericExtension(ext);
+          });
+      } catch (e) {}
     }
-  } catch(e) {}
+  } catch (e) {}
 
   text += `    Signature Algorithm: ${sigAlgName}\n`;
   try {
-    let sigHex = x509.getSignatureValueHex();
+    const sigHex = x509.getSignatureValueHex();
     if (sigHex) {
       text += `         ${formatHexWithColonLines(sigHex, '         ', 15)}\n`;
     }

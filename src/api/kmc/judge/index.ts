@@ -48,4 +48,3 @@ export const approveJudge = (data: JudgeApproveForm) => {
     data
   });
 };
-

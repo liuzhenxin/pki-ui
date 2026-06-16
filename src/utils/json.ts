@@ -6,11 +6,11 @@
 export function parseJson(jsonStr: string | null | undefined): any {
   if (!jsonStr) return null;
   if (typeof jsonStr !== 'string') return jsonStr;
-  
+
   try {
     // 移除 JSON 中的注释 (// ... 或 /* ... */)
     // 同时也处理了字符串中包含 // 的情况
-    const cleanJsonStr = jsonStr.replace(/\\"|"(?:\\"|[^"])*"|(\/\/.*|\/\*[\s\S]*?\*\/)/g, (m, g) => g ? "" : m);
+    const cleanJsonStr = jsonStr.replace(/\\"|"(?:\\"|[^"])*"|(\/\/.*|\/\*[\s\S]*?\*\/)/g, (m, g) => (g ? '' : m));
     return JSON.parse(cleanJsonStr);
   } catch (e) {
     console.error('JSON parse error:', e);
@@ -26,14 +26,14 @@ export function parseJson(jsonStr: string | null | undefined): any {
  */
 export const parseKeyAlgorithms = (keyAlgorithms: any[]): string[] => {
   if (!keyAlgorithms || !Array.isArray(keyAlgorithms)) return [];
-  
+
   const algos: string[] = [];
   keyAlgorithms.forEach((a: any) => {
     if (typeof a === 'string') {
       algos.push(a);
       return;
     }
-    
+
     // 处理复杂结构: { algorithms: [{ oid, description }], parameters: {...} }
     const mainDesc = a.algorithms?.[0]?.description;
     if (mainDesc === 'RSA' && a.parameters?.rsa?.modulus) {
@@ -51,6 +51,6 @@ export const parseKeyAlgorithms = (keyAlgorithms: any[]): string[] => {
       algos.push(a.name || a.type);
     }
   });
-  
+
   return algos;
 };

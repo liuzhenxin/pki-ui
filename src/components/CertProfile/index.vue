@@ -20,13 +20,13 @@
         </el-tag>
       </el-descriptions-item>
       <el-descriptions-item label="签名算法" :span="2">
-        <el-tag v-for="algo in (profile.signatureAlgorithms || [])" :key="algo" class="mr-1" type="success" effect="plain">
+        <el-tag v-for="algo in profile.signatureAlgorithms || []" :key="algo" class="mr-1" type="success" effect="plain">
           {{ algo }}
         </el-tag>
       </el-descriptions-item>
     </el-descriptions>
 
-    <el-tabs type="border-card" style="margin-top: 20px;">
+    <el-tabs type="border-card" style="margin-top: 20px">
       <el-tab-pane>
         <template #label>
           <span class="custom-tabs-label">
@@ -66,9 +66,7 @@
           <div class="sub-section-title">主题到备用名称映射 (Subject to SAN Mapping)</div>
           <el-table :data="profile.subjectToSubjectAltNames" border size="small">
             <el-table-column label="源字段">
-              <template #default="{ row }">
-                {{ getSubjectTypeLabel(row.source) }} ({{ getTypeLabel(row.source) }})
-              </template>
+              <template #default="{ row }"> {{ getSubjectTypeLabel(row.source) }} ({{ getTypeLabel(row.source) }}) </template>
             </el-table-column>
             <el-table-column prop="target" label="目标类型" />
           </el-table>
@@ -110,40 +108,44 @@
               </el-descriptions-item>
 
               <el-descriptions-item v-if="ext.extendedKeyUsage" label="增强密钥用法">
-                 <div v-if="ext.extendedKeyUsage.usages">
-                    <div v-for="(u, uIdx) in ext.extendedKeyUsage.usages" :key="uIdx" class="mb-1">
-                      <el-tag :type="u.required === true || String(u.required) === 'true' ? 'success' : 'info'" size="small">{{ u.description || u.oid }}</el-tag>
-                      <span class="ml-1 text-xs text-gray-400">({{ u.oid }})</span>
-                      <span class="ml-1 text-xs text-gray-400" v-if="u.required === true || String(u.required) === 'true'">(必须)</span>
-                    </div>
-                 </div>
+                <div v-if="ext.extendedKeyUsage.usages">
+                  <div v-for="(u, uIdx) in ext.extendedKeyUsage.usages" :key="uIdx" class="mb-1">
+                    <el-tag :type="u.required === true || String(u.required) === 'true' ? 'success' : 'info'" size="small">{{
+                      u.description || u.oid
+                    }}</el-tag>
+                    <span class="ml-1 text-xs text-gray-400">({{ u.oid }})</span>
+                    <span class="ml-1 text-xs text-gray-400" v-if="u.required === true || String(u.required) === 'true'">(必须)</span>
+                  </div>
+                </div>
               </el-descriptions-item>
 
               <el-descriptions-item v-if="ext.authorityInfoAccess" label="授权信息访问">
                 <div v-if="ext.authorityInfoAccess.includeCaIssuers">包含 CA 发行者</div>
                 <div v-if="ext.authorityInfoAccess.includeOcsp">包含 OCSP</div>
-                <div v-if="ext.authorityInfoAccess.caIssuersProtocols">CA Issuers 协议: {{ ext.authorityInfoAccess.caIssuersProtocols.join(', ') }}</div>
+                <div v-if="ext.authorityInfoAccess.caIssuersProtocols">
+                  CA Issuers 协议: {{ ext.authorityInfoAccess.caIssuersProtocols.join(', ') }}
+                </div>
                 <div v-if="ext.authorityInfoAccess.ocspProtocols">OCSP 协议: {{ ext.authorityInfoAccess.ocspProtocols.join(', ') }}</div>
               </el-descriptions-item>
 
               <el-descriptions-item v-if="ext.basicConstraints" label="基本约束">
-                 CA: {{ ext.basicConstraints.ca ? '是' : '否' }}
-                 <span v-if="ext.basicConstraints.pathLenConstraint !== undefined">, 路径长度: {{ ext.basicConstraints.pathLenConstraint }}</span>
+                CA: {{ ext.basicConstraints.ca ? '是' : '否' }}
+                <span v-if="ext.basicConstraints.pathLenConstraint !== undefined">, 路径长度: {{ ext.basicConstraints.pathLenConstraint }}</span>
               </el-descriptions-item>
 
               <el-descriptions-item v-if="ext.subjectAltName" label="主体备用名称模式">
-                <el-tag v-for="mode in (ext.subjectAltName.modes || [])" :key="mode" class="mr-1" size="small" type="info">{{ mode }}</el-tag>
+                <el-tag v-for="mode in ext.subjectAltName.modes || []" :key="mode" class="mr-1" size="small" type="info">{{ mode }}</el-tag>
               </el-descriptions-item>
 
               <el-descriptions-item v-if="ext.tlsFeature" label="TLS Feature">
-                <div v-for="feature in (ext.tlsFeature.features || [])" :key="feature.value">
+                <div v-for="feature in ext.tlsFeature.features || []" :key="feature.value">
                   <el-tag size="small" class="mr-1" type="primary">{{ feature.description }}</el-tag>
                   <span class="text-xs text-gray-400">({{ feature.value }})</span>
                 </div>
               </el-descriptions-item>
 
               <el-descriptions-item v-if="ext.smimeCapabilities" label="S/MIME Capabilities">
-                <div v-for="(cap, cIdx) in (ext.smimeCapabilities.capabilities || [])" :key="cIdx" class="mb-1">
+                <div v-for="(cap, cIdx) in ext.smimeCapabilities.capabilities || []" :key="cIdx" class="mb-1">
                   <el-tag size="small" type="primary">{{ getTypeLabel(cap.capabilityId) }}</el-tag>
                   <span class="ml-1 text-xs text-gray-400" v-if="cap.parameter">参数: {{ JSON.stringify(cap.parameter) }}</span>
                 </div>
@@ -154,7 +156,7 @@
               </el-descriptions-item>
 
               <el-descriptions-item v-if="ext.cRLDistributionPoints" label="CRL分发点">
-                <div v-for="(point, cIndex) in (ext.cRLDistributionPoints.points || [])" :key="cIndex">{{ point }}</div>
+                <div v-for="(point, cIndex) in ext.cRLDistributionPoints.points || []" :key="cIndex">{{ point }}</div>
               </el-descriptions-item>
 
               <el-descriptions-item v-if="ext.authorityKeyIdentifier" label="颁发机构密钥标识符">
@@ -166,20 +168,28 @@
               </el-descriptions-item>
 
               <el-descriptions-item v-if="ext.issuerAlternativeName" label="颁发者备用名称">
-                <el-tag v-for="(name, iIndex) in (ext.issuerAlternativeName.names || [])" :key="iIndex" class="mr-1" size="small" type="info">{{ name.type }}: {{ name.value }}</el-tag>
+                <el-tag v-for="(name, iIndex) in ext.issuerAlternativeName.names || []" :key="iIndex" class="mr-1" size="small" type="info"
+                  >{{ name.type }}: {{ name.value }}</el-tag
+                >
               </el-descriptions-item>
-              
+
               <el-descriptions-item v-if="ext.certificatePolicies" label="证书策略">
-                <div v-for="(policy, pIndex) in (ext.certificatePolicies.policies || [])" :key="pIndex">{{ policy.policyIdentifier }}</div>
+                <div v-for="(policy, pIndex) in ext.certificatePolicies.policies || []" :key="pIndex">{{ policy.policyIdentifier }}</div>
               </el-descriptions-item>
 
               <el-descriptions-item v-if="ext.policyConstraints" label="策略约束">
-                <div v-if="ext.policyConstraints.requireExplicitPolicy !== undefined">要求显式策略: {{ ext.policyConstraints.requireExplicitPolicy }}</div>
-                <div v-if="ext.policyConstraints.inhibitPolicyMapping !== undefined">禁止策略映射: {{ ext.policyConstraints.inhibitPolicyMapping }}</div>
+                <div v-if="ext.policyConstraints.requireExplicitPolicy !== undefined">
+                  要求显式策略: {{ ext.policyConstraints.requireExplicitPolicy }}
+                </div>
+                <div v-if="ext.policyConstraints.inhibitPolicyMapping !== undefined">
+                  禁止策略映射: {{ ext.policyConstraints.inhibitPolicyMapping }}
+                </div>
               </el-descriptions-item>
 
               <el-descriptions-item v-if="ext.policyMappings" label="策略映射">
-                <div v-for="(mapping, mIndex) in (ext.policyMappings.mappings || [])" :key="mIndex">{{ mapping.issuerDomainPolicy }}: {{ mapping.subjectDomainPolicy }}</div>
+                <div v-for="(mapping, mIndex) in ext.policyMappings.mappings || []" :key="mIndex">
+                  {{ mapping.issuerDomainPolicy }}: {{ mapping.subjectDomainPolicy }}
+                </div>
               </el-descriptions-item>
 
               <el-descriptions-item v-if="ext.nameConstraints" label="名称约束">
@@ -190,7 +200,6 @@
               <el-descriptions-item v-if="ext.inhibitAnyPolicy" label="禁止任意策略">
                 {{ ext.inhibitAnyPolicy.skipCerts }}
               </el-descriptions-item>
-
             </el-descriptions>
           </el-collapse-item>
         </el-collapse>
@@ -305,13 +314,12 @@ const getExtensionTypeLabel = (type: any) => {
   const lowerLabel = label.toLowerCase();
   return extensionTypeMap[lowerLabel] || label;
 };
-
 </script>
 
 <style scoped lang="scss">
 .cert-profile-detail {
   padding: 10px;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 }
 
 .section-title {

@@ -28,7 +28,12 @@
               <el-button type="danger" plain icon="Close" v-hasPermi="['kmc:keyrecovery:cancel']" @click="cancelRequest">取消申请</el-button>
             </el-form-item>
           </el-form>
-          <el-alert v-if="statusResult !== null" :title="statusResult ? '审批已通过' : '审批未通过或仍在处理中'" :type="statusResult ? 'success' : 'warning'" show-icon />
+          <el-alert
+            v-if="statusResult !== null"
+            :title="statusResult ? '审批已通过' : '审批未通过或仍在处理中'"
+            :type="statusResult ? 'success' : 'warning'"
+            show-icon
+          />
         </el-card>
       </el-col>
     </el-row>
@@ -43,7 +48,9 @@
           <el-input v-model="recoverForm.judgeId" />
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" icon="Key" :loading="recoverLoading" v-hasPermi="['kmc:keyrecovery:recover']" @click="recoverKey">恢复密钥</el-button>
+          <el-button type="primary" icon="Key" :loading="recoverLoading" v-hasPermi="['kmc:keyrecovery:recover']" @click="recoverKey"
+            >恢复密钥</el-button
+          >
         </el-form-item>
       </el-form>
       <el-input v-model="recoverResult" type="textarea" :rows="6" readonly placeholder="恢复成功后显示 Base64 密钥数据" />
@@ -109,4 +116,3 @@ const recoverKey = async () => {
   max-width: 640px;
 }
 </style>
-

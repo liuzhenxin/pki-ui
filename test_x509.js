@@ -17,36 +17,36 @@ X4+uJAwuG22XIgCo2w==
 -----END CERTIFICATE-----`;
 
 KJUR.crypto.ECParameterDB.regist(
-    'sm2p256v1',
-    256,
-    'FFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00000000FFFFFFFFFFFFFFFF',
-    'FFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00000000FFFFFFFFFFFFFFFC',
-    '28E9FA9E9D9F5E344D5A9E4BCF6509A7F39789F515AB8F92DDBCBD414D940E93',
-    'FFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFF7203DF6B21C6052B53BBF40939D54123',
-    '1',
-    '32C4AE2C1F1981195F9904466A39C9948FE30BBFF2660BE1715A4589334C74C7',
-    'BC3736A2F4F6779C59BDCEE36B692153D0A9877CC62A474002DF32E52139F0A0',
-    [],
-    '1.2.156.10197.1.301'
+  'sm2p256v1',
+  256,
+  'FFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00000000FFFFFFFFFFFFFFFF',
+  'FFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00000000FFFFFFFFFFFFFFFC',
+  '28E9FA9E9D9F5E344D5A9E4BCF6509A7F39789F515AB8F92DDBCBD414D940E93',
+  'FFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFF7203DF6B21C6052B53BBF40939D54123',
+  '1',
+  '32C4AE2C1F1981195F9904466A39C9948FE30BBFF2660BE1715A4589334C74C7',
+  'BC3736A2F4F6779C59BDCEE36B692153D0A9877CC62A474002DF32E52139F0A0',
+  [],
+  '1.2.156.10197.1.301'
 );
 
 const x509 = new X509();
 x509.readCertPEM(certPem);
 
-console.log("getVersion", x509.getVersion());
-console.log("getSerialNumberHex", x509.getSerialNumberHex());
-console.log("getSignatureAlgorithmName", x509.getSignatureAlgorithmName());
-console.log("getIssuer", x509.getIssuer());
-console.log("getNotBefore", x509.getNotBefore());
-console.log("getNotAfter", x509.getNotAfter());
-console.log("getSubject", x509.getSubject());
-console.log("getPublicKeyHex", x509.getPublicKeyHex());
-console.log("getSignatureValueHex", x509.getSignatureValueHex());
+console.log('getVersion', x509.getVersion());
+console.log('getSerialNumberHex', x509.getSerialNumberHex());
+console.log('getSignatureAlgorithmName', x509.getSignatureAlgorithmName());
+console.log('getIssuer', x509.getIssuer());
+console.log('getNotBefore', x509.getNotBefore());
+console.log('getNotAfter', x509.getNotAfter());
+console.log('getSubject', x509.getSubject());
+console.log('getPublicKeyHex', x509.getPublicKeyHex());
+console.log('getSignatureValueHex', x509.getSignatureValueHex());
 
 // Try to parse extensions
 try {
-    const exts = x509.getExtInfo();
-    console.log("getExtInfo", JSON.stringify(exts, null, 2));
+  const exts = x509.getExtInfo();
+  console.log('getExtInfo', JSON.stringify(exts, null, 2));
 } catch (e) {
-    console.log("Error extracting extensions", e.message);
+  console.log('Error extracting extensions', e.message);
 }

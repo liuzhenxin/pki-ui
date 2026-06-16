@@ -5,6 +5,13 @@ import { AxiosPromise } from 'axios';
 import { UserForm, UserQuery, UserVO, UserInfoVO, ModifyPwdForm } from './types';
 import { parseStrEmpty } from '@/utils/ruoyi';
 
+const RA_AUTH_ROLE_OPTIONS = [
+  { roleId: '503', roleName: '录入员', roleSort: 503 },
+  { roleId: '504', roleName: '审核员', roleSort: 504 },
+  { roleId: '505', roleName: '制证员', roleSort: 505 }
+];
+const RA_AUTH_ROLE_IDS = new Set(RA_AUTH_ROLE_OPTIONS.map((role) => role.roleId));
+
 /**
  * 查询用户列表
  * @param query
@@ -216,10 +223,58 @@ export const uploadAvatar = (data: FormData) => {
  * @param userId 用户ID
  */
 export const getAuthRole = (userId: string | number): AxiosPromise<{ user: UserVO; roles: RoleVO[] }> => {
-  return request({
-    url: '/system/user/authRole/' + userId,
-    method: 'get'
-  });
+  return Promise.all([
+    request({
+      url: '/admin/v1/users/' + userId,
+      method: 'get'
+    }),
+    request({
+      url: '/admin/v1/roles/page',
+      method: 'post',
+      data: {
+        pageNum: 1,
+        pageSize: 1000,
+        params: {}
+      }
+    })
+  ]).then(([userRes, roleRes]: any) => {
+    const userData = userRes?.data ?? {};
+    const selectedRoleIds = (userData.roleIds ?? []).map((id: string | number) => String(id));
+    const roleRecords = roleRes?.data?.records ?? roleRes?.rows ?? roleRes?.data ?? [];
+    const roleMap = new Map<string, any>();
+    roleRecords.forEach((role: any) => {
+      const roleId = role.roleId ?? role.id;
+      if (RA_AUTH_ROLE_IDS.has(String(roleId))) {
+        roleMap.set(String(roleId), role);
+      }
+    });
+    const roles = RA_AUTH_ROLE_OPTIONS.map((option) => {
+      const role = roleMap.get(option.roleId) ?? {};
+      const roleId = role.roleId ?? role.id ?? option.roleId;
+      return {
+        ...role,
+        roleId,
+        roleName: role.roleName ?? role.name ?? option.roleName,
+        roleKey: role.roleKey ?? String(roleId ?? ''),
+        roleSort: role.roleSort ?? role.sort ?? option.roleSort,
+        status: role.status ?? '0',
+        flag: selectedRoleIds.includes(String(roleId))
+      };
+    });
+
+    return {
+      code: 'OK',
+      data: {
+        user: {
+          ...userData,
+          userId: userData.userId ?? userData.id,
+          userName: userData.userName ?? userData.username,
+          nickName: userData.nickName ?? userData.username
+        },
+        roles
+      }
+    };
+  }) as AxiosPromise<{ user: UserVO; roles: RoleVO[] }>;
 };
 
 /**
@@ -227,10 +282,16 @@ export const getAuthRole = (userId: string | number): AxiosPromise<{ user: UserV
  * @param data 用户ID
  */
 export const updateAuthRole = (data: { userId: string; roleIds: string }) => {
+  const roleIds = data.roleIds ? data.roleIds.split(',').filter(Boolean) : [];
   return request({
-    url: '/system/user/authRole',
+    url: '/admin/v1/users/authority',
     method: 'put',
-    params: data
+    data: {
+      co: {
+        id: data.userId,
+        roleIds
+      }
+    }
   });
 };
 

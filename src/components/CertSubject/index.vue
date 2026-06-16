@@ -8,13 +8,7 @@
         :rules="getRules(item)"
       >
         <template v-if="getFieldMeta(item.type).isSelect">
-          <el-select 
-            v-if="item.type === 'country'" 
-            v-model="item.value" 
-            placeholder="请选择国家" 
-            style="width: 100%"
-            clearable
-          >
+          <el-select v-if="item.type === 'country'" v-model="item.value" placeholder="请选择国家" style="width: 100%" clearable>
             <el-option label="中国 (CN)" value="CN" />
             <el-option label="中国香港 (HK)" value="HK" />
             <el-option label="中国澳门 (MO)" value="MO" />
@@ -22,11 +16,7 @@
           </el-select>
         </template>
         <template v-else>
-          <el-input 
-            v-model="item.value" 
-            :placeholder="`请输入${getFieldMeta(item.type).label}`" 
-            clearable 
-          />
+          <el-input v-model="item.value" :placeholder="`请输入${getFieldMeta(item.type).label}`" clearable />
         </template>
       </el-form-item>
     </template>
@@ -97,7 +87,6 @@ const props = defineProps<{
   propPrefix?: string;
 }>();
 
-console.log('CertSubject Component: modelValue', props.modelValue?.length);
 const emit = defineEmits(['update:modelValue']);
 
 const getFieldMeta = (type: string) => {
@@ -130,9 +119,7 @@ const getRules = (item: SubjectItem) => {
       // Handle standard regex strings from profile
       try {
         // If the regex starts and ends with /, treat it as a literal regex
-        const pattern = item.regex.startsWith('/') && item.regex.endsWith('/')
-          ? new RegExp(item.regex.slice(1, -1))
-          : new RegExp(item.regex);
+        const pattern = item.regex.startsWith('/') && item.regex.endsWith('/') ? new RegExp(item.regex.slice(1, -1)) : new RegExp(item.regex);
 
         rules.push({
           pattern: pattern,

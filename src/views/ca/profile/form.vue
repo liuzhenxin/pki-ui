@@ -1,5 +1,5 @@
 <script setup name="ProfileForm" lang="ts">
-import { ref, reactive, toRefs, getCurrentInstance, ComponentInternalInstance, onMounted, computed } from 'vue';
+import { ref, reactive, toRefs, getCurrentInstance, ComponentInternalInstance, onMounted, computed, watch } from 'vue';
 import { ElMessage, FormInstance, FormRules } from 'element-plus';
 import { useRouter, useRoute } from 'vue-router';
 import { Plus, Delete, Top, Bottom, Postcard, CollectionTag, Timer, Calendar, EditPen, Key } from '@element-plus/icons-vue';
@@ -75,15 +75,15 @@ const presetTemplates = [
     name: 'RootCA证书模板',
     type: 'RootCA',
     certLevel: 'RootCA',
-    category: 'RootCA证书模板',
+    category: 'RootCA',
     validity: '8y',
     keyAlgorithms: ['RSA-2048', 'RSA-4096', 'SM2P256V1']
   },
   {
     name: '子CA证书模板',
-    type: 'IntermediateCA',
+    type: 'SubCA',
     certLevel: 'SubCA',
-    category: '子CA证书模板',
+    category: 'SubCA',
     validity: '5y',
     keyAlgorithms: ['RSA-2048', 'RSA-4096', 'SM2P256V1']
   },
@@ -91,7 +91,7 @@ const presetTemplates = [
     name: 'TLS服务器证书模板',
     type: 'EndEntity',
     certLevel: 'EndEntity',
-    category: 'TLS服务器证书模板',
+    category: 'EndEntity',
     validity: '5y',
     keyAlgorithms: ['RSA-2048', 'RSA-4096', 'SM2P256V1']
   },
@@ -99,7 +99,7 @@ const presetTemplates = [
     name: 'TLS客户端证书模板',
     type: 'EndEntity',
     certLevel: 'EndEntity',
-    category: 'TLS客户端证书模板',
+    category: 'EndEntity',
     validity: '5y',
     keyAlgorithms: ['RSA-2048', 'RSA-4096', 'SM2P256V1']
   },
@@ -107,15 +107,16 @@ const presetTemplates = [
     name: 'TLS服务器加密证书模板',
     type: 'EndEntity',
     certLevel: 'EndEntity',
-    category: 'TLS服务器加密证书模板',
+    category: 'EndEntity',
     validity: '2y',
+    keypairGeneration: 'KMC',
     keyAlgorithms: ['RSA-2048', 'RSA-4096', 'SM2P256V1']
   },
   {
     name: 'TLS客户端加密证书模板',
     type: 'EndEntity',
     certLevel: 'EndEntity',
-    category: 'TLS客户端加密证书模板',
+    category: 'EndEntity',
     validity: '2y',
     keyAlgorithms: ['RSA-2048', 'RSA-4096', 'SM2P256V1']
   },
@@ -123,7 +124,7 @@ const presetTemplates = [
     name: 'S/MIME证书模板',
     type: 'EndEntity',
     certLevel: 'EndEntity',
-    category: 'S/MIME证书模板',
+    category: 'EndEntity',
     validity: '5y',
     keyAlgorithms: ['RSA-2048', 'RSA-4096', 'SM2P256V1']
   },
@@ -131,7 +132,7 @@ const presetTemplates = [
     name: 'Email证书模板',
     type: 'EndEntity',
     certLevel: 'EndEntity',
-    category: 'Email证书模板',
+    category: 'EndEntity',
     validity: '2y',
     keyAlgorithms: ['RSA-2048', 'RSA-4096', 'SM2P256V1']
   },
@@ -139,7 +140,7 @@ const presetTemplates = [
     name: 'OCSP证书模板',
     type: 'EndEntity',
     certLevel: 'EndEntity',
-    category: 'OCSP证书模板',
+    category: 'EndEntity',
     validity: '5y',
     keyAlgorithms: ['RSA-2048', 'RSA-3072', 'RSA-4096', 'SM2P256V1']
   },
@@ -147,7 +148,15 @@ const presetTemplates = [
     name: '多用途证书模板',
     type: 'EndEntity',
     certLevel: 'EndEntity',
-    category: '多用途证书模板',
+    category: 'EndEntity',
+    validity: '5y',
+    keyAlgorithms: ['RSA-2048', 'RSA-4096', 'SM2P256V1']
+  },
+  {
+    name: '管理员证书模板',
+    type: 'EndEntity',
+    certLevel: 'EndEntity',
+    category: 'EndEntity',
     validity: '5y',
     keyAlgorithms: ['RSA-2048', 'RSA-4096', 'SM2P256V1']
   },
@@ -155,7 +164,7 @@ const presetTemplates = [
     name: '扩展证书模板',
     type: 'EndEntity',
     certLevel: 'EndEntity',
-    category: '扩展证书模板',
+    category: 'EndEntity',
     validity: '5y',
     keyAlgorithms: ['RSA-2048', 'RSA-4096', 'SM2P256V1']
   }
@@ -163,17 +172,9 @@ const presetTemplates = [
 
 // 模板类别选项
 const categoryOptions = [
-  { label: 'RootCA证书模板', value: 'RootCA证书模板' },
-  { label: '子CA证书模板', value: '子CA证书模板' },
-  { label: 'TLS服务器证书模板', value: 'TLS服务器证书模板' },
-  { label: 'TLS客户端证书模板', value: 'TLS客户端证书模板' },
-  { label: 'TLS服务器加密证书模板', value: 'TLS服务器加密证书模板' },
-  { label: 'TLS客户端加密证书模板', value: 'TLS客户端加密证书模板' },
-  { label: 'S/MIME证书模板', value: 'S/MIME证书模板' },
-  { label: 'Email证书模板', value: 'Email证书模板' },
-  { label: 'OCSP证书模板', value: 'OCSP证书模板' },
-  { label: '多用途证书模板', value: '多用途证书模板' },
-  { label: '扩展证书模板', value: '扩展证书模板' }
+  { label: 'RootCA证书模板 (RootCA)', value: 'RootCA' },
+  { label: '子CA证书模板 (SubCA)', value: 'SubCA' },
+  { label: '终端实体证书模板 (EndEntity)', value: 'EndEntity' }
 ];
 
 // 证书级别选项
@@ -198,6 +199,8 @@ const keypairGenerationOptions = [
   { label: 'KMC', value: 'KMC', description: '由 KMC 产生密钥对' }
 ];
 
+const caKeypairGenerationOption = { label: 'CA', value: 'KMC', description: '由 CA 产生密钥对' };
+
 function buildKeypairGeneration(location: string) {
   return location === 'KMC' ? { inheritCA: true, forbidden: false } : { inheritCA: false, forbidden: true };
 }
@@ -217,9 +220,25 @@ const keypairGenerationLocation = computed({
     return form.keypairGeneration?.inheritCA ? 'KMC' : 'CLIENT';
   },
   set(value: string) {
-    form.keypairGeneration = buildKeypairGeneration(value);
+    form.keypairGeneration = buildKeypairGeneration(isEndEntityTemplate.value ? value : 'KMC');
   }
 });
+
+const isEndEntityTemplate = computed(() => (form.metadata?.category || form.type || form.certLevel) === 'EndEntity');
+
+const availableKeypairGenerationOptions = computed(() => (isEndEntityTemplate.value ? keypairGenerationOptions : [caKeypairGenerationOption]));
+
+const currentKeypairGenerationDescription = computed(() => {
+  return availableKeypairGenerationOptions.value.find((item) => item.value === keypairGenerationLocation.value)?.description || '';
+});
+
+function syncKeypairGenerationWithTemplateCategory() {
+  if (!isEndEntityTemplate.value) {
+    form.keypairGeneration = buildKeypairGeneration('KMC');
+  }
+}
+
+watch(isEndEntityTemplate, syncKeypairGenerationWithTemplateCategory);
 
 // 计算属性：解析validity字符串为数值和单位
 const validityValue = computed(() => {
@@ -858,9 +877,17 @@ function handlePresetTemplateChange(templateName: string) {
     form.metadata.category = template.category;
     form.validity = template.validity;
     form.keyAlgorithms = [...template.keyAlgorithms];
-    form.keypairGeneration = buildKeypairGeneration('CLIENT');
+    form.keypairGeneration = buildKeypairGeneration(template.keypairGeneration || 'CLIENT');
+    syncKeypairGenerationWithTemplateCategory();
     ElMessage.success(`已加载预设模板：${template.name}`);
   }
+}
+
+function handleTemplateCategoryChange(category: string) {
+  if (!category) return;
+  form.type = category;
+  form.certLevel = category;
+  syncKeypairGenerationWithTemplateCategory();
 }
 
 /** 获取扩展标签 */
@@ -1381,7 +1408,7 @@ onMounted(() => {
                         <span>模板类别</span>
                       </div>
                     </template>
-                    <el-select v-model="form.metadata.category" placeholder="请选择模板类别" style="width: 100%" :disabled="isEdit">
+                    <el-select v-model="form.metadata.category" placeholder="请选择模板类别" style="width: 100%" :disabled="isEdit" @change="handleTemplateCategoryChange">
                       <el-option v-for="category in categoryOptions" :key="category.value" :label="category.label" :value="category.value" />
                     </el-select>
                   </el-form-item>
@@ -1469,12 +1496,12 @@ onMounted(() => {
                       </div>
                     </template>
                     <el-radio-group v-model="keypairGenerationLocation" class="keypair-generation-group">
-                      <el-radio-button v-for="item in keypairGenerationOptions" :key="item.value" :value="item.value">
+                      <el-radio-button v-for="item in availableKeypairGenerationOptions" :key="item.value" :value="item.value">
                         {{ item.label }}
                       </el-radio-button>
                     </el-radio-group>
                     <div class="form-tip">
-                      {{ keypairGenerationOptions.find((item) => item.value === keypairGenerationLocation)?.description }}
+                      {{ currentKeypairGenerationDescription }}
                     </div>
                   </el-form-item>
                 </el-col>

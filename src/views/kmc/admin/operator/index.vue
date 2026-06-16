@@ -52,8 +52,11 @@
           <span>{{ parseTime(scope.row.createTime) }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="操作" align="center" width="120" class-name="small-padding fixed-width">
+      <el-table-column label="操作" align="center" width="150" class-name="small-padding fixed-width">
         <template #default="scope">
+          <el-tooltip content="详情" placement="top">
+            <el-button link type="primary" icon="View" @click="handleDetail(scope.row)"></el-button>
+          </el-tooltip>
           <el-tooltip content="修改" placement="top" v-if="scope.row.id !== 1">
             <el-button link type="primary" icon="Edit" @click="handleUpdate(scope.row)" v-hasPermi="['system:user:edit']"></el-button>
           </el-tooltip>
@@ -101,7 +104,7 @@
           <el-col :span="12">
             <el-form-item label="状态">
               <el-select v-model="form.status" placeholder="请选择状态">
-                <el-option v-for="dict in sys_common_status" :key="dict.value" :label="dict.label" :value="dict.value"></el-option>
+                <el-option v-for="dict in sys_common_status" :key="dict.value" :label="dict.label" :value="Number(dict.value)"></el-option>
               </el-select>
             </el-form-item>
           </el-col>
@@ -145,6 +148,34 @@
       </template>
     </el-dialog>
 
+    <el-dialog v-model="detailOpen" title="业务操作员详情" width="720px" append-to-body class="kmc-user-detail-dialog">
+      <el-descriptions class="kmc-user-detail" :column="2" border>
+        <el-descriptions-item label="用户编号">{{ detail.id || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="用户名称">{{ detail.username || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="手机号码">{{ detail.mobile || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="邮箱">{{ detail.mail || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="状态">
+          <el-tag :type="Number(detail.status) === 0 ? 'success' : 'info'" size="small">{{ formatStatus(detail.status) }}</el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="创建时间">{{ parseTime(detail.createTime) || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="证书序列号" :span="2">
+          <span class="detail-mono">{{ detail.certSn || '-' }}</span>
+        </el-descriptions-item>
+        <el-descriptions-item label="证书详情" :span="2">
+          <el-button v-if="detail.certPem" link type="primary" icon="View" @click="handleViewDetailCert">查看证书详情</el-button>
+          <span v-else>-</span>
+        </el-descriptions-item>
+        <el-descriptions-item label="备注" :span="2">
+          <span class="detail-remark">{{ detail.remark || '-' }}</span>
+        </el-descriptions-item>
+      </el-descriptions>
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button @click="detailOpen = false">关 闭</el-button>
+        </div>
+      </template>
+    </el-dialog>
+
     <el-dialog v-model="showCertDialog" title="证书详情" width="60%">
       <X509Cert v-if="showCertDialog" :certPem="certPem" />
     </el-dialog>
@@ -181,6 +212,8 @@ const uploadCertRef = ref<UploadInstance>();
 const certFileList = ref<UploadUserFile[]>([]);
 const certPem = ref<string>('');
 const showCertDialog = ref(false);
+const detailOpen = ref(false);
+const detail = ref<any>({});
 
 const columns = ref([
   { key: 0, label: `用户编号`, visible: true },
@@ -220,6 +253,23 @@ const data = reactive<{
 });
 
 const { queryParams, form, rules } = toRefs(data);
+
+function normalizeUserForm() {
+  form.value.mail = form.value.mail?.trim() || undefined;
+  form.value.mobile = form.value.mobile?.trim() || undefined;
+}
+
+function showSaveUserError(error: unknown) {
+  const message = error instanceof Error ? error.message : typeof error === 'string' ? error : '';
+  if (message.includes('idx_certificate_tenant_id')) {
+    ElMessage.error('该证书已绑定其他用户，请更换证书');
+  }
+}
+
+function formatStatus(status: string | number | undefined) {
+  const dict = sys_common_status.value.find((item: any) => String(item.value) === String(status));
+  return dict?.label || '-';
+}
 
 function getList() {
   loading.value = true;
@@ -300,6 +350,19 @@ function handleResetPwd(row: any) {
     .catch(() => {});
 }
 
+function handleDetail(row: any) {
+  const userId = row.id;
+  getUser(userId).then((response) => {
+    detail.value = response.data || {};
+    detailOpen.value = true;
+  });
+}
+
+function handleViewDetailCert() {
+  certPem.value = detail.value.certPem;
+  showCertDialog.value = true;
+}
+
 function handleSelectionChange(selection: any) {
   ids.value = selection.map((item: any) => item.id);
   single.value = selection.length != 1;
@@ -359,6 +422,7 @@ function submitForm() {
 
     form.value.deptId = KMC_BIZ_DEPT_ID;
     form.value.roleIds = [KMC_OPERATOR_ROLE_ID];
+    normalizeUserForm();
     if (form.value.id != undefined) {
       updateUser(form.value).then(() => {
         proxy?.$modal.msgSuccess('修改成功');
@@ -381,7 +445,12 @@ function submitForm() {
       formData.append('file', certFileList.value[0].raw);
     }
 
-    await saveUserWithCert(formData);
+    try {
+      await saveUserWithCert(formData);
+    } catch (error) {
+      showSaveUserError(error);
+      return;
+    }
     proxy?.$modal.msgSuccess('新增成功');
     open.value = false;
     getList();
@@ -460,5 +529,39 @@ getList();
 .dialog-footer {
   display: flex;
   justify-content: flex-end;
+}
+
+:deep(.kmc-user-detail-dialog .el-dialog__body) {
+  padding-top: 8px;
+}
+
+:deep(.kmc-user-detail .el-descriptions__label) {
+  width: 108px;
+  color: var(--el-text-color-regular);
+  font-weight: 600;
+  background: var(--el-fill-color-lighter);
+}
+
+:deep(.kmc-user-detail .el-descriptions__content) {
+  min-width: 180px;
+  color: var(--el-text-color-primary);
+  line-height: 22px;
+  word-break: break-word;
+}
+
+.detail-mono {
+  display: inline-block;
+  max-width: 100%;
+  color: var(--el-text-color-primary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+  font-size: 12px;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+
+.detail-remark {
+  display: block;
+  min-height: 22px;
+  white-space: pre-wrap;
 }
 </style>

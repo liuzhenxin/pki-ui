@@ -14,4 +14,9 @@ export interface KmcRuntimeConfig {
     enabled: boolean;
     retentionDays: number;
   };
+  keyRecovery: {
+    enabled: boolean;
+    totalApprovers: number;
+    requiredApprovers: number;
+  };
 }

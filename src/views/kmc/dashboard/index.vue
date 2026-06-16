@@ -196,20 +196,20 @@ const statCards = computed(() => [
     iconClass: lowPoolCount.value > 0 ? 'bg-red' : 'bg-orange'
   },
   {
-    label: 'API 延迟',
-    value: String(systemHealth.value.apiLatency || '-').replace('ms', ''),
-    unit: systemHealth.value.apiLatency ? 'ms' : '',
-    desc: `HSM ${systemHealth.value.hsmStatus || '-'}，数据库 ${systemHealth.value.dbStatus || '-'}`,
+    label: '密钥库状态',
+    value: keyStoreStatusText(systemHealth.value.keyStoreStatus),
+    unit: '',
+    desc: systemHealth.value.keyStoreMessage || `数据库 ${systemHealth.value.dbStatus || '-'}，接口 ${systemHealth.value.apiLatency || '-'}`,
     icon: Connection,
-    iconClass: 'bg-purple'
+    iconClass: keyStoreIconClass.value
   }
 ]);
 
 const healthEvents = computed(() => [
   {
     label: 'HSM',
-    type: systemHealth.value.hsmStatus === 'UP' ? 'success' : 'danger',
-    content: `加密机状态：${systemHealth.value.hsmStatus || '-'}`
+    type: systemHealth.value.hsmStatus === 'UP' ? 'success' : systemHealth.value.hsmStatus === 'DEGRADED' ? 'warning' : 'danger',
+    content: `加密提供方：${systemHealth.value.cryptoProvider || '-'}（${cryptoProviderStatusText(systemHealth.value.cryptoProviderStatus)}）`
   },
   {
     label: '数据库',
@@ -222,9 +222,9 @@ const healthEvents = computed(() => [
     content: `核心接口延迟：${systemHealth.value.apiLatency || '-'}`
   },
   {
-    label: '密钥池',
-    type: lowPoolCount.value > 0 ? 'warning' : 'success',
-    content: lowPoolCount.value > 0 ? `发现 ${lowPoolCount.value} 个低水位策略` : '所有策略水位处于正常区间'
+    label: '密钥库',
+    type: keyStoreEventType.value,
+    content: systemHealth.value.keyStoreMessage || (lowPoolCount.value > 0 ? `发现 ${lowPoolCount.value} 个低水位策略` : '所有策略水位处于正常区间')
   }
 ]);
 
@@ -263,6 +263,45 @@ const statusTagType = (status?: string) => {
   }
   return 'success';
 };
+
+const keyStoreStatusText = (status?: string) => {
+  const map: Record<string, string> = {
+    NORMAL: '正常',
+    LOW: '低水位',
+    EMPTY: '未配置',
+    DOWN: '异常'
+  };
+  return map[status || ''] || status || '-';
+};
+
+const cryptoProviderStatusText = (status?: string) => {
+  const map: Record<string, string> = {
+    HARDWARE: '硬件可用',
+    SOFTWARE_FALLBACK: '软件备用',
+    UNAVAILABLE: '不可用'
+  };
+  return map[status || ''] || status || '-';
+};
+
+const keyStoreIconClass = computed(() => {
+  if (systemHealth.value.keyStoreStatus === 'DOWN' || systemHealth.value.keyStoreStatus === 'LOW') {
+    return 'bg-red';
+  }
+  if (systemHealth.value.keyStoreStatus === 'EMPTY') {
+    return 'bg-orange';
+  }
+  return 'bg-purple';
+});
+
+const keyStoreEventType = computed(() => {
+  if (systemHealth.value.keyStoreStatus === 'DOWN') {
+    return 'danger';
+  }
+  if (systemHealth.value.keyStoreStatus === 'LOW' || systemHealth.value.keyStoreStatus === 'EMPTY') {
+    return 'warning';
+  }
+  return 'success';
+});
 
 const renderAlgoChart = () => {
   if (!algoChartRef.value) {

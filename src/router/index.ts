@@ -90,6 +90,19 @@ export const constantRoutes: RouteRecordRaw[] = [
     ]
   },
   {
+    path: '/system/user-auth',
+    component: Layout,
+    hidden: true,
+    children: [
+      {
+        path: 'role/:userId',
+        component: () => import('@/views/system/user/authRole.vue'),
+        name: 'AuthRole',
+        meta: { title: '分配角色', activeMenu: '/system/user' }
+      }
+    ]
+  },
+  {
     path: '/ca/root/authorize-profile',
     component: () => import('@/views/ca/root/authorize-profile.vue'),
     name: 'AuthorizeProfile',
@@ -104,6 +117,111 @@ export const constantRoutes: RouteRecordRaw[] = [
     meta: { title: '证书模板表单' }
   },
   {
+    path: '/ca/cert',
+    component: Layout,
+    hidden: true,
+    children: [
+      {
+        path: '',
+        component: () => import('@/views/ca/cert/index.vue'),
+        name: 'CaCert',
+        meta: { title: '证书列表', activeMenu: '/ca/cert' }
+      }
+    ]
+  },
+  {
+    path: '/ca/archive-cert',
+    component: Layout,
+    hidden: true,
+    children: [
+      {
+        path: '',
+        component: () => import('@/views/ca/archive-cert/index.vue'),
+        name: 'CaArchiveCert',
+        meta: { title: '归档证书管理', activeMenu: '/ca/archive-cert' }
+      }
+    ]
+  },
+  {
+    path: '/ra/root/authorize-profile',
+    component: () => import('@/views/ra/root/authorize-profile.vue'),
+    name: 'RaAuthorizeProfile',
+    hidden: true,
+    meta: { title: '授权模板' }
+  },
+  {
+    path: '/ra/admin',
+    component: Layout,
+    hidden: true,
+    children: [
+      {
+        path: '',
+        component: () => import('@/views/ra/admin/index.vue'),
+        name: 'RaAdmin',
+        meta: { title: '业务管理员', activeMenu: '/ra/admin' }
+      }
+    ]
+  },
+  {
+    path: '/ra/root',
+    component: Layout,
+    hidden: true,
+    children: [
+      {
+        path: '',
+        component: () => import('@/views/ra/root/index.vue'),
+        name: 'RaRoot',
+        meta: { title: '根证书授权', activeMenu: '/ra/root' }
+      }
+    ]
+  },
+  {
+    path: '/ra/profile',
+    component: Layout,
+    hidden: true,
+    children: [
+      {
+        path: '',
+        component: () => import('@/views/ra/profile/index.vue'),
+        name: 'RaProfile',
+        meta: { title: '证书模板', activeMenu: '/ra/profile' }
+      }
+    ]
+  },
+  {
+    path: '/ra/profile/form',
+    component: () => import('@/views/ra/profile/form.vue'),
+    name: 'RaProfileForm',
+    hidden: true,
+    meta: { title: '证书模板表单' }
+  },
+  {
+    path: '/license/admin',
+    component: Layout,
+    hidden: true,
+    children: [
+      {
+        path: '',
+        component: () => import('@/views/license/admin/index.vue'),
+        name: 'LicenseAdmin',
+        meta: { title: 'License授权管理', activeMenu: '/license/admin' }
+      }
+    ]
+  },
+  {
+    path: '/license/init',
+    hidden: true,
+    component: Layout,
+    children: [
+      {
+        path: '',
+        component: () => import('@/views/license/init/index.vue'),
+        name: 'LicenseInit',
+        meta: { title: 'License系统初始化' }
+      }
+    ]
+  },
+  {
     path: '/ca/init',
     hidden: true,
     component: Layout,
@@ -115,13 +233,37 @@ export const constantRoutes: RouteRecordRaw[] = [
         meta: { title: 'CA系统初始化' }
       }
     ]
+  },
+  {
+    path: '/ra/init',
+    hidden: true,
+    component: Layout,
+    children: [
+      {
+        path: '',
+        component: () => import('@/views/ra/init/index.vue'),
+        name: 'RaInit',
+        meta: { title: 'RA系统初始化' }
+      }
+    ]
+  },
+  {
+    path: '/ocsp/init',
+    hidden: true,
+    component: Layout,
+    children: [
+      {
+        path: '',
+        component: () => import('@/views/ocsp/init/index.vue'),
+        name: 'OcspInit',
+        meta: { title: 'OCSP系统初始化' }
+      }
+    ]
   }
 ];
 
 // 动态路由，基于用户权限动态去加载
-export const dynamicRoutes: RouteRecordRaw[] = [
-
-];
+export const dynamicRoutes: RouteRecordRaw[] = [];
 
 /**
  * 创建路由

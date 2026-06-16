@@ -117,7 +117,7 @@
       </el-row>
 
       <!-- 底部：近期证书与审计日志 -->
-      <el-row :gutter="20" class="mt20">
+      <el-row v-if="isCaBusinessAdmin" :gutter="20" class="mt20">
         <el-col :span="14">
           <el-card shadow="hover">
             <template #header>
@@ -160,16 +160,23 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, reactive, nextTick, getCurrentInstance, ComponentInternalInstance } from 'vue';
+import { ref, onMounted, onUnmounted, reactive, nextTick, getCurrentInstance, ComponentInternalInstance, watch, computed } from 'vue';
 import * as echarts from 'echarts';
 import { useRouter } from 'vue-router';
 import { pageCert } from '@/api/ca/cert';
 import { getTenant } from '@/api/system/tenant';
 import { useUserStore } from '@/store/modules/user';
+import { X509, ASN1HEX } from 'jsrsasign';
 
 const router = useRouter();
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
 const userStore = useUserStore();
+const isCaBusinessAdmin = computed(() => {
+  const permissions = userStore.permissions || [];
+  const isAdmin = permissions.includes('ca:admin') || permissions.includes('setup');
+  const hasCertAccess = permissions.includes('ca:cert:page') || permissions.includes('ca:archive-cert:page');
+  return hasCertAccess && !isAdmin;
+});
 const timeRange = ref('week');
 const trendChartRef = ref<HTMLElement | null>(null);
 const algoChartRef = ref<HTMLElement | null>(null);
@@ -180,21 +187,17 @@ const isInitialized = ref(false);
 const loadingStatus = ref(true);
 
 const stats = reactive({
-  totalCerts: 1250,
-  validCerts: 1180,
-  revokedCerts: 42,
-  expiringSoon: 28
+  totalCerts: 0,
+  validCerts: 0,
+  revokedCerts: 0,
+  expiringSoon: 0
 });
 
-const recentCerts = ref([]);
+const allCerts = ref<any[]>([]);
+const recentCerts = ref<any[]>([]);
+const algoDistribution = ref<{ name: string; value: number; itemStyle?: { color: string } }[]>([]);
 
-const securityLogs = ref([
-  { time: '2026-04-23 11:05:21', content: '管理员 admin 签发了新证书 [Serial: 7A...E1]', type: 'primary' },
-  { time: '2026-04-23 10:30:45', content: '系统自动发布了最新的 CRL 列表', type: 'success' },
-  { time: '2026-04-23 09:15:02', content: '发现 3 个证书进入 30 天过期预警范围', type: 'warning' },
-  { time: '2026-04-22 16:40:18', content: '审计员 auditor 审核并批准了一项吊销请求', type: 'info' },
-  { time: '2026-04-22 14:22:55', content: '检测到非授权 IP 尝试访问管理接口 (已拦截)', type: 'danger' }
-]);
+const securityLogs = ref<any[]>([]);
 
 const checkInitialization = async () => {
   try {
@@ -211,12 +214,12 @@ const checkInitialization = async () => {
 };
 
 const getStatusType = (status: string) => {
-  const types: any = { 'VALID': 'success', 'REVOKED': 'danger', 'EXPIRED': 'warning' };
+  const types: any = { VALID: 'success', REVOKED: 'danger', EXPIRED: 'warning', HOLD: 'info' };
   return types[status] || 'info';
 };
 
 const getStatusLabel = (status: string) => {
-  const labels: any = { 'VALID': '有效', 'REVOKED': '已吊销', 'EXPIRED': '已过期' };
+  const labels: any = { VALID: '有效', REVOKED: '已吊销', EXPIRED: '已过期', HOLD: '已冻结' };
   return labels[status] || status;
 };
 
@@ -231,17 +234,23 @@ const goInit = () => {
 const initTrendChart = () => {
   if (!trendChartRef.value) return;
   trendChart = echarts.init(trendChartRef.value);
+  renderTrendChart();
+};
+
+const renderTrendChart = () => {
+  if (!trendChart) return;
+  const trend = buildIssueTrend();
   const option = {
     tooltip: { trigger: 'axis' },
     grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
-    xAxis: { type: 'category', boundaryGap: false, data: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] },
+    xAxis: { type: 'category', boundaryGap: false, data: trend.labels },
     yAxis: { type: 'value', name: '签发数量' },
     series: [
       {
         name: '签发量',
         type: 'line',
         smooth: true,
-        data: [120, 132, 101, 134, 90, 230, 210],
+        data: trend.values,
         itemStyle: { color: '#409EFF' },
         areaStyle: {
           color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
@@ -258,6 +267,11 @@ const initTrendChart = () => {
 const initAlgoChart = () => {
   if (!algoChartRef.value) return;
   algoChart = echarts.init(algoChartRef.value);
+  renderAlgoChart();
+};
+
+const renderAlgoChart = () => {
+  if (!algoChart) return;
   const option = {
     tooltip: { trigger: 'item' },
     legend: { bottom: '5%', left: 'center' },
@@ -271,21 +285,194 @@ const initAlgoChart = () => {
         label: { show: false, position: 'center' },
         emphasis: { label: { show: true, fontSize: '16', fontWeight: 'bold' } },
         labelLine: { show: false },
-        data: [
-          { value: 850, name: 'SM2 (国密)', itemStyle: { color: '#67C23A' } },
-          { value: 400, name: 'RSA-2048', itemStyle: { color: '#409EFF' } }
-        ]
+        data: algoDistribution.value.length ? algoDistribution.value : [{ value: 0, name: '暂无证书', itemStyle: { color: '#909399' } }]
       }
     ]
   };
   algoChart.setOption(option);
 };
 
-const fetchRecentCerts = async () => {
+const fetchDashboardData = async () => {
   try {
-    const res = await pageCert({ pageNum: 1, pageSize: 5 });
-    recentCerts.value = res.data.rows || res.data.records || [];
+    const certs = await fetchAllCerts();
+    allCerts.value = certs.map(normalizeCert);
+    updateStats();
+    updateAlgoDistribution();
+    if (isCaBusinessAdmin.value) {
+      updateRecentCerts();
+      updateSecurityLogs();
+    }
   } catch (error) {}
+};
+
+const fetchAllCerts = async () => {
+  const pageSize = 500;
+  const first = await pageCert({ pageNum: 1, pageSize });
+  const firstPage = unwrapPage(first);
+  const records = [...firstPage.records];
+  const total = Number(firstPage.total || records.length);
+  const maxTotal = Math.min(total, 2000);
+  const pageCount = Math.ceil(maxTotal / pageSize);
+  for (let pageNum = 2; pageNum <= pageCount; pageNum++) {
+    const page = unwrapPage(await pageCert({ pageNum, pageSize }));
+    records.push(...page.records);
+  }
+  return records;
+};
+
+const unwrapPage = (res: any) => {
+  const data = res?.data ?? res;
+  const records = data?.records || data?.rows || data?.data || (Array.isArray(data) ? data : []);
+  const total = data?.total || data?.totalCount || records.length;
+  return { records, total };
+};
+
+const normalizeCert = (cert: any) => {
+  const issueTime = parseDate(cert.notBefore || cert.createTime || cert.lastUpdate);
+  const notAfter = parseDate(cert.notAfter);
+  return {
+    ...cert,
+    status: resolveCertStatus(cert),
+    issueTime,
+    issueTimeText: formatDate(issueTime),
+    createTime: cert.createTime || cert.notBefore || cert.lastUpdate || '',
+    notAfterDate: notAfter,
+    algorithm: resolveCertAlgorithm(cert)
+  };
+};
+
+const updateStats = () => {
+  stats.totalCerts = allCerts.value.length;
+  stats.validCerts = allCerts.value.filter((item) => item.status === 'VALID').length;
+  stats.revokedCerts = allCerts.value.filter((item) => item.status === 'REVOKED').length;
+  stats.expiringSoon = allCerts.value.filter((item) => isExpiringSoon(item)).length;
+};
+
+const updateRecentCerts = () => {
+  recentCerts.value = [...allCerts.value].sort((a, b) => dateTime(b.issueTime) - dateTime(a.issueTime)).slice(0, 5);
+};
+
+const updateAlgoDistribution = () => {
+  const colors: Record<string, string> = {
+    'SM2 (国密)': '#67C23A',
+    RSA: '#409EFF',
+    ECDSA: '#E6A23C',
+    EdDSA: '#909399',
+    其他: '#C0C4CC'
+  };
+  const counts = allCerts.value.reduce((acc: Record<string, number>, cert) => {
+    acc[cert.algorithm] = (acc[cert.algorithm] || 0) + 1;
+    return acc;
+  }, {});
+  algoDistribution.value = Object.entries(counts).map(([name, value]) => ({
+    name,
+    value,
+    itemStyle: { color: colors[name] || colors['其他'] }
+  }));
+};
+
+const updateSecurityLogs = () => {
+  const logs = [...allCerts.value]
+    .sort((a, b) => dateTime(b.issueTime) - dateTime(a.issueTime))
+    .slice(0, 5)
+    .map((cert) => ({
+      time: cert.createTime || cert.issueTimeText,
+      content: `${cert.status === 'REVOKED' ? '证书已吊销' : '证书已签发'} [Serial: ${shortSerial(cert.serialNumber)}] ${cert.subject || ''}`,
+      type: cert.status === 'REVOKED' ? 'danger' : cert.status === 'EXPIRED' ? 'warning' : 'primary'
+    }));
+  if (stats.expiringSoon > 0) {
+    logs.unshift({
+      time: formatDate(new Date()),
+      content: `${stats.expiringSoon} 个证书将在 30 天内到期`,
+      type: 'warning'
+    });
+  }
+  securityLogs.value = logs;
+};
+
+const buildIssueTrend = () => {
+  const days = timeRange.value === 'month' ? 30 : 7;
+  const labels: string[] = [];
+  const counts: Record<string, number> = {};
+  const now = new Date();
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(now);
+    d.setDate(now.getDate() - i);
+    const key = formatDay(d);
+    labels.push(key);
+    counts[key] = 0;
+  }
+  allCerts.value.forEach((cert) => {
+    if (!cert.issueTime) return;
+    const key = formatDay(cert.issueTime);
+    if (key in counts) {
+      counts[key] += 1;
+    }
+  });
+  return { labels, values: labels.map((label) => counts[label]) };
+};
+
+const resolveCertStatus = (cert: any) => {
+  if (cert.status) return cert.status;
+  if (Number(cert.isRevoked) === 1 || cert.revocationTime) return 'REVOKED';
+  const notAfter = parseDate(cert.notAfter);
+  if (notAfter && notAfter.getTime() < Date.now()) return 'EXPIRED';
+  if (cert.certStatus) return cert.certStatus;
+  return 'VALID';
+};
+
+const resolveCertAlgorithm = (cert: any) => {
+  if (cert.algorithm) return cert.algorithm;
+  if (cert.cert) {
+    try {
+      const x509 = new X509();
+      x509.readCertPEM(cert.cert);
+      const sigAlgName = x509.getSignatureAlgorithmName();
+      if (/sm2|sm3|1\.2\.156\.10197/i.test(sigAlgName)) return 'SM2 (国密)';
+      const oidFromPath = (path: number[]) => {
+        const oidHex = ASN1HEX.getVbyList(x509.hex, 0, [...path]);
+        return oidHex ? ASN1HEX.hextooidstr(oidHex) : '';
+      };
+      const publicKeyOid = oidFromPath([0, 6, 0, 0]);
+      const publicKeyCurveOid = oidFromPath([0, 6, 0, 1]);
+      if (publicKeyCurveOid === '1.2.156.10197.1.301') return 'SM2 (国密)';
+      if (/rsa/i.test(sigAlgName)) return 'RSA';
+      if (/ecdsa|ec/i.test(sigAlgName)) return 'ECDSA';
+      if (/ed25519|ed448/i.test(sigAlgName)) return 'EdDSA';
+      const oid = publicKeyOid || oidFromPath([0, 5, 0, 0]);
+      if (oid === '1.2.840.113549.1.1.1') return 'RSA';
+      if (oid === '1.2.840.10045.2.1') return 'ECDSA';
+    } catch (error) {}
+  }
+  return '其他';
+};
+
+const isExpiringSoon = (cert: any) => {
+  if (cert.status !== 'VALID' || !cert.notAfterDate) return false;
+  const diff = cert.notAfterDate.getTime() - Date.now();
+  return diff >= 0 && diff <= 30 * 24 * 60 * 60 * 1000;
+};
+
+const parseDate = (value?: string) => {
+  if (!value) return null;
+  const normalized = value.includes('T') ? value : value.replace(/-/g, '/');
+  const date = new Date(normalized);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const dateTime = (date?: Date | null) => date?.getTime?.() || 0;
+
+const formatDay = (date: Date) => `${date.getMonth() + 1}/${date.getDate()}`;
+
+const formatDate = (date?: Date | null) => {
+  if (!date) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+};
+
+const shortSerial = (serial?: string) => {
+  if (!serial) return '-';
+  return serial.length > 10 ? `${serial.slice(0, 6)}...${serial.slice(-4)}` : serial;
 };
 
 const handleResize = () => {
@@ -296,7 +483,7 @@ const handleResize = () => {
 onMounted(async () => {
   await checkInitialization();
   if (isInitialized.value) {
-    fetchRecentCerts();
+    await fetchDashboardData();
     nextTick(() => {
       initTrendChart();
       initAlgoChart();
@@ -309,6 +496,10 @@ onUnmounted(() => {
   window.removeEventListener('resize', handleResize);
   trendChart?.dispose();
   algoChart?.dispose();
+});
+
+watch(timeRange, () => {
+  renderTrendChart();
 });
 </script>
 

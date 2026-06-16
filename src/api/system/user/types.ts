@@ -22,8 +22,10 @@ export interface UserQuery extends PageQuery {
   mail?: string;
   status?: string | number;
   superAdmin?: number;
+  userCategory?: string;
   deptId?: string | number;
   roleId?: string | number;
+  roleIds?: string[] | number[];
   userIds?: string | number | (string | number)[] | undefined;
 }
 
@@ -44,6 +46,7 @@ export interface UserVO {
   createTime?: string;
   mobile?: string;
   mail?: string;
+  userCategory?: string;
 }
 
 /**
@@ -52,19 +55,20 @@ export interface UserVO {
 export interface UserForm {
   id?: string;
   userId?: string;
-  deptId?: number;
+  deptId?: string | number;
   username: string;
   nickName?: string;
   password: string;
   mobile?: string;
   mail?: string;
+  userCategory?: string;
   sex?: string;
   status: string;
   remark?: string;
   postIds: string[];
   roleIds: string[];
-  certSn?: string;  // 证书序列号
-  cert?: string;    // 证书内容
+  certSn?: string; // 证书序列号
+  cert?: string; // 证书内容
 }
 
 export interface UserInfoVO {

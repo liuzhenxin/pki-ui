@@ -1,145 +1,137 @@
 <template>
-  <div class="nas-dashboard">
-    <!-- 数据概览 -->
-    <el-row :gutter="20">
-      <el-col :span="6">
+  <div class="nas-dashboard" v-loading="loading">
+    <el-row :gutter="16">
+      <el-col :xs="24" :sm="12" :lg="6">
         <el-card shadow="hover" class="stat-card">
           <div class="stat-content">
             <div class="stat-icon bg-blue">
-              <el-icon><Box /></el-icon>
+              <el-icon><Document /></el-icon>
             </div>
             <div class="stat-info">
-              <div class="stat-label">总存储容量</div>
-              <div class="stat-value">20.0 TB</div>
+              <div class="stat-label">迁移任务总数</div>
+              <div class="stat-value">{{ overview.totalTasks }}</div>
             </div>
           </div>
-          <div class="stat-footer">
-            <el-progress :percentage="65" :stroke-width="4" />
-            <div class="footer-desc">已使用 13.0 TB (65%)</div>
-          </div>
+          <div class="stat-footer">累计源文件 {{ formatNumber(overview.totalFiles) }} 个</div>
         </el-card>
       </el-col>
-      <el-col :span="6">
+
+      <el-col :xs="24" :sm="12" :lg="6">
         <el-card shadow="hover" class="stat-card">
           <div class="stat-content">
             <div class="stat-icon bg-green">
-              <el-icon><Switch /></el-icon>
+              <el-icon><Loading /></el-icon>
             </div>
             <div class="stat-info">
-              <div class="stat-label">正在运行任务</div>
-              <div class="stat-value">{{ runningTasks }}</div>
+              <div class="stat-label">活跃任务</div>
+              <div class="stat-value">{{ overview.activeTasks }}</div>
             </div>
           </div>
-          <div class="stat-footer">
-            <div class="footer-desc">总迁移任务: {{ totalTasks }}</div>
-          </div>
+          <div class="stat-footer">运行 {{ statusCounts.RUNNING }}，启动 {{ statusCounts.STARTING }}，停止中 {{ statusCounts.STOPPING }}</div>
         </el-card>
       </el-col>
-      <el-col :span="6">
+
+      <el-col :xs="24" :sm="12" :lg="6">
         <el-card shadow="hover" class="stat-card">
           <div class="stat-content">
-            <div class="stat-icon bg-orange">
-              <el-icon><Connection /></el-icon>
+            <div class="stat-icon bg-cyan">
+              <el-icon><Files /></el-icon>
             </div>
             <div class="stat-info">
-              <div class="stat-label">当前活跃连接</div>
-              <div class="stat-value">128</div>
+              <div class="stat-label">已迁移文件</div>
+              <div class="stat-value">{{ formatNumber(overview.migratedFiles) }}</div>
             </div>
           </div>
-          <div class="stat-footer">
-            <div class="footer-desc">NFS: 82 | SMB: 46</div>
-          </div>
+          <el-progress :percentage="overview.fileProgress" :stroke-width="5" />
         </el-card>
       </el-col>
-      <el-col :span="6">
+
+      <el-col :xs="24" :sm="12" :lg="6">
         <el-card shadow="hover" class="stat-card">
           <div class="stat-content">
-            <div class="stat-icon bg-purple">
-              <el-icon><Bell /></el-icon>
+            <div class="stat-icon bg-red">
+              <el-icon><WarningFilled /></el-icon>
             </div>
             <div class="stat-info">
-              <div class="stat-label">系统运行状态</div>
-              <div class="stat-value">健康</div>
+              <div class="stat-label">异常任务</div>
+              <div class="stat-value">{{ overview.abnormalTasks }}</div>
             </div>
           </div>
-          <div class="stat-footer">
-            <div class="footer-desc">运行时间: 142天 5小时</div>
-          </div>
+          <div class="stat-footer">失败 {{ statusCounts.FAILED }}，完成但有失败 {{ statusCounts.COMPLETED_WITH_FAILURES }}</div>
         </el-card>
       </el-col>
     </el-row>
 
-    <!-- 图表展示 -->
-    <el-row :gutter="20" class="mt20">
-      <el-col :span="16">
-        <el-card shadow="hover">
+    <el-row :gutter="16" class="mt16">
+      <el-col :xs="24" :lg="16">
+        <el-card shadow="hover" class="panel-card">
           <template #header>
             <div class="card-header">
-              <span>性能趋势监控 (IOPS & 带宽)</span>
+              <span>迁移文件趋势</span>
               <el-radio-group v-model="timeRange" size="small">
-                <el-radio-button value="1h">近1小时</el-radio-button>
-                <el-radio-button value="24h">近24小时</el-radio-button>
                 <el-radio-button value="7d">近7天</el-radio-button>
+                <el-radio-button value="30d">近30天</el-radio-button>
+                <el-radio-button value="all">全部</el-radio-button>
               </el-radio-group>
             </div>
           </template>
-          <div ref="performanceChartRef" style="height: 350px;"></div>
+          <div ref="trendChartRef" class="chart"></div>
         </el-card>
       </el-col>
-      <el-col :span="8">
-        <el-card shadow="hover">
+
+      <el-col :xs="24" :lg="8">
+        <el-card shadow="hover" class="panel-card">
           <template #header>
             <div class="card-header">
-              <span>文件类型分布</span>
+              <span>任务状态分布</span>
+              <el-button link type="primary" icon="Refresh" @click="fetchDashboard">刷新</el-button>
             </div>
           </template>
-          <div ref="fileTypeChartRef" style="height: 350px;"></div>
+          <div ref="statusChartRef" class="chart"></div>
         </el-card>
       </el-col>
     </el-row>
 
-    <!-- 底部：迁移任务与系统日志 -->
-    <el-row :gutter="20" class="mt20">
-      <el-col :span="12">
-        <el-card shadow="hover">
+    <el-row :gutter="16" class="mt16">
+      <el-col :xs="24" :lg="15">
+        <el-card shadow="hover" class="panel-card">
           <template #header>
             <div class="card-header">
               <span>近期迁移任务</span>
               <el-button link type="primary" @click="goMigration">查看全部</el-button>
             </div>
           </template>
-          <el-table :data="recentTasks" size="small" style="width: 100%">
-            <el-table-column prop="name" label="任务名称" show-overflow-tooltip />
-            <el-table-column prop="status" label="状态" width="100">
+          <el-table :data="recentTasks" size="small" height="330" empty-text="暂无迁移任务">
+            <el-table-column prop="name" label="任务名称" min-width="150" show-overflow-tooltip />
+            <el-table-column prop="sourcePath" label="源路径" min-width="180" show-overflow-tooltip />
+            <el-table-column prop="status" label="状态" width="130">
               <template #default="scope">
-                <el-tag :type="getStatusTag(scope.row.status)" size="small">
-                  {{ getStatusLabel(scope.row.status) }}
-                </el-tag>
+                <el-tag :type="getStatusTag(scope.row.status)" size="small">{{ getStatusLabel(scope.row.status) }}</el-tag>
               </template>
             </el-table-column>
-            <el-table-column label="进度" width="150">
+            <el-table-column label="进度" width="170">
               <template #default="scope">
-                <el-progress :percentage="scope.row.progress" :stroke-width="2" />
+                <el-progress :percentage="scope.row.progress" :stroke-width="4" :status="getProgressStatus(scope.row.status)" />
               </template>
+            </el-table-column>
+            <el-table-column label="创建时间" width="170">
+              <template #default="scope">{{ formatTime(scope.row.createTime) }}</template>
             </el-table-column>
           </el-table>
         </el-card>
       </el-col>
-      <el-col :span="12">
-        <el-card shadow="hover">
+
+      <el-col :xs="24" :lg="9">
+        <el-card shadow="hover" class="panel-card">
           <template #header>
             <div class="card-header">
-              <span>系统事件日志</span>
+              <span>任务事件</span>
             </div>
           </template>
-          <el-timeline size="small">
-            <el-timeline-item
-              v-for="(log, index) in systemLogs"
-              :key="index"
-              :type="log.type"
-              :timestamp="log.time"
-            >
-              {{ log.content }}
+          <el-empty v-if="taskEvents.length === 0" description="暂无任务事件" :image-size="80" />
+          <el-timeline v-else class="event-timeline">
+            <el-timeline-item v-for="event in taskEvents" :key="event.id" :type="event.type" :timestamp="event.time">
+              {{ event.content }}
             </el-timeline-item>
           </el-timeline>
         </el-card>
@@ -149,191 +141,424 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, nextTick } from 'vue';
-import * as echarts from 'echarts';
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { listTask } from '@/api/nas/migrationTask';
-import { Box, Switch, Connection, Bell } from '@element-plus/icons-vue';
+import * as echarts from 'echarts';
+import { CircleCheckFilled, Document, Files, Loading, WarningFilled } from '@element-plus/icons-vue';
+import { listAllTasks, listTask } from '@/api/nas/migrationTask';
+
+type MigrationTask = {
+  id?: number | string;
+  name?: string;
+  sourcePath?: string;
+  targetPath?: string;
+  status?: string;
+  totalFiles?: number;
+  migratedFiles?: number;
+  message?: string;
+  createTime?: string;
+  progress?: number;
+};
 
 const router = useRouter();
-const timeRange = ref('1h');
-const performanceChartRef = ref<HTMLElement | null>(null);
-const fileTypeChartRef = ref<HTMLElement | null>(null);
-let performanceChart: echarts.ECharts | null = null;
-let fileTypeChart: echarts.ECharts | null = null;
+const loading = ref(false);
+const timeRange = ref('7d');
+const allTasks = ref<MigrationTask[]>([]);
+const recentTasks = ref<MigrationTask[]>([]);
+const trendChartRef = ref<HTMLElement | null>(null);
+const statusChartRef = ref<HTMLElement | null>(null);
+const statusChart = ref<echarts.ECharts | null>(null);
+const trendChart = ref<echarts.ECharts | null>(null);
+let refreshTimer: ReturnType<typeof setInterval> | null = null;
 
-const runningTasks = ref(0);
-const totalTasks = ref(0);
-const recentTasks = ref([]);
+const statusOrder = ['PENDING', 'STARTING', 'RUNNING', 'STOPPING', 'STOPPED', 'COMPLETED', 'COMPLETED_WITH_FAILURES', 'FAILED'];
 
-const systemLogs = ref([
-  { time: '2026-04-23 10:15:32', content: '系统自动快照 [Daily_Backup_20260423] 创建成功。', type: 'success' },
-  { time: '2026-04-23 09:42:10', content: '用户 admin 修改了 NFS 共享目录 [/data/shared] 的权限。', type: 'info' },
-  { time: '2026-04-23 08:00:05', content: '存储池 Pool_01 容量超过 80% 阈值告警。', type: 'warning' },
-  { time: '2026-04-22 23:55:18', content: '数据迁移任务 [Oracle_DB_Archive] 已顺利完成。', type: 'success' },
-  { time: '2026-04-22 14:20:00', content: '节点 Node-02 网络接口发生瞬时中断，已自动切换。', type: 'danger' }
-]);
+const statusCounts = reactive<Record<string, number>>({
+  PENDING: 0,
+  STARTING: 0,
+  RUNNING: 0,
+  STOPPING: 0,
+  STOPPED: 0,
+  COMPLETED: 0,
+  COMPLETED_WITH_FAILURES: 0,
+  FAILED: 0
+});
 
-const getStatusTag = (status: string) => {
-  const tags: any = { 'PENDING': 'info', 'RUNNING': 'primary', 'COMPLETED': 'success', 'FAILED': 'danger' };
-  return tags[status] || 'info';
-};
+const overview = computed(() => {
+  const totalFiles = allTasks.value.reduce((sum, task) => sum + toNumber(task.totalFiles), 0);
+  const migratedFiles = allTasks.value.reduce((sum, task) => sum + toNumber(task.migratedFiles), 0);
+  const activeTasks = statusCounts.STARTING + statusCounts.RUNNING + statusCounts.STOPPING;
+  const abnormalTasks = statusCounts.FAILED + statusCounts.COMPLETED_WITH_FAILURES;
+  return {
+    totalTasks: allTasks.value.length,
+    activeTasks,
+    abnormalTasks,
+    totalFiles,
+    migratedFiles,
+    fileProgress: totalFiles > 0 ? Math.min(100, Math.floor((migratedFiles / totalFiles) * 100)) : 0
+  };
+});
 
-const getStatusLabel = (status: string) => {
-  const labels: any = { 'PENDING': '等待中', 'RUNNING': '运行中', 'COMPLETED': '已完成', 'FAILED': '失败' };
-  return labels[status] || status;
-};
+const taskEvents = computed(() =>
+  [...allTasks.value]
+    .sort((a, b) => toTimestamp(b.createTime) - toTimestamp(a.createTime))
+    .slice(0, 8)
+    .map((task) => ({
+      id: task.id,
+      time: formatTime(task.createTime),
+      type: getTimelineType(task.status),
+      content: `${task.name || '未命名任务'}：${getStatusLabel(task.status || '')}${task.message ? `，${task.message}` : ''}`
+    }))
+);
 
-const goMigration = () => {
-  router.push('/nas/migration-task');
-};
+function toNumber(value: unknown) {
+  return Number(value || 0);
+}
 
-const initPerformanceChart = () => {
-  if (!performanceChartRef.value) return;
-  performanceChart = echarts.init(performanceChartRef.value);
-  const option = {
-    tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
-    legend: { data: ['IOPS', '带宽 (MB/s)'] },
-    grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
-    xAxis: { type: 'category', boundaryGap: false, data: ['10:00', '10:10', '10:20', '10:30', '10:40', '10:50', '11:00'] },
-    yAxis: [
-      { type: 'value', name: 'IOPS', position: 'left' },
-      { type: 'value', name: 'MB/s', position: 'right' }
-    ],
+function toTimestamp(value?: string) {
+  if (!value) return 0;
+  const timestamp = new Date(value).getTime();
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function normalizeTasks(response: any): MigrationTask[] {
+  const data = response?.data || response || {};
+  const records = Array.isArray(data) ? data : data.records || data.rows || [];
+  return records.map((task: MigrationTask) => {
+    const totalFiles = toNumber(task.totalFiles);
+    const migratedFiles = toNumber(task.migratedFiles);
+    return {
+      ...task,
+      totalFiles,
+      migratedFiles,
+      progress: totalFiles > 0 ? Math.min(100, Math.floor((migratedFiles / totalFiles) * 100)) : 0
+    };
+  });
+}
+
+function resetStatusCounts() {
+  statusOrder.forEach((status) => {
+    statusCounts[status] = 0;
+  });
+}
+
+function updateStatusCounts(tasks: MigrationTask[]) {
+  resetStatusCounts();
+  tasks.forEach((task) => {
+    const status = task.status || 'PENDING';
+    statusCounts[status] = (statusCounts[status] || 0) + 1;
+  });
+}
+
+async function fetchDashboard() {
+  loading.value = true;
+  try {
+    const [listResponse, pageResponse] = await Promise.all([listAllTasks({}), listTask({ pageNum: 1, pageSize: 6 })]);
+    allTasks.value = normalizeTasks(listResponse);
+    recentTasks.value = normalizeTasks(pageResponse);
+    updateStatusCounts(allTasks.value);
+    await nextTick();
+    renderCharts();
+    updatePolling();
+  } finally {
+    loading.value = false;
+  }
+}
+
+function renderCharts() {
+  renderStatusChart();
+  renderTrendChart();
+}
+
+function renderStatusChart() {
+  if (!statusChartRef.value) return;
+  if (!statusChart.value) statusChart.value = echarts.init(statusChartRef.value);
+
+  const data = statusOrder
+    .filter((status) => statusCounts[status] > 0)
+    .map((status) => ({
+      name: getStatusLabel(status),
+      value: statusCounts[status],
+      itemStyle: { color: getStatusColor(status) }
+    }));
+
+  statusChart.value.setOption({
+    tooltip: { trigger: 'item' },
+    legend: { bottom: 0, type: 'scroll' },
     series: [
       {
-        name: 'IOPS',
-        type: 'line',
-        smooth: true,
-        data: [1200, 1350, 1100, 1600, 2100, 1800, 1950],
-        itemStyle: { color: '#409EFF' },
-        areaStyle: { opacity: 0.1 }
+        name: '任务状态',
+        type: 'pie',
+        radius: ['45%', '68%'],
+        center: ['50%', '45%'],
+        label: { formatter: '{b}: {c}' },
+        data: data.length > 0 ? data : [{ name: '暂无任务', value: 1, itemStyle: { color: '#dcdfe6' } }]
+      }
+    ]
+  });
+}
+
+function renderTrendChart() {
+  if (!trendChartRef.value) return;
+  if (!trendChart.value) trendChart.value = echarts.init(trendChartRef.value);
+
+  const rows = buildTrendRows();
+  trendChart.value.setOption({
+    tooltip: { trigger: 'axis' },
+    legend: { data: ['源文件数', '已迁移文件数'] },
+    grid: { left: 12, right: 18, top: 44, bottom: 12, containLabel: true },
+    xAxis: { type: 'category', data: rows.map((row) => row.label), axisTick: { alignWithLabel: true } },
+    yAxis: { type: 'value', minInterval: 1 },
+    series: [
+      {
+        name: '源文件数',
+        type: 'bar',
+        data: rows.map((row) => row.totalFiles),
+        itemStyle: { color: '#409eff' },
+        barMaxWidth: 28
       },
       {
-        name: '带宽 (MB/s)',
+        name: '已迁移文件数',
         type: 'line',
         smooth: true,
-        yAxisIndex: 1,
-        data: [210, 235, 190, 280, 320, 290, 310],
-        itemStyle: { color: '#67C23A' },
-        areaStyle: { opacity: 0.1 }
+        data: rows.map((row) => row.migratedFiles),
+        itemStyle: { color: '#67c23a' },
+        areaStyle: { opacity: 0.12 }
       }
     ]
-  };
-  performanceChart.setOption(option);
-};
+  });
+}
 
-const initFileTypeChart = () => {
-  if (!fileTypeChartRef.value) return;
-  fileTypeChart = echarts.init(fileTypeChartRef.value);
-  const option = {
-    tooltip: { trigger: 'item' },
-    legend: { bottom: '5%', left: 'center' },
-    series: [
-      {
-        name: '文件类型',
-        type: 'pie',
-        radius: ['40%', '70%'],
-        avoidLabelOverlap: false,
-        itemStyle: { borderRadius: 10, borderColor: '#fff', borderWidth: 2 },
-        label: { show: false, position: 'center' },
-        emphasis: { label: { show: true, fontSize: '20', fontWeight: 'bold' } },
-        labelLine: { show: false },
-        data: [
-          { value: 45, name: '图片/视频', itemStyle: { color: '#409EFF' } },
-          { value: 25, name: '数据库文件', itemStyle: { color: '#67C23A' } },
-          { value: 15, name: '文档记录', itemStyle: { color: '#E6A23C' } },
-          { value: 10, name: '虚拟机镜像', itemStyle: { color: '#F56C6C' } },
-          { value: 5, name: '其他', itemStyle: { color: '#909399' } }
-        ]
-      }
-    ]
-  };
-  fileTypeChart.setOption(option);
-};
+function buildTrendRows() {
+  const days = timeRange.value === '30d' ? 30 : timeRange.value === '7d' ? 7 : 0;
+  const now = new Date();
+  const start = days > 0 ? new Date(now.getFullYear(), now.getMonth(), now.getDate() - days + 1).getTime() : 0;
+  const buckets = new Map<string, { label: string; totalFiles: number; migratedFiles: number }>();
 
-const fetchTasks = async () => {
-  try {
-    const response = await listTask({ pageNum: 1, pageSize: 5 });
-    if (response && response.rows) {
-      recentTasks.value = response.rows.map((t: any) => ({
-        ...t,
-        progress: t.totalFiles > 0 ? Math.floor((t.migratedFiles / t.totalFiles) * 100) : 0
-      }));
-      totalTasks.value = response.total;
-      runningTasks.value = response.rows.filter((t: any) => t.status === 'RUNNING').length;
-    }
-  } catch (error) {
-    console.error('获取迁移任务失败:', error);
+  allTasks.value
+    .filter((task) => !start || toTimestamp(task.createTime) >= start)
+    .forEach((task) => {
+      const key = formatDateKey(task.createTime);
+      const row = buckets.get(key) || { label: key, totalFiles: 0, migratedFiles: 0 };
+      row.totalFiles += toNumber(task.totalFiles);
+      row.migratedFiles += toNumber(task.migratedFiles);
+      buckets.set(key, row);
+    });
+
+  return [...buckets.values()].sort((a, b) => a.label.localeCompare(b.label)).slice(-30);
+}
+
+function formatDateKey(value?: string) {
+  const date = value ? new Date(value) : new Date();
+  if (!Number.isFinite(date.getTime())) return '未知日期';
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  const day = `${date.getDate()}`.padStart(2, '0');
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
+function formatTime(value?: string) {
+  if (!value) return '-';
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return '-';
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  const day = `${date.getDate()}`.padStart(2, '0');
+  const hour = `${date.getHours()}`.padStart(2, '0');
+  const minute = `${date.getMinutes()}`.padStart(2, '0');
+  return `${date.getFullYear()}-${month}-${day} ${hour}:${minute}`;
+}
+
+function formatNumber(value: number) {
+  return new Intl.NumberFormat('zh-CN').format(value || 0);
+}
+
+function getStatusTag(status?: string) {
+  const tags: Record<string, string> = {
+    PENDING: 'info',
+    STARTING: 'warning',
+    RUNNING: 'primary',
+    STOPPING: 'warning',
+    STOPPED: 'info',
+    COMPLETED: 'success',
+    COMPLETED_WITH_FAILURES: 'warning',
+    FAILED: 'danger'
+  };
+  return tags[status || ''] || 'info';
+}
+
+function getProgressStatus(status?: string) {
+  if (status === 'FAILED') return 'exception';
+  if (status === 'COMPLETED' || status === 'COMPLETED_WITH_FAILURES') return 'success';
+  return '';
+}
+
+function getTimelineType(status?: string) {
+  if (status === 'FAILED') return 'danger';
+  if (status === 'COMPLETED_WITH_FAILURES' || status === 'STOPPING' || status === 'STARTING') return 'warning';
+  if (status === 'COMPLETED') return 'success';
+  return 'primary';
+}
+
+function getStatusColor(status: string) {
+  const colors: Record<string, string> = {
+    PENDING: '#909399',
+    STARTING: '#e6a23c',
+    RUNNING: '#409eff',
+    STOPPING: '#d69e2e',
+    STOPPED: '#606266',
+    COMPLETED: '#67c23a',
+    COMPLETED_WITH_FAILURES: '#f59e0b',
+    FAILED: '#f56c6c'
+  };
+  return colors[status] || '#909399';
+}
+
+function getStatusLabel(status: string) {
+  const labels: Record<string, string> = {
+    PENDING: '等待中',
+    STARTING: '启动中',
+    RUNNING: '运行中',
+    STOPPING: '停止中',
+    STOPPED: '已停止',
+    COMPLETED: '已完成',
+    COMPLETED_WITH_FAILURES: '已完成，有失败记录',
+    FAILED: '失败'
+  };
+  return labels[status] || status;
+}
+
+function goMigration() {
+  router.push('/nas/migration-task');
+}
+
+function handleResize() {
+  statusChart.value?.resize();
+  trendChart.value?.resize();
+}
+
+function updatePolling() {
+  const hasActiveTask = allTasks.value.some((task) => ['STARTING', 'RUNNING', 'STOPPING'].includes(task.status || ''));
+  if (hasActiveTask && !refreshTimer) {
+    refreshTimer = setInterval(fetchDashboard, 5000);
   }
-};
+  if (!hasActiveTask && refreshTimer) {
+    clearInterval(refreshTimer);
+    refreshTimer = null;
+  }
+}
 
-const handleResize = () => {
-  performanceChart?.resize();
-  fileTypeChart?.resize();
-};
+watch(timeRange, renderTrendChart);
 
 onMounted(() => {
-  fetchTasks();
-  nextTick(() => {
-    initPerformanceChart();
-    initFileTypeChart();
-  });
+  fetchDashboard();
   window.addEventListener('resize', handleResize);
 });
 
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize);
-  performanceChart?.dispose();
-  fileTypeChart?.dispose();
+  if (refreshTimer) clearInterval(refreshTimer);
+  statusChart.value?.dispose();
+  trendChart.value?.dispose();
 });
 </script>
 
 <style lang="scss" scoped>
 .nas-dashboard {
-  .mt20 { margin-top: 20px; }
-  
+  padding: 16px;
+
+  .mt16 {
+    margin-top: 16px;
+  }
+
+  .stat-card,
+  .panel-card {
+    border-radius: 8px;
+  }
+
   .stat-card {
+    height: 142px;
+    margin-bottom: 16px;
+
     .stat-content {
       display: flex;
       align-items: center;
-      margin-bottom: 15px;
-      
-      .stat-icon {
-        width: 48px;
-        height: 48px;
-        border-radius: 8px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 24px;
-        color: #fff;
-        margin-right: 15px;
-      }
-      
-      .bg-blue { background-color: #409EFF; }
-      .bg-green { background-color: #67C23A; }
-      .bg-orange { background-color: #E6A23C; }
-      .bg-purple { background-color: #9C27B0; }
-      
-      .stat-info {
-        .stat-label { font-size: 14px; color: #909399; margin-bottom: 5px; }
-        .stat-value { font-size: 20px; font-weight: bold; color: #303133; }
-      }
+      min-height: 66px;
     }
-    
+
+    .stat-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-right: 14px;
+      color: #fff;
+      font-size: 24px;
+      flex: 0 0 48px;
+    }
+
+    .bg-blue {
+      background: #409eff;
+    }
+
+    .bg-green {
+      background: #67c23a;
+    }
+
+    .bg-cyan {
+      background: #14b8a6;
+    }
+
+    .bg-red {
+      background: #f56c6c;
+    }
+
+    .stat-info {
+      min-width: 0;
+    }
+
+    .stat-label {
+      font-size: 13px;
+      color: #909399;
+      line-height: 20px;
+    }
+
+    .stat-value {
+      color: #303133;
+      font-size: 24px;
+      line-height: 32px;
+      font-weight: 700;
+    }
+
     .stat-footer {
-      border-top: 1px solid #EBEEF5;
+      border-top: 1px solid #ebeef5;
+      color: #909399;
+      font-size: 12px;
+      line-height: 18px;
       padding-top: 10px;
-      .footer-desc { font-size: 12px; color: #909399; margin-top: 5px; }
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
   }
 
   .card-header {
+    min-height: 32px;
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    font-weight: bold;
+    justify-content: space-between;
+    gap: 12px;
+    font-weight: 600;
+  }
+
+  .chart {
+    height: 330px;
+  }
+
+  .event-timeline {
+    height: 330px;
+    padding: 4px 8px 0 2px;
+    overflow: auto;
   }
 }
 </style>

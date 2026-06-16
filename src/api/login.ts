@@ -5,7 +5,6 @@ import { UserInfo } from '@/api/system/user/types';
 import { encrypt } from '@/utils/jsencrypt';
 import { getToken } from '@/utils/auth';
 import setting from '@/settings';
-import { useUserStore } from '@/store/modules/user';
 
 // pc端固定客户端授权id
 const clientId = import.meta.env.VITE_APP_CLIENT_ID;
@@ -150,9 +149,9 @@ export function getTenantList(isToken: boolean): Promise<TenantInfo> {
  * 校验当前用户密码 (用于敏感操作二次确认)
  */
 export function verifyPassword(password: string): Promise<boolean> {
-  const userStore = useUserStore();
-  return login({
-    username: userStore.name,
-    password: password
-  } as LoginData).then(() => true).catch(() => false);
+  return request({
+    url: '/admin/v1/users/verify-password',
+    method: 'post',
+    data: { password }
+  }).then((res: any) => res?.data === true || res === true);
 }

@@ -38,6 +38,11 @@ const service = axios.create({
 // 请求拦截器
 service.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
+    const hideErrorNotify = config.headers?.hideErrorNotify === true || config.headers?.hideErrorNotify === 'true';
+    (config as any).hideErrorNotify = hideErrorNotify;
+    if (config.headers?.hideErrorNotify !== undefined) {
+      delete config.headers.hideErrorNotify;
+    }
     // 对应国际化资源文件后缀
     config.headers['Content-Language'] = getLanguage();
     const language = getLanguage();
@@ -56,9 +61,9 @@ service.interceptors.request.use(
       // 如果 getLanguage() 没有匹配到，我们可以检查 navigator.language
       const browserLang = navigator.language;
       if (browserLang === 'zh-CN' || browserLang === 'zh') {
-         config.headers['Language'] = 'zh-CN';
+        config.headers['Language'] = 'zh-CN';
       } else if (browserLang === 'en-US' || browserLang === 'en') {
-         config.headers['Language'] = 'en-US';
+        config.headers['Language'] = 'en-US';
       }
     }
 
@@ -177,13 +182,19 @@ service.interceptors.response.use(
       }
       return Promise.reject('无效的会话，或者会话已过期，请重新登录。');
     } else if (code === HttpStatus.SERVER_ERROR) {
-      ElMessage({ message: msg, type: 'error' });
+      if (!(res.config as any).hideErrorNotify) {
+        ElMessage({ message: msg, type: 'error' });
+      }
       return Promise.reject(new Error(msg));
     } else if (code === HttpStatus.WARN) {
-      ElMessage({ message: msg, type: 'warning' });
+      if (!(res.config as any).hideErrorNotify) {
+        ElMessage({ message: msg, type: 'warning' });
+      }
       return Promise.reject(new Error(msg));
     } else if (code !== HttpStatus.SUCCESS) {
-      ElNotification.error({ title: msg });
+      if (!(res.config as any).hideErrorNotify) {
+        ElNotification.error({ title: msg });
+      }
       return Promise.reject('error');
     } else {
       return Promise.resolve(res.data);
@@ -201,7 +212,9 @@ service.interceptors.response.use(
     } else if (message.includes('Request failed with status code')) {
       message = '系统接口' + message.substr(message.length - 3) + '异常';
     }
-    ElMessage({ message: message, type: 'error', duration: 5 * 1000 });
+    if (!(error.config as any)?.hideErrorNotify) {
+      ElMessage({ message: message, type: 'error', duration: 5 * 1000 });
+    }
     return Promise.reject(error);
   }
 );

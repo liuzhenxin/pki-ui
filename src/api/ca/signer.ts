@@ -18,9 +18,15 @@ const normalizeSigner = (item: any = {}) => {
     ...item,
     algo: item.algo || conf.algo || 'SM2',
     signerType: item.signerType || item.type || 'PKCS12',
-    keyIndex: item.keyIndex || conf.keyIndex || 1
+    keyIndex: item.keyIndex || conf.keyIndex || 1,
+    keySize: item.keySize || conf.keySize || conf.keyLength
   };
 };
+
+const normalizePageQuery = (query: any = {}) => ({
+  ...query,
+  type: query.type || query.signerType || undefined
+});
 
 const normalizeResultList = (res: any) => ({
   ...res,
@@ -47,7 +53,8 @@ const toSignerCmd = (data: any = {}) => ({
     conf: JSON.stringify({
       ...parseConf(data.conf),
       algo: data.algo,
-      keyIndex: data.keyIndex
+      keyIndex: data.keyIndex,
+      keySize: data.algo === 'RSA' ? data.keySize : undefined
     })
   }
 });
@@ -66,7 +73,7 @@ export function pageSigner(query: any): Promise<Result<any>> {
   return request({
     url: '/ca/v1/signers/page',
     method: 'post',
-    data: query
+    data: normalizePageQuery(query)
   }).then(normalizeResultPage) as any;
 }
 
@@ -96,6 +103,16 @@ export function modifySigner(data: any): Promise<Result<any>> {
     url: '/ca/v1/signers',
     method: 'put',
     data: toSignerCmd(data)
+  }) as any;
+}
+
+// 测试签名者
+export function testSigner(data: any): Promise<Result<any>> {
+  const payload = data?.id ? { id: data.id } : { co: toSignerCmd(data).co };
+  return request({
+    url: '/ca/v1/signers/test',
+    method: 'post',
+    data: payload
   }) as any;
 }
 

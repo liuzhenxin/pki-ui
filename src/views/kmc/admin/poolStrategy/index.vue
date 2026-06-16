@@ -2,7 +2,9 @@
   <div class="app-container">
     <el-form :model="queryParams" ref="queryFormRef" :inline="true" v-show="showSearch" label-width="100px">
       <el-form-item label="密码算法类型" prop="algType">
-        <el-input v-model="queryParams.algType" placeholder="请输入密码算法类型(如SM2)" clearable @keyup.enter="handleQuery" />
+        <el-select v-model="queryParams.algType" placeholder="请选择密码算法类型" clearable style="width: 200px" @change="handleQuery">
+          <el-option v-for="item in algTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
+        </el-select>
       </el-form-item>
       <el-form-item label="状态" prop="status">
         <el-select v-model="queryParams.status" placeholder="策略状态" clearable style="width: 200px">
@@ -21,10 +23,14 @@
         <el-button type="primary" plain icon="Plus" @click="handleAdd" v-hasPermi="['kmc:poolstrategy:save']">新增</el-button>
       </el-col>
       <el-col :span="1.5">
-        <el-button type="success" plain icon="Edit" :disabled="single" @click="handleUpdate()" v-hasPermi="['kmc:poolstrategy:modify']">修改</el-button>
+        <el-button type="success" plain icon="Edit" :disabled="single" @click="handleUpdate()" v-hasPermi="['kmc:poolstrategy:modify']"
+          >修改</el-button
+        >
       </el-col>
       <el-col :span="1.5">
-        <el-button type="danger" plain icon="Delete" :disabled="multiple" @click="handleDelete()" v-hasPermi="['kmc:poolstrategy:remove']">删除</el-button>
+        <el-button type="danger" plain icon="Delete" :disabled="multiple" @click="handleDelete()" v-hasPermi="['kmc:poolstrategy:remove']"
+          >删除</el-button
+        >
       </el-col>
       <right-toolbar v-model:showSearch="showSearch" @queryTable="getList" />
     </el-row>
@@ -33,7 +39,6 @@
       <el-table-column type="selection" width="55" align="center" />
       <el-table-column label="策略ID" align="center" prop="id" width="100" />
       <el-table-column label="算法类型" align="center" prop="algType" />
-      <el-table-column label="密钥用途" align="center" prop="keyUsage" />
       <el-table-column label="低水位阈值" align="center" prop="lowWatermark" />
       <el-table-column label="高水位阈值" align="center" prop="highWatermark" />
       <el-table-column label="状态" align="center" prop="status">
@@ -61,10 +66,9 @@
     <el-dialog :title="dialog.title" v-model="dialog.visible" width="500px" append-to-body>
       <el-form ref="poolStrategyFormRef" :model="form" :rules="rules" label-width="120px">
         <el-form-item label="密码算法类型" prop="algType">
-          <el-input v-model="form.algType" placeholder="请输入密码算法类型 (例如: SM2, RSA2048)" />
-        </el-form-item>
-        <el-form-item label="密钥用途" prop="keyUsage">
-          <el-input v-model="form.keyUsage" placeholder="请输入密钥用途 (如 SIGN, ENCRYPT)" />
+          <el-select v-model="form.algType" placeholder="请选择密码算法类型" filterable style="width: 100%">
+            <el-option v-for="item in algTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
+          </el-select>
         </el-form-item>
         <el-form-item label="低水位阈值" prop="lowWatermark">
           <el-input-number v-model="form.lowWatermark" :min="1" controls-position="right" />
@@ -106,6 +110,11 @@ const ids = ref<Array<string | number>>([]);
 const single = ref(true);
 const multiple = ref(true);
 const total = ref(0);
+const algTypeOptions = [
+  { label: 'SM2', value: 'SM2' },
+  { label: 'RSA2048', value: 'RSA2048' },
+  { label: 'RSA4096', value: 'RSA4096' }
+];
 
 const dialog = reactive<DialogOption>({
   visible: false,
@@ -128,7 +137,7 @@ const data = reactive<PageData<PoolStrategyForm, PoolStrategyQuery>>({
   form: {
     id: undefined,
     algType: '',
-    keyUsage: '',
+    keyUsage: 'ENCRYPT',
     lowWatermark: 10,
     highWatermark: 50,
     status: 1
@@ -141,12 +150,8 @@ const data = reactive<PageData<PoolStrategyForm, PoolStrategyQuery>>({
   },
   rules: {
     algType: [
-      { required: true, message: '密码算法类型不能为空', trigger: 'blur' },
-      { pattern: /^[A-Za-z0-9]+$/, message: '算法类型格式不正确 (字母或数字)', trigger: 'blur' }
-    ],
-    keyUsage: [
-      { required: true, message: '密钥用途不能为空', trigger: 'blur' },
-      { pattern: /^[A-Z_]+$/, message: '用途格式不正确 (大写字母和下划线)', trigger: 'blur' }
+      { required: true, message: '密码算法类型不能为空', trigger: 'change' },
+      { pattern: /^[A-Za-z0-9]+$/, message: '算法类型格式不正确 (字母或数字)', trigger: 'change' }
     ],
     lowWatermark: [
       { required: true, message: '低水位阈值不能为空', trigger: 'blur' },
@@ -189,7 +194,7 @@ const reset = () => {
   form.value = {
     id: undefined,
     algType: '',
-    keyUsage: '',
+    keyUsage: 'ENCRYPT',
     lowWatermark: 10,
     highWatermark: 50,
     status: 1

@@ -107,14 +107,14 @@ const queryParams = reactive<LoginLogQuery>({
 /** 查询登录日志列表 */
 function getList() {
   loading.value = true;
-  
+
   // 处理日期范围
   const query = { ...queryParams };
   if (dateRange.value && dateRange.value.length === 2) {
     query.beginTime = dateRange.value[0];
     query.endTime = dateRange.value[1];
   }
-  
+
   list(query)
     .then((response) => {
       loginLogList.value = response.data.records || response.data.rows || [];

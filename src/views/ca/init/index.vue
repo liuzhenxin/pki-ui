@@ -303,17 +303,17 @@
                 <el-form-item label="增量CRL间隔" prop="deltaCrlIntervals">
                   <el-input-number v-model="rootCaForm.deltaCrlIntervals" :min="0" />
                 </el-form-item>
-                <el-form-item label="全量CRL签发线程" prop="fullCrlThreads">
-                  <el-input-number v-model="rootCaForm.fullCrlThreads" :min="1" :max="100" />
-                </el-form-item>
-                <el-form-item label="增量CRL签发线程" prop="deltaCrlThreads">
-                  <el-input-number v-model="rootCaForm.deltaCrlThreads" :min="1" :max="100" />
-                </el-form-item>
-                <el-form-item label="重叠时间" prop="crlOverlap">
-                  <el-input v-model="rootCaForm.crlOverlap" placeholder="例如: 90d" />
+                <el-form-item label="重叠时间" prop="crlOverlapValue">
+                  <div class="duration-input">
+                    <el-input-number v-model="rootCaForm.crlOverlapValue" :min="1" :precision="0" controls-position="right" />
+                    <el-select v-model="rootCaForm.crlOverlapUnit" class="duration-unit">
+                      <el-option label="小时" value="h" />
+                      <el-option label="天" value="d" />
+                    </el-select>
+                  </div>
                 </el-form-item>
                 <el-form-item label="更新时间点" prop="crlIntervalTime">
-                  <el-input v-model="rootCaForm.crlIntervalTime" placeholder="例如: 01:00" />
+                  <el-input v-model="rootCaForm.crlIntervalTime" placeholder="例如: 00:00" />
                 </el-form-item>
                 <el-form-item label="下一CRL编号" prop="nextCrlNo">
                   <el-input-number v-model="rootCaForm.nextCrlNo" :min="1" />
@@ -715,6 +715,11 @@ const getSkfClient = (): Promise<any> => {
   return skfClientPromise;
 };
 
+function formatDuration(value: any, unit: any) {
+  const numericValue = Number(value);
+  return `${Number.isFinite(numericValue) && numericValue > 0 ? Math.floor(numericValue) : 1}${unit || 'h'}`;
+}
+
 // --- USB Key Monitoring ---
 let usbMonitoringActive = false;
 const monitoredProviders = new Set<string>();
@@ -975,9 +980,11 @@ watch(active, async (newActive) => {
     const defaultC = rootCaForm.subjectItems.find((i: any) => i.type === 'country')?.value || 'CN';
     const defaultO = rootCaForm.subjectItems.find((i: any) => i.type === 'organization')?.value || '';
 
-    // Use "通用证书模板" if available, fallback to any EndEntity template
+    // Prefer the dedicated administrator certificate template, fallback to generic EndEntity templates.
     const eeTemplate =
-      selectedTemplates.value.find((t: any) => t.name === '通用证书模板') || selectedTemplates.value.find((t: any) => t.type === 'EndEntity');
+      selectedTemplates.value.find((t: any) => t.name === '管理员证书模板') ||
+      selectedTemplates.value.find((t: any) => t.name === '通用证书模板') ||
+      selectedTemplates.value.find((t: any) => t.type === 'EndEntity');
     if (eeTemplate) {
       adminForm.profileId = eeTemplate.id;
       await loadProfileToForm(eeTemplate.id, adminForm, {
@@ -1005,9 +1012,11 @@ watch(active, async (newActive) => {
     const defaultC = rootCaForm.subjectItems.find((i: any) => i.type === 'country')?.value || 'CN';
     const defaultO = rootCaForm.subjectItems.find((i: any) => i.type === 'organization')?.value || '';
 
-    // Use "通用证书模板" if available, fallback to any EndEntity template
+    // Prefer the dedicated administrator certificate template, fallback to generic EndEntity templates.
     const eeTemplate =
-      selectedTemplates.value.find((t: any) => t.name === '通用证书模板') || selectedTemplates.value.find((t: any) => t.type === 'EndEntity');
+      selectedTemplates.value.find((t: any) => t.name === '管理员证书模板') ||
+      selectedTemplates.value.find((t: any) => t.name === '通用证书模板') ||
+      selectedTemplates.value.find((t: any) => t.type === 'EndEntity');
     if (eeTemplate) {
       auditorForm.profileId = eeTemplate.id;
       await loadProfileToForm(eeTemplate.id, auditorForm, {
@@ -1103,14 +1112,15 @@ const rootCaForm = reactive({
   validityMode: 'cutoff',
 
   // CRL
-  crlIntervalHours: 24,
-  crlFullIntervals: 90,
-  deltaCrlIntervals: 0,
+  crlIntervalHours: 6,
+  crlFullIntervals: 4,
+  deltaCrlIntervals: 1,
   fullCrlThreads: 1,
   deltaCrlThreads: 1,
-  crlOverlap: '90d',
-  crlIntervalTime: '01:00',
-  nextCrlNo: 2,
+  crlOverlapValue: 1,
+  crlOverlapUnit: 'h',
+  crlIntervalTime: '00:00',
+  nextCrlNo: 1,
 
   // URIs
   cacertUris: [{ value: 'https://myorg.org/rootca1.der' }],
@@ -1867,7 +1877,7 @@ const next = async () => {
               `deltacrl.intervals=${rootCaForm.deltaCrlIntervals}`,
               `fullcrl.threads=${rootCaForm.fullCrlThreads}`,
               `deltacrl.threads=${rootCaForm.deltaCrlThreads}`,
-              `overlap=${rootCaForm.crlOverlap}`,
+              `overlap=${formatDuration(rootCaForm.crlOverlapValue, rootCaForm.crlOverlapUnit)}`,
               `interval.time=${rootCaForm.crlIntervalTime}`
             ];
 
@@ -2265,6 +2275,17 @@ onMounted(async () => {
   width: 100%;
 
   .validity-unit {
+    width: 88px;
+  }
+}
+
+.duration-input {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 88px;
+  gap: 8px;
+  width: 100%;
+
+  .duration-unit {
     width: 88px;
   }
 }

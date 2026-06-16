@@ -12,6 +12,7 @@
           <el-option label="停止中" value="STOPPING" />
           <el-option label="已停止" value="STOPPED" />
           <el-option label="已完成" value="COMPLETED" />
+          <el-option label="已完成，有失败记录" value="COMPLETED_WITH_FAILURES" />
           <el-option label="失败" value="FAILED" />
         </el-select>
       </el-form-item>
@@ -35,13 +36,13 @@
       <el-table-column label="进度" align="center" width="200">
         <template #default="scope">
           <div v-if="scope.row.totalFiles > 0">
-            <el-progress 
-              :percentage="Math.floor((scope.row.migratedFiles / scope.row.totalFiles) * 100)" 
-              :status="scope.row.status === 'COMPLETED' ? 'success' : (scope.row.status === 'FAILED' ? 'exception' : '')"
+            <el-progress
+              :percentage="Math.floor((scope.row.migratedFiles / scope.row.totalFiles) * 100)"
+              :status="
+                ['COMPLETED', 'COMPLETED_WITH_FAILURES'].includes(scope.row.status) ? 'success' : scope.row.status === 'FAILED' ? 'exception' : ''
+              "
             />
-            <div style="font-size: 12px; color: #909399;">
-              {{ scope.row.migratedFiles }} / {{ scope.row.totalFiles }}
-            </div>
+            <div style="font-size: 12px; color: #909399">{{ scope.row.migratedFiles }} / {{ scope.row.totalFiles }}</div>
           </div>
           <span v-else>-</span>
         </template>
@@ -58,10 +59,51 @@
       </el-table-column>
       <el-table-column label="操作" align="center" class-name="small-padding fixed-width" width="250">
         <template #default="scope">
-          <el-button link type="primary" icon="VideoPlay" @click="handleStart(scope.row)" v-if="['PENDING', 'STOPPED', 'FAILED'].includes(scope.row.status)" v-hasPermi="['nas:migration:edit']">启动</el-button>
-          <el-button link type="warning" icon="VideoPause" @click="handleStop(scope.row)" v-if="['RUNNING', 'STARTING'].includes(scope.row.status)" v-hasPermi="['nas:migration:edit']">停止</el-button>
-          <el-button link type="primary" icon="Edit" @click="handleUpdate(scope.row)" v-if="['PENDING', 'STOPPED', 'FAILED'].includes(scope.row.status)" v-hasPermi="['nas:migration:edit']">修改</el-button>
-          <el-button link type="danger" icon="Delete" @click="handleDelete(scope.row)" v-if="['PENDING', 'STOPPED', 'FAILED', 'COMPLETED'].includes(scope.row.status)" v-hasPermi="['nas:migration:remove']">删除</el-button>
+          <el-button
+            link
+            type="primary"
+            icon="VideoPlay"
+            @click="handleStart(scope.row)"
+            v-if="['PENDING', 'STOPPED', 'FAILED'].includes(scope.row.status)"
+            v-hasPermi="['nas:migration:edit']"
+            >启动</el-button
+          >
+          <el-button
+            link
+            type="warning"
+            icon="VideoPause"
+            @click="handleStop(scope.row)"
+            v-if="['RUNNING', 'STARTING'].includes(scope.row.status)"
+            v-hasPermi="['nas:migration:edit']"
+            >停止</el-button
+          >
+          <el-button
+            link
+            type="primary"
+            icon="Edit"
+            @click="handleUpdate(scope.row)"
+            v-if="['PENDING', 'STOPPED', 'FAILED'].includes(scope.row.status)"
+            v-hasPermi="['nas:migration:edit']"
+            >修改</el-button
+          >
+          <el-button
+            link
+            type="danger"
+            icon="Delete"
+            @click="handleDelete(scope.row)"
+            v-if="['PENDING', 'STOPPED', 'FAILED', 'COMPLETED', 'COMPLETED_WITH_FAILURES'].includes(scope.row.status)"
+            v-hasPermi="['nas:migration:remove']"
+            >删除</el-button
+          >
+          <el-button
+            link
+            type="warning"
+            icon="Refresh"
+            @click="handleRemigrate(scope.row)"
+            v-if="['STOPPED', 'FAILED', 'COMPLETED', 'COMPLETED_WITH_FAILURES'].includes(scope.row.status)"
+            v-hasPermi="['nas:migration:remigrate']"
+            >重新迁移</el-button
+          >
           <el-button link type="info" icon="InfoFilled" @click="handleDetail(scope.row)">详情</el-button>
         </template>
       </el-table-column>
@@ -76,7 +118,11 @@
           <el-input v-model="form.name" placeholder="请输入任务名称" />
         </el-form-item>
         <el-form-item label="源路径" prop="sourcePath">
-          <el-input v-model="form.sourcePath" placeholder="请输入源路径 (例如: /data/source)" />
+          <el-input v-model="form.sourcePath" placeholder="请输入源路径 (例如: /data/source)">
+            <template #append>
+              <el-button icon="Files" :loading="sourceFileCountLoading" @click="handleCountSourceFiles">获取文件数</el-button>
+            </template>
+          </el-input>
         </el-form-item>
         <el-form-item label="目标路径" prop="targetPath">
           <el-input v-model="form.targetPath" placeholder="请输入目标路径 (例如: /data/target)" />
@@ -94,7 +140,7 @@
     </el-dialog>
 
     <!-- 任务详情对话框 -->
-    <el-dialog title="任务详情" v-model="detailOpen" width="700px" append-to-body>
+    <el-dialog title="任务详情" v-model="detailOpen" width="980px" append-to-body>
       <el-descriptions :column="1" border>
         <el-descriptions-item label="任务名称">{{ detailForm.name }}</el-descriptions-item>
         <el-descriptions-item label="状态">
@@ -103,12 +149,58 @@
         <el-descriptions-item label="源路径">{{ detailForm.sourcePath }}</el-descriptions-item>
         <el-descriptions-item label="目标路径">{{ detailForm.targetPath }}</el-descriptions-item>
         <el-descriptions-item label="进度">
-           {{ detailForm.migratedFiles }} / {{ detailForm.totalFiles }} ({{ detailForm.totalFiles > 0 ? Math.floor((detailForm.migratedFiles / detailForm.totalFiles) * 100) : 0 }}%)
+          {{ detailForm.migratedFiles }} / {{ detailForm.totalFiles }} ({{
+            detailForm.totalFiles > 0 ? Math.floor((detailForm.migratedFiles / detailForm.totalFiles) * 100) : 0
+          }}%)
         </el-descriptions-item>
         <el-descriptions-item label="最后处理文件">{{ detailForm.lastProcessedFile || '-' }}</el-descriptions-item>
         <el-descriptions-item label="消息/错误">{{ detailForm.message || '-' }}</el-descriptions-item>
         <el-descriptions-item label="描述">{{ detailForm.description || '-' }}</el-descriptions-item>
       </el-descriptions>
+
+      <el-divider content-position="left">迁移失败记录</el-divider>
+      <el-table v-loading="failureLoading" :data="failureRecordList" border size="small" empty-text="暂无失败记录">
+        <el-table-column label="文件" prop="relativePath" min-width="220" :show-overflow-tooltip="true" />
+        <el-table-column label="失败原因" prop="failureReason" min-width="140" :show-overflow-tooltip="true" />
+        <el-table-column label="失败大小" prop="failedFileSize" width="90" align="center" />
+        <el-table-column label="失败修改时间" prop="failedLastModifiedTime" width="170" align="center">
+          <template #default="scope">
+            <span>{{ parseTime(scope.row.failedLastModifiedTime) || '-' }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="状态" prop="status" width="110" align="center">
+          <template #default="scope">
+            <el-tag :type="getFailureStatusTag(scope.row.status)">{{ getFailureStatusLabel(scope.row.status) }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="重试次数" prop="retryCount" width="90" align="center" />
+        <el-table-column label="最后重试时间" prop="lastRetryTime" width="170" align="center">
+          <template #default="scope">
+            <span>{{ parseTime(scope.row.lastRetryTime) || '-' }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="重试消息" prop="retryMessage" min-width="140" :show-overflow-tooltip="true" />
+        <el-table-column label="操作" width="100" align="center" fixed="right">
+          <template #default="scope">
+            <el-button
+              v-if="scope.row.status !== 'RETRIED_SUCCESS'"
+              link
+              type="primary"
+              icon="Refresh"
+              @click="handleRetryFailure(scope.row)"
+              v-hasPermi="['nas:migration:failure:retry']"
+              >重新迁移</el-button
+            >
+          </template>
+        </el-table-column>
+      </el-table>
+      <pagination
+        v-show="failureTotal > 0"
+        :total="failureTotal"
+        v-model:page="failureQueryParams.pageNum"
+        v-model:limit="failureQueryParams.pageSize"
+        @pagination="getFailureRecords"
+      />
       <template #footer>
         <div class="dialog-footer">
           <el-button @click="detailOpen = false">关 闭</el-button>
@@ -118,8 +210,20 @@
   </div>
 </template>
 
-<script setup name="MigrationTask">
-import { listTask, getTask, delTask, addTask, updateTask, startTask, stopTask } from "@/api/nas/migrationTask";
+<script setup name="MigrationTask" lang="ts">
+import {
+  listTask,
+  getTask,
+  delTask,
+  addTask,
+  updateTask,
+  startTask,
+  stopTask,
+  remigrateTask,
+  countSourceFiles,
+  listFailureRecords,
+  retryFailureRecord
+} from '@/api/nas/migrationTask';
 
 const { proxy } = getCurrentInstance();
 
@@ -129,7 +233,11 @@ const detailOpen = ref(false);
 const loading = ref(true);
 const showSearch = ref(true);
 const total = ref(0);
-const title = ref("");
+const failureLoading = ref(false);
+const sourceFileCountLoading = ref(false);
+const failureRecordList = ref([]);
+const failureTotal = ref(0);
+const title = ref('');
 const taskFormRef = ref();
 const queryFormRef = ref();
 const refreshTimer = ref(null);
@@ -143,34 +251,41 @@ const data = reactive({
     name: undefined,
     status: undefined
   },
+  failureQueryParams: {
+    pageNum: 1,
+    pageSize: 10,
+    taskId: undefined
+  },
   rules: {
-    name: [{ required: true, message: "任务名称不能为空", trigger: "blur" }],
-    sourcePath: [{ required: true, message: "源路径不能为空", trigger: "blur" }],
-    targetPath: [{ required: true, message: "目标路径不能为空", trigger: "blur" }]
+    name: [{ required: true, message: '任务名称不能为空', trigger: 'blur' }],
+    sourcePath: [{ required: true, message: '源路径不能为空', trigger: 'blur' }],
+    targetPath: [{ required: true, message: '目标路径不能为空', trigger: 'blur' }]
   }
 });
 
-const { queryParams, form, detailForm, rules } = toRefs(data);
+const { queryParams, failureQueryParams, form, detailForm, rules } = toRefs(data);
 
 /** 查询迁移任务列表 */
 function getList(silent = false) {
   if (!silent) loading.value = true;
-  listTask(queryParams.value).then(response => {
-    const data = response.data || {};
-    taskList.value = data.records || data.rows || [];
-    total.value = Number(data.total) || 0;
-    loading.value = false;
-    
-    // 检查是否需要开启轮询：如果存在正在运行、启动中或停止中的任务
-    const hasActiveTask = taskList.value.some(t => ['RUNNING', 'STARTING', 'STOPPING'].includes(t.status));
-    if (hasActiveTask) {
-      startPolling();
-    } else {
-      stopPolling();
-    }
-  }).catch(() => {
-    loading.value = false;
-  });
+  listTask(queryParams.value)
+    .then((response) => {
+      const data = response?.data || response || {};
+      taskList.value = data.records || data.rows || [];
+      total.value = Number(data.total) || 0;
+      loading.value = false;
+
+      // 检查是否需要开启轮询：如果存在正在运行、启动中或停止中的任务
+      const hasActiveTask = taskList.value.some((t) => ['RUNNING', 'STARTING', 'STOPPING'].includes(t.status));
+      if (hasActiveTask) {
+        startPolling();
+      } else {
+        stopPolling();
+      }
+    })
+    .catch(() => {
+      loading.value = false;
+    });
 }
 
 /** 启动轮询 */
@@ -227,42 +342,80 @@ function resetQuery() {
 function handleAdd() {
   reset();
   open.value = true;
-  title.value = "添加迁移任务";
+  title.value = '添加迁移任务';
 }
 
 /** 修改按钮操作 */
 function handleUpdate(row) {
   reset();
   const id = row.id;
-  getTask(id).then(response => {
+  getTask(id).then((response) => {
     form.value = response.data;
     open.value = true;
-    title.value = "修改迁移任务";
+    title.value = '修改迁移任务';
   });
 }
 
 /** 详情按钮操作 */
 function handleDetail(row) {
   const id = row.id;
-  getTask(id).then(response => {
+  getTask(id).then((response) => {
     detailForm.value = response.data;
+    failureQueryParams.value.pageNum = 1;
+    failureQueryParams.value.taskId = id;
+    getFailureRecords();
     detailOpen.value = true;
   });
 }
 
+/** 查询迁移失败记录 */
+function getFailureRecords() {
+  if (!failureQueryParams.value.taskId) return;
+  failureLoading.value = true;
+  listFailureRecords(failureQueryParams.value)
+    .then((response) => {
+      const data = response?.data || response || {};
+      failureRecordList.value = data.records || data.rows || [];
+      failureTotal.value = Number(data.total) || 0;
+      failureLoading.value = false;
+    })
+    .catch(() => {
+      failureLoading.value = false;
+    });
+}
+
+/** 获取源路径文件数 */
+function handleCountSourceFiles() {
+  const sourcePath = form.value.sourcePath?.trim();
+  if (!sourcePath) {
+    proxy.$modal.msgWarning('请先输入源路径');
+    return;
+  }
+
+  sourceFileCountLoading.value = true;
+  countSourceFiles(sourcePath)
+    .then((response) => {
+      const count = response?.data ?? response ?? 0;
+      proxy.$modal.msgSuccess('源路径文件数：' + count);
+    })
+    .finally(() => {
+      sourceFileCountLoading.value = false;
+    });
+}
+
 /** 提交按钮 */
 function submitForm() {
-  taskFormRef.value.validate(valid => {
+  taskFormRef.value.validate((valid) => {
     if (valid) {
       if (form.value.id !== undefined) {
-        updateTask(form.value).then(response => {
-          proxy.$modal.msgSuccess("修改成功");
+        updateTask(form.value).then((response) => {
+          proxy.$modal.msgSuccess('修改成功');
           open.value = false;
           getList();
         });
       } else {
-        addTask(form.value).then(response => {
-          proxy.$modal.msgSuccess("新增成功");
+        addTask(form.value).then((response) => {
+          proxy.$modal.msgSuccess('新增成功');
           open.value = false;
           getList();
         });
@@ -274,32 +427,73 @@ function submitForm() {
 /** 删除按钮操作 */
 function handleDelete(row) {
   const ids = row.id;
-  proxy?.$modal.confirm('是否确认删除任务编号为"' + ids + '"的数据项？').then(function() {
-    return delTask(ids);
-  }).then(() => {
-    getList();
-    proxy.$modal.msgSuccess("删除成功");
-  }).catch(() => {});
+  proxy?.$modal
+    .confirm('是否确认删除任务编号为"' + ids + '"的数据项？')
+    .then(function () {
+      return delTask(ids);
+    })
+    .then(() => {
+      getList();
+      proxy.$modal.msgSuccess('删除成功');
+    })
+    .catch(() => {});
 }
 
 /** 启动任务 */
 function handleStart(row) {
-  proxy?.$modal.confirm('是否确认启动任务 "' + row.name + '"？').then(function() {
-    return startTask(row.id);
-  }).then(() => {
-    getList();
-    proxy.$modal.msgSuccess("任务启动中");
-  }).catch(() => {});
+  proxy?.$modal
+    .confirm('是否确认启动任务 "' + row.name + '"？')
+    .then(function () {
+      return startTask(row.id);
+    })
+    .then(() => {
+      getList();
+      proxy.$modal.msgSuccess('任务启动中');
+    })
+    .catch(() => {});
 }
 
 /** 停止任务 */
 function handleStop(row) {
-  proxy?.$modal.confirm('是否确认停止任务 "' + row.name + '"？').then(function() {
-    return stopTask(row.id);
-  }).then(() => {
-    getList();
-    proxy.$modal.msgSuccess("停止请求已发送");
-  }).catch(() => {});
+  proxy?.$modal
+    .confirm('是否确认停止任务 "' + row.name + '"？')
+    .then(function () {
+      return stopTask(row.id);
+    })
+    .then(() => {
+      getList();
+      proxy.$modal.msgSuccess('停止请求已发送');
+    })
+    .catch(() => {});
+}
+
+/** 重新迁移任务 */
+function handleRemigrate(row) {
+  proxy?.$modal
+    .confirm('是否确认删除任务 "' + row.name + '" 已迁移的目标文件并重新迁移？')
+    .then(function () {
+      return remigrateTask(row.id);
+    })
+    .then(() => {
+      getList();
+      proxy.$modal.msgSuccess('重新迁移已提交');
+    })
+    .catch(() => {});
+}
+
+/** 重新迁移失败记录 */
+function handleRetryFailure(row) {
+  proxy?.$modal
+    .confirm('是否确认重新迁移文件 "' + row.relativePath + '"？')
+    .then(function () {
+      return retryFailureRecord(row.id);
+    })
+    .then(() => {
+      getFailureRecords();
+      getList(true);
+      proxy.$modal.msgSuccess('重新迁移完成');
+    })
+    .catch(() => {});
 }
 
 /** 状态标签类型 */
@@ -311,6 +505,7 @@ function getStatusTag(status) {
     'STOPPING': 'warning',
     'STOPPED': 'danger',
     'COMPLETED': 'success',
+    'COMPLETED_WITH_FAILURES': 'warning',
     'FAILED': 'danger'
   };
   return tags[status] || 'info';
@@ -325,7 +520,28 @@ function getStatusLabel(status) {
     'STOPPING': '停止中',
     'STOPPED': '已停止',
     'COMPLETED': '已完成',
+    'COMPLETED_WITH_FAILURES': '已完成，有失败记录',
     'FAILED': '失败'
+  };
+  return labels[status] || status;
+}
+
+/** 失败记录状态标签类型 */
+function getFailureStatusTag(status) {
+  const tags = {
+    'PENDING': 'danger',
+    'RETRIED_SUCCESS': 'success',
+    'RETRY_FAILED': 'warning'
+  };
+  return tags[status] || 'info';
+}
+
+/** 失败记录状态文字 */
+function getFailureStatusLabel(status) {
+  const labels = {
+    'PENDING': '待处理',
+    'RETRIED_SUCCESS': '重迁成功',
+    'RETRY_FAILED': '重迁失败'
   };
   return labels[status] || status;
 }

@@ -164,7 +164,7 @@ const approveRules = reactive<FormRules>({
   operatorUkeySn: [{ required: true, message: '请输入UKEY序列号', trigger: 'blur' }]
 });
 
-const statusText = (status?: string) => ({ APPROVED: '通过', REJECTED: '拒绝', PENDING: '待审批' }[status || ''] || status || '-');
+const statusText = (status?: string) => ({ APPROVED: '通过', REJECTED: '拒绝', PENDING: '待审批' })[status || ''] || status || '-';
 
 const resetForm = () => {
   Object.assign(form, { id: undefined, targetId: undefined, targetType: 'ARCHIVE_KEY', operator: '', status: 'PENDING', reason: '' });

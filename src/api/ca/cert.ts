@@ -147,3 +147,57 @@ export function revokeCert(data: any): Promise<Result<any>> {
     data: data
   }) as any;
 }
+
+// 双证书续期
+export function renewDualCert(data: any): Promise<Result<any>> {
+  return request({
+    url: '/ca/v1/certs/renew-dual',
+    method: 'post',
+    data: data
+  }) as any;
+}
+
+// 双证书更新
+export function updateDualCert(data: any): Promise<Result<any>> {
+  return request({
+    url: '/ca/v1/certs/update-dual',
+    method: 'post',
+    data: data
+  }) as any;
+}
+
+// 双证书补办
+export function reissueDualCert(data: any): Promise<Result<any>> {
+  return request({
+    url: '/ca/v1/certs/reissue-dual',
+    method: 'post',
+    data: data
+  }) as any;
+}
+
+// 双证书冻结
+export function suspendDualCert(data: any): Promise<Result<any>> {
+  return request({
+    url: '/ca/v1/certs/suspend-dual',
+    method: 'put',
+    data: data
+  }) as any;
+}
+
+// 双证书解冻
+export function resumeDualCert(data: any): Promise<Result<any>> {
+  return request({
+    url: '/ca/v1/certs/resume-dual',
+    method: 'put',
+    data: data
+  }) as any;
+}
+
+// 双证书吊销
+export function revokeDualCert(data: any): Promise<Result<any>> {
+  return request({
+    url: '/ca/v1/certs/revoke-dual',
+    method: 'put',
+    data: data
+  }) as any;
+}

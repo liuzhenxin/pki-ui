@@ -89,22 +89,48 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="detailDialog.visible" title="CA机构详情" width="560px" append-to-body>
-      <el-descriptions :column="1" border>
-        <el-descriptions-item label="ID">{{ detail.id || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="CA名称">{{ detail.name || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="状态">{{ formatStatus(detail.status) }}</el-descriptions-item>
-        <el-descriptions-item label="通信证书主题">{{ detail.certSubject || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="通信证书颁发者">{{ detail.certIssuer || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="通信证书序列号">{{ detail.certSerialNumber || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="通信证书有效期">
-          {{ detail.certNotBefore || '-' }} 至 {{ detail.certNotAfter || '-' }}
+    <el-dialog v-model="detailDialog.visible" title="CA机构详情" width="760px" append-to-body class="kmc-ca-detail-dialog">
+      <div class="detail-summary">
+        <div class="detail-title">
+          <span class="detail-name">{{ detail.name || '-' }}</span>
+          <el-tag :type="isEnabled(detail.status) ? 'success' : 'info'" size="small">{{ formatStatus(detail.status) }}</el-tag>
+        </div>
+        <div class="detail-subtitle">
+          <span>ID：{{ detail.id || '-' }}</span>
+          <span>通信证书：{{ detail.certFingerprintSha256 ? '已配置' : '未配置' }}</span>
+        </div>
+      </div>
+
+      <el-descriptions class="kmc-ca-detail" :column="2" border>
+        <el-descriptions-item label="证书主题" :span="2">
+          <span class="detail-text">{{ detail.certSubject || '-' }}</span>
         </el-descriptions-item>
-        <el-descriptions-item label="通信证书指纹">{{ detail.certFingerprintSha256 || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="描述">{{ detail.description || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="颁发者" :span="2">
+          <span class="detail-text">{{ detail.certIssuer || '-' }}</span>
+        </el-descriptions-item>
+        <el-descriptions-item label="序列号">
+          <span class="detail-mono">{{ detail.certSerialNumber || '-' }}</span>
+        </el-descriptions-item>
+        <el-descriptions-item label="有效期">
+          <span>{{ formatCertValidity() }}</span>
+        </el-descriptions-item>
+        <el-descriptions-item label="SHA-256指纹" :span="2">
+          <div v-if="detail.certFingerprintSha256" class="fingerprint-row">
+            <span class="detail-mono fingerprint-value">{{ detail.certFingerprintSha256 }}</span>
+            <el-button v-copyText="detail.certFingerprintSha256" v-copyText:callback="copyTextSuccess" link type="primary" icon="DocumentCopy"
+              >复制</el-button
+            >
+          </div>
+          <span v-else>-</span>
+        </el-descriptions-item>
+        <el-descriptions-item label="描述" :span="2">
+          <span class="detail-remark">{{ detail.description || '-' }}</span>
+        </el-descriptions-item>
       </el-descriptions>
       <template #footer>
-        <el-button type="primary" @click="detailDialog.visible = false">关闭</el-button>
+        <div class="dialog-footer">
+          <el-button @click="detailDialog.visible = false">关闭</el-button>
+        </div>
       </template>
     </el-dialog>
 
@@ -207,6 +233,15 @@ const verifyRules = reactive<FormRules>({
 
 const isEnabled = (status?: string) => ['1', 'ENABLED', 'ENABLE'].includes(String(status || '').toUpperCase());
 const formatStatus = (status?: string) => (isEnabled(status) ? '启用' : '停用');
+const formatCertValidity = () => {
+  if (!detail.certNotBefore && !detail.certNotAfter) {
+    return '-';
+  }
+  return `${detail.certNotBefore || '-'} 至 ${detail.certNotAfter || '-'}`;
+};
+const copyTextSuccess = () => {
+  ElMessage.success('复制成功');
+};
 
 const resetForm = () => {
   Object.assign(form, { id: undefined, name: '', type: 'ROOT', status: '1', communicationCertPem: '', description: '' });
@@ -324,4 +359,98 @@ const handleDelete = async (row?: KmcCaVO) => {
 onMounted(getList);
 </script>
 
-<style scoped lang="scss"></style>
+<style scoped lang="scss">
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+}
+
+:deep(.kmc-ca-detail-dialog .el-dialog__body) {
+  padding-top: 8px;
+}
+
+.detail-summary {
+  margin-bottom: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 6px;
+  background: var(--el-fill-color-extra-light);
+}
+
+.detail-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.detail-name {
+  min-width: 0;
+  color: var(--el-text-color-primary);
+  font-size: 16px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail-subtitle {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin-top: 8px;
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+:deep(.kmc-ca-detail .el-descriptions__label) {
+  width: 118px;
+  color: var(--el-text-color-regular);
+  font-weight: 600;
+  background: var(--el-fill-color-lighter);
+}
+
+:deep(.kmc-ca-detail .el-descriptions__content) {
+  min-width: 190px;
+  color: var(--el-text-color-primary);
+  line-height: 22px;
+  word-break: break-word;
+}
+
+.detail-text,
+.detail-remark {
+  display: block;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.detail-mono {
+  color: var(--el-text-color-primary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+  font-size: 12px;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+
+.fingerprint-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.fingerprint-value {
+  flex: 1;
+  min-width: 0;
+}
+
+@media (max-width: 768px) {
+  :deep(.kmc-ca-detail-dialog) {
+    width: calc(100vw - 24px) !important;
+  }
+
+  .fingerprint-row {
+    display: block;
+  }
+}
+</style>

@@ -9,7 +9,7 @@
     <el-form-item label="邮箱" prop="email">
       <el-input v-model="userForm.email" maxlength="50" />
     </el-form-item>
-    
+
     <el-form-item>
       <el-button type="primary" @click="submit">保存</el-button>
       <el-button type="danger" @click="close">关闭</el-button>

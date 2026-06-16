@@ -21,7 +21,9 @@
         <el-button type="success" plain icon="Edit" :disabled="single" @click="handleUpdate()" v-hasPermi="['kmc:archivekey:modify']">修改</el-button>
       </el-col>
       <el-col :span="1.5">
-        <el-button type="danger" plain icon="Delete" :disabled="multiple" @click="handleDelete()" v-hasPermi="['kmc:archivekey:remove']">删除</el-button>
+        <el-button type="danger" plain icon="Delete" :disabled="multiple" @click="handleDelete()" v-hasPermi="['kmc:archivekey:remove']"
+          >删除</el-button
+        >
       </el-col>
       <right-toolbar v-model:showSearch="showSearch" @queryTable="getList" />
     </el-row>
@@ -39,6 +41,9 @@
       </el-table-column>
       <el-table-column label="操作" align="center" class-name="small-padding fixed-width">
         <template #default="scope">
+          <el-tooltip content="密钥恢复" placement="top">
+            <el-button link type="primary" icon="Key" @click="handleRecovery(scope.row)" v-hasPermi="['kmc:keyrecovery:submit']" />
+          </el-tooltip>
           <el-tooltip content="修改" placement="top">
             <el-button link type="primary" icon="Edit" @click="handleUpdate(scope.row)" v-hasPermi="['kmc:archivekey:modify']" />
           </el-tooltip>
@@ -77,6 +82,8 @@
         </div>
       </template>
     </el-dialog>
+
+    <KeyRecoveryDialog ref="keyRecoveryDialogRef" />
   </div>
 </template>
 
@@ -87,9 +94,11 @@ import type { FormInstance } from 'element-plus';
 import { listArchiveKey, getArchiveKey, delArchiveKey, addArchiveKey, updateArchiveKey } from '@/api/kmc/archiveKey/index';
 import { ArchiveKeyVO, ArchiveKeyQuery, ArchiveKeyForm } from '@/api/kmc/archiveKey/types';
 import { readKmcPage, unwrapKmcData } from '@/api/kmc/common';
+import KeyRecoveryDialog from '@/views/kmc/components/KeyRecoveryDialog.vue';
 
 const queryFormRef = ref<FormInstance>();
 const archiveKeyFormRef = ref<FormInstance>();
+const keyRecoveryDialogRef = ref<InstanceType<typeof KeyRecoveryDialog>>();
 const archiveKeyList = ref<ArchiveKeyVO[]>([]);
 const loading = ref(true);
 const showSearch = ref(true);
@@ -190,6 +199,15 @@ const handleUpdate = async (row?: ArchiveKeyVO) => {
 
   dialog.visible = true;
   dialog.title = '修改归档密钥';
+};
+
+const handleRecovery = (row: ArchiveKeyVO) => {
+  keyRecoveryDialogRef.value?.open({
+    targetType: 'ARCHIVE_KEY',
+    targetId: row.id,
+    serialNumber: row.serialNumber,
+    subject: row.subject
+  });
 };
 
 const submitForm = () => {

@@ -6,7 +6,13 @@
         <lang-select />
       </div>
       <el-form-item v-if="tenantEnabled" prop="tenantId">
-        <el-select v-model="registerForm.tenantId" filterable :placeholder="proxy.$t('register.selectPlaceholder')" style="width: 100%" @change="handleTenantChange">
+        <el-select
+          v-model="registerForm.tenantId"
+          filterable
+          :placeholder="proxy.$t('register.selectPlaceholder')"
+          style="width: 100%"
+          @change="handleTenantChange"
+        >
           <el-option v-for="item in tenantList" :key="item.tenantId" :label="item.companyName" :value="item.tenantId"> </el-option>
           <template #prefix><svg-icon icon-class="company" class="el-input__icon input-icon" /></template>
         </el-select>

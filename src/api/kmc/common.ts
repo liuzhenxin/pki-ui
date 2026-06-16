@@ -17,4 +17,3 @@ export const readKmcPage = <T = any>(res: any): KmcPageResult<T> => {
     total
   };
 };
-

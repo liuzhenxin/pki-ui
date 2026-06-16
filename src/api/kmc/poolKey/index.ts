@@ -16,13 +16,6 @@ export const allocatePoolKeyByType = (algType: string, keyUsage: string) => {
   });
 };
 
-export const releasePoolKey = (keyId: string | number) => {
-  return request({
-    url: `/kmc/v1/pool-keys/${keyId}/release`,
-    method: 'delete'
-  });
-};
-
 export const batchAllocatePoolKey = (strategyId: string | number, count: number) => {
   return request({
     url: '/kmc/v1/pool-keys/batch-allocate',
@@ -30,4 +23,3 @@ export const batchAllocatePoolKey = (strategyId: string | number, count: number)
     params: { strategyId, count }
   });
 };
-

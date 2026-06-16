@@ -51,7 +51,23 @@
       <el-table-column label="操作" align="center" class-name="small-padding" width="380">
         <template #default="scope">
           <el-button link type="primary" icon="View" @click="handleView(scope.row)" v-hasPermi="['ca:root:detail']">详情</el-button>
-          <el-button link type="primary" icon="Download" @click="handleDownload(scope.row)" v-hasPermi="['ca:root:download']">下载</el-button>
+          <el-dropdown
+            trigger="click"
+            @command="(command: string) => handleDownload(scope.row, command)"
+            v-hasPermi="['ca:root:download']"
+          >
+            <el-button link type="primary" icon="Download">
+              下载<el-icon class="el-icon--right"><arrow-down /></el-icon>
+            </el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="cert-der">根证书（DER）</el-dropdown-item>
+                <el-dropdown-item command="cert-pem">根证书（PEM）</el-dropdown-item>
+                <el-dropdown-item command="chain-der">证书链（DER）</el-dropdown-item>
+                <el-dropdown-item command="chain-pem">证书链（PEM）</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
           <el-button link type="success" icon="Stamp" @click="handleAuthorizeProfile(scope.row)" v-hasPermi="['ca:root:authorize']"
             >授权模板</el-button
           >
@@ -76,7 +92,7 @@
     <pagination v-show="total > 0" :total="total" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" @pagination="getList" />
 
     <!-- 创建证书对话框 -->
-    <el-dialog :title="title" v-model="open" width="600px" append-to-body>
+    <el-dialog class="root-cert-dialog" :title="title" v-model="open" width="960px" append-to-body>
       <el-tabs v-model="activeTab">
         <el-tab-pane v-if="dialogType === 'root'" label="自签根证书" name="self">
           <el-form :model="selfForm" :rules="selfRules" ref="selfFormRef" label-width="140px">
@@ -100,14 +116,13 @@
 
               <el-tab-pane label="有效期配置">
                 <el-form-item label="最大有效期" prop="validity">
-                  <el-input v-model.number="selfForm.validity" placeholder="请输入正整数" style="width: 100%">
-                    <template #append>
-                      <el-select v-model="selfForm.validityUnit" style="width: 80px">
-                        <el-option label="年" value="y" />
-                        <el-option label="天" value="d" />
-                      </el-select>
-                    </template>
-                  </el-input>
+                  <div class="validity-input">
+                    <el-input-number v-model="selfForm.validity" :min="1" :precision="0" controls-position="right" />
+                    <el-select v-model="selfForm.validityUnit" class="validity-unit">
+                      <el-option label="年" value="y" />
+                      <el-option label="天" value="d" />
+                    </el-select>
+                  </div>
                 </el-form-item>
                 <el-form-item label="过期周期(天)" prop="expirationPeriod">
                   <el-input-number v-model="selfForm.expirationPeriod" :min="1" style="width: 100%" />
@@ -125,6 +140,9 @@
               </el-tab-pane>
 
               <el-tab-pane label="CRL配置">
+                <div class="crl-help-toolbar">
+                  <el-button type="info" text circle :icon="QuestionFilled" @click="showRootCrlHelp = true" />
+                </div>
                 <el-form-item label="更新间隔(小时)" prop="crlIntervalHours">
                   <el-input-number v-model="selfForm.crlIntervalHours" :min="1" style="width: 100%" />
                 </el-form-item>
@@ -134,17 +152,17 @@
                 <el-form-item label="增量CRL间隔" prop="deltaCrlIntervals">
                   <el-input-number v-model="selfForm.deltaCrlIntervals" :min="0" style="width: 100%" />
                 </el-form-item>
-                <el-form-item label="全量CRL签发线程" prop="fullCrlThreads">
-                  <el-input-number v-model="selfForm.fullCrlThreads" :min="1" :max="100" style="width: 100%" />
-                </el-form-item>
-                <el-form-item label="增量CRL签发线程" prop="deltaCrlThreads">
-                  <el-input-number v-model="selfForm.deltaCrlThreads" :min="1" :max="100" style="width: 100%" />
-                </el-form-item>
-                <el-form-item label="重叠时间" prop="crlOverlap">
-                  <el-input v-model="selfForm.crlOverlap" placeholder="例如: 90d" />
+                <el-form-item label="重叠时间" prop="crlOverlapValue">
+                  <div class="duration-input">
+                    <el-input-number v-model="selfForm.crlOverlapValue" :min="1" :precision="0" controls-position="right" />
+                    <el-select v-model="selfForm.crlOverlapUnit" class="duration-unit">
+                      <el-option label="小时" value="h" />
+                      <el-option label="天" value="d" />
+                    </el-select>
+                  </div>
                 </el-form-item>
                 <el-form-item label="更新时间点" prop="crlIntervalTime">
-                  <el-input v-model="selfForm.crlIntervalTime" placeholder="例如: 01:00" />
+                  <el-input v-model="selfForm.crlIntervalTime" placeholder="例如: 00:00" />
                 </el-form-item>
                 <el-form-item label="下一CRL编号" prop="nextCrlNo">
                   <el-input-number v-model="selfForm.nextCrlNo" :min="1" style="width: 100%" />
@@ -209,6 +227,11 @@
                 <el-option v-for="item in certList" :key="item.id" :label="item.name" :value="item.id" />
               </el-select>
             </el-form-item>
+            <el-form-item label="签名者" prop="signerId">
+              <el-select v-model="onlineSubForm.signerId" placeholder="请选择未使用的签名者" @change="onSubSignerChange" style="width: 100%">
+                <el-option v-for="s in availableSubSignerList" :key="s.id" :label="s.name" :value="s.id" />
+              </el-select>
+            </el-form-item>
             <el-form-item label="证书模板" prop="profileId">
               <el-select v-model="onlineSubForm.profileId" placeholder="请选择子CA模板" @change="onSubProfileChange" style="width: 100%">
                 <el-option v-for="item in subCaProfiles" :key="item.id" :label="item.name" :value="item.id" />
@@ -221,14 +244,74 @@
               </el-select>
             </el-form-item>
             <el-form-item label="有效期" prop="validity">
-              <el-input v-model.number="onlineSubForm.validity" style="width: 100%">
-                <template #append>
-                  <el-select v-model="onlineSubForm.validityUnit" style="width: 80px">
-                    <el-option label="年" value="y" />
-                    <el-option label="天" value="d" />
-                  </el-select>
-                </template>
-              </el-input>
+              <div class="validity-input">
+                <el-input-number
+                  v-model="onlineSubForm.validity"
+                  :min="1"
+                  :precision="0"
+                  controls-position="right"
+                  @change="onlineSubFormRef?.validateField('validity')"
+                />
+                <el-select v-model="onlineSubForm.validityUnit" class="validity-unit" @change="onlineSubFormRef?.validateField('validity')">
+                  <el-option label="年" value="y" />
+                  <el-option label="天" value="d" />
+                </el-select>
+              </div>
+            </el-form-item>
+            <el-form-item v-if="onlineSubForm.extensionItems.length > 0" label="扩展信息">
+              <div class="sub-extension-list">
+                <div v-for="(ext, extIndex) in onlineSubForm.extensionItems" :key="ext.key" class="sub-extension-item">
+                  <div class="sub-extension-title">
+                    <span>{{ ext.label }}</span>
+                    <el-tag v-if="ext.required" type="danger" size="small" effect="plain">必填</el-tag>
+                    <el-tag v-else type="info" size="small" effect="plain">可选</el-tag>
+                  </div>
+                  <template v-if="ext.kind === 'subjectAlternativeName'">
+                    <div v-for="(name, nameIndex) in ext.names" :key="`${ext.key}-${nameIndex}`" class="san-row">
+                      <el-select v-model="name.type" placeholder="类型" style="width: 130px">
+                        <el-option v-for="mode in ext.modes" :key="mode" :label="getSanModeLabel(mode)" :value="mode" />
+                      </el-select>
+                      <el-input v-model="name.value" :placeholder="getSanPlaceholder(name.type)" />
+                      <el-button icon="Delete" circle :disabled="ext.names.length <= 1" @click="removeSubSanName(extIndex, nameIndex)" />
+                    </div>
+                    <el-button type="primary" link icon="Plus" @click="addSubSanName(extIndex)">添加备用名称</el-button>
+                  </template>
+                  <template v-else-if="ext.kind === 'subjectInfoAccess'">
+                    <div v-for="(access, accessIndex) in ext.accesses" :key="`${ext.key}-${accessIndex}`" class="sia-row">
+                      <el-select
+                        v-model="access.accessMethodOid"
+                        placeholder="访问方法"
+                        style="width: 190px"
+                        @change="onSubSiaAccessMethodChange(extIndex, accessIndex)"
+                      >
+                        <el-option
+                          v-for="method in ext.accessMethods"
+                          :key="method.oid"
+                          :label="method.description || method.oid"
+                          :value="method.oid"
+                        />
+                      </el-select>
+                      <el-select v-model="access.locationType" placeholder="位置类型" style="width: 130px">
+                        <el-option v-for="mode in access.modes" :key="mode" :label="getSanModeLabel(mode)" :value="mode" />
+                      </el-select>
+                      <el-input v-model="access.locationValue" :placeholder="getSanPlaceholder(access.locationType)" />
+                      <el-button icon="Delete" circle :disabled="ext.accesses.length <= 1" @click="removeSubSiaAccess(extIndex, accessIndex)" />
+                    </div>
+                    <el-button type="primary" link icon="Plus" @click="addSubSiaAccess(extIndex)">添加访问位置</el-button>
+                  </template>
+                  <template v-else-if="ext.kind === 'keyUsage'">
+                    <el-checkbox-group v-model="ext.usages" class="key-usage-checkbox-group">
+                      <el-checkbox v-for="usage in keyUsageOptions" :key="usage.value" :label="usage.value">
+                        <span class="key-usage-label">{{ usage.label }}</span>
+                        <span class="key-usage-value">{{ usage.value }}</span>
+                      </el-checkbox>
+                    </el-checkbox-group>
+                  </template>
+                  <template v-else>
+                    <el-input v-model="ext.value" type="textarea" :rows="3" :placeholder="`请输入 ${ext.label} 的 JSON 或文本值`" />
+                  </template>
+                </div>
+              </div>
             </el-form-item>
           </el-form>
         </el-tab-pane>
@@ -268,51 +351,96 @@
       </template>
     </el-dialog>
 
+    <el-drawer v-model="showRootCrlHelp" title="CRL配置说明" direction="rtl" size="520px">
+      <div class="crl-help-content">
+        <h4>签发调度</h4>
+        <p>CRL配置用于控制根CA吊销列表的周期签发。创建根CA后，可在根证书列表的“CRL配置”中维护同一组参数并启动签发线程。</p>
+        <ul>
+          <li><strong>更新间隔(小时)：</strong>签发线程检查CRL的基础周期，单位为小时。</li>
+          <li><strong>全量CRL间隔：</strong>每经过多少个更新间隔签发一次全量CRL。默认4，更新间隔为6小时时即每24小时发布一次。</li>
+          <li><strong>增量CRL间隔：</strong>每经过多少个更新间隔签发一次增量CRL。默认1表示每6小时发布一次；填0表示不启用增量CRL周期签发。</li>
+        </ul>
+        <h4>有效期与编号</h4>
+        <ul>
+          <li><strong>重叠时间：</strong>新旧CRL的有效期重叠窗口，默认1小时，用于覆盖发布延迟和客户端缓存刷新时间。</li>
+          <li><strong>更新时间点：</strong>每天优先触发检查的时间点，格式为HH:mm，例如00:00。</li>
+          <li><strong>下一CRL编号：</strong>下一次签发使用的CRL编号，新建根CA默认从1开始。</li>
+        </ul>
+        <h4>URI配置</h4>
+        <p>CRL URI和Delta CRL URI在“URI配置”页填写，会写入证书扩展，供客户端定位全量CRL和增量CRL发布地址。</p>
+      </div>
+    </el-drawer>
+
     <!-- 详情弹窗 -->
     <el-dialog v-model="showDetail" title="证书详情" width="60%">
       <X509Cert v-if="showDetail" :certPem="currentCertPem" />
     </el-dialog>
 
-    <el-dialog v-model="crlConfigDialog.visible" :title="crlConfigDialog.title" width="720px" append-to-body>
+    <el-card v-if="crlConfigDialog.visible" ref="crlConfigPanelRef" class="crl-config-panel" shadow="never">
+      <template #header>
+        <div class="crl-config-header">
+          <div>
+            <div class="crl-config-title">{{ crlConfigDialog.title }}</div>
+            <div class="crl-config-subtitle">直接在根证书列表下方维护签发策略、发布地址和手动签发操作。</div>
+          </div>
+          <div class="crl-config-actions">
+            <el-tag :type="crlConfigForm.schedulerRunning ? 'success' : 'info'" effect="light">
+              {{ crlConfigForm.schedulerRunning ? '线程运行中' : '线程已停止' }}
+            </el-tag>
+            <el-button link type="primary" @click="refreshCrlConfig">刷新状态</el-button>
+            <el-button link type="info" @click="closeCrlConfig">收起</el-button>
+          </div>
+        </div>
+      </template>
+
       <el-form ref="crlConfigFormRef" :model="crlConfigForm" label-width="150px">
         <el-tabs type="border-card">
           <el-tab-pane label="签发配置">
-            <el-form-item label="线程状态">
-              <el-tag :type="crlConfigForm.schedulerRunning ? 'success' : 'info'">
-                {{ crlConfigForm.schedulerRunning ? '运行中' : '已停止' }}
-              </el-tag>
-            </el-form-item>
-            <el-form-item label="更新间隔(小时)" prop="intervalHours">
-              <el-select v-model="crlConfigForm.intervalHours" style="width: 100%">
-                <el-option v-for="item in [1, 2, 3, 4, 6, 8, 12, 24]" :key="item" :label="item + '小时'" :value="item" />
-              </el-select>
-            </el-form-item>
-            <el-form-item label="全量CRL间隔" prop="fullCrlIntervals">
-              <el-input-number v-model="crlConfigForm.fullCrlIntervals" :min="1" style="width: 100%" />
-            </el-form-item>
-            <el-form-item label="增量CRL间隔" prop="deltaCrlIntervals">
-              <el-input-number v-model="crlConfigForm.deltaCrlIntervals" :min="0" style="width: 100%" />
-            </el-form-item>
-            <el-form-item label="全量CRL签发线程" prop="fullCrlThreads">
-              <el-input-number v-model="crlConfigForm.fullCrlThreads" :min="1" :max="100" style="width: 100%" />
-            </el-form-item>
-            <el-form-item label="增量CRL签发线程" prop="deltaCrlThreads">
-              <el-input-number v-model="crlConfigForm.deltaCrlThreads" :min="1" :max="100" style="width: 100%" />
-            </el-form-item>
-            <el-form-item label="重叠时间" prop="overlap">
-              <el-input v-model="crlConfigForm.overlap" placeholder="例如: 90d" />
-            </el-form-item>
-            <el-form-item label="更新时间点" prop="intervalTime">
-              <el-input v-model="crlConfigForm.intervalTime" placeholder="例如: 01:00" />
-            </el-form-item>
-            <el-form-item label="下一CRL编号" prop="nextCrlNumber">
-              <el-input-number v-model="crlConfigForm.nextCrlNumber" :min="1" style="width: 100%" />
-            </el-form-item>
+            <el-row :gutter="16">
+              <el-col :xs="24" :sm="12" :lg="8">
+                <el-form-item label="更新间隔(小时)" prop="intervalHours">
+                  <el-select v-model="crlConfigForm.intervalHours" style="width: 100%">
+                    <el-option v-for="item in [1, 2, 3, 4, 6, 8, 12, 24]" :key="item" :label="item + '小时'" :value="item" />
+                  </el-select>
+                </el-form-item>
+              </el-col>
+              <el-col :xs="24" :sm="12" :lg="8">
+                <el-form-item label="全量CRL间隔" prop="fullCrlIntervals">
+                  <el-input-number v-model="crlConfigForm.fullCrlIntervals" :min="1" style="width: 100%" />
+                </el-form-item>
+              </el-col>
+              <el-col :xs="24" :sm="12" :lg="8">
+                <el-form-item label="增量CRL间隔" prop="deltaCrlIntervals">
+                  <el-input-number v-model="crlConfigForm.deltaCrlIntervals" :min="0" style="width: 100%" />
+                </el-form-item>
+              </el-col>
+              <el-col :xs="24" :sm="12" :lg="8">
+                <el-form-item label="下一CRL编号" prop="nextCrlNumber">
+                  <el-input-number v-model="crlConfigForm.nextCrlNumber" :min="1" style="width: 100%" />
+                </el-form-item>
+              </el-col>
+              <el-col :xs="24" :sm="12" :lg="8">
+                <el-form-item label="重叠时间" prop="overlapValue">
+                  <div class="duration-input">
+                    <el-input-number v-model="crlConfigForm.overlapValue" :min="1" :precision="0" controls-position="right" />
+                    <el-select v-model="crlConfigForm.overlapUnit" class="duration-unit">
+                      <el-option label="小时" value="h" />
+                      <el-option label="天" value="d" />
+                    </el-select>
+                  </div>
+                </el-form-item>
+              </el-col>
+              <el-col :xs="24" :sm="12" :lg="8">
+                <el-form-item label="更新时间点" prop="intervalTime">
+                  <el-input v-model="crlConfigForm.intervalTime" placeholder="例如: 00:00" />
+                </el-form-item>
+              </el-col>
+            </el-row>
           </el-tab-pane>
           <el-tab-pane label="发布地址">
             <el-form-item v-for="(item, index) in crlConfigForm.crlUris" :key="'cfg-crl-' + index" :label="index === 0 ? '全量CRL URI' : ' '">
-              <div style="display: flex; width: 100%">
-                <el-input v-model="item.value" style="flex: 1; margin-right: 10px" />
+              <div class="uri-row">
+                <el-input v-model="item.value" />
                 <el-button v-if="index === 0" @click="addCrlConfigUri('crlUris')" type="primary" :icon="Plus" circle size="small" />
                 <el-button v-if="index !== 0" @click="removeCrlConfigUri('crlUris', index)" type="danger" :icon="Minus" circle size="small" />
               </div>
@@ -322,8 +450,8 @@
               :key="'cfg-delta-crl-' + index"
               :label="index === 0 ? '增量CRL URI' : ' '"
             >
-              <div style="display: flex; width: 100%">
-                <el-input v-model="item.value" style="flex: 1; margin-right: 10px" />
+              <div class="uri-row">
+                <el-input v-model="item.value" />
                 <el-button v-if="index === 0" @click="addCrlConfigUri('deltaCrlUris')" type="primary" :icon="Plus" circle size="small" />
                 <el-button v-if="index !== 0" @click="removeCrlConfigUri('deltaCrlUris', index)" type="danger" :icon="Minus" circle size="small" />
               </div>
@@ -336,9 +464,9 @@
               </el-select>
             </el-form-item>
             <el-form-item label="发布记录">
-              <el-table :data="crlOperationRecords" border size="small" max-height="220" empty-text="暂无本次操作记录">
-                <el-table-column label="时间" prop="time" width="150" />
-                <el-table-column label="操作" prop="action" width="120" />
+              <el-table :data="crlOperationRecords" size="small" max-height="220" empty-text="暂无本次操作记录">
+                <el-table-column label="时间" prop="time" width="110" />
+                <el-table-column label="操作" prop="action" width="130" />
                 <el-table-column label="CRL编号" prop="crlNo" width="120" />
                 <el-table-column label="目标" prop="publisherName" min-width="150" show-overflow-tooltip />
                 <el-table-column label="结果" prop="status" width="90">
@@ -352,26 +480,23 @@
           </el-tab-pane>
         </el-tabs>
       </el-form>
-      <template #footer>
-        <div class="dialog-footer">
-          <el-button @click="refreshCrlConfig">刷新状态</el-button>
-          <el-button type="primary" @click="submitCrlConfig" v-hasPermi="['ca:root:crl-config']">保 存</el-button>
-          <el-button type="success" @click="issueCrl(false)" v-hasPermi="['ca:root:crl-config']">签发全量CRL</el-button>
-          <el-button type="warning" @click="issueCrl(true)" v-hasPermi="['ca:root:crl-config']">签发增量CRL</el-button>
-          <el-button type="success" plain @click="issueAndPublishCrl(false)" v-if="proxy?.$auth.hasPermiAnd(['ca:root:crl-config', 'ca:crl:publish'])"
-            >签发并发布全量</el-button
-          >
-          <el-button type="warning" plain @click="issueAndPublishCrl(true)" v-if="proxy?.$auth.hasPermiAnd(['ca:root:crl-config', 'ca:crl:publish'])"
-            >签发并发布增量</el-button
-          >
-          <el-button v-if="!crlConfigForm.schedulerRunning" type="primary" @click="startCrlScheduler" v-hasPermi="['ca:root:crl-config']"
-            >启动线程</el-button
-          >
-          <el-button v-else type="danger" @click="stopCrlScheduler" v-hasPermi="['ca:root:crl-config']">停止线程</el-button>
-          <el-button @click="crlConfigDialog.visible = false">关 闭</el-button>
-        </div>
-      </template>
-    </el-dialog>
+
+      <div class="crl-config-footer">
+        <el-button type="primary" @click="submitCrlConfig" v-hasPermi="['ca:root:crl-config']">保 存</el-button>
+        <el-button type="success" @click="issueCrl(false)" v-hasPermi="['ca:root:crl-config']">签发全量CRL</el-button>
+        <el-button type="warning" @click="issueCrl(true)" v-hasPermi="['ca:root:crl-config']">签发增量CRL</el-button>
+        <el-button type="success" plain @click="issueAndPublishCrl(false)" v-if="proxy?.$auth.hasPermiAnd(['ca:root:crl-config', 'ca:crl:publish'])"
+          >签发并发布全量</el-button
+        >
+        <el-button type="warning" plain @click="issueAndPublishCrl(true)" v-if="proxy?.$auth.hasPermiAnd(['ca:root:crl-config', 'ca:crl:publish'])"
+          >签发并发布增量</el-button
+        >
+        <el-button v-if="!crlConfigForm.schedulerRunning" type="primary" @click="startCrlScheduler" v-hasPermi="['ca:root:crl-config']"
+          >启动线程</el-button
+        >
+        <el-button v-else type="danger" @click="stopCrlScheduler" v-hasPermi="['ca:root:crl-config']">停止线程</el-button>
+      </div>
+    </el-card>
 
     <!-- 安全确认对话框 -->
     <SecurityConfirm
@@ -384,7 +509,7 @@
 </template>
 
 <script setup name="RootCert" lang="ts">
-import { ref, reactive, toRefs, getCurrentInstance, ComponentInternalInstance, watch } from 'vue';
+import { ref, reactive, toRefs, getCurrentInstance, ComponentInternalInstance, watch, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage, FormInstance, UploadInstance, UploadProps } from 'element-plus';
 import {
@@ -409,6 +534,7 @@ import { listProfile, getProfile } from '@/api/ca/profile';
 import { listSigner } from '@/api/ca/signer';
 import {
   listRootCa,
+  getRootCa,
   genRootCa,
   enableRootCa,
   disableRootCa,
@@ -443,14 +569,15 @@ const crlConfigDialog = reactive({
 });
 
 const crlConfigForm = reactive({
-  intervalHours: 24,
-  fullCrlIntervals: 90,
-  deltaCrlIntervals: 0,
+  intervalHours: 6,
+  fullCrlIntervals: 4,
+  deltaCrlIntervals: 1,
   fullCrlThreads: 1,
   deltaCrlThreads: 1,
-  overlap: '90d',
-  intervalTime: '01:00',
-  nextCrlNumber: 2,
+  overlapValue: 1,
+  overlapUnit: 'h',
+  intervalTime: '00:00',
+  nextCrlNumber: 1,
   crlUris: [{ value: '' }],
   deltaCrlUris: [{ value: '' }],
   schedulerRunning: false,
@@ -464,6 +591,7 @@ const certList = ref([]);
 const open = ref(false);
 const title = ref('');
 const activeTab = ref('self');
+const showRootCrlHelp = ref(false);
 const showDetail = ref(false);
 const currentCertPem = ref('');
 const dialogType = ref('root'); // 'root' or 'sub'
@@ -499,14 +627,15 @@ const data = reactive({
     keepExpiredCertDays: -1,
     validityMode: 'cutoff',
     // CRL配置
-    crlIntervalHours: 24,
-    crlFullIntervals: 90,
-    deltaCrlIntervals: 0,
+    crlIntervalHours: 6,
+    crlFullIntervals: 4,
+    deltaCrlIntervals: 1,
     fullCrlThreads: 1,
     deltaCrlThreads: 1,
-    crlOverlap: '90d',
-    crlIntervalTime: '01:00',
-    nextCrlNo: 2,
+    crlOverlapValue: 1,
+    crlOverlapUnit: 'h',
+    crlIntervalTime: '00:00',
+    nextCrlNo: 1,
     // URI配置
     cacertUris: [{ value: 'https://myorg.org/rootca1.der' }],
     crlUris: [{ value: 'https://localhost:8081/dummy/crl/?type=crl&name=rootca1' }],
@@ -524,8 +653,10 @@ const data = reactive({
   onlineSubForm: {
     name: '',
     parentCaId: undefined as string | number | undefined,
+    signerId: undefined as string | number | undefined,
     profileId: undefined as string | number | undefined,
     subjectItems: [] as any[],
+    extensionItems: [] as any[],
     keyAlgorithm: 'SM2',
     validity: 5,
     validityUnit: 'y'
@@ -557,16 +688,80 @@ async function loadSigners() {
   } catch (e) {}
 }
 
+function refreshAvailableSubSigners() {
+  const usedSignerIds = new Set(
+    (certList.value || [])
+      .map((item: any) => item.signerId)
+      .filter((id: any) => id !== undefined && id !== null && id !== '')
+      .map((id: any) => String(id))
+  );
+  availableSubSignerList.value = (signerList.value || []).filter((signer: any) => !usedSignerIds.has(String(signer.id)));
+  if (!availableSubSignerList.value.some((signer: any) => String(signer.id) === String(onlineSubForm.value.signerId))) {
+    onlineSubForm.value.signerId = availableSubSignerList.value[0]?.id;
+  }
+  if (onlineSubForm.value.signerId) {
+    onSubSignerChange(onlineSubForm.value.signerId);
+  }
+}
+
+function onSubSignerChange(val: any) {
+  const signer = availableSubSignerList.value.find((s: any) => String(s.id) === String(val));
+  if (signer?.algo) {
+    onlineSubForm.value.keyAlgorithm = signer.algo;
+  }
+}
+
 const parentCas = ref([]);
 const subCaProfiles = ref([]);
+const availableSubSignerList = ref<any[]>([]);
 const subAvailableAlgos = ref(['RSA2048', 'SM2']);
+
+const keyUsageOptions = [
+  { value: 'digitalSignature', label: '数字签名' },
+  { value: 'nonRepudiation', label: '不可否认/内容承诺' },
+  { value: 'keyEncipherment', label: '密钥加密' },
+  { value: 'dataEncipherment', label: '数据加密' },
+  { value: 'keyAgreement', label: '密钥协商' },
+  { value: 'keyCertSign', label: '证书签名' },
+  { value: 'cRLSign', label: 'CRL签名' },
+  { value: 'encipherOnly', label: '仅加密' },
+  { value: 'decipherOnly', label: '仅解密' }
+];
+
+const keyUsageAliasMap: Record<string, string> = {
+  '0': 'digitalSignature',
+  '1': 'nonRepudiation',
+  '2': 'keyEncipherment',
+  '3': 'dataEncipherment',
+  '4': 'keyAgreement',
+  '5': 'keyCertSign',
+  '6': 'cRLSign',
+  '7': 'encipherOnly',
+  '8': 'decipherOnly',
+  contentCommitment: 'nonRepudiation'
+};
+
+function formatDuration(value: any, unit: any) {
+  const numericValue = Number(value);
+  return `${Number.isFinite(numericValue) && numericValue > 0 ? Math.floor(numericValue) : 1}${unit || 'h'}`;
+}
+
+function parseDuration(value: any, defaultValue = 1, defaultUnit = 'h') {
+  const match = String(value || '').trim().match(/^(\d+)\s*([hd])$/i);
+  if (!match) {
+    return { value: defaultValue, unit: defaultUnit };
+  }
+  return { value: Number(match[1]), unit: match[2].toLowerCase() };
+}
 
 const onlineSubRules = {
   parentCaId: [{ required: true, message: '请选择父级CA', trigger: 'change' }],
+  signerId: [{ required: true, message: '请选择签名者', trigger: 'change' }],
   profileId: [{ required: true, message: '请选择证书模板', trigger: 'change' }],
   validity: [
     { required: true, message: '请输入有效期', trigger: 'blur' },
-    { type: 'number', message: '必须为正整数', trigger: 'blur', min: 1 }
+    { type: 'number', message: '必须为正整数', trigger: 'blur', min: 1 },
+    { validator: validateSubCaValidity, trigger: ['blur', 'change'] }
   ]
 };
 
@@ -589,6 +784,7 @@ const selfFormRef = ref<FormInstance>();
 const importFormRef = ref<FormInstance>();
 const onlineSubFormRef = ref<FormInstance>();
 const crlConfigFormRef = ref<FormInstance>();
+const crlConfigPanelRef = ref<any>();
 const uploadRef = ref<UploadInstance>();
 
 /** 解析 X509 日期格式 */
@@ -623,6 +819,317 @@ function formatX509Date(zStr: string): string {
     minute: '2-digit',
     second: '2-digit'
   });
+}
+
+function getSubCaNotAfter(value: number, unit: string): Date {
+  const notAfter = new Date();
+  if (unit === 'd') {
+    notAfter.setDate(notAfter.getDate() + value);
+  } else {
+    notAfter.setFullYear(notAfter.getFullYear() + value);
+  }
+  return notAfter;
+}
+
+function validateSubCaValidity(_rule: any, value: number, callback: (error?: Error) => void) {
+  if (!value || value <= 0 || !onlineSubForm.value.parentCaId) {
+    callback();
+    return;
+  }
+  const parentCa = certList.value.find((item: any) => item.id === onlineSubForm.value.parentCaId);
+  if (!parentCa?.notAfterTime) {
+    callback();
+    return;
+  }
+  const subCaNotAfter = getSubCaNotAfter(value, onlineSubForm.value.validityUnit);
+  if (subCaNotAfter.getTime() > parentCa.notAfterTime) {
+    callback(new Error('子CA有效期不能大于上级根证书有效期'));
+    return;
+  }
+  callback();
+}
+
+function getExtensionTypeMeta(ext: any) {
+  const type = ext?.type;
+  if (typeof type === 'object') {
+    return {
+      oid: type.oid || '',
+      description: type.description || type.name || type.oid || ''
+    };
+  }
+  return {
+    oid: '',
+    description: String(type || '')
+  };
+}
+
+function normalizeExtensionKey(description: string) {
+  return (description || '').replace(/[-_\s]/g, '').toLowerCase();
+}
+
+function getExtensionLabel(ext: any) {
+  const meta = getExtensionTypeMeta(ext);
+  const key = normalizeExtensionKey(meta.description);
+  const labels: Record<string, string> = {
+    subjectalternativename: '主体备用名称',
+    keyusage: '密钥用法',
+    extendedkeyusage: '增强密钥用法',
+    basicconstraints: '基本约束',
+    certificatepolicies: '证书策略',
+    subjectinfoaccess: '主体信息访问'
+  };
+  return labels[key] || meta.description || meta.oid || '扩展信息';
+}
+
+function normalizeKeyUsageValue(usage: any) {
+  const raw =
+    typeof usage === 'string'
+      ? usage
+      : usage?.value || usage?.name || usage?.description || usage?.oid || usage?.keyUsage?.description || usage?.keyUsage?.oid || '';
+  const value = String(raw || '').trim();
+  return keyUsageAliasMap[value] || value;
+}
+
+function getTemplateKeyUsages(ext: any) {
+  const values = (ext?.keyUsage?.usages || [])
+    .map(normalizeKeyUsageValue)
+    .filter((value: string) => keyUsageOptions.some((item) => item.value === value));
+  return Array.from(new Set(values));
+}
+
+function buildSubCaExtensionItems(extensions: any[]) {
+  return (extensions || [])
+    .filter((ext: any) => ext?.inRequest === 'required' || ext?.inRequest === 'optional' || (ext?.required && ext?.subjectAltName))
+    .map((ext: any, index: number) => {
+      const meta = getExtensionTypeMeta(ext);
+      const key = normalizeExtensionKey(meta.description);
+      const modes = ext?.subjectAltName?.modes?.length ? ext.subjectAltName.modes : ['DNSName'];
+      if (key === 'subjectalternativename') {
+        return {
+          key: `${meta.oid || meta.description || 'san'}-${index}`,
+          kind: 'subjectAlternativeName',
+          label: getExtensionLabel(ext),
+          oid: meta.oid,
+          description: meta.description,
+          critical: !!ext.critical,
+          required: ext.inRequest === 'required' || !!ext.required,
+          modes,
+          names: [{ type: modes[0], value: '' }]
+        };
+      }
+      if (key === 'subjectinfoaccess') {
+        const accessMethods = (ext?.subjectInfoAccess?.accesses || []).map((access: any) => ({
+          oid: access?.accessMethod?.oid || '',
+          description: access?.accessMethod?.description || access?.accessMethod?.oid || '',
+          modes: access?.accessLocation?.modes?.length ? access.accessLocation.modes : ['uniformResourceIdentifier']
+        }));
+        const defaultMethod = accessMethods[0] || {
+          oid: '1.3.6.1.5.5.7.48.5',
+          description: 'ad-caRepository',
+          modes: ['uniformResourceIdentifier']
+        };
+        return {
+          key: `${meta.oid || meta.description || 'sia'}-${index}`,
+          kind: 'subjectInfoAccess',
+          label: getExtensionLabel(ext),
+          oid: meta.oid,
+          description: meta.description,
+          critical: !!ext.critical,
+          required: ext.inRequest === 'required' || !!ext.required,
+          accessMethods,
+          accesses: [
+            {
+              accessMethodOid: defaultMethod.oid,
+              locationType: defaultMethod.modes[0],
+              locationValue: '',
+              modes: defaultMethod.modes
+            }
+          ]
+        };
+      }
+      if (key === 'keyusage') {
+        return {
+          key: `${meta.oid || meta.description || 'keyusage'}-${index}`,
+          kind: 'keyUsage',
+          label: getExtensionLabel(ext),
+          oid: meta.oid || '2.5.29.15',
+          description: meta.description || 'keyUsage',
+          critical: !!ext.critical,
+          required: ext.inRequest === 'required' || !!ext.required,
+          usages: getTemplateKeyUsages(ext)
+        };
+      }
+      return {
+        key: `${meta.oid || meta.description || 'ext'}-${index}`,
+        kind: 'generic',
+        label: getExtensionLabel(ext),
+        oid: meta.oid,
+        description: meta.description,
+        critical: !!ext.critical,
+        required: ext.inRequest === 'required' || !!ext.required,
+        value: ''
+      };
+    });
+}
+
+function getSanModeLabel(mode: string) {
+  const labels: Record<string, string> = {
+    DNSName: 'DNS名称',
+    dNSName: 'DNS名称',
+    IPAddress: 'IP地址',
+    iPAddress: 'IP地址',
+    rfc822Name: '邮箱',
+    RFC822Name: '邮箱',
+    uniformResourceIdentifier: 'URI',
+    directoryName: '目录名',
+    registeredID: '注册ID'
+  };
+  return labels[mode] || mode;
+}
+
+function getSanPlaceholder(mode: string) {
+  if (mode === 'IPAddress' || mode === 'iPAddress') return '例如：192.168.1.10';
+  if (mode === 'rfc822Name' || mode === 'RFC822Name') return '例如：user@example.com';
+  if (mode === 'uniformResourceIdentifier') return '例如：https://example.com';
+  return '例如：www.example.com';
+}
+
+function addSubSanName(extIndex: number) {
+  const ext = onlineSubForm.value.extensionItems[extIndex];
+  if (!ext) return;
+  ext.names.push({ type: ext.modes?.[0] || 'DNSName', value: '' });
+}
+
+function removeSubSanName(extIndex: number, nameIndex: number) {
+  const ext = onlineSubForm.value.extensionItems[extIndex];
+  if (!ext || ext.names.length <= 1) return;
+  ext.names.splice(nameIndex, 1);
+}
+
+function getSubSiaAccessMethod(ext: any, oid: string) {
+  return (ext.accessMethods || []).find((method: any) => method.oid === oid) || ext.accessMethods?.[0];
+}
+
+function addSubSiaAccess(extIndex: number) {
+  const ext = onlineSubForm.value.extensionItems[extIndex];
+  if (!ext) return;
+  const method = ext.accessMethods?.[0] || {
+    oid: '1.3.6.1.5.5.7.48.5',
+    description: 'ad-caRepository',
+    modes: ['uniformResourceIdentifier']
+  };
+  ext.accesses.push({
+    accessMethodOid: method.oid,
+    locationType: method.modes?.[0] || 'uniformResourceIdentifier',
+    locationValue: '',
+    modes: method.modes || ['uniformResourceIdentifier']
+  });
+}
+
+function removeSubSiaAccess(extIndex: number, accessIndex: number) {
+  const ext = onlineSubForm.value.extensionItems[extIndex];
+  if (!ext || ext.accesses.length <= 1) return;
+  ext.accesses.splice(accessIndex, 1);
+}
+
+function onSubSiaAccessMethodChange(extIndex: number, accessIndex: number) {
+  const ext = onlineSubForm.value.extensionItems[extIndex];
+  const access = ext?.accesses?.[accessIndex];
+  if (!ext || !access) return;
+  const method = getSubSiaAccessMethod(ext, access.accessMethodOid);
+  access.modes = method?.modes?.length ? method.modes : ['uniformResourceIdentifier'];
+  if (!access.modes.includes(access.locationType)) {
+    access.locationType = access.modes[0];
+  }
+}
+
+function buildSubCaExtensionsPayload() {
+  const extensions = (onlineSubForm.value.extensionItems || [])
+    .map((ext: any) => {
+      if (ext.kind === 'subjectAlternativeName') {
+        const names = (ext.names || [])
+          .filter((name: any) => name.value && String(name.value).trim())
+          .map((name: any) => ({ type: name.type, value: String(name.value).trim() }));
+        if (!names.length) return null;
+        return {
+          type: { oid: ext.oid, description: ext.description },
+          critical: ext.critical,
+          subjectAltName: { names }
+        };
+      }
+      if (ext.kind === 'subjectInfoAccess') {
+        const accesses = (ext.accesses || [])
+          .filter((access: any) => access.locationValue && String(access.locationValue).trim())
+          .map((access: any) => {
+            const method = getSubSiaAccessMethod(ext, access.accessMethodOid);
+            return {
+              accessMethod: {
+                oid: access.accessMethodOid,
+                description: method?.description || access.accessMethodOid
+              },
+              accessLocation: {
+                type: access.locationType,
+                value: String(access.locationValue).trim()
+              }
+            };
+          });
+        if (!accesses.length) return null;
+        return {
+          type: { oid: ext.oid, description: ext.description },
+          critical: ext.critical,
+          subjectInfoAccess: { accesses }
+        };
+      }
+      if (ext.kind === 'keyUsage') {
+        const usages = (ext.usages || []).filter((usage: string) => keyUsageOptions.some((item) => item.value === usage));
+        if (!usages.length) return null;
+        return {
+          type: { oid: ext.oid || '2.5.29.15', description: ext.description || 'keyUsage' },
+          critical: ext.critical,
+          keyUsage: { usages }
+        };
+      }
+      if (!ext.value || !String(ext.value).trim()) return null;
+      let value: any = String(ext.value).trim();
+      try {
+        value = JSON.parse(value);
+      } catch (e) {}
+      return {
+        type: { oid: ext.oid, description: ext.description },
+        critical: ext.critical,
+        value
+      };
+    })
+    .filter(Boolean);
+  return extensions.length ? JSON.stringify(extensions) : undefined;
+}
+
+function validateSubCaExtensions() {
+  for (const ext of onlineSubForm.value.extensionItems || []) {
+    if (!ext.required) continue;
+    if (ext.kind === 'subjectAlternativeName') {
+      const hasValue = (ext.names || []).some((name: any) => name.value && String(name.value).trim());
+      if (!hasValue) {
+        ElMessage.warning(`请输入${ext.label}`);
+        return false;
+      }
+    } else if (ext.kind === 'subjectInfoAccess') {
+      const hasValue = (ext.accesses || []).some((access: any) => access.locationValue && String(access.locationValue).trim());
+      if (!hasValue) {
+        ElMessage.warning(`请输入${ext.label}`);
+        return false;
+      }
+    } else if (ext.kind === 'keyUsage') {
+      if (!ext.usages || ext.usages.length === 0) {
+        ElMessage.warning(`请选择${ext.label}`);
+        return false;
+      }
+    } else if (!ext.value || !String(ext.value).trim()) {
+      ElMessage.warning(`请输入${ext.label}`);
+      return false;
+    }
+  }
+  return true;
 }
 
 /** 解析证书信息 */
@@ -661,6 +1168,7 @@ function parseCertInfo(certPem: string) {
       subject,
       notBefore: formatX509Date(notBefore),
       notAfter: formatX509Date(notAfter),
+      notAfterTime: notAfterDate.getTime(),
       status,
       pem: certPem
     };
@@ -704,6 +1212,8 @@ async function getList() {
           id: item.id,
           name: item.name,
           caStatus: item.caStatus,
+          cert: item.cert,
+          certchain: item.certchain,
           ...certInfo
         };
       })
@@ -746,8 +1256,8 @@ async function handleCommand(command: string) {
     dialogType.value = 'sub';
     title.value = '创建子CA证书';
     activeTab.value = 'online';
-    // 加载子CA模板
-    await loadSubCaProfiles();
+    await Promise.all([loadSubCaProfiles(), loadSigners()]);
+    refreshAvailableSubSigners();
   }
   open.value = true;
 }
@@ -835,6 +1345,8 @@ async function onSubProfileChange(profileId: any) {
         });
         onlineSubForm.value.subjectItems = sortSubjectItems(items);
       }
+
+      onlineSubForm.value.extensionItems = buildSubCaExtensionItems(conf.extensions || []);
     }
   } catch (error) {}
 }
@@ -949,7 +1461,9 @@ async function onProfileChange(profileId: any) {
           selfForm.value.deltaCrlThreads = conf.crlControl.deltaCrlThreads;
         }
         if (conf.crlControl.overlap) {
-          selfForm.value.crlOverlap = conf.crlControl.overlap;
+          const overlap = parseDuration(conf.crlControl.overlap);
+          selfForm.value.crlOverlapValue = overlap.value;
+          selfForm.value.crlOverlapUnit = overlap.unit;
         }
         if (conf.crlControl.intervalTime) {
           selfForm.value.crlIntervalTime = conf.crlControl.intervalTime;
@@ -1004,14 +1518,15 @@ function reset() {
     expirationPeriod: 365,
     keepExpiredCertDays: -1,
     validityMode: 'cutoff',
-    crlIntervalHours: 24,
-    crlFullIntervals: 90,
-    deltaCrlIntervals: 0,
+    crlIntervalHours: 6,
+    crlFullIntervals: 4,
+    deltaCrlIntervals: 1,
     fullCrlThreads: 1,
     deltaCrlThreads: 1,
-    crlOverlap: '90d',
-    crlIntervalTime: '01:00',
-    nextCrlNo: 2,
+    crlOverlapValue: 1,
+    crlOverlapUnit: 'h',
+    crlIntervalTime: '00:00',
+    nextCrlNo: 1,
     cacertUris: [{ value: 'https://myorg.org/rootca1.der' }],
     crlUris: [{ value: 'https://localhost:8081/dummy/crl/?type=crl&name=rootca1' }],
     deltaCrlUris: [{ value: '' }],
@@ -1027,8 +1542,10 @@ function reset() {
   onlineSubForm.value = {
     name: '',
     parentCaId: undefined,
+    signerId: undefined,
     profileId: undefined,
     subjectItems: [],
+    extensionItems: [],
     keyAlgorithm: 'SM2',
     validity: 5,
     validityUnit: 'y'
@@ -1075,7 +1592,7 @@ function submitForm() {
             `deltacrl.intervals=${selfForm.value.deltaCrlIntervals}`,
             `fullcrl.threads=${selfForm.value.fullCrlThreads}`,
             `deltacrl.threads=${selfForm.value.deltaCrlThreads}`,
-            `overlap=${selfForm.value.crlOverlap}`,
+            `overlap=${formatDuration(selfForm.value.crlOverlapValue, selfForm.value.crlOverlapUnit)}`,
             `interval.time=${selfForm.value.crlIntervalTime}`
           ];
 
@@ -1125,12 +1642,16 @@ function submitForm() {
   } else if (activeTab.value === 'online') {
     onlineSubFormRef.value?.validate(async (valid: boolean) => {
       if (valid) {
+        if (!validateSubCaExtensions()) {
+          return;
+        }
         loading.value = true;
         try {
           const reqData = {
             name: onlineSubForm.value.name,
             parentRootId: onlineSubForm.value.parentCaId,
             profileId: onlineSubForm.value.profileId,
+            signerId: onlineSubForm.value.signerId,
             subject: onlineSubForm.value.subjectItems
               .filter((item: any) => item.value)
               .map((item: any) => {
@@ -1139,7 +1660,8 @@ function submitForm() {
               })
               .join(','),
             algo: onlineSubForm.value.keyAlgorithm,
-            maxValidity: onlineSubForm.value.validity + onlineSubForm.value.validityUnit
+            maxValidity: onlineSubForm.value.validity + onlineSubForm.value.validityUnit,
+            extensions: buildSubCaExtensionsPayload()
           };
           const res = await genSubCaOnline(reqData);
           if (res.data) {
@@ -1176,18 +1698,30 @@ const removeUri = (field: 'cacertUris' | 'crlUris' | 'deltaCrlUris' | 'ocspUris'
   selfForm.value[field].splice(index, 1);
 };
 
+function getResultData(res: any) {
+  return res?.data ?? res ?? {};
+}
+
+function toNumberValue(value: any, defaultValue: number) {
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) ? numberValue : defaultValue;
+}
+
 function applyCrlConfig(data: any) {
-  crlConfigForm.intervalHours = data?.intervalHours ?? 24;
-  crlConfigForm.fullCrlIntervals = data?.fullCrlIntervals ?? 90;
-  crlConfigForm.deltaCrlIntervals = data?.deltaCrlIntervals ?? 0;
-  crlConfigForm.fullCrlThreads = data?.fullCrlThreads ?? 1;
-  crlConfigForm.deltaCrlThreads = data?.deltaCrlThreads ?? 1;
-  crlConfigForm.overlap = data?.overlap || '90d';
-  crlConfigForm.intervalTime = data?.intervalTime || '01:00';
-  crlConfigForm.nextCrlNumber = data?.nextCrlNumber ?? 2;
-  crlConfigForm.crlUris = (data?.crlUris && data.crlUris.length > 0 ? data.crlUris : ['']).map((value: string) => ({ value }));
-  crlConfigForm.deltaCrlUris = (data?.deltaCrlUris && data.deltaCrlUris.length > 0 ? data.deltaCrlUris : ['']).map((value: string) => ({ value }));
-  crlConfigForm.schedulerRunning = !!data?.schedulerRunning;
+  const config = getResultData(data);
+  crlConfigForm.intervalHours = toNumberValue(config?.intervalHours, 6);
+  crlConfigForm.fullCrlIntervals = toNumberValue(config?.fullCrlIntervals, 4);
+  crlConfigForm.deltaCrlIntervals = toNumberValue(config?.deltaCrlIntervals, 1);
+  crlConfigForm.fullCrlThreads = toNumberValue(config?.fullCrlThreads, 1);
+  crlConfigForm.deltaCrlThreads = toNumberValue(config?.deltaCrlThreads, 1);
+  const overlap = parseDuration(config?.overlap);
+  crlConfigForm.overlapValue = overlap.value;
+  crlConfigForm.overlapUnit = overlap.unit;
+  crlConfigForm.intervalTime = config?.intervalTime || '00:00';
+  crlConfigForm.nextCrlNumber = toNumberValue(config?.nextCrlNumber, 1);
+  crlConfigForm.crlUris = (config?.crlUris && config.crlUris.length > 0 ? config.crlUris : ['']).map((value: string) => ({ value }));
+  crlConfigForm.deltaCrlUris = (config?.deltaCrlUris && config.deltaCrlUris.length > 0 ? config.deltaCrlUris : ['']).map((value: string) => ({ value }));
+  crlConfigForm.schedulerRunning = !!config?.schedulerRunning;
 }
 
 async function loadPublisherList() {
@@ -1224,18 +1758,25 @@ async function handleCrlConfig(row: any) {
   try {
     await loadPublisherList();
     const res = await getRootCrlConfig(row.id);
-    applyCrlConfig(res.data || {});
+    applyCrlConfig(res);
     crlConfigDialog.visible = true;
+    await nextTick();
+    crlConfigPanelRef.value?.$el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   } catch (error: any) {
     ElMessage.error(error.response?.data?.msg || error.message || '加载CRL配置失败');
   }
+}
+
+function closeCrlConfig() {
+  crlConfigDialog.visible = false;
+  crlConfigDialog.rootId = undefined;
 }
 
 async function refreshCrlConfig() {
   if (!crlConfigDialog.rootId) return;
   try {
     const res = await getRootCrlConfig(crlConfigDialog.rootId);
-    applyCrlConfig(res.data || {});
+    applyCrlConfig(res);
     ElMessage.success('CRL线程状态已刷新');
   } catch (error: any) {
     ElMessage.error(error.response?.data?.msg || error.message || '刷新CRL配置失败');
@@ -1249,7 +1790,7 @@ function buildCrlConfigPayload() {
     deltaCrlIntervals: crlConfigForm.deltaCrlIntervals,
     fullCrlThreads: crlConfigForm.fullCrlThreads,
     deltaCrlThreads: crlConfigForm.deltaCrlThreads,
-    overlap: crlConfigForm.overlap,
+    overlap: formatDuration(crlConfigForm.overlapValue, crlConfigForm.overlapUnit),
     intervalTime: crlConfigForm.intervalTime,
     nextCrlNumber: crlConfigForm.nextCrlNumber,
     crlUris: crlConfigForm.crlUris.map((u: any) => u.value).filter((v: any) => v),
@@ -1261,7 +1802,7 @@ async function submitCrlConfig() {
   if (!crlConfigDialog.rootId) return;
   try {
     const res = await saveRootCrlConfig(crlConfigDialog.rootId, buildCrlConfigPayload());
-    applyCrlConfig(res.data || {});
+    applyCrlConfig(res);
     ElMessage.success('CRL配置已保存');
     getList();
   } catch (error: any) {
@@ -1281,7 +1822,7 @@ async function issueCrl(deltaCrl: boolean) {
     });
     ElMessage.success(deltaCrl ? '增量CRL签发成功' : '全量CRL签发成功');
     const res = await getRootCrlConfig(crlConfigDialog.rootId);
-    applyCrlConfig(res.data || {});
+    applyCrlConfig(res);
     getList();
   } catch (error: any) {
     addCrlOperationRecord({
@@ -1324,7 +1865,7 @@ async function startCrlScheduler() {
   if (!crlConfigDialog.rootId) return;
   try {
     const res = await startRootCrlScheduler(crlConfigDialog.rootId);
-    applyCrlConfig(res.data || {});
+    applyCrlConfig(res);
     ElMessage.success('CRL签发线程已启动');
   } catch (error: any) {
     ElMessage.error(error.response?.data?.msg || error.message || '启动CRL签发线程失败');
@@ -1335,7 +1876,7 @@ async function stopCrlScheduler() {
   if (!crlConfigDialog.rootId) return;
   try {
     const res = await stopRootCrlScheduler(crlConfigDialog.rootId);
-    applyCrlConfig(res.data || {});
+    applyCrlConfig(res);
     ElMessage.success('CRL签发线程已停止');
   } catch (error: any) {
     ElMessage.error(error.response?.data?.msg || error.message || '停止CRL签发线程失败');
@@ -1357,13 +1898,80 @@ function handleView(row: any) {
 }
 
 /** 下载证书 */
-function handleDownload(row: any) {
-  // 实现下载逻辑
-  const blob = new Blob([row.pem], { type: 'application/x-pem-file' });
+async function handleDownload(row: any, command: string) {
+  try {
+    const res = await getRootCa(row.id);
+    const root = res.data || row;
+    const certPem = normalizePem(root.cert || row.cert || row.pem);
+    const chainPem = normalizePem(root.certchain || row.certchain || certPem);
+    const baseName = sanitizeFilename(root.name || row.name || 'root-ca');
+
+    switch (command) {
+      case 'cert-der':
+        saveBlob(pemToDerBlob(certPem), `${baseName}.crt`);
+        break;
+      case 'cert-pem':
+        saveBlob(new Blob([certPem], { type: 'application/x-pem-file' }), `${baseName}.pem`);
+        break;
+      case 'chain-der':
+        saveBlob(pemChainToDerBlob(chainPem), `${baseName}-chain.der`);
+        break;
+      case 'chain-pem':
+        saveBlob(new Blob([chainPem], { type: 'application/x-pem-file' }), `${baseName}-chain.pem`);
+        break;
+      default:
+        ElMessage.warning('不支持的下载格式');
+    }
+  } catch (error: any) {
+    ElMessage.error(error?.response?.data?.msg || error?.message || '下载证书失败');
+  }
+}
+
+function normalizePem(pem: string) {
+  if (!pem) {
+    throw new Error('证书内容为空');
+  }
+  const value = String(pem).trim();
+  if (value.includes('-----BEGIN CERTIFICATE-----')) {
+    return value.endsWith('\n') ? value : `${value}\n`;
+  }
+  const body = value.replace(/\s+/g, '').match(/.{1,64}/g)?.join('\n') || value;
+  return `-----BEGIN CERTIFICATE-----\n${body}\n-----END CERTIFICATE-----\n`;
+}
+
+function pemToDerBlob(pem: string) {
+  const base64 = pem
+    .replace(/-----BEGIN CERTIFICATE-----/g, '')
+    .replace(/-----END CERTIFICATE-----/g, '')
+    .replace(/\s+/g, '');
+  const binary = window.atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return new Blob([bytes], { type: 'application/pkix-cert' });
+}
+
+function pemChainToDerBlob(pem: string) {
+  const matches = pem.match(/-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/g);
+  if (!matches || matches.length === 0) {
+    return pemToDerBlob(pem);
+  }
+  const parts = matches.map((item) => pemToDerBlob(item));
+  return new Blob(parts, { type: 'application/octet-stream' });
+}
+
+function sanitizeFilename(name: string) {
+  return name.replace(/[\\/:*?"<>|]/g, '_');
+}
+
+function saveBlob(blob: Blob, filename: string) {
   const link = document.createElement('a');
-  link.href = window.URL.createObjectURL(blob);
-  link.download = `${row.name}.crt`;
+  const url = window.URL.createObjectURL(blob);
+  link.href = url;
+  link.download = filename;
   link.click();
+  window.URL.revokeObjectURL(url);
 }
 
 /** 授权模板按钮操作 */
@@ -1425,7 +2033,9 @@ async function handleRevoke(row: any) {
 
 /** 父级CA变更处理 */
 function onParentCaChange(val: any) {
-  // 可以根据父级CA限制子CA的一些属性，比如算法或有效期
+  if (val) {
+    onlineSubFormRef.value?.validateField('validity');
+  }
 }
 
 getList();
@@ -1435,5 +2045,206 @@ getList();
 .dialog-footer {
   display: flex;
   justify-content: flex-end;
+}
+
+.root-cert-dialog {
+  :deep(.el-dialog) {
+    max-width: calc(100vw - 32px);
+  }
+
+  :deep(.el-dialog__body) {
+    max-height: calc(100vh - 180px);
+    overflow-y: auto;
+    padding: 16px 22px 10px;
+  }
+
+  :deep(.el-tabs__content) {
+    overflow: visible;
+  }
+}
+
+.crl-config-panel {
+  margin-top: 16px;
+  border: 1px solid #dcdfe6;
+}
+
+.crl-help-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin: -2px 0 8px;
+}
+
+.crl-help-toolbar .el-button {
+  font-size: 18px;
+}
+
+.crl-help-content {
+  color: #303133;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.crl-help-content h4 {
+  margin: 0 0 8px;
+  color: #303133;
+  font-size: 15px;
+}
+
+.crl-help-content h4:not(:first-child) {
+  margin-top: 18px;
+}
+
+.crl-help-content p {
+  margin: 0 0 10px;
+}
+
+.crl-help-content ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.crl-help-content li {
+  margin-bottom: 8px;
+}
+
+.crl-config-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.crl-config-title {
+  color: #303133;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 24px;
+}
+
+.crl-config-subtitle {
+  margin-top: 4px;
+  color: #909399;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.crl-config-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.uri-row {
+  display: flex;
+  width: 100%;
+  gap: 10px;
+}
+
+.uri-row .el-input {
+  flex: 1;
+}
+
+.validity-input {
+  display: flex;
+  width: 100%;
+  gap: 8px;
+}
+
+.validity-input :deep(.el-input-number) {
+  flex: 1;
+  width: auto;
+}
+
+.validity-unit {
+  width: 88px;
+  flex: none;
+}
+
+.duration-input {
+  display: flex;
+  width: 100%;
+  gap: 8px;
+}
+
+.duration-input :deep(.el-input-number) {
+  flex: 1;
+  width: auto;
+}
+
+.duration-unit {
+  width: 88px;
+  flex: none;
+}
+
+.sub-extension-list {
+  width: 100%;
+}
+
+.sub-extension-item {
+  padding: 10px 0;
+  border-bottom: 1px solid #ebeef5;
+}
+
+.sub-extension-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  color: #303133;
+  font-weight: 600;
+}
+
+.san-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.san-row .el-input {
+  flex: 1;
+}
+
+.sia-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.sia-row .el-input {
+  flex: 1;
+}
+
+.key-usage-checkbox-group {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 8px 12px;
+  width: 100%;
+}
+
+.key-usage-checkbox-group :deep(.el-checkbox) {
+  height: 34px;
+  margin-right: 0;
+  padding: 0 10px;
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 6px;
+}
+
+.key-usage-label {
+  margin-right: 6px;
+}
+
+.key-usage-value {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+}
+
+.crl-config-footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
 }
 </style>

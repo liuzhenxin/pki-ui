@@ -66,3 +66,20 @@ export function exportRequestor(ids: (string | number)[]): Promise<any> {
     responseType: 'blob'
   }) as any;
 }
+
+// 请求者授权
+export function authorizeRequestor(data: any): Promise<Result<any>> {
+  return request({
+    url: '/ca/v1/requestors/authorize',
+    method: 'post',
+    data
+  }) as any;
+}
+
+// 查看请求者在指定根CA下的授权
+export function getRequestorAuthorization(requestorId: string | number, rootId: string | number): Promise<Result<any>> {
+  return request({
+    url: `/ca/v1/requestors/${requestorId}/roots/${rootId}/authorization`,
+    method: 'get'
+  }) as any;
+}

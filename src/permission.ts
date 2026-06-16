@@ -15,7 +15,10 @@ import setting from '@/settings';
 NProgress.configure({ showSpinner: false });
 const whiteList = ['/login', '/register', '/social-callback', '/register*', '/register/*'];
 const caInitPath = '/ca/init';
+const licenseInitPath = '/license/init';
 const kmcInitPath = '/position/setup';
+const raInitPath = '/ra/init';
+const ocspInitPath = '/ocsp/init';
 
 const isWhiteList = (path: string) => {
   return whiteList.some((pattern) => isPathMatch(pattern, path));
@@ -23,11 +26,46 @@ const isWhiteList = (path: string) => {
 
 const getCurrentTenantId = () => useUserStore().tenantId || localStorage.getItem('tenantId') || '';
 
-const getCurrentInitPath = () => (String(getCurrentTenantId()) === '3' ? kmcInitPath : caInitPath);
+const getCurrentInitPath = () => {
+  const tenantId = String(getCurrentTenantId());
+  if (tenantId === '2') {
+    return licenseInitPath;
+  }
+  if (tenantId === '3') {
+    return kmcInitPath;
+  }
+  if (tenantId === '5') {
+    return raInitPath;
+  }
+  if (tenantId === '6') {
+    return ocspInitPath;
+  }
+  return caInitPath;
+};
 
-const isInitRoute = (path: string) => path === caInitPath || path === kmcInitPath || path.includes('/setup');
+const isInitRoute = (path: string) =>
+  path === caInitPath || path === licenseInitPath || path === kmcInitPath || path === raInitPath || path === ocspInitPath || path.includes('/setup');
 
 const isTenantInitialized = (status: unknown) => Number(status) === -1;
+
+const getTenantAppTitle = (tenantName: string, tenantId: string, longName = false) => {
+  if (tenantId === '2') {
+    return `${tenantName} (${longName ? 'License授权系统' : 'License'})`;
+  }
+  if (tenantId === '3') {
+    return `${tenantName} (${longName ? '密钥管理中心' : 'KMC'})`;
+  }
+  if (tenantId === '5') {
+    return `${tenantName} (${longName ? '注册认证中心' : 'RA'})`;
+  }
+  if (tenantId === '6') {
+    return `${tenantName} (${longName ? '在线证书状态服务' : 'OCSP'})`;
+  }
+  if (tenantId === '10') {
+    return `${tenantName} (${longName ? 'NAS网络存储管理系统' : 'NAS'})`;
+  }
+  return `${tenantName} (CA)`;
+};
 
 const loadCurrentTenant = async () => {
   const tenantId = getCurrentTenantId();
@@ -41,16 +79,7 @@ const syncTenantContext = async () => {
   const tenantId = getCurrentTenantId();
   const res = await loadCurrentTenant();
   if (res?.data) {
-    let appTitle = res.data.name;
-    const idStr = String(tenantId);
-    if (idStr === '3') {
-      appTitle += ' (KMC密钥管理中心)';
-    } else if (idStr === '10') {
-      appTitle += ' (NAS网络存储管理系统)';
-    } else {
-      appTitle += ' (CA证书认证系统)';
-    }
-    useSettingsStore().setAppTitle(appTitle);
+    useSettingsStore().setAppTitle(getTenantAppTitle(res.data.name, String(tenantId)));
     useUserStore().setTenantInitStatus(Number(res.data.status));
   }
   return res;
@@ -134,16 +163,7 @@ router.beforeEach(async (to, from, next) => {
         getTenant(tenantId)
           .then((res) => {
             if (res?.data) {
-              let appTitle = res.data.name;
-              const idStr = String(tenantId);
-              if (idStr === '3') {
-                appTitle += ' (KMC密钥管理中心)';
-              } else if (idStr === '10') {
-                appTitle += ' (NAS网络存储管理系统)';
-              } else {
-                appTitle += ' (CA证书认证系统)';
-              }
-              useSettingsStore().setAppTitle(appTitle);
+              useSettingsStore().setAppTitle(getTenantAppTitle(res.data.name, String(tenantId), true));
             }
           })
           .catch(() => {});
