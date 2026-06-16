@@ -58,7 +58,10 @@
       "Bash(git push *)",
       "Bash(echo \"1. 页面: $\\(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8088/\\)\")",
       "Bash(echo \"2. 租户: $\\(curl -s -X POST 'http://127.0.0.1:8088/api-gateway/admin/v1/tenants/list' -H 'Content-Type: application/json' -d '{}')",
-      "Bash(git commit -m 'feat: 更新CA/KMC/RA/OCSP前端页面和API接口 *)"
+      "Bash(git commit -m 'feat: 更新CA/KMC/RA/OCSP前端页面和API接口 *)",
+      "Bash(cat)",
+      "Bash(bash /tmp/ca-login-test.sh)",
+      "Bash(git commit *)"
     ]
   }
 }
