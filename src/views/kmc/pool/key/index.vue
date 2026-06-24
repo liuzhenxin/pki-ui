@@ -56,7 +56,6 @@
       <template #header>执行结果</template>
       <el-table v-if="Array.isArray(result)" :data="result" border>
         <el-table-column prop="id" label="在用密钥ID" width="120" />
-        <el-table-column prop="strategyId" label="策略ID" width="100" />
         <el-table-column prop="keyType" label="密钥类型" width="120" />
         <el-table-column prop="keyBits" label="位长" width="100" />
         <el-table-column label="状态" width="140">

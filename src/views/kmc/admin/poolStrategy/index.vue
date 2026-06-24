@@ -37,7 +37,6 @@
 
     <el-table v-loading="loading" :data="poolStrategyList" @selection-change="handleSelectionChange">
       <el-table-column type="selection" width="55" align="center" />
-      <el-table-column label="策略ID" align="center" prop="id" width="100" />
       <el-table-column label="算法类型" align="center" prop="algType" />
       <el-table-column label="低水位阈值" align="center" prop="lowWatermark" />
       <el-table-column label="高水位阈值" align="center" prop="highWatermark" />
