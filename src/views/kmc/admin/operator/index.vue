@@ -111,7 +111,7 @@
         </el-row>
         <el-row>
           <el-col :span="24">
-            <el-form-item label="上传证书" required>
+            <el-form-item label="上传证书">
               <el-upload
                 ref="uploadCertRef"
                 action="#"
@@ -125,7 +125,7 @@
               >
                 <el-button type="primary">点击上传</el-button>
                 <template #tip>
-                  <div class="el-upload__tip">请上传 .cer, .crt, 或 .pem 格式的 X.509 证书文件。</div>
+                  <div class="el-upload__tip">可上传 .cer, .crt, 或 .pem 格式的 X.509 证书文件，非必填，可后续绑定。</div>
                 </template>
               </el-upload>
               <el-button v-if="certPem" link type="primary" @click="showCertDialog = true">查看证书详情</el-button>
@@ -183,7 +183,7 @@
 </template>
 
 <script setup name="KmcOperatorAdmin" lang="ts">
-import { listUser, getUser, delUser, updateUser, resetUserPwd, changeStatus, saveUserWithCert } from '@/api/system/user';
+import { addUser, listUser, getUser, delUser, updateUser, resetUserPwd, changeStatus, saveUserWithCert } from '@/api/system/user';
 import { UserForm, UserQuery, UserVO } from '@/api/system/user/types';
 import { FormInstance, UploadInstance, UploadUserFile, UploadProps, UploadRawFile, genFileId } from 'element-plus';
 import X509Cert from '@/components/X509Cert/index.vue';
@@ -432,24 +432,20 @@ function submitForm() {
       return;
     }
 
-    if (certFileList.value.length === 0) {
-      ElMessage.error('请上传证书文件');
-      return;
-    }
-
-    const formData = new FormData();
-    const coBlob = new Blob([JSON.stringify(form.value)], { type: 'application/json' });
-    formData.append('co', coBlob);
-
-    if (certFileList.value[0].raw) {
+    // 证书非必填，可后续绑定
+    if (certFileList.value.length > 0 && certFileList.value[0].raw) {
+      const formData = new FormData();
+      const coBlob = new Blob([JSON.stringify(form.value)], { type: 'application/json' });
+      formData.append('co', coBlob);
       formData.append('file', certFileList.value[0].raw);
-    }
-
-    try {
-      await saveUserWithCert(formData);
-    } catch (error) {
-      showSaveUserError(error);
-      return;
+      try {
+        await saveUserWithCert(formData);
+      } catch (error) {
+        showSaveUserError(error);
+        return;
+      }
+    } else {
+      await addUser(form.value as any);
     }
     proxy?.$modal.msgSuccess('新增成功');
     open.value = false;
