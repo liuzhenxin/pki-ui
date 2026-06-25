@@ -14,11 +14,11 @@ import setting from '@/settings';
 
 NProgress.configure({ showSpinner: false });
 const whiteList = ['/login', '/register', '/social-callback', '/register*', '/register/*'];
-const caInitPath = '/ca/init';
-const licenseInitPath = '/license/init';
-const kmcInitPath = '/position/setup';
-const raInitPath = '/ra/init';
-const ocspInitPath = '/ocsp/init';
+const caInitPath = '/ca/setup';
+const licenseInitPath = '/license/setup';
+const kmcInitPath = '/kmc/setup';
+const raInitPath = '/ra/setup';
+const ocspInitPath = '/ocsp/setup';
 
 const isWhiteList = (path: string) => {
   return whiteList.some((pattern) => isPathMatch(pattern, path));

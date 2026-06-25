@@ -60,7 +60,7 @@
         </el-table-column>
         <el-table-column label="证书状态" align="center" width="120">
           <template #default="scope">
-            <el-tag :type="scope.row.cert ? 'success' : 'warning'" effect="plain">{{ scope.row.cert ? '已配置' : '未配置' }}</el-tag>
+            <el-tag :type="isCertConfigured(scope.row) ? 'success' : 'warning'" effect="plain">{{ isCertConfigured(scope.row) ? '已配置' : '未配置' }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="创建时间" align="center" prop="createTime" width="180">
@@ -428,6 +428,10 @@ function formatAlgorithm(row: any) {
     return `RSA-${row.keySize}`;
   }
   return row?.algo || '-';
+}
+
+function isCertConfigured(row: any) {
+  return row?.certConfigured ?? Boolean(row?.cert);
 }
 
 getList();

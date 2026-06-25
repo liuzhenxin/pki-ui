@@ -41,3 +41,23 @@ export function testCaConfig(data: CaConfigCO): Promise<Result<CaConfigTestCO>> 
     data
   }) as any;
 }
+
+export interface ArchivePolicyStatsCO {
+  totalArchived?: number;
+  archivedToday?: number;
+  archivedThisWeek?: number;
+}
+
+export function getArchiveStats(): Promise<Result<ArchivePolicyStatsCO>> {
+  return request({
+    url: '/ca/v1/archive-policy/stats',
+    method: 'get'
+  }) as any;
+}
+
+export function triggerArchive(): Promise<Result<ArchivePolicyStatsCO>> {
+  return request({
+    url: '/ca/v1/archive-policy/trigger',
+    method: 'post'
+  }) as any;
+}

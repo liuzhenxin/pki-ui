@@ -59,3 +59,46 @@ export function exportPublisher(query: any): Promise<any> {
     responseType: 'blob'
   }) as any;
 }
+
+/** 手动发布证书 */
+export function publishCert(data: { certId: number; publisherId?: number; rootId?: number }): Promise<Result<any>> {
+  return request({
+    url: '/ca/v1/publishers/publish',
+    method: 'post',
+    data
+  }) as any;
+}
+
+/** 重试发布队列项 */
+export function retryPublish(ids: (string | number)[]): Promise<Result<any>> {
+  return request({
+    url: '/ca/v1/publishers/publish-queue/retry',
+    method: 'post',
+    data: { ids }
+  }) as any;
+}
+
+/** 分页查询发布队列 */
+export function pagePublishQueue(query: any): Promise<Result<any>> {
+  return request({
+    url: '/ca/v1/publishers/publish-queue/page',
+    method: 'post',
+    data: query
+  }) as any;
+}
+
+/** 查询证书发布状态 */
+export function getPublishQueueStatus(certId: string | number): Promise<Result<any>> {
+  return request({
+    url: `/ca/v1/publishers/publish-queue/${certId}/status`,
+    method: 'get'
+  }) as any;
+}
+
+/** 测试发布者连接 */
+export function testPublisherConnection(id: string | number): Promise<Result<any>> {
+  return request({
+    url: `/ca/v1/publishers/${id}/test`,
+    method: 'post'
+  }) as any;
+}

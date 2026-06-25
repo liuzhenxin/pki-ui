@@ -14,25 +14,14 @@
         <template #default> {{ info.requestMethod }} {{ info.operUrl }} </template>
       </el-descriptions-item>
       <el-descriptions-item label="操作模块">
-        <template #default> {{ info.title }} / {{ typeFormat(info) }} </template>
+        <template #default>
+          {{ info.title }}
+          <template v-if="operationLabel(info)"> / {{ operationLabel(info) }} </template>
+        </template>
       </el-descriptions-item>
       <el-descriptions-item label="操作方法">
         <template #default>
           {{ info.method }}
-        </template>
-      </el-descriptions-item>
-      <el-descriptions-item label="请求参数">
-        <template #default>
-          <div class="max-h-300px overflow-y-auto">
-            <VueJsonPretty :data="formatToJsonObject(info.operParam)" />
-          </div>
-        </template>
-      </el-descriptions-item>
-      <el-descriptions-item label="返回参数">
-        <template #default>
-          <div class="max-h-300px overflow-y-auto">
-            <VueJsonPretty :data="formatToJsonObject(info.jsonResult)" />
-          </div>
         </template>
       </el-descriptions-item>
       <el-descriptions-item label="消耗时间">
@@ -54,8 +43,6 @@
 
 <script setup lang="ts">
 import type { OperLogForm } from '@/api/monitor/operlog/types';
-import VueJsonPretty from 'vue-json-pretty';
-import 'vue-json-pretty/lib/styles.css';
 
 const open = ref(false);
 const info = ref<OperLogForm | null>(null);
@@ -74,24 +61,15 @@ defineExpose({
 });
 
 /**
- * json转为对象
- * @param data 原始数据
- */
-function formatToJsonObject(data: string) {
-  try {
-    return JSON.parse(data);
-  } catch (error) {
-    return data;
-  }
-}
-
-/**
  * 字典信息
  */
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
 const { sys_oper_type } = toRefs<any>(proxy?.useDict('sys_oper_type'));
 const typeFormat = (row: OperLogForm) => {
   return proxy?.selectDictLabel(sys_oper_type.value, row.businessType);
+};
+const operationLabel = (row: OperLogForm) => {
+  return row.operationName || typeFormat(row);
 };
 </script>
 

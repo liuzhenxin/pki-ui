@@ -44,7 +44,7 @@ export interface RaCertIssueForm {
   csr?: string;
   subject?: string;
   extensions?: string;
-  fileFormat?: 'PKCS12' | 'JKS';
+  fileFormat?: 'PKCS12';
   filePassword?: string;
 }
 

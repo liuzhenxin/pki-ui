@@ -171,8 +171,8 @@
         <el-form-item label="邮箱">
           <el-input v-model="certForm.mail" disabled />
         </el-form-item>
-        <div style="margin-top: 20px; border-top: 1px dashed #eee; padding-top: 20px; margin-bottom: 20px">
-          <h4 style="margin-top: 0; color: #606266; font-size: 14px">证书主题信息</h4>
+        <div class="cert-section">
+          <h4>证书主题信息</h4>
           <CertSubject v-model="certForm.subjectItems" propPrefix="subjectItems" />
           <el-form-item label="证书有效期" prop="validityValue">
             <div class="validity-input-group">
@@ -184,8 +184,8 @@
             </div>
           </el-form-item>
         </div>
-        <div style="margin-top: 20px; border-top: 1px dashed #eee; padding-top: 20px; margin-bottom: 20px">
-          <h4 style="margin-top: 0; color: #606266; font-size: 14px">USBKey 证书设置</h4>
+        <div class="cert-section">
+          <h4>USBKey 证书设置</h4>
           <el-form-item label="设备提供商" prop="provider">
             <div class="flex-row" style="display: flex; gap: 10px; width: 100%">
               <el-select v-model="certForm.provider" placeholder="请选择或刷新" style="flex: 1" @change="onCertProviderChange">
@@ -205,7 +205,12 @@
             </el-select>
           </el-form-item>
           <el-form-item label="容器名" prop="containerName">
-            <el-input v-model="certForm.containerName" placeholder="建议使用用户名作为容器名" />
+            <div class="flex-row" style="display: flex; gap: 10px; width: 100%">
+              <el-input v-model="certForm.containerName" placeholder="格式: admin-xxxxxx" style="flex: 1" />
+              <el-tooltip content="随机生成" placement="top">
+                <el-button @click="genRandomContainerName" :icon="Refresh" circle />
+              </el-tooltip>
+            </div>
           </el-form-item>
           <el-form-item label="User PIN" prop="pin">
             <el-input v-model="certForm.pin" type="password" show-password placeholder="请输入 USBKey User PIN" />
@@ -546,7 +551,7 @@ async function handleIssueCert(row: any) {
     certForm.provider = '';
     certForm.device = '';
     certForm.appName = '';
-    certForm.containerName = row.username;
+    certForm.containerName = 'admin-' + Date.now().toString(36).slice(-6);
     certForm.pin = '';
     certForm.validityValue = 5;
     certForm.validityUnit = 'y';
@@ -682,6 +687,11 @@ async function onCertDeviceChange() {
 /** 应用变更 */
 function onCertAppChange() {
   // 应用变更时的处理
+}
+
+/** 随机生成容器名 */
+function genRandomContainerName() {
+  certForm.containerName = 'admin-' + Date.now().toString(36).slice(-6);
 }
 
 function applyCertValidity(validity?: string) {
@@ -833,5 +843,42 @@ onMounted(() => {
   .validity-unit {
     width: 88px;
   }
+}
+
+:deep(.el-dialog__body) {
+  padding-top: 16px;
+}
+
+.cert-section {
+  margin-top: 20px;
+  border-top: 1px dashed #dcdfe6;
+  padding-top: 20px;
+  margin-bottom: 20px;
+
+  h4 {
+    margin: 0 0 16px 0;
+    color: #303133;
+    font-size: 15px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    &::before {
+      content: '';
+      display: inline-block;
+      width: 4px;
+      height: 16px;
+      background: #409eff;
+      border-radius: 2px;
+    }
+  }
+}
+
+.flex-row {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+  align-items: center;
 }
 </style>

@@ -145,11 +145,10 @@
                 <el-form-item label="文件格式" prop="fileFormat">
                   <el-radio-group v-model="issueForm.fileFormat">
                     <el-radio-button value="PKCS12">PKCS12</el-radio-button>
-                    <el-radio-button value="JKS">JKS</el-radio-button>
                   </el-radio-group>
                 </el-form-item>
                 <el-form-item label="文件密码" prop="filePassword">
-                  <el-input v-model="issueForm.filePassword" type="password" show-password placeholder="请输入 P12/JKS 文件密码" />
+                  <el-input v-model="issueForm.filePassword" type="password" show-password placeholder="请输入 P12 文件密码" />
                 </el-form-item>
               </div>
             </template>
@@ -364,7 +363,7 @@ const issueForm = reactive({
   appName: '',
   containerName: '',
   pin: '',
-  fileFormat: 'PKCS12' as 'PKCS12' | 'JKS',
+  fileFormat: 'PKCS12' as const,
   filePassword: ''
 });
 
@@ -952,7 +951,7 @@ function downloadKeyStore(result: Partial<RaCertIssueResult>) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = result.fileName || `${result.serialNumber || 'ra-cert'}.${result.fileFormat === 'JKS' ? 'jks' : 'p12'}`;
+  link.download = result.fileName || `${result.serialNumber || 'ra-cert'}.p12`;
   link.click();
   URL.revokeObjectURL(url);
 }

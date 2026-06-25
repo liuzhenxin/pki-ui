@@ -19,7 +19,8 @@ const normalizeSigner = (item: any = {}) => {
     algo: item.algo || conf.algo || 'SM2',
     signerType: item.signerType || item.type || 'PKCS12',
     keyIndex: item.keyIndex || conf.keyIndex || 1,
-    keySize: item.keySize || conf.keySize || conf.keyLength
+    keySize: item.keySize || conf.keySize || conf.keyLength,
+    certConfigured: item.certConfigured ?? Boolean(item.cert)
   };
 };
 

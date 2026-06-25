@@ -21,6 +21,7 @@ export interface RaApplyForm {
   certMode?: 'single' | 'dual';
   profileId?: string | number;
   profileName?: string;
+  dualProfileIndex?: number;
   signProfileId?: string | number;
   signProfileName?: string;
   encryptProfileId?: string | number;

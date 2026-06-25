@@ -149,6 +149,9 @@
                 <el-select v-model="signerForm.algo" style="width: 100%">
                   <el-option label="SM2" value="SM2" />
                   <el-option label="RSA" value="RSA" />
+                  <el-option label="ML-DSA-44 (量子)" value="ML-DSA44" />
+                  <el-option label="ML-DSA-65 (量子)" value="ML-DSA65" />
+                  <el-option label="ML-DSA-87 (量子)" value="ML-DSA87" />
                 </el-select>
               </el-form-item>
               <el-form-item label="签名器类型" prop="signerType">
@@ -662,6 +665,7 @@ import { listSigner, saveSigner, removeSigner, modifySigner } from '@/api/ca/sig
 import { uploadUserCert, resetUserPwd } from '@/api/system/user';
 import { getTenant, updateTenant } from '@/api/system/tenant';
 import { genRootCa, importExternalCert, issueAdminCert, deleteAllRootCa } from '@/api/ca/root';
+import { getInitStatus } from '@/api/ca/init';
 import { useUserStore } from '@/store/modules/user';
 import { useTagsViewStore } from '@/store/modules/tagsView';
 import X509Cert from '@/components/X509Cert/index.vue';
@@ -925,6 +929,56 @@ const showRootCaHelp = ref(false);
 const showAdminHelp = ref(false);
 const showAuditorHelp = ref(false);
 const currentTemplate = ref({});
+
+const restoreInitStep = async () => {
+  // 使用后端 InitController 返回的详细状态精确恢复初始化步骤
+  try {
+    const statusRes = await getInitStatus();
+    const data = statusRes.data;
+    const ts = data?.tenantStatus;
+
+    // 初始化已完成，直接跳转到首页
+    if (ts === -1) {
+      router.replace({ path: '/index' });
+      return;
+    }
+
+    const profileCount = data?.profileCount ?? 0;
+    const signerCount = data?.signerCount ?? 0;
+    const rootCount = data?.rootCount ?? 0;
+
+    // 步骤1：未导入证书模板 → 跳到模板导入
+    if (profileCount === 0) {
+      active.value = 1;
+      return;
+    }
+
+    // 步骤2：未创建签名者 → 跳到签名者创建
+    if (signerCount === 0) {
+      active.value = 2;
+      return;
+    }
+
+    // 步骤3：未初始化根证书 → 跳到根证书初始化
+    if (rootCount === 0) {
+      active.value = 3;
+      return;
+    }
+
+    // 管理员/审计员配置判断
+    // ts === 1: 模板已导入但管理员未配置 → 管理员设置
+    // ts === 2: 管理员已配置但未完成 → 审计员设置
+    if (ts === 2) {
+      active.value = 5;
+      return;
+    }
+
+    // 默认跳到管理员设置
+    active.value = 4;
+  } catch (e) {
+    // 获取状态失败，从步骤0开始
+  }
+};
 
 const loadTemplateData = async () => {
   try {
@@ -2047,7 +2101,7 @@ const prev = async () => {
 };
 
 onMounted(async () => {
-  // 获取租户信息
+  // 获取租户信息并恢复初始化步骤
   try {
     const tenantId = userStore.tenantId || localStorage.getItem('tenantId') || '';
     const tenantRes = await getTenant(tenantId);
@@ -2056,26 +2110,12 @@ onMounted(async () => {
       tenantName.value = tenantRes.data.name;
       companyName.value = tenantRes.data.companyName || '';
       userStore.setTenantInitStatus(Number(tenantRes.data.status));
-
-      if (Number(tenantRes.data.status) === -1) {
-        router.replace('/index');
-        return;
-      }
-
-      // 根据 tenant 的 status 恢复到对应步骤
-      if (tenantRes.data.status !== undefined && tenantRes.data.status !== null) {
-        if ((tenantRes.data.status as any) === 'active') {
-          // 如果是原始的 'active' 状态，直接跳到最后一步
-          active.value = 6;
-        } else {
-          const parsedStatus = Number(tenantRes.data.status);
-          if (!isNaN(parsedStatus) && parsedStatus >= 0 && parsedStatus <= 6) {
-            active.value = parsedStatus;
-          }
-        }
-      }
     }
   } catch (error) {}
+
+  // 使用后端 InitController 的详细状态精确恢复初始化步骤
+  await restoreInitStep();
+  loading.value = false;
 
   // 预加载设备列表，如果当前在管理员页面或根证书配置
   setTimeout(() => {

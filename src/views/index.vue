@@ -157,8 +157,9 @@
       </el-row>
     </div>
 
-    <!-- 密钥库状态 (全宽) - 仅 KMC 显示 -->
-    <el-card v-if="!isLicense && isKMC" class="box-card status-card" shadow="hover">
+
+    <!-- 密钥库状态 (全宽) - 仅 KMC admin 显示 -->
+    <el-card v-if="!isLicense && isKMC && userStore.permissions.includes('kmc:dashboard:view')" class="box-card status-card" shadow="hover">
       <template #header>
         <div class="card-header status-header">
           <div class="title">
@@ -522,7 +523,7 @@
               </div>
             </div>
           </el-col>
-          <el-col :xs="24" :sm="24" :md="16">
+          <el-col v-if="!isKMC" :xs="24" :sm="24" :md="16">
             <h4 style="margin: 0 0 15px 0; font-size: 16px; color: #303133; font-weight: 600">更新日志</h4>
             <el-collapse accordion>
               <el-collapse-item title="v4.1.2 - 2025-11-25" name="1">
@@ -988,9 +989,11 @@ const initCharts = () => {
 onMounted(async () => {
   fetchTenantInfo();
   await fetchLicenseHomeData();
-  await fetchKmcDashboardStats();
-  await nextTick();
-  initCharts();
+  if (isKMC.value && userStore.permissions.includes('kmc:dashboard:view')) {
+    await fetchKmcDashboardStats();
+    await nextTick();
+    initCharts();
+  }
   window.addEventListener('resize', handleResize);
 });
 

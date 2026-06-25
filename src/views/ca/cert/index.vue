@@ -213,37 +213,31 @@
               <div class="section-title">证书模板</div>
               <el-form-item v-if="certMode === 'single'" label="证书模板" prop="profileId">
                 <el-select v-model="issueForm.profileId" filterable placeholder="请选择模板" style="width: 100%" @change="handleProfileChange">
-                  <el-option v-for="item in profileList" :key="item.id" :label="item.name" :value="item.id" />
+                  <el-option v-for="item in singleProfileList" :key="item.id" :label="item.name" :value="item.id" />
                 </el-select>
               </el-form-item>
               <template v-else>
-                <el-form-item label="双证书模板对">
+                <el-form-item label="证书模板" prop="profileId">
                   <el-select
-                    v-model="issueForm.dualProfileName"
+                    v-model="issueForm.profileId"
                     filterable
                     clearable
-                    placeholder="选择双证书对（自动填充签名和加密模板）"
+                    placeholder="请选择双证书模板"
                     style="width: 100%"
                     @change="handleDualProfileChange"
                   >
-                    <el-option v-for="item in dualProfileList" :key="item.pairName" :label="item.pairDisplayName" :value="item.pairName" />
+                    <el-option v-for="item in availableDualEntityProfiles" :key="item.id" :label="item.name" :value="item.id" />
                   </el-select>
                 </el-form-item>
-                <el-form-item label="签名证书模板" prop="signProfileId">
-                  <el-select
-                    v-model="issueForm.signProfileId"
-                    filterable
-                    placeholder="请选择签名模板"
-                    style="width: 100%"
-                    @change="handleSignProfileChange"
-                  >
-                    <el-option v-for="item in profileList" :key="item.id" :label="item.name" :value="item.id" />
-                  </el-select>
+                <el-form-item label="签名证书模板">
+                  <div class="readonly-field">
+                    {{ selectedDualSignProfile?.name || '-' }}
+                  </div>
                 </el-form-item>
-                <el-form-item label="加密证书模板" prop="encProfileId">
-                  <el-select v-model="issueForm.encProfileId" filterable placeholder="请选择加密模板" style="width: 100%">
-                    <el-option v-for="item in profileList" :key="item.id" :label="item.name" :value="item.id" />
-                  </el-select>
+                <el-form-item label="加密证书模板">
+                  <div class="readonly-field">
+                    {{ selectedDualEncProfile?.name || '-' }}
+                  </div>
                 </el-form-item>
                 <el-form-item label="加密密钥来源">
                   <el-tag type="success" effect="plain">KMC 生成并托管</el-tag>
@@ -389,19 +383,9 @@
 
             <div v-if="issueType === 'p10'" class="form-section">
               <div class="section-title">PKCS10 CSR 内容</div>
-              <template v-if="certMode === 'single'">
-                <el-form-item label="CSR PEM" prop="csr" label-width="0">
-                  <el-input v-model="issueForm.csr" type="textarea" :rows="15" placeholder="-----BEGIN CERTIFICATE REQUEST----- ..." />
-                </el-form-item>
-              </template>
-              <template v-else>
-                <el-form-item label="签名CSR PEM" prop="csr" label-width="0">
-                  <el-input v-model="issueForm.csr" type="textarea" :rows="10" placeholder="-----BEGIN CERTIFICATE REQUEST----- ..." />
-                </el-form-item>
-                <el-form-item label="加密CSR PEM" prop="encCsr" label-width="0">
-                  <el-input v-model="issueForm.encCsr" type="textarea" :rows="10" placeholder="可选：为空时由 KMC 自动生成加密密钥对" />
-                </el-form-item>
-              </template>
+              <el-form-item :label="certMode === 'dual' ? '签名CSR PEM' : 'CSR PEM'" prop="csr" label-width="0">
+                <el-input v-model="issueForm.csr" type="textarea" :rows="15" placeholder="-----BEGIN CERTIFICATE REQUEST----- ..." />
+              </el-form-item>
             </div>
           </el-col>
         </el-row>
@@ -769,7 +753,7 @@ import {
   revokeDualCert
 } from '@/api/ca/cert';
 import { listRootCa, getRootCa } from '@/api/ca/root';
-import { listProfile, getProfile, listDualCertProfiles } from '@/api/ca/profile';
+import { listProfile, getProfile } from '@/api/ca/profile';
 import { X509 } from 'jsrsasign';
 import request from '@/utils/request';
 import { parseJson } from '@/utils/json';
@@ -843,10 +827,10 @@ const certMode = ref('single');
 const rootList = ref([]);
 const selectedRootAlgo = ref('');
 const isSm2Root = computed(() => (selectedRootAlgo.value || '').toUpperCase().includes('SM2'));
-const profileList = ref([]);
-const dualProfileList = ref<any[]>([]);
+const singleProfileList = ref<any[]>([]);
 const allProfileList = ref([]);
 const profileLookupList = ref([]);
+const authorizedProfileIds = ref<Set<string>>(new Set());
 const issueProfileInfo = ref<any>(null);
 const certProviders = ref<string[]>([]);
 const certDevices = ref<string[]>([]);
@@ -854,6 +838,45 @@ const certApps = ref<string[]>([]);
 const issueFormRef = ref<FormInstance>();
 let deviceMonitorTimer: ReturnType<typeof setInterval> | null = null;
 let lastDeviceSnapshot = '';
+
+const availableDualEntityProfiles = computed(() => {
+  if (!authorizedProfileIds.value.size) return [];
+  return allProfileList.value.filter((profile: any) => {
+    if (!authorizedProfileIds.value.has(String(profile.id)) || getProfileCertLevel(profile) !== 'DualEntity') return false;
+    const dualCert = parseJson(profile?.conf)?.dualCert || {};
+    return (
+      dualCert.signProfileId &&
+      dualCert.encProfileId &&
+      authorizedProfileIds.value.has(String(dualCert.signProfileId)) &&
+      authorizedProfileIds.value.has(String(dualCert.encProfileId))
+    );
+  });
+});
+
+const selectedDualSignProfile = computed(() => findProfileById(issueForm.value.signProfileId));
+const selectedDualEncProfile = computed(() => findProfileById(issueForm.value.encProfileId));
+
+function getProfileCertLevel(profile: any) {
+  return String(profile?.certLevel || profile?.type || parseJson(profile?.conf)?.certLevel || '');
+}
+
+function findProfileById(id: any) {
+  if (!id) return null;
+  return profileLookupList.value.find((profile: any) => String(profile.id) === String(id)) || null;
+}
+
+function getDualProfileRole(profile: any) {
+  const category = String(profile?.profileCategory || '').toUpperCase();
+  if (category === 'DUAL_SIGN') return 'SIGNING';
+  if (category === 'DUAL_ENC') return 'ENCRYPTION';
+  const conf = parseJson(profile?.conf);
+  return String(conf?.dualCert?.role || '').toUpperCase();
+}
+
+function isDualMemberProfile(profile: any) {
+  const role = getDualProfileRole(profile);
+  return role === 'SIGNING' || role === 'ENCRYPTION';
+}
 
 const keyUsageOptions = [
   { value: 'digitalSignature', label: '数字签名' },
@@ -1034,7 +1057,7 @@ async function loadProfiles() {
     const res = await listProfile();
     profileLookupList.value = res.data || [];
     allProfileList.value = profileLookupList.value.filter((p: any) => p.type !== 'RootCA');
-    profileList.value = [];
+    singleProfileList.value = [];
   } catch (e) {}
 }
 
@@ -1147,10 +1170,12 @@ async function pollUsbKeyDevices() {
 
 async function handleRootChange(val: any) {
   if (!val) {
-    profileList.value = [];
+    singleProfileList.value = [];
+    authorizedProfileIds.value = new Set();
     issueForm.value.profileId = undefined;
     issueForm.value.signProfileId = undefined;
     issueForm.value.encProfileId = undefined;
+    issueForm.value.dualProfileName = undefined;
     issueForm.value.subjectItems = [];
     issueForm.value.extensionItems = [];
     return;
@@ -1158,11 +1183,23 @@ async function handleRootChange(val: any) {
   try {
     const res = await getRootCa(val);
     const authorizedIds = res.data.profileIds || [];
-    profileList.value = allProfileList.value.filter((p: any) => authorizedIds.some((authId: any) => String(authId) === String(p.id)));
+    authorizedProfileIds.value = new Set(authorizedIds.map((authId: any) => String(authId)));
+    const authorizedProfiles = allProfileList.value.filter((p: any) => authorizedProfileIds.value.has(String(p.id)));
+    singleProfileList.value = authorizedProfiles.filter((p: any) => getProfileCertLevel(p) !== 'DualEntity' && !isDualMemberProfile(p));
     // 从 signerConf 中提取算法类型
     try {
-      const signerConf = parseJson(res.data.signerConf);
-      selectedRootAlgo.value = signerConf?.algo || '';
+      const raw = res.data.signerConf || '';
+      // signerConf 可能是 JSON 或 key=value 格式
+      let algo = '';
+      const trimmed = raw.trim();
+      if (trimmed.startsWith('{')) {
+        const signerConf = parseJson(raw);
+        algo = signerConf?.algo || '';
+      } else {
+        const match = raw.match(/(?:^|,)algo=([^,]+)/);
+        algo = match ? match[1] : '';
+      }
+      selectedRootAlgo.value = algo;
     } catch (e) {
       selectedRootAlgo.value = '';
     }
@@ -1174,6 +1211,7 @@ async function handleRootChange(val: any) {
     issueForm.value.profileId = undefined;
     issueForm.value.signProfileId = undefined;
     issueForm.value.encProfileId = undefined;
+    issueForm.value.dualProfileName = undefined;
     issueForm.value.subjectItems = [];
     issueForm.value.extensionItems = [];
   } catch (e) {}
@@ -1211,10 +1249,6 @@ async function handleProfileChange(val: any) {
   } catch (e) {}
 }
 
-async function handleSignProfileChange(val: any) {
-  await handleProfileChange(val);
-}
-
 function prepareIssueFormForType(type: string) {
   issueType.value = type;
   stopDeviceMonitoring();
@@ -1228,26 +1262,27 @@ function openIssueDialog() {
   issueOpen.value = true;
   certMode.value = 'single';
   prepareIssueFormForType('key');
-  loadDualProfileList();
 }
 
-async function loadDualProfileList() {
-  try {
-    const res = await listDualCertProfiles();
-    dualProfileList.value = res?.data || [];
-  } catch (e) {
-    dualProfileList.value = [];
+async function handleDualProfileChange(profileId: string | number | undefined) {
+  issueForm.value.signProfileId = undefined;
+  issueForm.value.encProfileId = undefined;
+  issueForm.value.subjectItems = [];
+  issueForm.value.extensionItems = [];
+  issueProfileInfo.value = null;
+  if (!profileId) return;
+  const profile = availableDualEntityProfiles.value.find((item: any) => String(item.id) === String(profileId));
+  const dualCert = parseJson(profile?.conf)?.dualCert || {};
+  if (!profile || !dualCert.signProfileId || !dualCert.encProfileId) {
+    issueForm.value.profileId = undefined;
+    ElMessage.warning('该双证书模板未绑定签名证书模板或加密证书模板');
+    return;
   }
-}
-
-function handleDualProfileChange(pairName: string) {
-  if (!pairName) return;
-  const pair = dualProfileList.value.find((p) => p.pairName === pairName);
-  if (pair) {
-    issueForm.value.signProfileId = pair.signProfile?.id;
-    issueForm.value.encProfileId = pair.encProfile?.id;
-    ElMessage.success(`已选择双证书对: ${pair.pairDisplayName || pair.pairName}`);
-  }
+  issueForm.value.signProfileId = dualCert.signProfileId;
+  issueForm.value.encProfileId = dualCert.encProfileId;
+  await handleProfileChange(dualCert.signProfileId);
+  issueProfileInfo.value = profile;
+  ElMessage.success('已自动绑定签名证书模板和加密证书模板');
 }
 
 function handleIssueTypeChange(type: string | number | boolean) {
@@ -1264,13 +1299,15 @@ function handleCertModeChange(mode: string | number | boolean) {
   issueForm.value.profileId = undefined;
   issueForm.value.signProfileId = undefined;
   issueForm.value.encProfileId = undefined;
+  issueForm.value.dualProfileName = undefined;
   issueForm.value.subjectItems = [];
   issueForm.value.extensionItems = [];
   issueProfileInfo.value = null;
 }
 
 function resetIssueForm() {
-  profileList.value = [];
+  singleProfileList.value = [];
+  authorizedProfileIds.value = new Set();
   issueForm.value = {
     rootId: undefined,
     profileId: undefined,
@@ -1549,7 +1586,7 @@ function validateIssueExtensions() {
 }
 
 function shouldUseKmcSingleEncryption() {
-  const profile = issueProfileInfo.value || profileList.value.find((item: any) => String(item.id) === String(issueForm.value.profileId));
+  const profile = issueProfileInfo.value || singleProfileList.value.find((item: any) => String(item.id) === String(issueForm.value.profileId));
   const name = String(profile?.name || profile?.description || '').toLowerCase();
   if (name.includes('加密') || name.includes('enc')) return true;
   const conf = parseJson(profile?.conf);
@@ -1664,6 +1701,10 @@ async function submitIssue() {
       return;
     }
     if (valid) {
+      if (certMode.value === 'dual' && (!issueForm.value.signProfileId || !issueForm.value.encProfileId)) {
+        ElMessage.warning('请选择已绑定签名证书模板和加密证书模板的双证书模板');
+        return;
+      }
       if (!validateIssueExtensions()) {
         return;
       }
@@ -1832,24 +1873,17 @@ async function submitIssue() {
         } else if (issueType.value === 'p10' && certMode.value === 'dual') {
           // p10 双证书
           const signCsrBase64 = pemToBase64(issueForm.value.csr);
-          const encCsr = issueForm.value.encCsr?.trim();
           const payload: any = {
             rootId: issueForm.value.rootId,
             signProfileId: issueForm.value.signProfileId,
             encProfileId: issueForm.value.encProfileId,
             signCsrBase64,
+            keyGenStrategy: 'KMC',
             notBefore: issueForm.value.notBefore,
             notAfter: issueForm.value.notAfter,
             extensions: buildIssueExtensionsPayload()
           };
-          if (encCsr) {
-            payload.encCsrBase64 = pemToBase64(encCsr);
-            payload.keyGenStrategy = 'CA';
-          } else {
-            setIssueStep('未提供加密 CSR，将委托 KMC 自动生成加密密钥对...');
-            payload.keyGenStrategy = 'KMC';
-          }
-          setIssueStep('正在提交双证书 CSR 签发...');
+          setIssueStep('正在提交签名 CSR，KMC 将自动生成加密密钥对...');
           const res = await issueDualCert(payload);
           if (res.data && res.data.cert && res.data.encryptionCert) {
             ElMessage.success('双证书签发成功');
@@ -1857,7 +1891,7 @@ async function submitIssue() {
             showIssueResult(res.data, {
               primaryCertLabel: '签名证书',
               encryptionCertLabel: '加密证书',
-              keySource: encCsr ? '客户端CSR' : 'KMC'
+              keySource: 'KMC'
             });
           } else {
             throw new Error(res.msg || '后端签发双证书结果不完整');
@@ -3161,9 +3195,15 @@ onMounted(async () => {
 
 .result-actions {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
   gap: 10px;
   margin-top: 14px;
+}
+.result-actions :deep(.el-button) {
+  margin-left: 0;
+  max-width: 100%;
+  white-space: normal;
 }
 
 .flex-row {

@@ -83,6 +83,7 @@ export const useUserStore = defineStore('user', () => {
     tenantId,
     tenantInitStatus,
     token,
+    name,
     nickname,
     avatar,
     roles,

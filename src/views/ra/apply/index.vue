@@ -104,25 +104,11 @@
             <el-option v-for="profile in profileOptions" :key="String(profile.id)" :label="profile.name" :value="String(profile.id)" />
           </el-select>
         </el-form-item>
-        <template v-else>
-          <el-form-item label="签名模板" prop="signProfileId">
-            <el-select v-model="form.signProfileId" filterable clearable placeholder="请选择签名证书模板" style="width: 100%" @change="handleSignProfileChange">
-              <el-option v-for="profile in signProfileOptions" :key="String(profile.id)" :label="profile.name" :value="String(profile.id)" />
-            </el-select>
-          </el-form-item>
-          <el-form-item label="加密模板" prop="encryptProfileId">
-            <el-select
-              v-model="form.encryptProfileId"
-              filterable
-              clearable
-              placeholder="请选择加密证书模板"
-              style="width: 100%"
-              @change="handleEncryptProfileChange"
-            >
-              <el-option v-for="profile in encryptProfileOptions" :key="String(profile.id)" :label="profile.name" :value="String(profile.id)" />
-            </el-select>
-          </el-form-item>
-        </template>
+        <el-form-item v-else label="证书模板" prop="dualProfileIndex">
+          <el-select v-model="form.dualProfileIndex" filterable clearable placeholder="请选择双证书模板" style="width: 100%" @change="handleDualProfileChange">
+            <el-option v-for="(pair, index) in dualProfileOptions" :key="index" :label="dualPairLabel(pair)" :value="index" />
+          </el-select>
+        </el-form-item>
       </el-form>
       <template #footer>
         <div class="dialog-footer">
@@ -229,7 +215,7 @@ import { pageRaApply, getRaApply, saveRaApply, RaApplyForm, RaApplyVO } from '@/
 import { listUser } from '@/api/ra/user';
 import { listDeptSelectTree } from '@/api/ra/dept';
 import { RaDeptTreeOption } from '@/api/ra/dept/types';
-import { listMyUserCertScopeOptions, RaUserCertScopeProfile, RaUserCertScopeRoot } from '@/api/ra/userCertScope';
+import { listMyUserCertScopeOptions, RaUserCertScopeDualPair, RaUserCertScopeProfile, RaUserCertScopeRoot } from '@/api/ra/userCertScope';
 import { FormInstance, FormRules } from 'element-plus';
 
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
@@ -298,6 +284,7 @@ const form = reactive<RaApplyForm>({
   certMode: 'single',
   profileId: undefined,
   profileName: undefined,
+  dualProfileIndex: undefined,
   signProfileId: undefined,
   signProfileName: undefined,
   encryptProfileId: undefined,
@@ -309,9 +296,8 @@ const rules: FormRules = {
   userId: [{ required: true, message: '申请用户不能为空', trigger: 'change' }],
   rootId: [{ required: true, message: '根证书不能为空', trigger: 'change' }],
   certMode: [{ required: true, message: '签发类型不能为空', trigger: 'change' }],
-  profileId: [{ validator: validateSingleProfile, trigger: 'change' }],
-  signProfileId: [{ validator: validateSignProfile, trigger: 'change' }],
-  encryptProfileId: [{ validator: validateEncryptProfile, trigger: 'change' }]
+  profileId: [{ validator: validateProfile, trigger: 'change' }],
+  dualProfileIndex: [{ validator: validateDualProfile, trigger: 'change' }]
 };
 
 const selectedUserText = computed(() => {
@@ -334,17 +320,12 @@ const profileOptions = computed<RaUserCertScopeProfile[]>(() => {
   return rootOptions.value.find((root) => String(root.id) === rootId)?.profiles || [];
 });
 
-const signProfileOptions = computed(() => {
-  const preferred = profileOptions.value.filter((profile) => !isEncryptProfile(profile));
-  return preferred.length > 0 ? preferred : profileOptions.value;
+const dualProfileOptions = computed<RaUserCertScopeDualPair[]>(() => {
+  const rootId = form.rootId === undefined ? undefined : String(form.rootId);
+  return rootOptions.value.find((root) => String(root.id) === rootId)?.dualProfiles || [];
 });
 
-const encryptProfileOptions = computed(() => {
-  const preferred = profileOptions.value.filter(isEncryptProfile);
-  return preferred.length > 0 ? preferred : profileOptions.value;
-});
-
-function validateSingleProfile(_: any, value: any, callback: any) {
+function validateProfile(_: any, value: any, callback: any) {
   if (form.certMode !== 'dual' && !value) {
     callback(new Error('证书模板不能为空'));
     return;
@@ -352,17 +333,9 @@ function validateSingleProfile(_: any, value: any, callback: any) {
   callback();
 }
 
-function validateSignProfile(_: any, value: any, callback: any) {
-  if (form.certMode === 'dual' && !value) {
-    callback(new Error('签名证书模板不能为空'));
-    return;
-  }
-  callback();
-}
-
-function validateEncryptProfile(_: any, value: any, callback: any) {
-  if (form.certMode === 'dual' && !value) {
-    callback(new Error('加密证书模板不能为空'));
+function validateDualProfile(_: any, value: any, callback: any) {
+  if (form.certMode === 'dual' && (value === undefined || value === null || value === '')) {
+    callback(new Error('双证书模板不能为空'));
     return;
   }
   callback();
@@ -428,6 +401,7 @@ function resetForm() {
   form.certMode = 'single';
   form.profileId = undefined;
   form.profileName = undefined;
+  form.dualProfileIndex = undefined;
   form.signProfileId = undefined;
   form.signProfileName = undefined;
   form.encryptProfileId = undefined;
@@ -558,6 +532,7 @@ function handleCertModeChange() {
 function clearProfiles() {
   form.profileId = undefined;
   form.profileName = undefined;
+  form.dualProfileIndex = undefined;
   form.signProfileId = undefined;
   form.signProfileName = undefined;
   form.encryptProfileId = undefined;
@@ -569,18 +544,22 @@ function handleProfileChange(profileId?: string | number) {
   form.profileName = profile?.name;
 }
 
-function handleSignProfileChange(profileId?: string | number) {
-  const profile = profileOptions.value.find((item) => String(item.id) === String(profileId));
-  form.signProfileName = profile?.name;
-  if (form.certMode === 'dual') {
-    form.profileId = profileId;
-    form.profileName = profile?.name;
+function handleDualProfileChange(index?: number) {
+  if (index === undefined || index === null) {
+    clearProfiles();
+    return;
   }
-}
-
-function handleEncryptProfileChange(profileId?: string | number) {
-  const profile = profileOptions.value.find((item) => String(item.id) === String(profileId));
-  form.encryptProfileName = profile?.name;
+  const pair = dualProfileOptions.value[index];
+  if (!pair) {
+    clearProfiles();
+    return;
+  }
+  form.signProfileId = pair.signProfileId;
+  form.signProfileName = pair.signProfileName;
+  form.encryptProfileId = pair.encryptProfileId;
+  form.encryptProfileName = pair.encryptProfileName;
+  form.profileId = pair.signProfileId;
+  form.profileName = pair.signProfileName;
 }
 
 function submitForm() {
@@ -622,9 +601,11 @@ function rootLabel(root: RaUserCertScopeRoot) {
   return root.algorithm ? `${root.name}（${root.algorithm}）` : root.name;
 }
 
-function isEncryptProfile(profile: RaUserCertScopeProfile) {
-  const text = `${profile.name || ''} ${profile.type || ''}`.toLowerCase();
-  return text.includes('加密') || text.includes('encrypt') || text.includes('encipher');
+function dualPairLabel(pair: RaUserCertScopeDualPair) {
+  if (pair.pairName) {
+    return pair.pairName;
+  }
+  return `签名：${pair.signProfileName} / 加密：${pair.encryptProfileName}`;
 }
 
 function profileText(row: Partial<RaApplyVO>) {

@@ -119,10 +119,9 @@ async function getList() {
   loading.value = true;
   try {
     const res = await pageProfile(queryParams.value);
-    profileList.value = [];
-    total.value = res.data.total || 0;
-    await nextTick();
-    profileList.value = res.data.rows || res.data.records || [];
+    const page = res.data || {};
+    total.value = page.total || 0;
+    profileList.value = page.records || page.rows || [];
   } catch {
     ElMessage.error('获取列表失败');
   } finally {
@@ -413,11 +412,12 @@ loadDualProfilePairs();
             <el-form-item label="模板名称" prop="name">
               <el-input v-model="queryParams.name" placeholder="请输入模板名称" clearable @keyup.enter="handleQuery" />
             </el-form-item>
-            <el-form-item label="模板类型" prop="type">
-              <el-select v-model="queryParams.type" placeholder="模板类型" clearable>
+            <el-form-item label="证书级别" prop="type">
+              <el-select v-model="queryParams.type" placeholder="证书级别" clearable>
                 <el-option label="RootCA" value="RootCA" />
                 <el-option label="IntermediateCA" value="IntermediateCA" />
                 <el-option label="EndEntity" value="EndEntity" />
+                <el-option label="DualEntity" value="DualEntity" />
               </el-select>
             </el-form-item>
             <el-form-item>
@@ -454,11 +454,12 @@ loadDualProfilePairs();
       <el-table v-loading="loading" border :data="profileList" @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="50" align="center" />
         <el-table-column label="模板名称" align="center" prop="name" width="200" :show-overflow-tooltip="true" />
-        <el-table-column label="模板类型" align="center" prop="type" width="150">
+        <el-table-column label="证书级别" align="center" prop="type" width="150">
           <template #default="scope">
             <el-tag v-if="scope.row.type === 'RootCA'" type="danger">根CA</el-tag>
             <el-tag v-else-if="scope.row.type === 'IntermediateCA'" type="warning">中间CA</el-tag>
             <el-tag v-else-if="scope.row.type === 'EndEntity'" type="success">终端实体</el-tag>
+            <el-tag v-else-if="scope.row.type === 'DualEntity'" type="primary">双终端实体</el-tag>
             <el-tag v-else type="info">{{ scope.row.type }}</el-tag>
           </template>
         </el-table-column>
@@ -515,11 +516,12 @@ loadDualProfilePairs();
             </el-row>
             <el-row>
               <el-col :span="24">
-                <el-form-item label="模板类型" prop="type">
-                  <el-select v-model="form.type" placeholder="请选择模板类型" style="width: 100%">
+                <el-form-item label="证书级别" prop="type">
+                  <el-select v-model="form.type" placeholder="请选择证书级别" style="width: 100%">
                     <el-option label="RootCA" value="RootCA" />
                     <el-option label="IntermediateCA" value="IntermediateCA" />
                     <el-option label="EndEntity" value="EndEntity" />
+                    <el-option label="DualEntity" value="DualEntity" />
                   </el-select>
                 </el-form-item>
               </el-col>
@@ -689,10 +691,11 @@ loadDualProfilePairs();
       <div style="max-height: 75vh; overflow-y: auto; padding-right: 10px">
         <el-descriptions :column="2" border v-if="detailDialog.data" class="mb-4">
           <el-descriptions-item label="模板名称">{{ detailDialog.data.name }}</el-descriptions-item>
-          <el-descriptions-item label="模板类型">
+          <el-descriptions-item label="证书级别">
             <el-tag v-if="detailDialog.data.type === 'RootCA'" type="danger">根CA</el-tag>
             <el-tag v-else-if="detailDialog.data.type === 'IntermediateCA'" type="warning">中间CA</el-tag>
             <el-tag v-else-if="detailDialog.data.type === 'EndEntity'" type="success">终端实体</el-tag>
+            <el-tag v-else-if="detailDialog.data.type === 'DualEntity'" type="primary">双终端实体</el-tag>
             <el-tag v-else type="info">{{ detailDialog.data.type }}</el-tag>
           </el-descriptions-item>
           <el-descriptions-item label="描述" :span="2">{{ detailDialog.data.description || '-' }}</el-descriptions-item>

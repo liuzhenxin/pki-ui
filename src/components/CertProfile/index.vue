@@ -10,10 +10,12 @@
       <el-descriptions-item label="类别">{{ profile.metadata?.category || '-' }}</el-descriptions-item>
       <el-descriptions-item label="详情">{{ profile.metadata?.details || '-' }}</el-descriptions-item>
       <el-descriptions-item label="证书层级">{{ profile.certLevel || '-' }}</el-descriptions-item>
-      <el-descriptions-item label="最大大小">{{ profile.maxSize || '-' }}</el-descriptions-item>
-      <el-descriptions-item label="有效期">{{ profile.validity || '-' }}</el-descriptions-item>
-      <el-descriptions-item label="生效时间">{{ profile.notBeforeTime || '-' }}</el-descriptions-item>
-      <el-descriptions-item label="密钥对生成">{{ formatKeypairGeneration(profile.keypairGeneration) }}</el-descriptions-item>
+      <template v-if="!isDualEntityProfile">
+        <el-descriptions-item label="最大大小">{{ profile.maxSize || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="有效期">{{ profile.validity || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="生效时间">{{ profile.notBeforeTime || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="密钥对生成">{{ formatKeypairGeneration(profile.keypairGeneration) }}</el-descriptions-item>
+      </template>
       <el-descriptions-item label="密钥算法" :span="2">
         <el-tag v-for="algo in parsedKeyAlgorithms" :key="algo" class="mr-1" type="info" effect="plain">
           {{ algo }}
@@ -26,7 +28,25 @@
       </el-descriptions-item>
     </el-descriptions>
 
-    <el-tabs type="border-card" style="margin-top: 20px">
+    <el-descriptions v-if="isDualEntityProfile" title="双证书绑定" :column="2" border style="margin-top: 20px">
+      <template #title>
+        <div class="section-title">
+          <el-icon><Connection /></el-icon>
+          <span>双证书绑定</span>
+        </div>
+      </template>
+      <el-descriptions-item label="模板对标识">{{ dualCertInfo.pairName || '-' }}</el-descriptions-item>
+      <el-descriptions-item label="模板对名称">{{ dualCertInfo.pairDisplayName || '-' }}</el-descriptions-item>
+      <el-descriptions-item label="签名证书模板ID">
+        <el-tag type="warning" effect="plain">{{ dualCertInfo.signProfileId || '-' }}</el-tag>
+      </el-descriptions-item>
+      <el-descriptions-item label="加密证书模板ID">
+        <el-tag type="success" effect="plain">{{ dualCertInfo.encProfileId || '-' }}</el-tag>
+      </el-descriptions-item>
+      <el-descriptions-item label="说明" :span="2">{{ dualCertInfo.pairDescription || profile.metadata?.details || '-' }}</el-descriptions-item>
+    </el-descriptions>
+
+    <el-tabs v-else type="border-card" style="margin-top: 20px">
       <el-tab-pane>
         <template #label>
           <span class="custom-tabs-label">
@@ -226,6 +246,10 @@ const props = defineProps({
 const parsedKeyAlgorithms = computed(() => {
   return parseKeyAlgorithms(props.profile?.keyAlgorithms || []);
 });
+
+const isDualEntityProfile = computed(() => props.profile?.certLevel === 'DualEntity');
+
+const dualCertInfo = computed(() => props.profile?.dualCert || {});
 
 /** 处理主体数据，支持直接数组或 { rdns: [] } 结构 */
 const subjectData = computed(() => {

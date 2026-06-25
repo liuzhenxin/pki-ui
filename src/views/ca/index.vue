@@ -18,6 +18,90 @@
       </el-card>
     </div>
 
+    <div v-else-if="isCaAuditHome" class="ca-audit-home">
+      <section class="audit-hero">
+        <div>
+          <span class="audit-kicker">{{ isCaAuditManager ? '审计管理员工作台' : '安全审计工作台' }}</span>
+          <h1>{{ isCaAuditManager ? '审计员账号管理' : '业务日志与登录审计' }}</h1>
+          <p>
+            {{
+              isCaAuditManager
+                ? '维护审计员账号与证书状态，确保日志查看职责独立、账号可控、权限边界清晰。'
+                : '集中查看 CA 登录日志和业务操作日志，关注异常登录、失败操作和关键证书生命周期事件。'
+            }}
+          </p>
+        </div>
+        <div class="audit-hero-actions">
+          <el-button v-if="isCaAuditManager" type="primary" icon="User" @click="goAuditManager">审计员管理</el-button>
+          <el-button v-if="!isCaAuditManager && canViewOperateLog" type="primary" plain icon="Tickets" @click="goOperateLog">业务日志</el-button>
+          <el-button v-if="!isCaAuditManager && canViewLoginLog" plain icon="Key" @click="goLoginLog">登录日志</el-button>
+        </div>
+      </section>
+
+      <el-row v-if="auditMetrics.length" :gutter="16" class="audit-metrics">
+        <el-col v-for="item in auditMetrics" :key="item.label" :xs="12" :sm="12" :md="6">
+          <div class="audit-metric-card">
+            <div class="audit-metric-icon" :class="item.tone">
+              <el-icon><component :is="item.icon" /></el-icon>
+            </div>
+            <div class="audit-metric-copy">
+              <span>{{ item.label }}</span>
+              <strong>{{ item.value }}</strong>
+            </div>
+          </div>
+        </el-col>
+      </el-row>
+
+      <el-row :gutter="16">
+        <el-col v-if="!isCaAuditManager" :xs="24" :lg="15">
+          <el-card class="audit-panel" shadow="never">
+            <template #header>
+              <div class="audit-panel-header">
+                <div>
+                  <h2>最新审计事件</h2>
+                  <span>最近的业务操作与登录记录。</span>
+                </div>
+                <el-button text type="primary" icon="Refresh" @click="fetchAuditHomeData">刷新</el-button>
+              </div>
+            </template>
+            <div v-if="auditEvents.length" class="audit-event-list">
+              <button v-for="item in auditEvents" :key="item.key" type="button" class="audit-event-item" @click="goTarget(item.path)">
+                <div class="audit-event-icon" :class="item.tone">
+                  <el-icon><component :is="item.icon" /></el-icon>
+                </div>
+                <div class="audit-event-main">
+                  <b>{{ item.title }}</b>
+                  <span>{{ item.desc }}</span>
+                </div>
+                <time>{{ item.time || '-' }}</time>
+              </button>
+            </div>
+            <el-empty v-else description="暂无审计记录" />
+          </el-card>
+        </el-col>
+
+        <el-col :xs="24" :lg="isCaAuditManager ? 24 : 9">
+          <el-card class="audit-panel" shadow="never">
+            <template #header>
+              <div class="audit-panel-header">
+                <div>
+                  <h2>审计职责</h2>
+                  <span>当前角色可执行的监督动作。</span>
+                </div>
+              </div>
+            </template>
+            <div class="audit-action-list">
+              <button v-for="action in auditActions" :key="action.title" type="button" @click="goTarget(action.path)">
+                <el-icon><component :is="action.icon" /></el-icon>
+                <span>{{ action.title }}</span>
+                <small>{{ action.desc }}</small>
+              </button>
+            </div>
+          </el-card>
+        </el-col>
+      </el-row>
+    </div>
+
     <div v-else>
       <!-- 数据概览 -->
       <el-row :gutter="20">
@@ -165,12 +249,21 @@ import * as echarts from 'echarts';
 import { useRouter } from 'vue-router';
 import { pageCert } from '@/api/ca/cert';
 import { getTenant } from '@/api/system/tenant';
+import { list as listLoginLog } from '@/api/system/loginlog';
+import { list as listOperateLog } from '@/api/system/operlog';
 import { useUserStore } from '@/store/modules/user';
 import { X509, ASN1HEX } from 'jsrsasign';
 
 const router = useRouter();
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
 const userStore = useUserStore();
+const hasPermission = (permission: string) => (userStore.permissions || []).includes(permission) || (userStore.permissions || []).includes('*:*:*');
+const isAuditManagerAccount = computed(() => String(userStore.name || '').toLowerCase() === 'audit' || String(userStore.userId || '') === '402');
+const isCaAuditManager = computed(() => isAuditManagerAccount.value || (hasPermission('ca:audit') && !hasPermission('ca:cert:page')));
+const canViewLoginLog = computed(() => hasPermission('sys:login-log:page'));
+const canViewOperateLog = computed(() => hasPermission('sys:operate-log:page'));
+const isCaAuditor = computed(() => canViewLoginLog.value || canViewOperateLog.value);
+const isCaAuditHome = computed(() => isCaAuditManager.value || isCaAuditor.value);
 const isCaBusinessAdmin = computed(() => {
   const permissions = userStore.permissions || [];
   const isAdmin = permissions.includes('ca:admin') || permissions.includes('setup');
@@ -198,6 +291,76 @@ const recentCerts = ref<any[]>([]);
 const algoDistribution = ref<{ name: string; value: number; itemStyle?: { color: string } }[]>([]);
 
 const securityLogs = ref<any[]>([]);
+const recentLoginLogs = ref<any[]>([]);
+const recentOperateLogs = ref<any[]>([]);
+const auditStats = reactive({
+  loginTotal: 0,
+  operateTotal: 0,
+  failedLoginTotal: 0,
+  failedOperateTotal: 0
+});
+
+const auditMetrics = computed(() =>
+  isCaAuditManager.value
+    ? []
+    : [
+        { label: '登录日志', value: auditStats.loginTotal, icon: 'Key', tone: 'blue' },
+        { label: '业务日志', value: auditStats.operateTotal, icon: 'Tickets', tone: 'green' },
+        { label: '异常登录', value: auditStats.failedLoginTotal, icon: 'Warning', tone: 'orange' },
+        { label: '失败操作', value: auditStats.failedOperateTotal, icon: 'CircleClose', tone: 'red' }
+      ]
+);
+
+const auditActions = computed(() => {
+  const actions: Array<{ title: string; desc: string; icon: string; path: string }> = [];
+  if (isCaAuditManager.value) {
+    actions.push({
+      title: '审计员管理',
+      desc: '维护审计员账号、状态和证书签发。',
+      icon: 'User',
+      path: '/ca-audit-manager/ca-audit'
+    });
+  }
+  if (!isCaAuditManager.value && canViewOperateLog.value) {
+    actions.push({
+      title: '业务日志',
+      desc: '查看 CA 关键业务操作和执行结果。',
+      icon: 'Tickets',
+      path: '/ca-log/ca-log-operator'
+    });
+  }
+  if (!isCaAuditManager.value && canViewLoginLog.value) {
+    actions.push({
+      title: '登录日志',
+      desc: '追踪登录成功、失败和来源地址。',
+      icon: 'Key',
+      path: '/ca-log/ca-log-login'
+    });
+  }
+  return actions;
+});
+
+const auditEvents = computed(() => {
+  const loginEvents = recentLoginLogs.value.map((item, index) => ({
+    key: `login-${item.id || index}`,
+    title: `${item.username || item.userName || item.loginName || '-'} 登录${isFailureStatus(item.status) ? '失败' : '成功'}`,
+    desc: item.ip || item.loginIp || item.address || item.browser || '登录日志',
+    time: item.createTime || item.loginTime,
+    icon: 'Key',
+    tone: isFailureStatus(item.status) ? 'orange' : 'blue',
+    path: '/ca-log/ca-log-login'
+  }));
+  const operateEvents = recentOperateLogs.value.map((item, index) => ({
+    key: `operate-${item.id || index}`,
+    title: `${item.moduleName || item.title || '业务操作'} / ${item.name || item.operation || '-'}`,
+    desc: `${item.operator || item.operName || '-'} ${item.uri || item.operUrl || ''}`,
+    time: item.createTime || item.operTime,
+    icon: 'Tickets',
+    tone: isFailureStatus(item.status) ? 'red' : 'green',
+    path: '/ca-log/ca-log-operator'
+  }));
+  return [...loginEvents, ...operateEvents].sort((a, b) => dateTime(parseDate(b.time)) - dateTime(parseDate(a.time))).slice(0, 8);
+});
 
 const checkInitialization = async () => {
   try {
@@ -225,6 +388,22 @@ const getStatusLabel = (status: string) => {
 
 const goCertList = () => {
   router.push('/ca/cert');
+};
+
+const goAuditManager = () => {
+  router.push('/ca-audit-manager/ca-audit');
+};
+
+const goOperateLog = () => {
+  router.push('/ca-log/ca-log-operator');
+};
+
+const goLoginLog = () => {
+  router.push('/ca-log/ca-log-login');
+};
+
+const goTarget = (path: string) => {
+  router.push(path);
 };
 
 const goInit = () => {
@@ -305,6 +484,29 @@ const fetchDashboardData = async () => {
   } catch (error) {}
 };
 
+const fetchAuditHomeData = async () => {
+  if (isCaAuditManager.value) {
+    return;
+  }
+  const [loginPage, operatePage, failedLoginPage, failedOperatePage] = await Promise.all([
+    canViewLoginLog.value ? fetchLogPage(listLoginLog, {}) : Promise.resolve({ records: [], total: 0 }),
+    canViewOperateLog.value ? fetchLogPage(listOperateLog, {}) : Promise.resolve({ records: [], total: 0 }),
+    canViewLoginLog.value ? fetchLogPage(listLoginLog, { status: 1 }) : Promise.resolve({ records: [], total: 0 }),
+    canViewOperateLog.value ? fetchLogPage(listOperateLog, { status: 1 }) : Promise.resolve({ records: [], total: 0 })
+  ]);
+  recentLoginLogs.value = loginPage.records;
+  recentOperateLogs.value = operatePage.records;
+  auditStats.loginTotal = loginPage.total;
+  auditStats.operateTotal = operatePage.total;
+  auditStats.failedLoginTotal = failedLoginPage.total;
+  auditStats.failedOperateTotal = failedOperatePage.total;
+};
+
+const fetchLogPage = async (loader: (query: any) => Promise<any>, query: Record<string, any>) => {
+  const res = await loader({ pageNum: 1, pageSize: 5, ...query });
+  return unwrapPage(res);
+};
+
 const fetchAllCerts = async () => {
   const pageSize = 500;
   const first = await pageCert({ pageNum: 1, pageSize });
@@ -326,6 +528,9 @@ const unwrapPage = (res: any) => {
   const total = data?.total || data?.totalCount || records.length;
   return { records, total };
 };
+
+const isFailureStatus = (status: unknown) =>
+  Number(status) === 1 || String(status).toUpperCase() === 'FAIL' || String(status).toUpperCase() === 'FAILED';
 
 const normalizeCert = (cert: any) => {
   const issueTime = parseDate(cert.notBefore || cert.createTime || cert.lastUpdate);
@@ -483,11 +688,15 @@ const handleResize = () => {
 onMounted(async () => {
   await checkInitialization();
   if (isInitialized.value) {
-    await fetchDashboardData();
-    nextTick(() => {
-      initTrendChart();
-      initAlgoChart();
-    });
+    if (isCaAuditHome.value) {
+      await fetchAuditHomeData();
+    } else {
+      await fetchDashboardData();
+      nextTick(() => {
+        initTrendChart();
+        initAlgoChart();
+      });
+    }
   }
   window.addEventListener('resize', handleResize);
 });
@@ -583,6 +792,269 @@ watch(timeRange, () => {
       width: 100%;
       max-width: 600px;
       border-radius: 12px;
+    }
+  }
+
+  .ca-audit-home {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .audit-hero {
+    min-height: 156px;
+    padding: 24px;
+    border: 1px solid #dcdfe6;
+    border-radius: 8px;
+    background: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+
+    .audit-kicker {
+      display: block;
+      margin-bottom: 8px;
+      color: #409eff;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    h1 {
+      margin: 0 0 10px;
+      color: #1f2d3d;
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: 0;
+    }
+
+    p {
+      max-width: 760px;
+      margin: 0;
+      color: #606266;
+      font-size: 14px;
+      line-height: 1.7;
+    }
+  }
+
+  .audit-hero-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 10px;
+  }
+
+  .audit-metrics {
+    .audit-metric-card {
+      min-height: 92px;
+      padding: 18px;
+      border: 1px solid #ebeef5;
+      border-radius: 8px;
+      background: #fff;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .audit-metric-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-size: 22px;
+
+      &.blue {
+        background: #409eff;
+      }
+      &.green {
+        background: #67c23a;
+      }
+      &.orange {
+        background: #e6a23c;
+      }
+      &.red {
+        background: #f56c6c;
+      }
+    }
+
+    .audit-metric-copy {
+      span {
+        display: block;
+        color: #909399;
+        font-size: 13px;
+      }
+
+      strong {
+        display: block;
+        margin-top: 6px;
+        color: #303133;
+        font-size: 22px;
+      }
+    }
+  }
+
+  .audit-panel {
+    border-radius: 8px;
+  }
+
+  .audit-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+
+    h2 {
+      margin: 0 0 4px;
+      color: #303133;
+      font-size: 16px;
+      letter-spacing: 0;
+    }
+
+    span {
+      color: #909399;
+      font-size: 12px;
+    }
+  }
+
+  .audit-event-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .audit-event-item {
+    width: 100%;
+    min-height: 64px;
+    border: 1px solid #ebeef5;
+    border-radius: 8px;
+    background: #fff;
+    padding: 10px 12px;
+    display: grid;
+    grid-template-columns: 38px minmax(0, 1fr) 150px;
+    align-items: center;
+    gap: 12px;
+    text-align: left;
+    cursor: pointer;
+
+    &:hover {
+      border-color: #409eff;
+      background: #f5f9ff;
+    }
+
+    time {
+      color: #909399;
+      font-size: 12px;
+      text-align: right;
+    }
+  }
+
+  .audit-event-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+
+    &.blue {
+      background: #409eff;
+    }
+    &.green {
+      background: #67c23a;
+    }
+    &.orange {
+      background: #e6a23c;
+    }
+    &.red {
+      background: #f56c6c;
+    }
+  }
+
+  .audit-event-main {
+    min-width: 0;
+
+    b,
+    span {
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    b {
+      color: #303133;
+      font-size: 14px;
+    }
+
+    span {
+      margin-top: 4px;
+      color: #606266;
+      font-size: 12px;
+    }
+  }
+
+  .audit-action-list {
+    display: grid;
+    gap: 10px;
+
+    button {
+      min-height: 72px;
+      border: 1px solid #ebeef5;
+      border-radius: 8px;
+      background: #fff;
+      padding: 12px;
+      display: grid;
+      grid-template-columns: 28px minmax(0, 1fr);
+      column-gap: 10px;
+      align-items: center;
+      text-align: left;
+      cursor: pointer;
+
+      &:hover {
+        border-color: #409eff;
+        background: #f5f9ff;
+      }
+
+      .el-icon {
+        grid-row: span 2;
+        color: #409eff;
+        font-size: 22px;
+      }
+
+      span {
+        color: #303133;
+        font-size: 14px;
+        font-weight: 600;
+      }
+
+      small {
+        color: #909399;
+        font-size: 12px;
+      }
+    }
+  }
+
+  @media (max-width: 768px) {
+    .audit-hero {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+
+    .audit-hero-actions {
+      justify-content: flex-start;
+    }
+
+    .audit-event-item {
+      grid-template-columns: 38px minmax(0, 1fr);
+
+      time {
+        grid-column: 2;
+        text-align: left;
+      }
     }
   }
 }

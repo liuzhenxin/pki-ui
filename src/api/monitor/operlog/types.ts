@@ -1,6 +1,7 @@
 export interface OperLogQuery extends PageQuery {
   operIp: string;
   title: string;
+  operationName: string;
   operName: string;
   businessType: string;
   status: string;
@@ -12,6 +13,7 @@ export interface OperLogVO extends BaseEntity {
   operId: string | number;
   tenantId: string;
   title: string;
+  operationName?: string;
   businessType: number;
   businessTypes: number[] | undefined;
   method: string;
@@ -34,6 +36,7 @@ export interface OperLogForm {
   operId: number | string | undefined;
   tenantId: string | number | undefined;
   title: string;
+  operationName?: string;
   businessType: number;
   businessTypes: number[] | undefined;
   method: string;

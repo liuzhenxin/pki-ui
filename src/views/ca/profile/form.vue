@@ -3,7 +3,7 @@ import { ref, reactive, toRefs, getCurrentInstance, ComponentInternalInstance, o
 import { ElMessage, FormInstance, FormRules } from 'element-plus';
 import { useRouter, useRoute } from 'vue-router';
 import { Plus, Delete, Top, Bottom, Postcard, CollectionTag, Timer, Calendar, EditPen, Key } from '@element-plus/icons-vue';
-import { getProfile, saveProfile, modifyProfile } from '@/api/ca/profile';
+import { getProfile, listProfile, saveProfile, modifyProfile } from '@/api/ca/profile';
 import { ProfileForm } from '@/api/ca/profile/types';
 import { parseJson, parseKeyAlgorithms } from '@/utils/json';
 
@@ -170,18 +170,12 @@ const presetTemplates = [
   }
 ];
 
-// 模板类别选项
-const categoryOptions = [
-  { label: 'RootCA证书模板 (RootCA)', value: 'RootCA' },
-  { label: '子CA证书模板 (SubCA)', value: 'SubCA' },
-  { label: '终端实体证书模板 (EndEntity)', value: 'EndEntity' }
-];
-
 // 证书级别选项
 const certLevelOptions = [
   { label: '根证书 (RootCA)', value: 'RootCA' },
   { label: '子CA (SubCA)', value: 'SubCA' },
-  { label: '终端实体 (EndEntity)', value: 'EndEntity' }
+  { label: '终端实体 (EndEntity)', value: 'EndEntity' },
+  { label: '双终端实体 (DualEntity)', value: 'DualEntity' }
 ];
 
 // 密钥算法选项
@@ -193,6 +187,9 @@ const keyAlgorithmOptions = [
 ];
 
 const form = reactive<ProfileForm>({ ...initFormData });
+const bindableProfiles = ref<any[]>([]);
+const dualSignProfileId = ref<string | number | undefined>();
+const dualEncProfileId = ref<string | number | undefined>();
 
 const keypairGenerationOptions = [
   { label: '客户端', value: 'CLIENT', description: '由客户端产生密钥对并提交 CSR/公钥' },
@@ -224,7 +221,13 @@ const keypairGenerationLocation = computed({
   }
 });
 
-const isEndEntityTemplate = computed(() => (form.metadata?.category || form.type || form.certLevel) === 'EndEntity');
+const isEndEntityTemplate = computed(() => {
+  const certLevel = form.certLevel || form.type || form.metadata?.category;
+  return certLevel === 'EndEntity' || certLevel === 'DualEntity';
+});
+const isDualEntityTemplate = computed(() => form.certLevel === 'DualEntity');
+const dualSignProfileOptions = computed(() => bindableProfiles.value.filter((profile: any) => getDualProfileRole(profile) === 'SIGNING'));
+const dualEncProfileOptions = computed(() => bindableProfiles.value.filter((profile: any) => getDualProfileRole(profile) === 'ENCRYPTION'));
 
 const availableKeypairGenerationOptions = computed(() => (isEndEntityTemplate.value ? keypairGenerationOptions : [caKeypairGenerationOption]));
 
@@ -239,6 +242,46 @@ function syncKeypairGenerationWithTemplateCategory() {
 }
 
 watch(isEndEntityTemplate, syncKeypairGenerationWithTemplateCategory);
+watch(isDualEntityTemplate, (value) => {
+  if (value) {
+    syncDualEntityDefaults();
+    if (activeTab.value === 'subject' || activeTab.value === 'extensions' || activeTab.value === 'constraints') {
+      activeTab.value = 'basic';
+    }
+  }
+});
+
+function getDualProfileRole(profile: any) {
+  const category = String(profile?.profileCategory || '').toUpperCase();
+  if (category === 'DUAL_SIGN') return 'SIGNING';
+  if (category === 'DUAL_ENC') return 'ENCRYPTION';
+  const conf = parseJson(profile?.conf);
+  const role = String(conf?.dualCert?.role || '').toUpperCase();
+  if (role === 'SIGNING') return 'SIGNING';
+  if (role === 'ENCRYPTION') return 'ENCRYPTION';
+  return '';
+}
+
+async function loadBindableProfiles() {
+  try {
+    const res = await listProfile();
+    bindableProfiles.value = (res.data || []).filter((profile: any) => profile.type === 'EndEntity');
+  } catch {
+    bindableProfiles.value = [];
+  }
+}
+
+function syncDualEntityDefaults() {
+  form.keyAlgorithms = ['SM2P256V1'];
+  form.signatureAlgorithms = ['SM3withSM2'];
+  form.keypairGeneration = buildKeypairGeneration('CLIENT');
+  form.subjectItems = [];
+  form.subjectToSubjectAltNames = [];
+  form.extensions = [];
+  selectedKeyUsages.value = [];
+  selectedExtendedKeyUsages.value = [];
+  selectedSubjectAltNameModes.value = [];
+}
 
 // 计算属性：解析validity字符串为数值和单位
 const validityValue = computed(() => {
@@ -545,7 +588,7 @@ const templateConstraints: Record<string, TemplateConstraint> = {
 
 const profileRules: FormRules = {
   name: [{ required: true, message: '模板名称不能为空', trigger: 'blur' }],
-  type: [{ required: true, message: '模板类型不能为空', trigger: 'change' }],
+  certLevel: [{ required: true, message: '证书级别不能为空', trigger: 'change' }],
   validity: [
     {
       validator: (rule: any, value: any, callback: any) => {
@@ -585,13 +628,13 @@ const profileRules: FormRules = {
 };
 
 const templateConstraintKey = computed(() => {
-  const category = form.metadata?.category || form.name || '';
+  const category = form.certLevel || form.metadata?.category || form.name || '';
   const name = form.name || '';
   const source = `${category} ${name}`.toLowerCase();
-  if (form.certLevel === 'RootCA' || form.type === 'RootCA' || source.includes('rootca') || source.includes('根')) {
+  if (form.certLevel === 'RootCA' || source.includes('rootca') || source.includes('根')) {
     return 'RootCA';
   }
-  if (form.certLevel === 'SubCA' || form.type === 'SubCA' || source.includes('subca') || source.includes('子ca')) {
+  if (form.certLevel === 'SubCA' || source.includes('subca') || source.includes('子ca')) {
     return 'SubCA';
   }
   if (source.includes('ocsp')) {
@@ -684,14 +727,42 @@ function getSelectedSubjectAltNameModes() {
   return subjectAltName?.subjectAltName?.modes || [];
 }
 
+function buildDualPairName() {
+  const ascii = (form.name || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return ascii || `dual-${dualSignProfileId.value || 'sign'}-${dualEncProfileId.value || 'enc'}`;
+}
+
 function buildProfileConf() {
+  if (isDualEntityTemplate.value) {
+    return {
+      metadata: {
+        category: form.name || '双终端实体证书模板',
+        details: form.description || ''
+      },
+      version: 'v3',
+      certLevel: 'DualEntity',
+      keyAlgorithms: ['SM2P256V1'],
+      signatureAlgorithms: ['SM3withSM2'],
+      dualCert: {
+        pairName: buildDualPairName(),
+        pairDisplayName: form.name || '双终端实体证书模板',
+        pairDescription: form.description || '',
+        signProfileId: dualSignProfileId.value,
+        encProfileId: dualEncProfileId.value
+      }
+    };
+  }
   return {
     metadata: {
       category: form.metadata?.category || form.name || '',
       details: form.metadata?.details || form.description || ''
     },
     version: 'v3',
-    certLevel: form.certLevel || form.type || 'EndEntity',
+    certLevel: form.certLevel || 'EndEntity',
     maxSize: form.maxSize || 8400,
     validity: form.validity || '1y',
     notBeforeTime: form.notBeforeTime || 'current',
@@ -786,6 +857,18 @@ const previewJson = computed(() => {
 
 function validateTemplate() {
   const issues: TemplateIssue[] = [];
+  if (isDualEntityTemplate.value) {
+    if (!dualSignProfileId.value) {
+      issues.push({ level: 'error', tab: 'basic', message: '请选择签名证书模板' });
+    }
+    if (!dualEncProfileId.value) {
+      issues.push({ level: 'error', tab: 'basic', message: '请选择加密证书模板' });
+    }
+    if (dualSignProfileId.value && dualEncProfileId.value && String(dualSignProfileId.value) === String(dualEncProfileId.value)) {
+      issues.push({ level: 'error', tab: 'basic', message: '签名证书模板和加密证书模板不能相同' });
+    }
+    return issues;
+  }
   const constraint = activeConstraint.value;
   const subjectFields = (form.subjectItems || []).map((item: any) => item.type).filter(Boolean);
   const keyUsages = getSelectedKeyUsageValues();
@@ -883,11 +966,19 @@ function handlePresetTemplateChange(templateName: string) {
   }
 }
 
-function handleTemplateCategoryChange(category: string) {
-  if (!category) return;
-  form.type = category;
-  form.certLevel = category;
+function handleCertLevelChange(certLevel: string) {
+  if (!certLevel) return;
+  syncCertLevelFields(certLevel);
   syncKeypairGenerationWithTemplateCategory();
+}
+
+function syncCertLevelFields(certLevel = form.certLevel || form.type || form.metadata?.category || 'EndEntity') {
+  form.certLevel = certLevel;
+  // 后端当前仍依赖 Profile.type 查询和校验，保留兼容填充。
+  form.type = certLevel;
+  if (!form.metadata) {
+    form.metadata = { category: '', details: '' };
+  }
 }
 
 /** 获取扩展标签 */
@@ -1128,6 +1219,7 @@ function handleSubjectAltNameModeGroupChange(extIndex: number, values: string[])
 
 /** 提交按钮 */
 async function submitForm() {
+  syncCertLevelFields();
   profileFormRef.value?.validate(async (valid: boolean) => {
     if (valid) {
       loading.value = true;
@@ -1141,19 +1233,23 @@ async function submitForm() {
         }
         const conf = buildProfileConf();
 
-        // 只提交必要的字段，避免包含原始的 subjectItems 和 extensions
-        const submitData = {
+        const baseSubmitData = {
           id: form.id,
           name: form.name,
           type: form.type,
-          certLevel: form.certLevel,
           description: form.description,
+          conf: JSON.stringify(conf)
+        };
+        // 只提交必要的字段，避免包含原始的 subjectItems 和 extensions
+        const submitData = isDualEntityTemplate.value
+          ? baseSubmitData
+          : {
+              ...baseSubmitData,
           maxSize: form.maxSize,
           validity: form.validity,
           notBeforeTime: form.notBeforeTime,
-          keyAlgorithms: form.keyAlgorithms,
-          conf: JSON.stringify(conf)
-        };
+              keyAlgorithms: form.keyAlgorithms
+            };
 
         const commandData = {
           co: submitData
@@ -1200,6 +1296,11 @@ async function getProfileDetail(id: string | number) {
       // 解析新格式的字段
       form.metadata = conf.metadata || { category: '', details: '' };
       form.certLevel = conf.certLevel || conf.type || 'EndEntity';
+      if (form.certLevel === 'DualEntity') {
+        dualSignProfileId.value = conf.dualCert?.signProfileId;
+        dualEncProfileId.value = conf.dualCert?.encProfileId;
+        syncDualEntityDefaults();
+      }
       form.maxSize = conf.maxSize || 8400;
       form.validity = conf.validity || '1y';
       form.notBeforeTime = conf.notBeforeTime || 'current';
@@ -1334,6 +1435,7 @@ async function getProfileDetail(id: string | number) {
 }
 
 onMounted(() => {
+  loadBindableProfiles();
   const id = route.query.id;
   if (id) {
     isEdit.value = true;
@@ -1401,48 +1503,54 @@ onMounted(() => {
                   </el-form-item>
                 </el-col>
                 <el-col :span="12">
-                  <el-form-item label="模板类别">
-                    <template #label>
-                      <div class="custom-form-label">
-                        <el-icon><CollectionTag /></el-icon>
-                        <span>模板类别</span>
-                      </div>
-                    </template>
-                    <el-select v-model="form.metadata.category" placeholder="请选择模板类别" style="width: 100%" :disabled="isEdit" @change="handleTemplateCategoryChange">
-                      <el-option v-for="category in categoryOptions" :key="category.value" :label="category.label" :value="category.value" />
-                    </el-select>
-                  </el-form-item>
-                </el-col>
-              </el-row>
-              <el-alert type="info" :closable="false" show-icon class="constraint-alert">
-                <template #title> 当前按 {{ activeConstraint.label }} 模板约束校验，最多有效期 {{ activeConstraint.maxValidityDays }} 天 </template>
-              </el-alert>
-              <el-row :gutter="20">
-                <el-col :span="12">
-                  <el-form-item label="证书级别" prop="type">
+                  <el-form-item label="证书级别" prop="certLevel">
                     <template #label>
                       <div class="custom-form-label">
                         <el-icon><CollectionTag /></el-icon>
                         <span>证书级别</span>
                       </div>
                     </template>
-                    <el-select v-model="form.type" placeholder="请选择证书级别" style="width: 100%" :disabled="isEdit">
+                    <el-select v-model="form.certLevel" placeholder="请选择证书级别" style="width: 100%" :disabled="isEdit" @change="handleCertLevelChange">
                       <el-option v-for="level in certLevelOptions" :key="level.value" :label="level.label" :value="level.value" />
                     </el-select>
                   </el-form-item>
                 </el-col>
+              </el-row>
+              <el-alert v-if="!isDualEntityTemplate" type="info" :closable="false" show-icon class="constraint-alert">
+                <template #title> 当前按 {{ activeConstraint.label }} 模板约束校验，最多有效期 {{ activeConstraint.maxValidityDays }} 天 </template>
+              </el-alert>
+              <el-alert
+                v-if="isDualEntityTemplate"
+                type="success"
+                :closable="false"
+                show-icon
+                class="constraint-alert"
+                title="双终端实体模板仅用于绑定签名证书模板和加密证书模板，算法固定为 SM2。"
+              />
+              <el-row v-if="isDualEntityTemplate" :gutter="20">
                 <el-col :span="12">
-                  <el-form-item label="模板类型" prop="certLevel">
-                    <template #label>
-                      <div class="custom-form-label">
-                        <el-icon><CollectionTag /></el-icon>
-                        <span>CA类型</span>
-                      </div>
-                    </template>
-                    <el-select v-model="form.certLevel" placeholder="请选择CA类型" style="width: 100%" :disabled="isEdit">
-                      <el-option label="RootCA" value="RootCA" />
-                      <el-option label="SubCA" value="SubCA" />
-                      <el-option label="EndEntity" value="EndEntity" />
+                  <el-form-item label="密钥算法">
+                    <el-tag type="success" effect="plain">SM2P256V1</el-tag>
+                  </el-form-item>
+                </el-col>
+                <el-col :span="12">
+                  <el-form-item label="签名算法">
+                    <el-tag type="success" effect="plain">SM3withSM2</el-tag>
+                  </el-form-item>
+                </el-col>
+              </el-row>
+              <el-row v-if="isDualEntityTemplate" :gutter="20">
+                <el-col :span="12">
+                  <el-form-item label="签名证书模板" required>
+                    <el-select v-model="dualSignProfileId" filterable placeholder="请选择签名证书模板" style="width: 100%">
+                      <el-option v-for="profile in dualSignProfileOptions" :key="profile.id" :label="profile.name" :value="profile.id" />
+                    </el-select>
+                  </el-form-item>
+                </el-col>
+                <el-col :span="12">
+                  <el-form-item label="加密证书模板" required>
+                    <el-select v-model="dualEncProfileId" filterable placeholder="请选择加密证书模板" style="width: 100%">
+                      <el-option v-for="profile in dualEncProfileOptions" :key="profile.id" :label="profile.name" :value="profile.id" />
                     </el-select>
                   </el-form-item>
                 </el-col>
@@ -1462,7 +1570,7 @@ onMounted(() => {
               </el-row>
             </div>
 
-            <div class="basic-info-section">
+            <div v-if="!isDualEntityTemplate" class="basic-info-section">
               <div class="section-title">
                 <el-icon><Key /></el-icon>
                 <span>技术参数</span>
@@ -1570,7 +1678,7 @@ onMounted(() => {
           </el-tab-pane>
 
           <!-- 主题信息 -->
-          <el-tab-pane label="主题信息" name="subject">
+          <el-tab-pane v-if="!isDualEntityTemplate" label="主题信息" name="subject">
             <div class="subject-container">
               <div class="subject-header">
                 <span>主题字段列表（RDNs）</span>
@@ -1704,7 +1812,7 @@ onMounted(() => {
           </el-tab-pane>
 
           <!-- 扩展信息 -->
-          <el-tab-pane label="扩展信息" name="extensions">
+          <el-tab-pane v-if="!isDualEntityTemplate" label="扩展信息" name="extensions">
             <div class="extensions-container">
               <div v-if="form.extensions && form.extensions.length > 0">
                 <div v-for="(ext, index) in form.extensions" :key="index" class="extension-item">
@@ -1834,7 +1942,7 @@ onMounted(() => {
             </div>
           </el-tab-pane>
 
-          <el-tab-pane label="约束视图" name="constraints">
+          <el-tab-pane v-if="!isDualEntityTemplate" label="约束视图" name="constraints">
             <div class="constraints-container">
               <el-descriptions :column="2" border>
                 <el-descriptions-item label="约束类型">{{ activeConstraint.label }}</el-descriptions-item>

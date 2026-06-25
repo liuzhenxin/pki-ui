@@ -1,5 +1,5 @@
 <template>
-  <div class="app-container ra-admin-page">
+  <div class="app-container ra-audit-page">
     <el-row :gutter="16">
       <el-col :xs="24" :sm="24" :md="6" :lg="5" :xl="4">
         <el-card shadow="never" class="dept-tree-card">
@@ -35,11 +35,6 @@
               <el-option v-for="dict in sys_common_status" :key="dict.value" :label="dict.label" :value="dict.value" />
             </el-select>
           </el-form-item>
-          <el-form-item label="业务角色" prop="roleId">
-            <el-select v-model="queryParams.roleId" placeholder="全部业务角色" clearable style="width: 240px">
-              <el-option v-for="role in raBizRoleOptions" :key="role.value" :label="role.label" :value="role.value" />
-            </el-select>
-          </el-form-item>
           <el-form-item>
             <el-button type="primary" icon="Search" @click="handleQuery">搜索</el-button>
             <el-button icon="Refresh" @click="resetQuery">重置</el-button>
@@ -48,114 +43,91 @@
 
         <el-row :gutter="10" class="mb8">
           <el-col :span="1.5">
-            <el-button type="primary" plain icon="Plus" @click="handleAdd">新增</el-button>
+            <el-button type="primary" plain icon="Plus" @click="handleAdd" v-hasPermi="['ra:audit:manager']">新增审计员</el-button>
           </el-col>
           <el-col :span="1.5">
-            <el-button type="success" plain icon="Edit" :disabled="single" @click="handleUpdate" v-hasPermi="['ra:admin']">修改</el-button>
+            <el-button type="success" plain icon="Edit" :disabled="single" @click="handleUpdate" v-hasPermi="['ra:audit:manager']">修改</el-button>
           </el-col>
           <el-col :span="1.5">
-            <el-button type="danger" plain icon="Delete" :disabled="multiple" @click="handleDelete" v-hasPermi="['ra:admin']">删除</el-button>
+            <el-button type="danger" plain icon="Delete" :disabled="multiple" @click="handleDelete" v-hasPermi="['ra:audit:manager']">删除</el-button>
           </el-col>
-          <el-col :span="1.5">
-            <el-button type="info" plain icon="Upload" @click="handleImport" v-hasPermi="['ra:admin']">导入</el-button>
-          </el-col>
-          <el-col :span="1.5">
-            <el-button type="warning" plain icon="Download" @click="handleExport" v-hasPermi="['ra:admin']">导出</el-button>
-          </el-col>
-          <right-toolbar v-model:showSearch="showSearch" @queryTable="getList" :columns="columns"></right-toolbar>
+          <right-toolbar v-model:show-search="showSearch" @query-table="getList"></right-toolbar>
         </el-row>
 
-        <el-table v-loading="loading" :data="userList" @selection-change="handleSelectionChange">
+        <el-table v-loading="loading" border :data="userList" @selection-change="handleSelectionChange">
           <el-table-column type="selection" width="50" align="center" />
-          <el-table-column label="用户编号" align="center" key="id" prop="id" v-if="columns[0].visible" />
-          <el-table-column label="用户名称" align="center" key="username" prop="username" v-if="columns[1].visible" :show-overflow-tooltip="true" />
-          <el-table-column label="邮箱" align="center" key="mail" prop="mail" v-if="columns[2].visible" :show-overflow-tooltip="true" />
-          <el-table-column label="手机号码" align="center" key="mobile" prop="mobile" v-if="columns[3].visible" width="120" />
-          <el-table-column label="状态" align="center" key="status" v-if="columns[4].visible">
+          <el-table-column label="用户名称" align="center" prop="username" :show-overflow-tooltip="true" />
+          <el-table-column label="手机号码" align="center" prop="mobile" width="120" />
+          <el-table-column label="邮箱" align="center" prop="mail" width="200" :show-overflow-tooltip="true" />
+          <el-table-column label="状态" align="center" width="80">
             <template #default="scope">
               <el-switch
                 v-model="scope.row.status"
                 :active-value="0"
                 :inactive-value="1"
-                @change="(val) => handleStatusChange(scope.row, val as number)"
-              ></el-switch>
+                active-color="#13ce66"
+                inactive-color="#ff4949"
+                @change="(val: number) => handleStatusChange(scope.row, val)"
+              />
             </template>
           </el-table-column>
-          <el-table-column label="证书状态" align="center" key="certSn" width="100">
+          <el-table-column label="证书状态" align="center" prop="certSn" width="100">
             <template #default="scope">
               <el-tag :type="scope.row.certSn ? 'success' : 'info'">{{ scope.row.certSn ? '已签发' : '未签发' }}</el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="创建时间" align="center" prop="createTime" v-if="columns[5].visible" width="160">
+          <el-table-column label="创建时间" align="center" prop="createTime" width="180">
             <template #default="scope">
               <span>{{ parseTime(scope.row.createTime) }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="操作" align="center" width="220" class-name="small-padding fixed-width">
+          <el-table-column label="操作" fixed="right" width="260" class-name="small-padding fixed-width">
             <template #default="scope">
-              <el-tooltip content="详情" placement="top">
-                <el-button link type="primary" icon="View" @click="handleDetail(scope.row)"></el-button>
-              </el-tooltip>
-              <el-tooltip content="签证" placement="top" v-if="scope.row.id !== 1 && !scope.row.certSn">
-                <el-button link type="success" icon="Ticket" @click="handleIssueCert(scope.row)" v-hasPermi="['ra:admin']"></el-button>
-              </el-tooltip>
-              <el-tooltip content="修改" placement="top" v-if="scope.row.id !== 1">
-                <el-button link type="primary" icon="Edit" @click="handleUpdate(scope.row)" v-hasPermi="['ra:admin']"></el-button>
-              </el-tooltip>
-              <el-tooltip content="删除" placement="top" v-if="scope.row.id !== 1">
-                <el-button link type="primary" icon="Delete" @click="handleDelete(scope.row)" v-hasPermi="['ra:admin']"></el-button>
-              </el-tooltip>
-              <el-tooltip content="重置密码" placement="top" v-if="scope.row.id !== 1">
-                <el-button link type="primary" icon="Key" @click="handleResetPwd(scope.row)" v-hasPermi="['ra:admin']"></el-button>
-              </el-tooltip>
-              <el-tooltip content="分配角色" placement="top" v-if="scope.row.id !== 1">
-                <el-button link type="primary" icon="CircleCheck" @click="handleAuthRole(scope.row)" v-hasPermi="['ra:admin']"></el-button>
-              </el-tooltip>
+              <el-button link type="primary" icon="Edit" @click="handleUpdate(scope.row)" v-hasPermi="['ra:audit:manager']">修改</el-button>
+              <el-button v-if="!scope.row.certSn" link type="success" icon="Document" @click="handleIssueCert(scope.row)" v-hasPermi="['ra:audit:manager']">签发证书</el-button>
+              <el-button link type="primary" icon="Delete" @click="handleDelete(scope.row)" v-hasPermi="['ra:audit:manager']">删除</el-button>
+              <el-button link type="primary" icon="Key" @click="handleResetPwd(scope.row)" v-hasPermi="['ra:audit:manager']">重置密码</el-button>
             </template>
           </el-table-column>
         </el-table>
-
-        <pagination v-show="total > 0" :total="total" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" @pagination="getList" />
+        <pagination v-show="total > 0" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" :total="total" @pagination="getList" />
       </el-col>
     </el-row>
 
-    <!-- 添加或修改用户配置对话框 -->
+    <!-- 添加/修改审计员对话框 -->
     <el-dialog :title="title" v-model="open" width="600px" append-to-body>
       <el-form ref="userRef" :model="form" :rules="rules" label-width="80px">
-        <el-row>
+        <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item label="用户名称" prop="username">
-              <el-input v-model="form.username" placeholder="请输入用户名称" maxlength="30" :disabled="form.id != undefined" />
+              <el-input v-model="form.username" placeholder="请输入用户名称" maxlength="30" />
             </el-form-item>
           </el-col>
-          <el-col :span="12">
-            <el-form-item v-if="form.id == undefined" label="用户密码" prop="password">
-              <el-input v-model="form.password" placeholder="请输入用户密码" type="password" maxlength="30" show-password />
-            </el-form-item>
-          </el-col>
-        </el-row>
-        <el-row>
           <el-col :span="12">
             <el-form-item label="手机号码" prop="mobile">
               <el-input v-model="form.mobile" placeholder="请输入手机号码" maxlength="11" />
             </el-form-item>
           </el-col>
         </el-row>
-        <el-row>
-          <el-col :span="24">
+        <el-row :gutter="16">
+          <el-col :span="12">
             <el-form-item label="邮箱" prop="mail">
               <el-input v-model="form.mail" placeholder="请输入邮箱" maxlength="50" />
             </el-form-item>
           </el-col>
+          <el-col :span="12">
+            <el-form-item label="用户密码" prop="password" v-if="!form.userId">
+              <el-input v-model="form.password" placeholder="请输入用户密码" type="password" maxlength="20" show-password />
+            </el-form-item>
+          </el-col>
         </el-row>
-        <el-row>
+        <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item label="所属部门" prop="deptId">
               <el-tree-select
                 v-model="form.deptId"
                 :data="deptOptions"
-                :props="{ value: 'id', label: 'name', children: 'children' } as any"
-                value-key="id"
+                :props="{ label: 'name', value: 'id', children: 'children' }"
                 placeholder="请选择所属部门"
                 check-strictly
                 style="width: 100%"
@@ -164,25 +136,17 @@
           </el-col>
           <el-col :span="12">
             <el-form-item label="状态">
-              <el-select v-model="form.status" placeholder="请选择状态">
-                <el-option v-for="dict in sys_common_status" :key="dict.value" :label="dict.label" :value="Number(dict.value)"></el-option>
-              </el-select>
+              <el-radio-group v-model="form.status">
+                <el-radio :value="0">正常</el-radio>
+                <el-radio :value="1">停用</el-radio>
+              </el-radio-group>
             </el-form-item>
           </el-col>
         </el-row>
-        <el-row>
-          <el-col :span="24">
-            <el-form-item label="业务角色" prop="roleIds">
-              <el-select v-model="form.roleIds" multiple filterable placeholder="请选择业务角色" style="width: 100%">
-                <el-option v-for="role in raBizRoleOptions" :key="role.value" :label="role.label" :value="role.value" />
-              </el-select>
-            </el-form-item>
-          </el-col>
-        </el-row>
-        <el-row>
+        <el-row :gutter="16">
           <el-col :span="24">
             <el-form-item label="备注">
-              <el-input v-model="form.remark" type="textarea" placeholder="请输入内容"></el-input>
+              <el-input v-model="form.remark" type="textarea" placeholder="请输入内容" />
             </el-form-item>
           </el-col>
         </el-row>
@@ -195,8 +159,8 @@
       </template>
     </el-dialog>
 
-    <!-- 签发业务管理员证书对话框 -->
-    <el-dialog v-model="certDialog.visible" title="签发业务管理员证书" width="680px" append-to-body @close="closeCertDialog">
+    <!-- 签发证书对话框 -->
+    <el-dialog v-model="certDialog.visible" title="签发审计员证书" width="800px" append-to-body :close-on-click-modal="false">
       <el-form ref="certFormRef" :model="certForm" :rules="certRules" label-width="120px">
         <el-row :gutter="16">
           <el-col :span="12">
@@ -243,9 +207,9 @@
         </el-form-item>
         <el-form-item label="容器名" prop="containerName">
           <div class="cert-inline-control">
-            <el-input v-model="certForm.containerName" placeholder="格式: admin-xxxxxx" style="flex: 1" />
+            <el-input v-model="certForm.containerName" placeholder="格式: audit-xxxxxx" style="flex: 1" />
             <el-tooltip content="随机生成" placement="top">
-              <el-button icon="Refresh" circle @click="certForm.containerName = randomContainerName('admin')" />
+              <el-button icon="Refresh" circle @click="certForm.containerName = randomContainerName('audit')" />
             </el-tooltip>
           </div>
         </el-form-item>
@@ -261,66 +225,6 @@
       </template>
     </el-dialog>
 
-    <!-- 用户导入对话框 -->
-    <el-dialog :title="upload.title" v-model="upload.open" width="400px" append-to-body>
-      <el-upload
-        ref="uploadRef"
-        :limit="1"
-        accept=".xlsx, .xls"
-        :headers="upload.headers"
-        :action="upload.url + '?updateSupport=' + upload.updateSupport"
-        :disabled="upload.isUploading"
-        :on-progress="handleFileUploadProgress"
-        :on-success="handleFileSuccess"
-        :auto-upload="false"
-        drag
-      >
-        <el-icon class="el-icon--upload"><upload-filled /></el-icon>
-        <div class="el-upload__text">将文件拖到此处，或<em>点击上传</em></div>
-        <template #tip>
-          <div class="el-upload__tip text-center">
-            <div class="el-upload__tip"><el-checkbox v-model="upload.updateSupport" />是否更新已经存在的用户数据</div>
-            <span>仅允许导入xls、xlsx格式文件。</span>
-            <el-link type="primary" :underline="false" style="font-size: 12px; vertical-align: baseline" @click="importTemplate">下载模板</el-link>
-          </div>
-        </template>
-      </el-upload>
-      <template #footer>
-        <div class="dialog-footer">
-          <el-button type="primary" @click="submitFileForm">确 定</el-button>
-          <el-button @click="upload.open = false">取 消</el-button>
-        </div>
-      </template>
-    </el-dialog>
-
-    <el-dialog v-model="detailOpen" title="业务管理员详情" width="720px" append-to-body class="ra-user-detail-dialog">
-      <el-descriptions class="ra-user-detail" :column="2" border>
-        <el-descriptions-item label="用户编号">{{ detail.id || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="用户名称">{{ detail.username || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="手机号码">{{ detail.mobile || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="邮箱">{{ detail.mail || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="状态">
-          <el-tag :type="Number(detail.status) === 0 ? 'success' : 'info'" size="small">{{ formatStatus(detail.status) }}</el-tag>
-        </el-descriptions-item>
-        <el-descriptions-item label="创建时间">{{ parseTime(detail.createTime) || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="证书序列号" :span="2">
-          <span class="detail-mono">{{ detail.certSn || '-' }}</span>
-        </el-descriptions-item>
-        <el-descriptions-item label="证书详情" :span="2">
-          <el-button v-if="detail.certPem" link type="primary" icon="View" @click="handleViewDetailCert">查看证书详情</el-button>
-          <span v-else>-</span>
-        </el-descriptions-item>
-        <el-descriptions-item label="备注" :span="2">
-          <span class="detail-remark">{{ detail.remark || '-' }}</span>
-        </el-descriptions-item>
-      </el-descriptions>
-      <template #footer>
-        <div class="dialog-footer">
-          <el-button @click="detailOpen = false">关 闭</el-button>
-        </div>
-      </template>
-    </el-dialog>
-
     <!-- 证书详情弹窗 -->
     <el-dialog v-model="showCertDialog" title="证书详情" width="60%">
       <X509Cert v-if="showCertDialog" :certPem="certPem" />
@@ -328,20 +232,26 @@
   </div>
 </template>
 
-<script setup name="User" lang="ts">
-import { listUser, getUser, delUser, updateUser, resetUserPwd, changeStatus, addUser } from '@/api/ra/user';
-import { getToken } from '@/utils/auth';
-import { UserForm, UserQuery, UserVO } from '@/api/system/user/types';
+<script setup name="RaAuditManager" lang="ts">
+import { ref, reactive, toRefs, getCurrentInstance, ComponentInternalInstance, onMounted, nextTick, computed, watch } from 'vue';
+import { ElMessage } from 'element-plus';
 import { FormInstance, FormRules } from 'element-plus';
-import X509Cert from '@/components/X509Cert/index.vue';
+import { listUser, getUser, delUser, updateUser, resetUserPwd, changeStatus, addUser } from '@/api/ra/user';
+import { UserForm, UserQuery, UserVO } from '@/api/system/user/types';
 import { listDeptSelectTree } from '@/api/ra/dept';
 import { RaDeptTreeOption } from '@/api/ra/dept/types';
 import { getAdminCertOptions, issueAdminAccountCert, unwrapRaData, RaAdminCertOptions, RaAdminCertRootOption } from '@/api/ra/init';
 import SKFClient from '@/api/skf/skf_api';
+import X509Cert from '@/components/X509Cert/index.vue';
 import CertSubject, { typeMapping, sortSubjectItems } from '@/components/CertSubject/index.vue';
 
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
 const { sys_common_status } = toRefs<any>(proxy!.useDict('sys_common_status'));
+
+// 审计员角色 ID（更新后角色模型）
+const RA_AUDITOR_ROLE_ID = '506';
+const RA_AUDITOR_ROLE_IDS = [RA_AUDITOR_ROLE_ID];
+const ALL_DEPT_ID = '__ALL__';
 
 const userList = ref<UserVO[]>([]);
 const open = ref(false);
@@ -352,37 +262,11 @@ const single = ref(true);
 const multiple = ref(true);
 const total = ref(0);
 const title = ref('');
-const dateRange = ref<[Date, Date]>();
-const initPassword = ref<string | undefined>(undefined);
 const isDataLoaded = ref(false);
-const raBizRoleOptions = [
-  { label: '录入员', value: '503' },
-  { label: '审核员', value: '504' },
-  { label: '制证员', value: '505' }
-];
-const RA_BIZ_ROLE_IDS = raBizRoleOptions.map((role) => role.value);
-const RA_DEFAULT_BIZ_ROLE_IDS = ['503'];
-const ALL_DEPT_ID = '__ALL__';
-const deptOptions = ref<RaDeptTreeOption[]>([]);
-const deptName = ref('');
-const deptTreeRef = ref<any>();
-const deptTreeProps = { label: 'name', children: 'children' };
-const deptTreeOptions = computed<RaDeptTreeOption[]>(() => [
-  {
-    id: ALL_DEPT_ID,
-    name: '全部部门',
-    children: deptOptions.value
-  }
-]);
-
-const userRef = ref<FormInstance>();
-const queryForm = ref<FormInstance>();
 
 // 证书相关
-const certPem = ref<string>('');
+const certPem = ref('');
 const showCertDialog = ref(false);
-const detailOpen = ref(false);
-const detail = ref<any>({});
 const certFormRef = ref<FormInstance>();
 const certDialog = reactive({
   visible: false,
@@ -419,30 +303,20 @@ const certRules: FormRules = {
   pin: [{ required: true, message: '请输入 User PIN', trigger: 'blur' }]
 };
 
-/*** 用户导入参数 */
-const upload = reactive({
-  // 是否显示弹出层（用户导入）
-  open: false,
-  // 弹出层标题（用户导入）
-  title: '',
-  // 是否禁用上传
-  isUploading: false,
-  // 是否更新已经存在的用户数据
-  updateSupport: 0,
-  // 设置上传的请求头部
-  headers: { Authorization: 'Bearer ' + getToken() },
-  // 上传的地址
-  url: import.meta.env.VITE_APP_BASE_API + '/system/user/importData'
-});
-
-const columns = ref([
-  { key: 0, label: `用户编号`, visible: true },
-  { key: 1, label: `用户名称`, visible: true },
-  { key: 2, label: `邮箱`, visible: true },
-  { key: 3, label: `手机号码`, visible: true },
-  { key: 4, label: `状态`, visible: true },
-  { key: 5, label: `创建时间`, visible: true }
+const deptName = ref('');
+const deptTreeRef = ref<any>();
+const deptTreeProps = { label: 'name', children: 'children' };
+const deptOptions = ref<RaDeptTreeOption[]>([]);
+const deptTreeOptions = computed<RaDeptTreeOption[]>(() => [
+  {
+    id: ALL_DEPT_ID,
+    name: '全部部门',
+    children: deptOptions.value
+  }
 ]);
+
+const userRef = ref<FormInstance>();
+const queryForm = ref<FormInstance>();
 
 const data = reactive<{
   form: UserForm;
@@ -456,8 +330,8 @@ const data = reactive<{
     username: undefined,
     mobile: undefined,
     status: undefined,
-    roleId: undefined,
-    roleIds: RA_BIZ_ROLE_IDS
+    roleId: RA_AUDITOR_ROLE_ID,
+    roleIds: RA_AUDITOR_ROLE_IDS
   },
   rules: {
     username: [
@@ -470,23 +344,13 @@ const data = reactive<{
     ],
     mail: [{ type: 'email', message: '请输入正确的邮箱地址', trigger: ['blur', 'change'] }],
     mobile: [{ pattern: /^1[3|4|5|6|7|8|9][0-9]\d{8}$/, message: '请输入正确的手机号码', trigger: 'blur' }],
-    deptId: [{ required: true, message: '所属部门不能为空', trigger: 'change' }],
-    roleIds: [{ required: true, type: 'array', min: 1, message: '业务角色不能为空', trigger: 'change' }]
+    deptId: [{ required: true, message: '所属部门不能为空', trigger: 'change' }]
   }
 });
 
 const { queryParams, form, rules } = toRefs(data);
 
-function normalizeUserForm() {
-  form.value.mail = form.value.mail?.trim() || undefined;
-  form.value.mobile = form.value.mobile?.trim() || undefined;
-}
-
-function formatStatus(status: string | number | undefined) {
-  const dict = sys_common_status.value.find((item: any) => String(item.value) === String(status));
-  return dict?.label || '-';
-}
-
+// 证书选项计算属性
 const certRoots = computed(() => certOptions.value.roots || []);
 const certProfileOptions = computed(() => {
   const root = certRoots.value.find((item) => String(item.id) === String(certForm.rootId));
@@ -495,14 +359,14 @@ const certProfileOptions = computed(() => {
 
 function randomContainerName(_username: string) {
   const suffix = Math.random().toString(36).slice(2, 8);
-  return `admin-${Date.now().toString(36)}-${suffix}`;
+  return `audit-${Date.now().toString(36)}-${suffix}`;
 }
 
 function buildDefaultSubjectItems(row: any) {
   return sortSubjectItems([
     { type: 'country', value: 'CN' },
     { type: 'organization', value: '注册认证中心' },
-    { type: 'organizationalUnit', value: '业务管理员' },
+    { type: 'organizationalUnit', value: '审计员' },
     { type: 'commonName', value: row.username || '' },
     { type: 'emailAddress', value: row.mail || '' }
   ]);
@@ -560,12 +424,8 @@ watch(
 );
 
 function filterDeptNode(value: string, data: RaDeptTreeOption) {
-  if (!value) {
-    return true;
-  }
-  if (data.id === ALL_DEPT_ID) {
-    return true;
-  }
+  if (!value) return true;
+  if (data.id === ALL_DEPT_ID) return true;
   return data.name?.includes(value);
 }
 
@@ -574,12 +434,12 @@ function handleDeptNodeClick(data: RaDeptTreeOption) {
   handleQuery();
 }
 
-/** 查询用户列表 */
+/** 查询审计员列表 */
 function getList() {
   loading.value = true;
   isDataLoaded.value = false;
-  queryParams.value.roleIds = queryParams.value.roleId ? undefined : RA_BIZ_ROLE_IDS;
-  listUser(proxy?.addDateRange(queryParams.value, dateRange.value)).then((res) => {
+  queryParams.value.roleIds = RA_AUDITOR_ROLE_IDS;
+  listUser(queryParams.value).then((res) => {
     loading.value = false;
     const page = res.data || res;
     userList.value = [];
@@ -601,47 +461,24 @@ function handleQuery() {
 
 /** 重置按钮操作 */
 function resetQuery() {
-  dateRange.value = [];
   queryForm.value?.resetFields();
-  queryParams.value.roleId = undefined;
-  queryParams.value.roleIds = RA_BIZ_ROLE_IDS;
+  queryParams.value.roleId = RA_AUDITOR_ROLE_ID;
+  queryParams.value.roleIds = RA_AUDITOR_ROLE_IDS;
   queryParams.value.deptId = undefined;
   deptTreeRef.value?.setCurrentKey(ALL_DEPT_ID);
   handleQuery();
 }
 
-/** 删除按钮操作 */
-function handleDelete(row: any) {
-  const userIds = row.id || ids.value;
-  proxy?.$modal
-    .confirm('是否确认删除用户编号为"' + userIds + '"的数据项？')
-    .then(function () {
-      return delUser(userIds);
-    })
-    .then(() => {
-      getList();
-      proxy?.$modal.msgSuccess('删除成功');
-    })
-    .catch(() => {});
+/** 多选框选中数据 */
+function handleSelectionChange(selection: any[]) {
+  ids.value = selection.map((item) => item.id);
+  single.value = selection.length !== 1;
+  multiple.value = !selection.length;
 }
 
-/** 导出按钮操作 */
-function handleExport() {
-  proxy?.download(
-    'system/user/export',
-    {
-      ...queryParams.value
-    },
-    `user_${new Date().getTime()}.xlsx`
-  );
-}
-
-/** 用户状态修改  */
+/** 用户状态修改 */
 function handleStatusChange(row: any, newStatus: number) {
-  if (!isDataLoaded.value) {
-    return;
-  }
-
+  if (!isDataLoaded.value) return;
   const text = newStatus === 0 ? '启用' : '停用';
   proxy?.$modal
     .confirm('确认要"' + text + '" "' + row.username + '"用户吗?')
@@ -656,18 +493,20 @@ function handleStatusChange(row: any, newStatus: number) {
     });
 }
 
-/** 更多操作 */
-function handleCommand(command: string, row: any) {
-  switch (command) {
-    case 'handleResetPwd':
-      handleResetPwd(row);
-      break;
-    case 'handleAuthRole':
-      handleAuthRole(row);
-      break;
-    default:
-      break;
-  }
+/** 删除按钮操作 */
+function handleDelete(row: any) {
+  const userIds = row.id || ids.value;
+  const username = row.username || '选中的用户';
+  proxy?.$modal
+    .confirm('确认要删除审计员"' + username + '"吗？')
+    .then(function () {
+      return delUser(userIds);
+    })
+    .then(() => {
+      getList();
+      proxy?.$modal.msgSuccess('删除成功');
+    })
+    .catch(() => {});
 }
 
 /** 重置密码按钮操作 */
@@ -688,69 +527,6 @@ function handleResetPwd(row: any) {
     .catch(() => {});
 }
 
-/** 分配角色 */
-function handleAuthRole(row: any) {
-  const userId = row.id;
-  proxy?.$router.push({
-    path: '/system/user-auth/role/' + userId,
-    query: {
-      redirect: '/ra-admin/ra-admin-operator'
-    }
-  });
-}
-
-function handleDetail(row: any) {
-  const userId = row.id;
-  getUser(userId).then((response) => {
-    detail.value = response.data || {};
-    detailOpen.value = true;
-  });
-}
-
-function handleViewDetailCert() {
-  certPem.value = detail.value.certPem;
-  showCertDialog.value = true;
-}
-
-/** 选择条数  */
-function handleSelectionChange(selection: any) {
-  ids.value = selection.map((item: any) => item.id);
-  single.value = selection.length != 1;
-  multiple.value = !selection.length;
-}
-
-/** 导入按钮操作 */
-function handleImport() {
-  upload.title = '用户导入';
-  upload.open = true;
-}
-
-/** 下载模板操作 */
-function importTemplate() {
-  proxy?.download('system/user/importTemplate', {}, `user_template_${new Date().getTime()}.xlsx`);
-}
-
-/**文件上传中处理 */
-const handleFileUploadProgress = (event: any, file: any, fileList: any) => {
-  upload.isUploading = true;
-};
-
-/** 文件上传成功处理 */
-const handleFileSuccess = (response: any, file: any, fileList: any) => {
-  upload.open = false;
-  upload.isUploading = false;
-  proxy?.$refs['uploadRef'].clearFiles();
-  proxy?.$alert("<div style='overflow: auto;overflow-x: hidden;max-height: 70vh;padding: 10px 20px 0;'>" + response.msg + '</div>', '导入结果', {
-    dangerouslyUseHTMLString: true
-  });
-  getList();
-};
-
-/** 提交上传文件 */
-function submitFileForm() {
-  proxy?.$refs['uploadRef'].submit();
-}
-
 /** 重置操作表单 */
 function reset() {
   form.value = {
@@ -765,10 +541,9 @@ function reset() {
     status: 0,
     remark: undefined,
     postIds: [],
-    roleIds: [...RA_DEFAULT_BIZ_ROLE_IDS]
+    roleIds: [...RA_AUDITOR_ROLE_IDS]
   };
   userRef.value?.resetFields();
-  certPem.value = '';
 }
 
 /** 取消按钮 */
@@ -785,8 +560,7 @@ async function handleAdd() {
     form.value.deptId = Number(queryParams.value.deptId);
   }
   open.value = true;
-  title.value = '添加业务管理员';
-  form.value.password = initPassword.value || '';
+  title.value = '添加审计员';
 }
 
 /** 修改按钮操作 */
@@ -797,11 +571,9 @@ async function handleUpdate(row: any) {
   getUser(userId).then((response) => {
     form.value = response.data as any;
     form.value.postIds = [];
-    const roleIds = (form.value.roleIds || []).map((roleId: any) => String(roleId));
-    const bizRoleIds = roleIds.filter((roleId) => raBizRoleOptions.some((role) => role.value === roleId));
-    form.value.roleIds = bizRoleIds.length > 0 ? bizRoleIds : [...RA_DEFAULT_BIZ_ROLE_IDS];
+    form.value.roleIds = [...RA_AUDITOR_ROLE_IDS];
     open.value = true;
-    title.value = '修改业务管理员';
+    title.value = '修改审计员';
     form.value.password = '';
   });
 }
@@ -810,8 +582,7 @@ async function handleUpdate(row: any) {
 function submitForm() {
   proxy?.$refs['userRef'].validate(async (valid: any) => {
     if (valid) {
-      form.value.roleIds = (form.value.roleIds || []).map((roleId: any) => String(roleId));
-      normalizeUserForm();
+      form.value.roleIds = [...RA_AUDITOR_ROLE_IDS];
       if (form.value.id != undefined) {
         updateUser(form.value).then(() => {
           proxy?.$modal.msgSuccess('修改成功');
@@ -822,7 +593,7 @@ function submitForm() {
         try {
           await addUser(form.value);
         } catch (error) {
-          ElMessage.error('新增业务管理员失败');
+          ElMessage.error('新增审计员失败');
           return;
         }
         proxy?.$modal.msgSuccess('新增成功');
@@ -833,6 +604,7 @@ function submitForm() {
   });
 }
 
+/** 签发证书按钮操作 */
 async function handleIssueCert(row: any) {
   try {
     await loadCertOptions();
@@ -913,9 +685,7 @@ async function refreshCertProviders() {
 }
 
 async function onCertProviderChange() {
-  if (!certForm.provider) {
-    return;
-  }
+  if (!certForm.provider) return;
   try {
     const skf = await getSkfClient();
     const devices = await skf.enumDevice(certForm.provider);
@@ -933,9 +703,7 @@ async function onCertProviderChange() {
 }
 
 async function onCertDeviceChange() {
-  if (!certForm.provider || !certForm.device) {
-    return;
-  }
+  if (!certForm.provider || !certForm.device) return;
   try {
     const skf = await getSkfClient();
     const apps = await skf.enumApplication(certForm.provider, certForm.device);
@@ -948,9 +716,7 @@ async function onCertDeviceChange() {
 
 async function submitCertForm() {
   certFormRef.value?.validate(async (valid: boolean) => {
-    if (!valid || certDialog.loading) {
-      return;
-    }
+    if (!valid || certDialog.loading) return;
     certDialog.loading = true;
     try {
       const skf = await getSkfClient();
@@ -965,7 +731,7 @@ async function submitCertForm() {
       const issueRes = await issueAdminAccountCert({
         rootId: certForm.rootId,
         profileId: certForm.profileId,
-        role: '业务管理员',
+        role: '审计员',
         subject,
         csrPem: csrRes.pem
       });
@@ -978,12 +744,10 @@ async function submitCertForm() {
       ElMessage.info('正在将证书写入 USB KEY...');
       await skf.importCertificate(certForm.provider, certForm.device, certForm.appName, csrRes.container, true, issuedCertPem);
 
-      ElMessage.info('正在更新业务管理员证书信息...');
+      // 更新用户证书信息
+      const serialNumber = issueData.serialNumber || issueData.certSn || '';
       const userDataRes = await getUser(certForm.userId);
       const userData = userDataRes.data as any;
-      const userRoleIds = (userData.roleIds || [])
-        .map((roleId: any) => String(roleId))
-        .filter((roleId: string) => raBizRoleOptions.some((role) => role.value === roleId));
       await updateUser({
         id: userData.id,
         userId: userData.id,
@@ -995,112 +759,62 @@ async function submitCertForm() {
         status: userData.status,
         remark: userData.remark || '',
         postIds: [],
-        roleIds: userRoleIds.length > 0 ? userRoleIds : [...RA_DEFAULT_BIZ_ROLE_IDS],
-        certSn: issueData.serialNumber || issueData.certSn || '',
+        roleIds: [...RA_AUDITOR_ROLE_IDS],
+        certSn: serialNumber,
         cert: issuedCertPem
-      } as any);
+      });
 
-      ElMessage.success('签证成功，证书已写入 USB KEY');
+      ElMessage.success('审计员证书签发成功');
       certDialog.visible = false;
-      await getList();
+      getList();
     } catch (error: any) {
-      ElMessage.error('签证失败: ' + (error.message || error));
+      ElMessage.error('证书签发失败: ' + (error.message || error));
     } finally {
       certDialog.loading = false;
     }
   });
 }
 
+/** 关闭签发证书对话框 */
 function closeCertDialog() {
   certDialog.visible = false;
-  certDialog.loading = false;
   certFormRef.value?.resetFields();
 }
 
-async function initPage() {
-  await loadDeptOptions();
-  nextTick(() => {
-    deptTreeRef.value?.setCurrentKey(ALL_DEPT_ID);
-  });
+onMounted(() => {
   getList();
-}
-
-initPage();
+});
 </script>
 
 <style scoped lang="scss">
-.ra-admin-page {
+.ra-audit-page {
+  padding: 0;
+
   .dept-tree-card {
-    margin-bottom: 12px;
+    .dept-tree-title {
+      font-size: 14px;
+      font-weight: bold;
+    }
+
+    .dept-tree {
+      margin-top: 10px;
+      max-height: calc(100vh - 260px);
+      overflow-y: auto;
+    }
   }
 
-  .dept-tree-title {
-    color: var(--el-text-color-primary);
-    font-size: 14px;
-    font-weight: 600;
-    line-height: 20px;
+  .mb8 {
+    margin-bottom: 10px;
   }
 
-  .dept-tree {
-    margin-top: 10px;
-    min-height: 360px;
-    max-height: calc(100vh - 220px);
-    overflow: auto;
+  .dialog-footer {
+    text-align: right;
   }
-}
 
-.dialog-footer {
-  display: flex;
-  justify-content: flex-end;
-}
-
-:deep(.ra-user-detail-dialog .el-dialog__body) {
-  padding-top: 8px;
-}
-
-:deep(.ra-user-detail .el-descriptions__label) {
-  width: 108px;
-  color: var(--el-text-color-regular);
-  font-weight: 600;
-  background: var(--el-fill-color-lighter);
-}
-
-:deep(.ra-user-detail .el-descriptions__content) {
-  min-width: 180px;
-  color: var(--el-text-color-primary);
-  line-height: 22px;
-  word-break: break-word;
-}
-
-.detail-mono {
-  display: inline-block;
-  max-width: 100%;
-  color: var(--el-text-color-primary);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
-  font-size: 12px;
-  line-height: 20px;
-  overflow-wrap: anywhere;
-}
-
-.detail-remark {
-  display: block;
-  min-height: 22px;
-  white-space: pre-wrap;
-}
-
-.cert-inline-control {
-  display: flex;
-  gap: 8px;
-  width: 100%;
-}
-
-:deep(.el-divider__text) {
-  font-weight: 600;
-  font-size: 14px;
-  color: var(--el-color-primary);
-}
-
-:deep(.el-dialog__body) {
-  padding-top: 8px;
+  .cert-inline-control {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
 }
 </style>

@@ -8,12 +8,21 @@ export interface RaUserCertScopeProfile {
   authorized?: boolean;
 }
 
+export interface RaUserCertScopeDualPair {
+  pairName?: string;
+  signProfileId: string | number;
+  signProfileName: string;
+  encryptProfileId: string | number;
+  encryptProfileName: string;
+}
+
 export interface RaUserCertScopeRoot {
   id: string | number;
   name: string;
   status?: number;
   algorithm?: string;
   profiles: RaUserCertScopeProfile[];
+  dualProfiles?: RaUserCertScopeDualPair[];
   authorized?: boolean;
 }
 

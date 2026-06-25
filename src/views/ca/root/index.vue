@@ -82,9 +82,6 @@
             >停用</el-button
           >
           <el-button v-else link type="success" icon="SuccessFilled" @click="handleEnable(scope.row)" v-hasPermi="['ca:root:enable']">启用</el-button>
-          <el-button v-if="scope.row.status === '1'" link type="danger" icon="Delete" @click="handleRevoke(scope.row)" v-hasPermi="['ca:root:revoke']"
-            >吊销</el-button
-          >
         </template>
       </el-table-column>
     </el-table>

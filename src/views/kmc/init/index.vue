@@ -6,7 +6,6 @@
           <p class="heading-label">密钥管理中心</p>
           <h1>KMC 初始化向导</h1>
         </div>
-        <el-tag effect="plain" size="large">租户 {{ tenantCode.toUpperCase() || 'KMC' }}</el-tag>
       </div>
 
       <el-steps :active="activeStep" finish-status="success" simple class="init-steps">
@@ -34,7 +33,7 @@
           <div class="step-header">
             <div>
               <h2>环境检查</h2>
-              <p>确认初始化所需的业务库、租户和默认账号状态。</p>
+              <p>确认初始化所需的业务库、平台租户和默认账号状态。</p>
             </div>
             <div class="header-actions">
               <el-button type="info" text circle class="help-button" :icon="QuestionFilled" @click="showEnvHelp = true" />
@@ -71,29 +70,45 @@
             </div>
           </el-drawer>
 
-          <div class="table-panel">
-            <el-table
-              v-loading="envLoading"
-              :data="envRows"
-              border
-              style="width: 100%"
-              class="env-table"
-              :header-cell-style="{ background: '#f8f9fa', color: '#606266', fontWeight: 600 }"
-            >
-              <template #empty>
-                <div class="empty-state">
-                  <el-empty description="暂无环境检查结果" :image-size="120" />
+          <!-- 环境检测结果摘要 -->
+          <div v-if="envRows.length > 0 && !envLoading" class="env-summary">
+            <div class="env-summary-card" :class="allEnvOk ? 'env-summary-ok' : 'env-summary-fail'">
+              <div class="env-summary-icon">
+                <el-icon :size="40"><CircleCheckFilled v-if="allEnvOk" /><WarningFilled v-else /></el-icon>
+              </div>
+              <div class="env-summary-text">
+                <div class="env-summary-title">{{ allEnvOk ? '环境检查全部通过' : '环境检查存在异常' }}</div>
+                <div class="env-summary-desc">
+                  共 {{ envRows.length }} 项检测，
+                  <span class="env-count-ok">{{ okCount }} 项正常</span>
+                  <template v-if="failCount > 0">
+                    ，<span class="env-count-fail">{{ failCount }} 项异常</span>
+                  </template>
                 </div>
-              </template>
-              <el-table-column prop="name" label="检测项" min-width="160" />
-              <el-table-column prop="value" label="当前值" min-width="220" show-overflow-tooltip />
-              <el-table-column prop="message" label="说明" min-width="220" show-overflow-tooltip />
-              <el-table-column label="状态" width="120" align="center">
-                <template #default="{ row }">
-                  <el-tag :type="row.ok ? 'success' : 'danger'" effect="light">{{ row.ok ? '正常' : '异常' }}</el-tag>
-                </template>
-              </el-table-column>
-            </el-table>
+              </div>
+            </div>
+          </div>
+
+          <!-- 环境检测卡片列表 -->
+          <div v-loading="envLoading" class="env-cards">
+            <div v-for="(row, index) in envRows" :key="index" class="env-card" :class="{ 'env-card-ok': row.ok, 'env-card-fail': !row.ok }">
+              <div class="env-card-icon">
+                <el-icon :size="22"><CircleCheckFilled v-if="row.ok" /><CircleCloseFilled v-else /></el-icon>
+              </div>
+              <div class="env-card-body">
+                <div class="env-card-header">
+                  <span class="env-card-name">{{ row.name }}</span>
+                  <el-tag :type="row.ok ? 'success' : 'danger'" effect="light" size="small">{{ row.ok ? '正常' : '异常' }}</el-tag>
+                </div>
+                <div class="env-card-value" v-if="row.value && row.value !== '-'">
+                  <span class="env-card-label">当前值：</span>{{ row.value }}
+                </div>
+                <div class="env-card-message" v-if="row.message">{{ row.message }}</div>
+              </div>
+            </div>
+            <div v-if="envRows.length === 0 && !envLoading" class="empty-state">
+              <el-empty description="暂无环境检查结果" :image-size="80" />
+            </div>
           </div>
         </div>
 
@@ -151,7 +166,7 @@ import { computed, onMounted, reactive, ref } from 'vue';
 import type { FormInstance, FormRules } from 'element-plus';
 import { ElMessage } from 'element-plus';
 import { useRouter } from 'vue-router';
-import { QuestionFilled, Refresh } from '@element-plus/icons-vue';
+import { QuestionFilled, Refresh, CircleCheckFilled, CircleCloseFilled, WarningFilled } from '@element-plus/icons-vue';
 import { getEnvInfo, getInitStatus, initAdmin } from '@/api/kmc/init';
 import { unwrapKmcData } from '@/api/kmc/common';
 import { getTenant, updateTenant } from '@/api/system/tenant';
@@ -170,7 +185,7 @@ const userStore = useUserStore();
 const formRef = ref<FormInstance>();
 const activeStep = ref(0);
 const agree = ref(false);
-const loading = ref(false);
+const loading = ref(true);
 const envLoading = ref(false);
 const initialized = ref(false);
 const showEnvHelp = ref(false);
@@ -212,7 +227,9 @@ const normalizeEnvRows = (data: any): EnvRow[] => {
   }));
 };
 
-const allEnvOk = computed(() => envRows.value.length === 0 || envRows.value.every((item) => item.ok));
+const allEnvOk = computed(() => envRows.value.length > 0 && envRows.value.every((item) => item.ok));
+const okCount = computed(() => envRows.value.filter((item) => item.ok).length);
+const failCount = computed(() => envRows.value.filter((item) => !item.ok).length);
 const canGoNext = computed(() => (activeStep.value === 0 ? agree.value : allEnvOk.value));
 
 const saveTenantStatus = async (statusValue: number) => {
@@ -344,6 +361,15 @@ const enterSystem = async () => {
 };
 
 onMounted(async () => {
+  // 优先使用后端 InitController 状态判断是否已完成初始化
+  try {
+    const statusRes = await getInitStatus();
+    if (statusRes && (statusRes as any).data?.tenantStatus === -1) {
+      router.replace('/index');
+      return;
+    }
+  } catch (e) {}
+
   try {
     const tenantId = userStore.tenantId || localStorage.getItem('tenantId') || '';
     if (tenantId) {
@@ -367,6 +393,7 @@ onMounted(async () => {
       }
     }
   } catch (error) {}
+  loading.value = false;
   await loadInitInfo();
 });
 </script>
@@ -517,21 +544,148 @@ onMounted(async () => {
   line-height: 1.6;
 }
 
-.table-panel {
-  overflow: hidden;
-  border: 1px solid var(--el-border-color-lighter);
-  border-radius: 8px;
-  background: var(--el-fill-color-blank);
+.env-summary {
+  margin-bottom: 20px;
 }
 
-.env-table {
-  :deep(.el-table__cell) {
-    padding: 12px 0;
-  }
+.env-summary-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px 24px;
+  border-radius: 10px;
+  border: 1px solid var(--el-border-color-lighter);
+}
+
+.env-summary-ok {
+  background: linear-gradient(135deg, #f0fdf4 0%, #f0faf3 100%);
+  border-color: #b7ebc9;
+}
+
+.env-summary-fail {
+  background: linear-gradient(135deg, #fef2f2 0%, #fef5f5 100%);
+  border-color: #fecaca;
+}
+
+.env-summary-icon {
+  flex-shrink: 0;
+}
+
+.env-summary-ok .env-summary-icon {
+  color: var(--el-color-success);
+}
+
+.env-summary-fail .env-summary-icon {
+  color: var(--el-color-danger);
+}
+
+.env-summary-text {
+  min-width: 0;
+}
+
+.env-summary-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+  margin-bottom: 4px;
+}
+
+.env-summary-desc {
+  color: var(--el-text-color-secondary);
+  font-size: 14px;
+}
+
+.env-count-ok {
+  color: var(--el-color-success);
+  font-weight: 600;
+}
+
+.env-count-fail {
+  color: var(--el-color-danger);
+  font-weight: 600;
+}
+
+.env-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.env-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 18px 20px;
+  border-radius: 8px;
+  border: 1px solid var(--el-border-color-lighter);
+  background: var(--el-fill-color-blank);
+  transition: box-shadow 0.2s;
+}
+
+.env-card:hover {
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+}
+
+.env-card-ok {
+  border-left: 4px solid var(--el-color-success);
+}
+
+.env-card-fail {
+  border-left: 4px solid var(--el-color-danger);
+  background: #fffbfb;
+}
+
+.env-card-icon {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.env-card-ok .env-card-icon {
+  color: var(--el-color-success);
+}
+
+.env-card-fail .env-card-icon {
+  color: var(--el-color-danger);
+}
+
+.env-card-body {
+  min-width: 0;
+  flex: 1;
+}
+
+.env-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.env-card-name {
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--el-text-color-primary);
+}
+
+.env-card-value {
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
+  margin-bottom: 4px;
+  word-break: break-all;
+}
+
+.env-card-label {
+  color: var(--el-text-color-placeholder);
+}
+
+.env-card-message {
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 .empty-state {
-  padding: 20px 0;
+  padding: 40px 0;
 }
 
 .wizard-actions {

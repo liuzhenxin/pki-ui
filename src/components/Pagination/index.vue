@@ -39,7 +39,7 @@ const normalizedTotal = computed(() => Number(props.total) || 0);
 const paginationKey = computed(() => `${normalizedPage.value}-${normalizedLimit.value}-${normalizedTotal.value}`);
 
 function handlePaginationChange(page: number, limit: number) {
-  if (page * limit > normalizedTotal.value) {
+  if ((page - 1) * limit >= normalizedTotal.value) {
     page = 1;
   }
   emit('update:page', page);

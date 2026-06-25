@@ -107,14 +107,14 @@ export const constantRoutes: RouteRecordRaw[] = [
     component: () => import('@/views/ca/root/authorize-profile.vue'),
     name: 'AuthorizeProfile',
     hidden: true,
-    meta: { title: '授权模板' }
+    meta: { title: '授权模板', icon: 'key' }
   },
   {
     path: '/ca/profile/form',
     component: () => import('@/views/ca/profile/form.vue'),
     name: 'ProfileForm',
     hidden: true,
-    meta: { title: '证书模板表单' }
+    meta: { title: '证书模板表单', icon: 'form' }
   },
   {
     path: '/ca/cert',
@@ -125,7 +125,7 @@ export const constantRoutes: RouteRecordRaw[] = [
         path: '',
         component: () => import('@/views/ca/cert/index.vue'),
         name: 'CaCert',
-        meta: { title: '证书列表', activeMenu: '/ca/cert' }
+        meta: { title: '证书列表', icon: 'cert', activeMenu: '/ca/cert' }
       }
     ]
   },
@@ -138,7 +138,7 @@ export const constantRoutes: RouteRecordRaw[] = [
         path: '',
         component: () => import('@/views/ca/archive-cert/index.vue'),
         name: 'CaArchiveCert',
-        meta: { title: '归档证书管理', activeMenu: '/ca/archive-cert' }
+        meta: { title: '归档证书管理', icon: 'list', activeMenu: '/ca/archive-cert' }
       }
     ]
   },
@@ -208,58 +208,6 @@ export const constantRoutes: RouteRecordRaw[] = [
       }
     ]
   },
-  {
-    path: '/license/init',
-    hidden: true,
-    component: Layout,
-    children: [
-      {
-        path: '',
-        component: () => import('@/views/license/init/index.vue'),
-        name: 'LicenseInit',
-        meta: { title: 'License系统初始化' }
-      }
-    ]
-  },
-  {
-    path: '/ca/init',
-    hidden: true,
-    component: Layout,
-    children: [
-      {
-        path: '',
-        component: () => import('@/views/ca/init/index.vue'),
-        name: 'CaInit',
-        meta: { title: 'CA系统初始化' }
-      }
-    ]
-  },
-  {
-    path: '/ra/init',
-    hidden: true,
-    component: Layout,
-    children: [
-      {
-        path: '',
-        component: () => import('@/views/ra/init/index.vue'),
-        name: 'RaInit',
-        meta: { title: 'RA系统初始化' }
-      }
-    ]
-  },
-  {
-    path: '/ocsp/init',
-    hidden: true,
-    component: Layout,
-    children: [
-      {
-        path: '',
-        component: () => import('@/views/ocsp/init/index.vue'),
-        name: 'OcspInit',
-        meta: { title: 'OCSP系统初始化' }
-      }
-    ]
-  }
 ];
 
 // 动态路由，基于用户权限动态去加载

@@ -1,12 +1,13 @@
 <template>
-  <div class="p-2">
-    <el-card shadow="hover">
-      <template #header>
-        <div class="card-header">
-          <span>系统配置</span>
-          <el-button v-hasPermi="['ca:config:get']" icon="Refresh" @click="loadActiveConfig">刷新</el-button>
-        </div>
-      </template>
+  <div class="ca-config-page">
+    <div class="page-header">
+      <div class="page-header-left">
+        <h2 class="page-title">系统配置</h2>
+        <p class="page-desc">管理 CA 身份证书、KMC 服务连接及归档策略</p>
+      </div>
+      <el-button v-hasPermi="['ca:config:get']" icon="Refresh" @click="loadActiveConfig">刷新</el-button>
+    </div>
+    <el-card shadow="never" class="config-card">
 
       <el-tabs v-model="activeType" @tab-change="handleTabChange">
         <el-tab-pane label="CA身份配置" name="CA_IDENTITY">
@@ -40,7 +41,12 @@
 
           <el-form v-else ref="identityFormRef" :model="identityForm" label-width="112px" class="identity-form">
             <section class="config-section">
-              <div class="section-title">基础信息</div>
+              <div class="section-title">
+                <span class="section-icon">
+                  <el-icon><Setting /></el-icon>
+                </span>
+                基础信息
+              </div>
               <div class="form-grid">
                 <el-form-item label="签发CA">
                   <el-select v-model="identityForm.rootId" placeholder="请选择签发CA" style="width: 100%" clearable>
@@ -60,8 +66,15 @@
                 </el-form-item>
                 <el-form-item label="证书有效期">
                   <div class="validity-input">
-                    <el-input-number v-model="identityForm.validityValue" :min="1" :step="1" :precision="0" controls-position="right" />
-                    <el-select v-model="identityForm.validityUnit" class="validity-unit">
+                    <el-input-number
+                      v-model="identityForm.validityValue"
+                      :min="1"
+                      :step="1"
+                      :precision="0"
+                      controls-position="right"
+                      style="flex: 1; min-width: 0"
+                    />
+                    <el-select v-model="identityForm.validityUnit" style="width: 80px; flex-shrink: 0">
                       <el-option label="年" value="y" />
                       <el-option label="月" value="m" />
                       <el-option label="日" value="d" />
@@ -72,7 +85,10 @@
             </section>
 
             <section class="config-section">
-              <div class="section-title">证书主题</div>
+              <div class="section-title">
+                <span class="section-icon"><el-icon><Document /></el-icon></span>
+                证书主题
+              </div>
               <div class="form-grid subject-grid">
                 <el-form-item v-for="field in subjectFields" :key="field.key" :label="field.label">
                   <el-input
@@ -86,7 +102,10 @@
             </section>
 
             <section class="config-section">
-              <div class="section-title">密钥生成</div>
+              <div class="section-title">
+                <span class="section-icon"><el-icon><Key /></el-icon></span>
+                密钥生成
+              </div>
               <div class="form-grid">
                 <el-form-item label="密钥算法">
                   <el-select v-model="identityForm.algo" style="width: 100%">
@@ -98,11 +117,10 @@
                 <el-form-item label="存储方式">
                   <el-radio-group v-model="identityForm.signerType">
                     <el-radio-button value="PKCS12">PKCS12</el-radio-button>
-                    <el-radio-button value="JKS">JKS</el-radio-button>
                     <el-radio-button value="SDF">SDF</el-radio-button>
                   </el-radio-group>
                 </el-form-item>
-                <el-form-item v-if="identityForm.signerType === 'PKCS12' || identityForm.signerType === 'JKS'" label="密钥密码">
+                <el-form-item v-if="identityForm.signerType === 'PKCS12'" label="密钥密码">
                   <el-input v-model="identityForm.password" type="password" show-password placeholder="请输入密钥库密码" />
                 </el-form-item>
                 <el-form-item v-if="identityForm.signerType === 'SDF'" label="密钥索引">
@@ -155,23 +173,85 @@
         </el-tab-pane>
 
         <el-tab-pane label="归档策略" name="ARCHIVE_POLICY">
-          <el-form ref="archiveFormRef" :model="archiveForm" label-width="130px">
-            <el-form-item label="启用归档">
-              <el-switch v-model="archiveForm.enabled" />
-            </el-form-item>
-            <el-form-item label="归档方式">
-              <el-select v-model="archiveForm.mode" placeholder="请选择归档方式" style="width: 100%">
-                <el-option label="数据库" value="DATABASE" />
-                <el-option label="文件系统" value="FILE" />
-              </el-select>
-            </el-form-item>
-            <el-form-item label="保留天数">
-              <el-input-number v-model="archiveForm.retentionDays" :min="1" controls-position="right" style="width: 100%" />
-            </el-form-item>
-            <el-form-item label="归档路径">
-              <el-input v-model="archiveForm.path" placeholder="/data/ca/archive" />
-            </el-form-item>
-          </el-form>
+          <!-- 归档统计 -->
+          <section class="config-section">
+            <div class="section-title">
+              <span class="section-icon"><el-icon><DataAnalysis /></el-icon></span>
+              归档统计
+            </div>
+            <div class="archive-stats-cards">
+              <div class="stat-card">
+                <div class="stat-value">{{ archiveStats.totalArchived ?? '-' }}</div>
+                <div class="stat-label">累计归档</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-value">{{ archiveStats.archivedToday ?? '-' }}</div>
+                <div class="stat-label">今日归档</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-value">{{ archiveStats.archivedThisWeek ?? '-' }}</div>
+                <div class="stat-label">本周归档</div>
+              </div>
+            </div>
+          </section>
+
+          <!-- 归档设置 -->
+          <section class="config-section">
+            <div class="section-title">
+              <span class="section-icon"><el-icon><Setting /></el-icon></span>
+              归档设置
+            </div>
+            <el-form ref="archiveFormRef" :model="archiveForm" label-width="130px">
+              <el-form-item label="启用自动归档">
+                <el-switch v-model="archiveForm.enabled" />
+                <span class="form-tip">开启后系统每 10 分钟自动归档已过期和已吊销的证书</span>
+              </el-form-item>
+              <el-form-item label="归档方式">
+                <el-select v-model="archiveForm.mode" style="width: 240px" disabled>
+                  <el-option label="数据库" value="DATABASE" />
+                </el-select>
+                <el-tag type="info" size="small" style="margin-left: 10px">文件归档即将上线</el-tag>
+              </el-form-item>
+              <el-form-item label="保留天数">
+                <el-input-number v-model="archiveForm.retentionDays" :min="1" :step="1" controls-position="right" style="width: 240px" />
+                <span class="form-tip">超过保留期限的归档记录将被自动清理</span>
+              </el-form-item>
+            </el-form>
+          </section>
+
+          <!-- 手动执行 -->
+          <section class="config-section">
+            <div class="section-title">
+              <span class="section-icon"><el-icon><VideoPlay /></el-icon></span>
+              手动执行
+            </div>
+            <div class="archive-operation">
+              <el-button type="primary" icon="VideoPlay" :loading="triggeringArchive" @click="handleTriggerArchive">
+                立即执行归档
+              </el-button>
+              <span class="form-tip">手动触发一次归档任务，处理当前符合条件的所有证书</span>
+            </div>
+          </section>
+
+          <!-- 最近执行记录 -->
+          <section v-if="archiveForm.lastRunTime" class="config-section result-section">
+            <div class="section-title">
+              <span class="section-icon"><el-icon><Clock /></el-icon></span>
+              最近执行记录
+            </div>
+            <div class="last-run-info">
+              <el-descriptions :column="2" border size="small">
+                <el-descriptions-item label="执行时间">{{ archiveForm.lastRunTime }}</el-descriptions-item>
+                <el-descriptions-item label="执行结果">
+                  <el-tag :type="archiveForm.lastRunSuccess ? 'success' : 'danger'" size="small">
+                    {{ archiveForm.lastRunSuccess ? '成功' : '失败' }}
+                  </el-tag>
+                </el-descriptions-item>
+                <el-descriptions-item label="本次归档">{{ archiveForm.lastRunArchivedCount ?? 0 }} 条</el-descriptions-item>
+                <el-descriptions-item label="本次清理">{{ archiveForm.lastRunCleanedUpCount ?? 0 }} 条</el-descriptions-item>
+              </el-descriptions>
+            </div>
+          </section>
         </el-tab-pane>
       </el-tabs>
 
@@ -185,8 +265,9 @@
 <script setup name="CaConfig" lang="ts">
 import { computed, reactive, ref, watch } from 'vue';
 import { ElMessage } from 'element-plus';
-import { getCaConfig, saveCaConfig, testCaConfig } from '@/api/ca/config';
-import type { CaConfigTestCO } from '@/api/ca/config';
+import { Setting, Document, Key, DataAnalysis, VideoPlay, Clock } from '@element-plus/icons-vue';
+import { getCaConfig, saveCaConfig, testCaConfig, getArchiveStats, triggerArchive } from '@/api/ca/config';
+import type { CaConfigTestCO, ArchivePolicyStatsCO } from '@/api/ca/config';
 import { issueCaIdentityCert, listRootCa } from '@/api/ca/root';
 import { listProfile } from '@/api/ca/profile';
 import X509Cert from '@/components/X509Cert/index.vue';
@@ -236,11 +317,15 @@ const archiveForm = reactive<any>({
   id: undefined,
   enabled: true,
   mode: 'DATABASE',
-  retentionDays: 3650,
-  path: ''
+  retentionDays: 3650
 });
 
-const archiveModeValues = ['DATABASE', 'FILE'];
+const archiveStats = reactive<ArchivePolicyStatsCO>({
+  totalArchived: undefined,
+  archivedToday: undefined,
+  archivedThisWeek: undefined
+});
+const triggeringArchive = ref(false);
 
 const activePayload = computed(() => {
   if (activeType.value === 'KMC_SERVER') {
@@ -281,9 +366,31 @@ function normalizeKmcForm(source: any = {}) {
 }
 
 function normalizeArchiveMode() {
-  if (!archiveModeValues.includes(archiveForm.mode)) {
+  if (archiveForm.mode !== 'DATABASE') {
     archiveForm.mode = 'DATABASE';
   }
+}
+
+function loadArchiveStats() {
+  getArchiveStats().then((response) => {
+    Object.assign(archiveStats, response.data || {});
+  }).catch(() => {});
+}
+
+function handleTriggerArchive() {
+  triggeringArchive.value = true;
+  triggerArchive()
+    .then((response) => {
+      ElMessage.success('归档任务执行成功');
+      Object.assign(archiveStats, response.data || {});
+      loadConfig('ARCHIVE_POLICY');
+    })
+    .catch(() => {
+      ElMessage.error('归档任务执行失败');
+    })
+    .finally(() => {
+      triggeringArchive.value = false;
+    });
 }
 
 function syncValidityFieldsFromValue() {
@@ -318,6 +425,7 @@ function loadConfig(type: string) {
     } else if (type === 'ARCHIVE_POLICY') {
       assignForm(archiveForm, parsed, data.id);
       normalizeArchiveMode();
+      loadArchiveStats();
     } else {
       assignForm(identityForm, parsed, data.id);
       syncValidityFieldsFromValue();
@@ -539,6 +647,7 @@ function buildSaveData() {
     }
   } else if (activeType.value === 'ARCHIVE_POLICY') {
     normalizeArchiveMode();
+    delete (payload as any).path;
   } else if (activeType.value === 'KMC_SERVER') {
     normalizeKmcForm(payload);
   }
@@ -631,7 +740,7 @@ function issueIdentityCert() {
   if (!syncValidityValueFromFields()) {
     return;
   }
-  if ((identityForm.signerType === 'PKCS12' || identityForm.signerType === 'JKS') && !identityForm.password) {
+  if (identityForm.signerType === 'PKCS12' && !identityForm.password) {
     ElMessage.warning('请输入密钥密码');
     return;
   }
@@ -691,20 +800,59 @@ watch(
 </script>
 
 <style scoped lang="scss">
-.p-2 {
-  padding: 8px;
+.ca-config-page {
+  padding: 0;
 }
 
-.card-header {
+.page-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
+  padding: 20px 24px 16px;
+  margin-bottom: 0;
+}
+
+.page-header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.page-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--el-text-color-primary);
+  letter-spacing: -0.3px;
+}
+
+.page-desc {
+  margin: 0;
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+  line-height: 20px;
+}
+
+.config-card {
+  margin: 0 20px 20px;
+  border-radius: 8px;
+
+  :deep(.el-card__body) {
+    padding: 0 20px 20px;
+  }
+
+  :deep(.el-tabs__header) {
+    margin-bottom: 0;
+    padding: 0 4px;
+  }
 }
 
 .action-bar {
   display: flex;
   justify-content: flex-end;
-  padding-top: 16px;
+  padding: 20px 0 4px;
+  border-top: 1px solid var(--el-border-color-lighter);
+  margin-top: 8px;
 }
 
 .identity-form {
@@ -712,12 +860,12 @@ watch(
 }
 
 .config-section {
-  padding: 18px 0 8px;
+  padding: 20px 0 12px;
   border-bottom: 1px solid var(--el-border-color-lighter);
-}
 
-.config-section:first-child {
-  padding-top: 8px;
+  &:first-child {
+    padding-top: 12px;
+  }
 }
 
 .result-section {
@@ -725,36 +873,62 @@ watch(
 }
 
 .section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   position: relative;
-  margin: 0 0 16px;
-  padding-left: 10px;
+  margin: 0 0 20px;
+  padding: 0 0 14px;
   font-size: 15px;
   font-weight: 600;
   line-height: 20px;
   color: var(--el-text-color-primary);
+  border-bottom: 2px solid var(--el-border-color-light);
+
+  &::after {
+    position: absolute;
+    bottom: -2px;
+    left: 0;
+    width: 40px;
+    height: 2px;
+    content: '';
+    background: var(--el-color-primary);
+  }
 }
 
-.section-title::before {
-  position: absolute;
-  top: 3px;
-  left: 0;
-  width: 3px;
-  height: 14px;
-  content: '';
-  background: var(--el-color-primary);
-  border-radius: 2px;
+.section-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: var(--el-color-primary-light-9);
+  color: var(--el-color-primary);
+  font-size: 14px;
 }
 
 .identity-result-title {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  padding-bottom: 14px;
+  border-bottom: 0;
+}
+
+.identity-cert-view {
+  background: var(--el-fill-color-lighter);
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 8px;
+  padding: 20px 24px;
+  margin-top: 8px;
 }
 
 .form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  column-gap: 24px;
+  column-gap: 32px;
+  row-gap: 6px;
 }
 
 .subject-grid {
@@ -777,21 +951,22 @@ watch(
 }
 
 .subject-preview {
-  padding: 9px 12px;
-  margin: 0 0 14px 112px;
+  padding: 10px 14px;
+  margin: 4px 0 16px 112px;
   overflow-wrap: anywhere;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
   font-size: 12px;
   line-height: 18px;
   color: var(--el-text-color-secondary);
-  background: var(--el-fill-color-light);
-  border: 1px solid var(--el-border-color-lighter);
-  border-radius: 4px;
+  background: var(--el-fill-color);
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 6px;
 }
 
 .issue-actions {
   display: flex;
   justify-content: flex-end;
+  gap: 8px;
   padding: 2px 0 8px;
 }
 
@@ -803,11 +978,86 @@ watch(
   width: 100%;
 }
 
+:deep(.identity-form .el-form-item .el-select) {
+  width: 100%;
+}
+
+:deep(.identity-form .el-form-item__label) {
+  font-weight: 500;
+  color: var(--el-text-color-regular);
+}
+
+:deep(.identity-form .el-input__wrapper) {
+  border-radius: 6px;
+  box-shadow: 0 0 0 1px var(--el-border-color) inset;
+  transition: box-shadow 0.2s;
+}
+
+:deep(.identity-form .el-input__wrapper:hover) {
+  box-shadow: 0 0 0 1px var(--el-border-color-darker) inset;
+}
+
+:deep(.identity-form .el-radio-button__inner) {
+  border-radius: 6px;
+}
+
+:deep(.identity-form .el-tabs__header) {
+  margin-bottom: 18px;
+}
+
 .form-tip {
+  display: inline-block;
   margin-top: 6px;
+  margin-left: 12px;
   color: var(--el-text-color-secondary);
   font-size: 12px;
   line-height: 18px;
+}
+
+.archive-stats-cards {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 4px;
+}
+
+.stat-card {
+  flex: 1;
+  min-width: 140px;
+  padding: 20px 24px;
+  background: var(--el-fill-color-lighter);
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 8px;
+  text-align: center;
+  transition: border-color 0.2s, background 0.2s;
+
+  &:hover {
+    border-color: var(--el-color-primary-light-5);
+    background: var(--el-color-primary-light-9);
+  }
+}
+
+.stat-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--el-color-primary);
+  line-height: 36px;
+}
+
+.stat-label {
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+}
+
+.archive-operation {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 0;
+}
+
+.last-run-info {
+  max-width: 640px;
 }
 
 .test-checks {
