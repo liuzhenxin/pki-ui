@@ -121,7 +121,7 @@
         </el-row>
         <el-row>
           <el-col :span="24">
-            <el-form-item label="上传证书" required>
+            <el-form-item label="上传证书">
               <el-upload
                 ref="uploadCertRef"
                 action="#"
@@ -135,7 +135,7 @@
               >
                 <el-button type="primary">点击上传</el-button>
                 <template #tip>
-                  <div class="el-upload__tip">请上传 .cer, .crt, 或 .pem 格式的 X.509 证书文件。</div>
+                  <div class="el-upload__tip">可上传 .cer, .crt, 或 .pem 格式的 X.509 证书文件，非必填，可后续绑定。</div>
                 </template>
               </el-upload>
               <el-button v-if="certPem" link type="primary" @click="showCertDialog = true">查看证书详情</el-button>
@@ -226,7 +226,7 @@
 </template>
 
 <script setup name="User" lang="ts">
-import { listUser, getUser, delUser, updateUser, resetUserPwd, changeStatus, saveUserWithCert } from '@/api/system/user';
+import { addUser, listUser, getUser, delUser, updateUser, resetUserPwd, changeStatus, saveUserWithCert } from '@/api/system/user';
 import { getToken } from '@/utils/auth';
 import { UserForm, UserQuery, UserVO } from '@/api/system/user/types';
 import { FormInstance, UploadInstance, UploadUserFile, UploadProps, UploadRawFile, genFileId } from 'element-plus';
@@ -566,38 +566,20 @@ function submitForm() {
           getList();
         });
       } else {
-        // 校验是否上传了证书
-        if (certFileList.value.length === 0) {
-          ElMessage.error('请上传证书文件');
-          return;
-        }
-
-        // 使用 saveUserWithCert 接口
-        const formData = new FormData();
-        // 将 form 数据转换为 JSON 字符串并作为 'co' 参数传递
-        // 注意：后端 @RequestPart("co") UserCO co，通常需要 Content-Type: application/json
-        // 但 FormData 中 append 对象通常会被转为字符串。
-        // 如果后端需要 JSON，我们需要 Blob
-        const coBlob = new Blob([JSON.stringify(form.value)], { type: 'application/json' });
-        formData.append('co', coBlob);
-
+        // 证书非必填，可后续绑定
         if (certFileList.value.length > 0 && certFileList.value[0].raw) {
+          const formData = new FormData();
+          const coBlob = new Blob([JSON.stringify(form.value)], { type: 'application/json' });
+          formData.append('co', coBlob);
           formData.append('file', certFileList.value[0].raw);
+          try {
+            await saveUserWithCert(formData);
+          } catch (error) {
+            showSaveUserError(error);
+            return;
+          }
         } else {
-          // 如果没有文件，可能需要传递一个空的 Blob 或者不传，取决于后端是否允许 file 为空
-          // 假设后端允许 file 为空或者必须传
-          // 如果必须传，这里可能需要处理。如果非必须，不 append 即可。
-          // 根据之前的逻辑，证书是可选的吗？之前的逻辑是先 addUser 再 uploadUserCert。
-          // 现在是合并。如果用户没选证书，file 参数怎么办？
-          // 假设没选证书就传一个空的 Blob
-          formData.append('file', new Blob(), '');
-        }
-
-        try {
-          await saveUserWithCert(formData);
-        } catch (error) {
-          showSaveUserError(error);
-          return;
+          await addUser(form.value as any);
         }
         proxy?.$modal.msgSuccess('新增成功');
         open.value = false;
