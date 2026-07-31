@@ -5,6 +5,10 @@ export interface PoolStrategyVO {
   lowWatermark: number;
   highWatermark: number;
   status: number | string;
+  autoReplenish: number | string;
+  consecutiveFailures?: number;
+  lastFailureReason?: string;
+  suspendedTime?: string;
   createTime?: string;
 }
 
@@ -15,6 +19,7 @@ export interface PoolStrategyForm {
   lowWatermark: number;
   highWatermark: number;
   status: number | string;
+  autoReplenish: number | string;
 }
 
 export interface PoolStrategyQuery extends PageQuery {

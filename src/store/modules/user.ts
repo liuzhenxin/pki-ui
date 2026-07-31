@@ -1,5 +1,5 @@
 import { to } from 'await-to-js';
-import { getToken, removeToken, setToken } from '@/utils/auth';
+import { getToken, removeToken, setToken, setRefreshToken, removeRefreshToken } from '@/utils/auth';
 import { login as loginApi, logout as logoutApi, getInfo as getUserInfo } from '@/api/login';
 import { LoginData, LoginResult, Result } from '@/api/types';
 import defAva from '@/assets/images/profile.jpg';
@@ -27,6 +27,7 @@ export const useUserStore = defineStore('user', () => {
     const [err, res] = await to(loginApi(userInfo));
     if (res) {
       setToken(res.access_token);
+      setRefreshToken(res.refresh_token);
       token.value = res.access_token;
       tenantId.value = userInfo.tenantId || '';
       return Promise.resolve(res);
@@ -68,6 +69,7 @@ export const useUserStore = defineStore('user', () => {
     permissions.value = [];
     tenantInitStatus.value = undefined;
     removeToken();
+    removeRefreshToken();
   };
 
   const setAvatar = (value: string) => {

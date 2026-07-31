@@ -4,8 +4,8 @@
       <div v-show="showSearch" class="mb-10px">
         <el-card shadow="hover">
           <el-form ref="queryFormRef" :model="queryParams" :inline="true">
-            <el-form-item label="登录地址" prop="ip">
-              <el-input v-model="queryParams.ip" placeholder="请输入登录地址" clearable @keyup.enter="handleQuery" />
+            <el-form-item label="登录地址" prop="ipAddress">
+              <el-input v-model="queryParams.ipAddress" placeholder="请输入登录地址" clearable @keyup.enter="handleQuery" />
             </el-form-item>
             <el-form-item label="用户名称" prop="username">
               <el-input v-model="queryParams.username" placeholder="请输入用户名称" clearable @keyup.enter="handleQuery" />
@@ -53,7 +53,7 @@
         <el-table-column type="index" label="序号" width="80" align="center" />
         <el-table-column label="访问编号" align="center" prop="id" width="180" />
         <el-table-column label="用户名称" align="center" prop="username" :show-overflow-tooltip="true" />
-        <el-table-column label="登录地址" align="center" prop="ip" width="130" :show-overflow-tooltip="true" />
+        <el-table-column label="登录地址" align="center" prop="ipAddress" width="130" :show-overflow-tooltip="true" />
         <el-table-column label="登录地点" align="center" prop="address" :show-overflow-tooltip="true" />
         <el-table-column label="浏览器" align="center" prop="browser" :show-overflow-tooltip="true" />
         <el-table-column label="操作系统" align="center" prop="os" :show-overflow-tooltip="true" />
@@ -97,7 +97,7 @@ const queryFormRef = ref();
 const queryParams = reactive<LoginLogQuery>({
   pageNum: 1,
   pageSize: 10,
-  ip: undefined,
+  ipAddress: undefined,
   username: undefined,
   status: undefined,
   beginTime: undefined,

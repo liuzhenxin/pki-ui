@@ -204,7 +204,7 @@
             <el-form ref="archiveFormRef" :model="archiveForm" label-width="130px">
               <el-form-item label="启用自动归档">
                 <el-switch v-model="archiveForm.enabled" />
-                <span class="form-tip">开启后系统每 10 分钟自动归档已过期和已吊销的证书</span>
+                <span class="form-tip">开启后系统每 10 分钟自动归档已过期和已注销的证书</span>
               </el-form-item>
               <el-form-item label="归档方式">
                 <el-select v-model="archiveForm.mode" style="width: 240px" disabled>

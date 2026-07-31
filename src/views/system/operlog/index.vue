@@ -57,7 +57,7 @@
         <el-table-column label="模块名称" align="center" prop="moduleName" :show-overflow-tooltip="true" width="150" />
         <el-table-column label="操作方法" align="center" prop="methodName" :show-overflow-tooltip="true" min-width="250" />
         <el-table-column label="操作人员" align="center" prop="operator" :show-overflow-tooltip="true" width="120" />
-        <el-table-column label="IP地址" align="center" prop="ip" width="130" :show-overflow-tooltip="true" />
+        <el-table-column label="IP地址" align="center" prop="ipAddress" width="130" :show-overflow-tooltip="true" />
         <el-table-column label="操作地点" align="center" prop="address" :show-overflow-tooltip="true" width="120" />
         <el-table-column label="请求类型" align="center" prop="requestType" width="100" />
         <el-table-column label="URI" align="center" prop="uri" :show-overflow-tooltip="true" min-width="200" />

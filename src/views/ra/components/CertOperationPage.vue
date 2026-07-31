@@ -29,7 +29,7 @@
         </el-form-item>
       </el-form>
 
-      <el-table v-loading="loading" :data="rows" border height="420" @selection-change="handleSelectionChange">
+      <el-table ref="tableRef" v-loading="loading" :data="rows" border height="420" @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="48" align="center" />
         <el-table-column prop="serialNumber" label="证书序列号" min-width="180" show-overflow-tooltip />
         <el-table-column prop="subject" label="主体名称" min-width="180" show-overflow-tooltip />
@@ -40,6 +40,11 @@
             <el-tag :type="row.statusType">{{ row.statusName }}</el-tag>
           </template>
         </el-table-column>
+        <el-table-column v-if="action === 'renewal'" label="操作" width="100" align="center" fixed="right">
+          <template #default="{ row }">
+            <el-button link type="primary" icon="Timer" @click="handleSingleRenewal(row)">续签</el-button>
+          </template>
+        </el-table-column>
       </el-table>
       <pagination v-show="total > 0" :total="total" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" @pagination="getList" />
 
@@ -48,9 +53,34 @@
           <el-form-item label="已选证书">
             <el-input :model-value="selectedRows.length ? `${selectedRows.length} 张` : '未选择'" disabled />
           </el-form-item>
-          <el-form-item label="申请原因">
-            <el-input v-model="form.reason" type="textarea" :rows="4" :placeholder="`请输入${actionName}原因`" />
+          <el-form-item :label="action === 'renewal' ? '申请原因（选填）' : '申请原因'">
+            <el-input
+              v-model="form.reason"
+              type="textarea"
+              :rows="4"
+              :placeholder="action === 'renewal' ? '可填写续期原因' : `请输入${actionName}原因`"
+            />
           </el-form-item>
+          <template v-if="action === 'renewal'">
+            <el-form-item label="新生效时间">
+              <el-date-picker
+                v-model="form.notBefore"
+                type="datetime"
+                value-format="YYYY-MM-DD HH:mm:ss"
+                placeholder="默认保持原生效时间"
+                style="width: 100%"
+              />
+            </el-form-item>
+            <el-form-item label="新失效时间" required>
+              <el-date-picker
+                v-model="form.notAfter"
+                type="datetime"
+                value-format="YYYY-MM-DD HH:mm:ss"
+                placeholder="请选择续期后的失效时间"
+                style="width: 100%"
+              />
+            </el-form-item>
+          </template>
           <el-form-item v-if="action === 'reissue'" label="CSR">
             <el-input v-model="form.csr" type="textarea" :rows="5" placeholder="请输入补办证书使用的 CSR" />
           </el-form-item>
@@ -68,7 +98,7 @@
 import { computed, reactive, ref } from 'vue';
 import { pageRaOperationCert, submitRaOperation, RaOperationCert } from '@/api/ra/workflowTask';
 
-type OperationAction = 'reissue' | 'freeze' | 'unfreeze';
+type OperationAction = 'reissue' | 'freeze' | 'unfreeze' | 'renewal';
 
 const props = defineProps<{
   action: OperationAction;
@@ -82,6 +112,15 @@ const actionMeta = {
     statusOptions: [
       { label: '有效', value: 'valid' },
       { label: '即将到期', value: 'expiring' }
+    ]
+  },
+  renewal: {
+    title: '证书续期',
+    subtitle: '保留原证书密钥、主体、扩展和序列号，仅更新证书有效期。',
+    icon: 'Timer',
+    statusOptions: [
+      { label: '有效', value: 'valid' },
+      { label: '已过期', value: 'expired' }
     ]
   },
   freeze: {
@@ -111,12 +150,15 @@ const queryParams = reactive({
 
 const form = reactive({
   reason: '',
-  csr: ''
+  csr: '',
+  notBefore: '',
+  notAfter: ''
 });
 
 const drawerOpen = ref(false);
 const loading = ref(false);
 const submitLoading = ref(false);
+const tableRef = ref();
 const total = ref(0);
 const rows = ref<Array<RaOperationCert & { status?: string; statusType?: string }>>([]);
 const selectedRows = ref<Array<RaOperationCert & { status?: string; statusType?: string }>>([]);
@@ -184,12 +226,35 @@ function handleSubmit() {
   }
   form.reason = '';
   form.csr = '';
+  form.notBefore = '';
+  form.notAfter = '';
+  drawerOpen.value = true;
+}
+
+function handleSingleRenewal(row: RaOperationCert & { status?: string; statusType?: string }) {
+  tableRef.value?.clearSelection();
+  tableRef.value?.toggleRowSelection(row, true);
+  form.reason = '';
+  form.csr = '';
+  form.notBefore = '';
+  form.notAfter = '';
   drawerOpen.value = true;
 }
 
 async function confirmSubmit() {
-  if (!form.reason.trim()) {
+  if (action.value !== 'renewal' && !form.reason.trim()) {
     ElMessage.warning(`请输入${actionName.value}原因`);
+    return;
+  }
+  if (action.value === 'renewal' && !form.notAfter) {
+    ElMessage.warning('请选择续期后的失效时间');
+    return;
+  }
+  if (
+    action.value === 'renewal' &&
+    selectedRows.value.some((row) => row.notAfter && new Date(form.notAfter).getTime() <= new Date(row.notAfter).getTime())
+  ) {
+    ElMessage.warning('续期后的失效时间必须晚于原证书失效时间');
     return;
   }
   submitLoading.value = true;
@@ -200,7 +265,9 @@ async function confirmSubmit() {
           operationType: operationType.value,
           certId: row.id,
           reason: form.reason,
-          csr: form.csr
+          csr: form.csr,
+          notBefore: form.notBefore || undefined,
+          notAfter: form.notAfter || undefined
         })
       )
     );

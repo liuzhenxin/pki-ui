@@ -1,28 +1,33 @@
 <template>
   <div class="app-container ra-cert-issue-page">
-    <el-form ref="queryFormRef" v-show="showSearch" :model="queryParams" :inline="true" label-width="80px">
-      <el-form-item label="业务类型" prop="businessType">
-        <el-select v-model="queryParams.businessType" clearable placeholder="全部" style="width: 180px">
-          <el-option v-for="item in businessTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
-        </el-select>
-      </el-form-item>
-      <el-form-item label="关键字" prop="keyword">
-        <el-input v-model="queryParams.keyword" clearable placeholder="用户/部门/序列号/主题" style="width: 240px" @keyup.enter="handleQuery" />
-      </el-form-item>
-      <el-form-item>
-        <el-button type="primary" icon="Search" @click="handleQuery">搜索</el-button>
-        <el-button icon="Refresh" @click="resetQuery">重置</el-button>
-      </el-form-item>
-    </el-form>
+    <div v-show="showSearch" class="query-panel">
+      <el-form ref="queryFormRef" :model="queryParams" :inline="true" label-width="72px" class="query-form">
+        <el-form-item label="业务类型" prop="businessType">
+          <el-select v-model="queryParams.businessType" clearable placeholder="全部业务类型" class="business-type-select">
+            <el-option v-for="item in businessTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="关键字" prop="keyword">
+          <el-input v-model="queryParams.keyword" clearable placeholder="用户、部门、序列号或主题" class="keyword-input" @keyup.enter="handleQuery" />
+        </el-form-item>
+        <el-form-item class="query-actions">
+          <el-button type="primary" icon="Search" @click="handleQuery">搜索</el-button>
+          <el-button icon="RefreshLeft" @click="resetQuery">重置</el-button>
+        </el-form-item>
+      </el-form>
+    </div>
 
-    <el-row :gutter="10" class="mb8">
-      <el-col :span="1.5">
-        <el-button type="primary" plain icon="Stamp" @click="getList">刷新</el-button>
-      </el-col>
-      <right-toolbar v-model:showSearch="showSearch" @queryTable="getList" />
-    </el-row>
+    <div class="list-toolbar">
+      <div class="list-heading">
+        <span class="list-title">待签发申请</span>
+        <el-tag type="info" effect="plain" round>{{ total }}</el-tag>
+      </div>
+      <div class="toolbar-actions">
+        <right-toolbar v-model:showSearch="showSearch" @queryTable="getList" />
+      </div>
+    </div>
 
-    <el-table v-loading="loading" :data="rows" border>
+    <el-table v-loading="loading" :data="rows" border stripe class="issue-table" empty-text="暂无待签发申请">
       <el-table-column label="业务编号" prop="businessId" width="120" align="center" />
       <el-table-column label="业务类型" prop="businessTypeName" width="120" align="center" />
       <el-table-column label="申请用户" prop="userName" min-width="140" show-overflow-tooltip />
@@ -58,188 +63,361 @@
     <el-dialog v-model="issueOpen" title="证书签发" width="1180px" append-to-body top="3vh" class="cert-issue-dialog" @close="closeIssueDialog">
       <el-alert v-if="issueStep" class="issue-step-alert" :title="issueStep" type="info" show-icon :closable="false" />
       <el-form ref="issueFormRef" :model="issueForm" :rules="rules" label-width="108px" class="issue-form">
-        <div class="issue-section-grid">
-          <div class="form-section user-section">
-            <div class="section-title">用户信息</div>
-            <el-descriptions :column="2" border size="small" class="issue-descriptions">
-              <el-descriptions-item label="申请用户">{{ current.userName || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="所属部门">{{ current.deptName || '-' }}</el-descriptions-item>
-            </el-descriptions>
-          </div>
+        <div class="issue-top-grid">
+          <el-form-item class="issue-type-item" label="CSR来源" prop="issueType">
+            <el-segmented v-model="issueForm.issueType" :options="issueTypeOptions" @change="handleIssueTypeChange" />
+          </el-form-item>
+          <el-form-item label="根证书">
+            <el-input :model-value="current.rootName || current.rootId || '-'" disabled />
+          </el-form-item>
+          <el-form-item label="证书模板">
+            <el-input :model-value="current.profileName || '-'" disabled />
+          </el-form-item>
+        </div>
 
-          <div class="form-section apply-section">
-            <div class="section-title">
-              <span>申请信息</span>
-              <el-tag type="warning" effect="plain">{{ current.issueStatusName || '待签发' }}</el-tag>
+        <div class="issue-content-grid">
+          <aside class="issue-summary-pane">
+            <div class="form-section summary-section">
+              <div class="section-title">
+                <span>申请摘要</span>
+                <el-tag type="warning" effect="plain">{{ current.issueStatusName || '待签发' }}</el-tag>
+              </div>
+              <el-descriptions :column="1" border size="small" class="issue-descriptions">
+                <el-descriptions-item label="申请用户">{{ current.userName || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="所属部门">{{ current.deptName || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="业务类型">{{ current.businessTypeName || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="业务编号">{{ current.businessId || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="原证书序列号">{{ current.serialNumber || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="申请原因">{{ current.reason || '-' }}</el-descriptions-item>
+              </el-descriptions>
             </div>
-            <el-descriptions :column="2" border size="small" class="issue-descriptions">
-              <el-descriptions-item label="业务类型">{{ current.businessTypeName || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="业务编号">{{ current.businessId || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="原证书序列号">{{ current.serialNumber || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="申请原因">{{ current.reason || '-' }}</el-descriptions-item>
-            </el-descriptions>
-          </div>
+          </aside>
 
-          <div class="form-section issue-info-section">
-            <div class="section-title">签发信息</div>
-            <div class="issue-info-grid">
-              <el-form-item class="issue-type-item" label="CSR来源" prop="issueType">
-                <el-segmented v-model="issueForm.issueType" :options="issueTypeOptions" @change="handleIssueTypeChange" />
+          <div class="issue-params-pane">
+            <div class="form-section params-section">
+              <div class="section-title">签发参数</div>
+              <el-alert v-if="dualCertInfo?.certMode === 'dual' && isPostQuantumDual" class="dual-cert-alert" type="info" :closable="false" show-icon>
+                <template #title>
+                  抗量子双证书签发：ML-DSA 签名密钥由客户端生成并提交 CSR；ML-KEM 加密私钥由 KMC 永久托管，不支持 USBKey
+                </template>
+              </el-alert>
+              <el-alert v-else-if="dualCertInfo?.certMode === 'dual' && supportsDualRoot" class="dual-cert-alert" type="success" :closable="false" show-icon>
+                <template #title>
+                  双证书签发：签名模板「{{ dualCertInfo.signProfileName }}」+ 加密模板「{{ dualCertInfo.encryptProfileName }}」 — 签名证书由 USB Key
+                  生成，加密证书由 KMC 生成
+                </template>
+              </el-alert>
+              <el-alert v-if="dualCertInfo?.certMode === 'dual' && !supportsDualRoot" class="dual-cert-alert" type="error" :closable="false" show-icon>
+                <template #title>双证书签发异常：当前根证书算法不支持双证书。</template>
+              </el-alert>
+              <el-form-item v-if="issueForm.issueType === 'csr'" label="CSR" prop="csr" class="csr-form-item">
+                <el-input v-model="issueForm.csr" type="textarea" :rows="8" placeholder="请输入证书请求CSR" />
               </el-form-item>
-              <el-form-item label="根证书">
-                <el-input :model-value="current.rootName || current.rootId || '-'" disabled />
-              </el-form-item>
-              <el-form-item label="证书模板">
-                <el-input :model-value="current.profileName || '-'" disabled />
-              </el-form-item>
-            </div>
-            <el-alert
-              v-if="dualCertInfo?.certMode === 'dual' && isDualRootSm2"
-              type="success"
-              :closable="false"
-              show-icon
-              style="margin-bottom: 12px"
-            >
-              <template #title>
-                双证书签发：签名模板「{{ dualCertInfo.signProfileName }}」+ 加密模板「{{ dualCertInfo.encryptProfileName }}」 — 签名证书由 USB Key
-                生成，加密证书由 KMC 生成
-              </template>
-            </el-alert>
-            <el-alert v-if="dualCertInfo?.certMode === 'dual' && !isDualRootSm2" type="error" :closable="false" show-icon style="margin-bottom: 12px">
-              <template #title> 双证书签发异常：当前根证书不是 SM2 算法，无法签发双证书。请联系管理员更换为 SM2 根证书。 </template>
-            </el-alert>
-            <el-form-item v-if="issueForm.issueType === 'csr'" label="CSR" prop="csr" class="csr-form-item">
-              <el-input v-model="issueForm.csr" type="textarea" :rows="8" placeholder="请输入证书请求CSR" />
-            </el-form-item>
-            <template v-if="issueForm.issueType === 'usb_key'">
-              <el-alert class="usb-key-tip" type="info" show-icon :closable="false" title="请确认 USB Key 已插入，应用已创建，User PIN 正确。" />
-              <div class="issue-info-grid">
-                <el-form-item label="设备提供商" prop="provider">
-                  <div class="issue-device-row">
-                    <el-select v-model="issueForm.provider" placeholder="请选择或刷新" style="flex: 1" @change="onCertProviderChange">
-                      <el-option v-for="item in certProviders" :key="item" :label="item" :value="item" />
+              <template v-if="issueForm.issueType === 'usb_key'">
+                <el-alert class="usb-key-tip" type="info" show-icon :closable="false" title="请确认 USB Key 已插入，应用已创建，User PIN 正确。" />
+                <div class="issue-info-grid">
+                  <el-form-item label="设备提供商" prop="provider">
+                    <div class="issue-device-row">
+                      <el-select v-model="issueForm.provider" placeholder="请选择或刷新" style="flex: 1" @change="onCertProviderChange">
+                        <el-option v-for="item in certProviders" :key="item" :label="item" :value="item" />
+                      </el-select>
+                      <el-button icon="Refresh" circle @click="refreshCertProviders" />
+                    </div>
+                  </el-form-item>
+                  <el-form-item label="设备列表" prop="device">
+                    <el-select v-model="issueForm.device" placeholder="请选择设备" @change="onCertDeviceChange">
+                      <el-option v-for="item in certDevices" :key="item" :label="item" :value="item" />
                     </el-select>
-                    <el-button icon="Refresh" circle @click="refreshCertProviders" />
-                  </div>
-                </el-form-item>
-                <el-form-item label="设备列表" prop="device">
-                  <el-select v-model="issueForm.device" placeholder="请选择设备" @change="onCertDeviceChange">
-                    <el-option v-for="item in certDevices" :key="item" :label="item" :value="item" />
-                  </el-select>
-                </el-form-item>
-                <el-form-item label="应用" prop="appName">
-                  <el-select v-model="issueForm.appName" placeholder="请选择应用">
-                    <el-option v-for="item in certApps" :key="item" :label="item" :value="item" />
-                  </el-select>
-                </el-form-item>
-                <el-form-item label="容器名" prop="containerName">
-                  <el-input v-model="issueForm.containerName" placeholder="请输入或使用自动生成的容器名" />
-                </el-form-item>
-                <el-form-item label="User PIN" prop="pin">
-                  <el-input v-model="issueForm.pin" type="password" show-password placeholder="请输入 USBKey User PIN" />
-                </el-form-item>
-              </div>
-            </template>
-            <template v-if="issueForm.issueType === 'file'">
-              <div class="issue-info-grid compact">
-                <el-form-item label="文件格式" prop="fileFormat">
-                  <el-radio-group v-model="issueForm.fileFormat">
-                    <el-radio-button value="PKCS12">PKCS12</el-radio-button>
-                  </el-radio-group>
-                </el-form-item>
-                <el-form-item label="文件密码" prop="filePassword">
-                  <el-input v-model="issueForm.filePassword" type="password" show-password placeholder="请输入 P12 文件密码" />
-                </el-form-item>
-              </div>
-            </template>
-          </div>
-
-          <div class="form-section subject-section">
-            <div class="section-title">证书主题</div>
-            <template v-if="issueForm.issueType !== 'csr'">
-              <div v-if="issueForm.subjectItems.length > 0" class="subject-scroll-area">
-                <CertSubject v-model="issueForm.subjectItems" propPrefix="subjectItems" />
-              </div>
-              <el-form-item v-else label="证书主题" prop="subject">
-                <el-input v-model="issueForm.subject" clearable placeholder="请输入证书主题，例如：CN=user,O=org,C=CN" />
-              </el-form-item>
-            </template>
-            <el-descriptions v-else :column="1" border size="small" class="issue-descriptions">
-              <el-descriptions-item label="证书主题">{{ current.subject || '-' }}</el-descriptions-item>
-            </el-descriptions>
-          </div>
-
-          <div class="form-section extension-section">
-            <div class="section-title">扩展信息</div>
-            <div v-if="issueForm.extensionItems.length > 0" class="extension-scroll-area">
-              <div v-for="(ext, extIndex) in issueForm.extensionItems" :key="ext.key" class="issue-extension-item">
-                <div class="issue-extension-title">
-                  <span>{{ ext.label }}</span>
-                  <el-tag v-if="ext.required" type="danger" size="small" effect="plain">必填</el-tag>
-                  <el-tag v-else type="info" size="small" effect="plain">可选</el-tag>
+                  </el-form-item>
+                  <el-form-item label="应用" prop="appName">
+                    <el-select v-model="issueForm.appName" placeholder="请选择应用">
+                      <el-option v-for="item in certApps" :key="item" :label="item" :value="item" />
+                    </el-select>
+                  </el-form-item>
+                  <el-form-item label="容器名" prop="containerName">
+                    <el-input v-model="issueForm.containerName" placeholder="请输入或使用自动生成的容器名" />
+                  </el-form-item>
+                  <el-form-item label="User PIN" prop="pin">
+                    <el-input v-model="issueForm.pin" type="password" show-password placeholder="请输入 USBKey User PIN" />
+                  </el-form-item>
                 </div>
-                <template v-if="ext.kind === 'subjectAlternativeName'">
-                  <div v-for="(name, nameIndex) in ext.names" :key="`${ext.key}-${nameIndex}`" class="san-row">
-                    <el-select v-model="name.type" placeholder="类型" style="width: 130px">
-                      <el-option v-for="mode in ext.modes" :key="mode" :label="getSanModeLabel(mode)" :value="mode" />
-                    </el-select>
-                    <el-input v-model="name.value" :placeholder="getSanPlaceholder(name.type)" />
-                    <el-button icon="Delete" circle :disabled="ext.names.length <= 1" @click="removeSanName(extIndex, nameIndex)" />
+              </template>
+              <template v-else-if="issueForm.issueType === 'file'">
+                <div class="issue-info-grid compact">
+                  <el-form-item label="文件格式" prop="fileFormat">
+                    <el-radio-group v-model="issueForm.fileFormat">
+                      <el-radio-button value="PKCS12">PKCS12</el-radio-button>
+                    </el-radio-group>
+                  </el-form-item>
+                  <el-form-item label="文件密码" prop="filePassword">
+                    <el-input v-model="issueForm.filePassword" type="password" show-password placeholder="请输入 P12 文件密码" />
+                  </el-form-item>
+                </div>
+              </template>
+
+              <div class="issue-extension-section">
+                <div class="section-subtitle">证书主题</div>
+                <template v-if="issueForm.issueType !== 'csr'">
+                  <div v-if="issueForm.subjectItems.length > 0" class="subject-scroll-area">
+                    <CertSubject v-model="issueForm.subjectItems" propPrefix="subjectItems" />
                   </div>
-                  <el-button type="primary" link icon="Plus" @click="addSanName(extIndex)">添加备用名称</el-button>
+                  <el-form-item v-else label="证书主题" prop="subject">
+                    <el-input v-model="issueForm.subject" clearable placeholder="请输入证书主题，例如：CN=user,O=org,C=CN" />
+                  </el-form-item>
                 </template>
-                <template v-else-if="ext.kind === 'keyUsage'">
-                  <el-checkbox-group v-model="ext.usages" class="key-usage-checkbox-group">
-                    <el-checkbox v-for="usage in keyUsageOptions" :key="usage.value" :value="usage.value">
-                      {{ usage.label }}
-                    </el-checkbox>
-                  </el-checkbox-group>
-                </template>
-                <template v-else-if="ext.kind === 'extendedKeyUsage'">
-                  <el-checkbox-group v-model="ext.usages" class="key-usage-checkbox-group">
-                    <el-checkbox v-for="usage in extendedKeyUsageOptions" :key="usage.value" :value="usage.value">
-                      {{ usage.label }}
-                    </el-checkbox>
-                  </el-checkbox-group>
-                </template>
-                <template v-else>
-                  <el-input v-model="ext.value" type="textarea" :rows="3" :placeholder="`请输入 ${ext.label} 的 JSON 或文本值`" />
-                </template>
+                <el-descriptions v-else :column="1" border size="small" class="issue-descriptions">
+                  <el-descriptions-item label="证书主题">{{ current.subject || '-' }}</el-descriptions-item>
+                </el-descriptions>
+              </div>
+
+              <div class="issue-extension-section">
+                <div class="section-subtitle">扩展信息</div>
+                <div v-if="issueForm.extensionItems.length > 0" class="extension-scroll-area">
+                  <div v-for="(ext, extIndex) in issueForm.extensionItems" :key="ext.key" class="issue-extension-item">
+                    <div class="issue-extension-title">
+                      <span>{{ ext.label }}</span>
+                      <el-tag v-if="ext.required" type="danger" size="small" effect="plain">必填</el-tag>
+                      <el-tag v-else type="info" size="small" effect="plain">可选</el-tag>
+                    </div>
+                    <template v-if="ext.kind === 'subjectAlternativeName'">
+                      <div v-for="(name, nameIndex) in ext.names" :key="`${ext.key}-${nameIndex}`" class="san-row">
+                        <el-select v-model="name.type" placeholder="类型" style="width: 130px">
+                          <el-option v-for="mode in ext.modes" :key="mode" :label="getSanModeLabel(mode)" :value="mode" />
+                        </el-select>
+                        <el-input v-model="name.value" :placeholder="getSanPlaceholder(name.type)" />
+                        <el-button icon="Delete" circle :disabled="ext.names.length <= 1" @click="removeSanName(extIndex, nameIndex)" />
+                      </div>
+                      <el-button type="primary" link icon="Plus" @click="addSanName(extIndex)">添加备用名称</el-button>
+                    </template>
+                    <template v-else-if="ext.kind === 'keyUsage'">
+                      <el-checkbox-group v-model="ext.usages" class="key-usage-checkbox-group">
+                        <el-checkbox v-for="usage in keyUsageOptions" :key="usage.value" :value="usage.value">
+                          {{ usage.label }}
+                        </el-checkbox>
+                      </el-checkbox-group>
+                    </template>
+                    <template v-else-if="ext.kind === 'extendedKeyUsage'">
+                      <el-checkbox-group v-model="ext.usages" class="key-usage-checkbox-group">
+                        <el-checkbox v-for="usage in extendedKeyUsageOptions" :key="usage.value" :value="usage.value">
+                          {{ usage.label }}
+                        </el-checkbox>
+                      </el-checkbox-group>
+                    </template>
+                    <template v-else>
+                      <el-input v-model="ext.value" type="textarea" :rows="3" :placeholder="`请输入 ${ext.label} 的 JSON 或文本值`" />
+                    </template>
+                  </div>
+                </div>
+                <el-empty v-else description="无扩展信息" :image-size="64" />
               </div>
             </div>
-            <el-empty v-else description="无扩展信息" :image-size="64" />
           </div>
         </div>
       </el-form>
       <template #footer>
         <div class="dialog-footer">
-          <el-button type="primary" :loading="submitLoading" @click="submitIssue">签 发</el-button>
-          <el-button @click="issueOpen = false">取 消</el-button>
+          <el-button @click="issueOpen = false">取消</el-button>
+          <el-button type="primary" icon="Stamp" :loading="submitLoading" @click="submitIssue">确认签发</el-button>
         </div>
       </template>
     </el-dialog>
 
-    <el-dialog v-model="issueResultOpen" title="证书签发结果" width="920px" append-to-body>
+    <el-dialog v-model="renewalOpen" title="执行证书续期" width="860px" append-to-body class="renewal-dialog">
+      <el-alert title="续期保留原密钥、公钥、主体、扩展和序列号，仅更新有效期。" type="info" show-icon :closable="false" />
+      <el-descriptions :column="2" border class="mt-4">
+        <el-descriptions-item label="原证书序列号">{{ current.serialNumber || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="证书类型">{{ renewalTargets.length > 1 ? '双证书' : '单证书' }}</el-descriptions-item>
+        <el-descriptions-item label="新生效时间">{{ renewalConf.notBefore || '保持原生效时间' }}</el-descriptions-item>
+        <el-descriptions-item label="新失效时间">{{ renewalConf.notAfter || '-' }}</el-descriptions-item>
+      </el-descriptions>
+
+      <div class="renewal-storage-heading">
+        <span>原存储方式</span>
+        <el-button v-if="hasRenewalUsbTarget" icon="Refresh" :loading="renewalCheckLoading" @click="checkRenewalStorage(false)">
+          检测原存储介质
+        </el-button>
+      </div>
+      <div class="renewal-target-list">
+        <div v-for="(target, index) in renewalTargets" :key="target.certId || target.serialNumber || index" class="renewal-target">
+          <div class="renewal-target-title">
+            <span>{{ target.role === 'PAIRED' ? '配对证书' : '主证书' }} · {{ target.serialNumber || '-' }}</span>
+            <el-tag :type="renewalTargetReady(target) ? 'success' : 'danger'" effect="plain">
+              {{ renewalTargetReady(target) ? '条件满足' : '条件不满足' }}
+            </el-tag>
+          </div>
+          <el-descriptions :column="2" border size="small">
+            <el-descriptions-item label="存储方式">{{ storageTypeName(target.storageType) }}</el-descriptions-item>
+            <el-descriptions-item label="密钥来源">{{ keySourceName(target.keySource) }}</el-descriptions-item>
+            <el-descriptions-item v-if="target.storageType === 'USB_KEY'" label="设备提供商">
+              {{ target.storageInfo?.provider || '-' }}
+            </el-descriptions-item>
+            <el-descriptions-item v-if="target.storageType === 'USB_KEY'" label="设备">
+              {{ target.storageInfo?.device || '-' }}
+            </el-descriptions-item>
+            <el-descriptions-item v-if="target.storageType === 'USB_KEY'" label="应用">
+              {{ target.storageInfo?.application || '-' }}
+            </el-descriptions-item>
+            <el-descriptions-item v-if="target.storageType === 'USB_KEY'" label="原容器">
+              {{ target.storageInfo?.container || '-' }}
+            </el-descriptions-item>
+            <el-descriptions-item v-if="target.storageType === 'RA'" label="托管私钥">
+              {{ target.hasManagedPrivateKey ? '已保存' : '缺失' }}
+            </el-descriptions-item>
+            <el-descriptions-item label="校验说明" :span="2">
+              {{ renewalTargetMessage(target) }}
+            </el-descriptions-item>
+          </el-descriptions>
+        </div>
+      </div>
+
+      <template v-if="hasRenewalUsbTarget">
+        <div class="renewal-storage-heading">
+          <span>续期证书签发与写入位置</span>
+          <el-tag type="primary" effect="plain">USBKey</el-tag>
+        </div>
+        <div class="renewal-target-list">
+          <div
+            v-for="(target, index) in renewalUsbTargets"
+            :key="`renewed-${target.certId || target.serialNumber || index}`"
+            class="renewal-target renewal-write-target"
+          >
+            <div class="renewal-target-title">
+              <span>{{ renewalTargetName(target) }}</span>
+              <el-tag type="info" effect="plain">写回原容器</el-tag>
+            </div>
+            <el-descriptions :column="2" border size="small">
+              <el-descriptions-item label="续期证书存储">USBKey</el-descriptions-item>
+              <el-descriptions-item label="密钥处理">保留原容器私钥</el-descriptions-item>
+              <el-descriptions-item label="设备提供商">{{ target.storageInfo?.provider || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="设备">{{ target.storageInfo?.device || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="应用">{{ target.storageInfo?.application || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="目标容器">{{ target.storageInfo?.container || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="写入规则" :span="2">CA 签发成功后，将续期证书写入该原容器，不生成新密钥。</el-descriptions-item>
+            </el-descriptions>
+          </div>
+        </div>
+      </template>
+
+      <template v-if="hasRenewalRaTarget">
+        <div class="renewal-storage-heading">
+          <span>续期证书托管与下载</span>
+          <el-tag type="success" effect="plain">RA 私钥托管</el-tag>
+        </div>
+        <div class="renewal-target-list">
+          <div
+            v-for="(target, index) in renewalRaTargets"
+            :key="`renewed-ra-${target.certId || target.serialNumber || index}`"
+            class="renewal-target renewal-ra-target"
+          >
+            <div class="renewal-target-title">
+              <span>{{ renewalTargetName(target) }}</span>
+              <el-tag type="info" effect="plain">下载 PKCS#12</el-tag>
+            </div>
+            <el-descriptions :column="2" border size="small">
+              <el-descriptions-item label="续期证书存储">RA 托管</el-descriptions-item>
+              <el-descriptions-item label="密钥处理">保留原托管私钥</el-descriptions-item>
+              <el-descriptions-item label="托管状态">{{ target.hasManagedPrivateKey ? '私钥可用' : '私钥缺失' }}</el-descriptions-item>
+              <el-descriptions-item label="下载格式">PKCS#12（.p12）</el-descriptions-item>
+            </el-descriptions>
+          </div>
+        </div>
+      </template>
+
+      <el-alert
+        class="mt-4"
+        :title="renewalReadyMessage"
+        :type="renewalCanSubmit ? 'success' : renewalStaticReady ? 'warning' : 'error'"
+        show-icon
+        :closable="false"
+      />
+      <el-alert v-if="renewalStep" class="mt-4" :title="renewalStep" type="info" show-icon :closable="false" />
+      <el-form v-if="hasRenewalUsbTarget" label-width="100px" class="mt-4">
+        <el-form-item label="User PIN" required>
+          <el-input v-model="renewalPin" type="password" show-password placeholder="请输入原 USBKey User PIN" />
+        </el-form-item>
+      </el-form>
+      <el-form v-if="hasRenewalRaTarget" label-width="112px" class="mt-4">
+        <el-form-item label="导出口令" required :error="renewalPkcs12PasswordError">
+          <el-input
+            v-model="renewalPkcs12Password"
+            type="password"
+            show-password
+            autocomplete="new-password"
+            placeholder="请设置至少 8 个字符的 PKCS#12 导出口令"
+          />
+        </el-form-item>
+        <el-form-item label="确认口令" required :error="renewalPkcs12ConfirmError">
+          <el-input
+            v-model="renewalPkcs12ConfirmPassword"
+            type="password"
+            show-password
+            autocomplete="new-password"
+            placeholder="请再次输入导出口令"
+          />
+        </el-form-item>
+      </el-form>
+      <el-checkbox v-if="hasRenewalClientTarget" v-model="renewalClientConfirmed" class="renewal-client-confirm">
+        已确认原客户端私钥仍然存在且可用
+      </el-checkbox>
+      <template #footer>
+        <el-button @click="renewalOpen = false">取消</el-button>
+        <el-button type="primary" icon="Timer" :loading="submitLoading" :disabled="!renewalCanSubmit" @click="submitRenewal">确认续期</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="issueResultOpen" title="证书签发结果" width="920px" append-to-body class="issue-result-dialog">
       <el-descriptions :column="2" border class="result-section">
         <el-descriptions-item label="证书ID">{{ issueResult.certId || '-' }}</el-descriptions-item>
         <el-descriptions-item label="序列号">{{ issueResult.serialNumber || '-' }}</el-descriptions-item>
         <el-descriptions-item label="证书主题" :span="2">{{ issueResult.subject || '-' }}</el-descriptions-item>
       </el-descriptions>
+      <div v-if="issueResult.storageType === 'USB_KEY' || issueResult.encStorageType === 'USB_KEY'" class="renewal-result-storage">
+        <el-alert title="续期证书已写入 USBKey" type="success" show-icon :closable="false" />
+        <el-descriptions :column="2" border size="small" class="mt-4">
+          <template v-if="issueResult.storageType === 'USB_KEY'">
+            <el-descriptions-item label="签名证书应用">{{ issueResultStorageInfo.application || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="签名证书容器">{{ issueResultStorageInfo.container || '-' }}</el-descriptions-item>
+          </template>
+          <template v-if="issueResult.encStorageType === 'USB_KEY'">
+            <el-descriptions-item label="加密证书应用">{{ issueResultEncStorageInfo.application || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="加密证书容器">{{ issueResultEncStorageInfo.container || '-' }}</el-descriptions-item>
+          </template>
+        </el-descriptions>
+      </div>
+      <el-alert
+        v-if="issueResult.storageType === 'CLIENT' || issueResult.encStorageType === 'CLIENT'"
+        class="renewal-result-storage"
+        title="续期证书已自动下载；原私钥仍由客户端持有。"
+        type="success"
+        show-icon
+        :closable="false"
+      />
+      <el-alert
+        v-if="issueResult.storageType === 'RA' || issueResult.encStorageType === 'RA'"
+        class="renewal-result-storage"
+        :title="renewalRaDownloadStatus === 'success' ? '续期证书保持 RA 私钥托管，PKCS#12 已自动下载。' : '续期证书保持 RA 私钥托管。'"
+        :type="renewalRaDownloadStatus === 'error' ? 'warning' : 'success'"
+        show-icon
+        :closable="false"
+      />
       <div class="result-actions">
         <el-button icon="CopyDocument" @click="copyCert(issueResult.cert)">复制证书</el-button>
         <el-button type="primary" icon="Download" @click="downloadCert(issueResult)">下载证书</el-button>
+        <el-button v-if="issueResult.certificateChain" icon="Download" @click="downloadCertPem(issueResult.certificateChain, 'certificate-chain')">
+          下载证书链
+        </el-button>
         <el-button v-if="issueResult.fileBase64" type="success" icon="Download" @click="downloadKeyStore(issueResult)"
           >下载{{ issueResult.fileFormat }}</el-button
         >
       </div>
       <el-input v-model="issueResult.cert" type="textarea" :rows="10" readonly class="cert-result-textarea" />
-      <div v-if="issueResult.encCert" style="margin-top: 16px">
+      <div v-if="issueResult.encCert" class="encryption-result">
         <el-divider content-position="left">加密证书</el-divider>
         <el-descriptions :column="2" border size="small">
           <el-descriptions-item label="加密证书ID">{{ issueResult.encCertId || '-' }}</el-descriptions-item>
           <el-descriptions-item label="加密序列号">{{ issueResult.encSerialNumber || '-' }}</el-descriptions-item>
         </el-descriptions>
-        <div style="margin: 8px 0">
+        <div class="encryption-actions">
           <el-button icon="CopyDocument" @click="copyCert(issueResult.encCert)">复制加密证书</el-button>
           <el-button type="primary" icon="Download" @click="downloadCertPem(issueResult.encCert, issueResult.encSerialNumber || 'enc-cert')"
             >下载加密证书</el-button
@@ -249,7 +427,7 @@
       </div>
       <template #footer>
         <div class="dialog-footer">
-          <el-button type="primary" @click="issueResultOpen = false">关 闭</el-button>
+          <el-button type="primary" @click="issueResultOpen = false">关闭</el-button>
         </div>
       </template>
     </el-dialog>
@@ -275,7 +453,16 @@
 
 <script setup name="RaCertIssue" lang="ts">
 import { ElMessage, FormInstance, FormRules } from 'element-plus';
-import { getRaCertIssue, issueRaCert, pageRaCertIssue, RaCertIssue, RaCertIssueResult, DualCertIssueInfo } from '@/api/ra/certIssue';
+import {
+  confirmRaRenewalDistribution,
+  getRaCertIssue,
+  issueRaCert,
+  pageRaCertIssue,
+  RaCertIssue,
+  RaCertIssueResult,
+  DualCertIssueInfo
+} from '@/api/ra/certIssue';
+import { downloadRaPkcs12 } from '@/api/ra/cert';
 import CertSubject, { typeMapping, sortSubjectItems } from '@/components/CertSubject/index.vue';
 import { parseJson } from '@/utils/json';
 import SKFClient from '@/api/skf/skf_api';
@@ -297,14 +484,93 @@ const total = ref(0);
 const issueOpen = ref(false);
 const detailOpen = ref(false);
 const issueResultOpen = ref(false);
+const renewalOpen = ref(false);
+const renewalPin = ref('');
+const renewalStep = ref('');
+const renewalPkcs12Password = ref('');
+const renewalPkcs12ConfirmPassword = ref('');
+const renewalRaDownloadStatus = ref<'idle' | 'success' | 'error'>('idle');
+const renewalClientConfirmed = ref(false);
+const renewalCheckLoading = ref(false);
+const renewalUsbChecks = ref<Record<string, { ready: boolean; message: string }>>({});
 const issueStep = ref('');
 const current = ref<Partial<RaCertIssue>>({});
 const detail = ref<Partial<RaCertIssue>>({});
 const issueResult = ref<Partial<RaCertIssueResult>>({});
+const issueResultStorageInfo = computed<any>(() => parseJson(issueResult.value.storageInfo || '{}') || {});
+const issueResultEncStorageInfo = computed<any>(() => parseJson(issueResult.value.encStorageInfo || '{}') || {});
 const dualCertInfo = ref<DualCertIssueInfo | null>(null);
-const isDualRootSm2 = computed(() => {
+const renewalConf = computed<any>(() => parseJson(String(current.value.conf || '{}')) || {});
+interface RenewalStorageTarget {
+  role?: 'PRIMARY' | 'PAIRED';
+  certId?: string | number;
+  serialNumber?: string;
+  keySource?: string;
+  storageType?: string;
+  storageInfo?: Record<string, any>;
+  hasManagedPrivateKey?: boolean;
+  ready?: boolean;
+  message?: string;
+}
+const renewalTargets = computed<RenewalStorageTarget[]>(() => {
+  if (Array.isArray(renewalConf.value.targets) && renewalConf.value.targets.length) return renewalConf.value.targets;
+  return [
+    {
+      role: 'PRIMARY',
+      certId: current.value.oldCertId,
+      serialNumber: current.value.serialNumber,
+      storageType: renewalConf.value.storageType,
+      storageInfo: renewalConf.value.storageInfo || {},
+      ready: Boolean(renewalConf.value.storageType),
+      message: renewalConf.value.storageType ? '使用原存储方式续期' : '缺少原存储方式'
+    }
+  ];
+});
+const renewalStaticReady = computed(() => renewalConf.value.ready !== false && renewalTargets.value.every((target) => target.ready !== false));
+const hasRenewalUsbTarget = computed(() => renewalTargets.value.some((target) => target.storageType === 'USB_KEY'));
+const renewalUsbTargets = computed(() => renewalTargets.value.filter((target) => target.storageType === 'USB_KEY'));
+const hasRenewalRaTarget = computed(() => renewalTargets.value.some((target) => target.storageType === 'RA'));
+const renewalRaTargets = computed(() => renewalTargets.value.filter((target) => target.storageType === 'RA'));
+const hasRenewalClientTarget = computed(() => renewalTargets.value.some((target) => target.storageType === 'CLIENT'));
+const renewalPkcs12PasswordError = computed(() => {
+  if (!renewalPkcs12Password.value) return '';
+  return renewalPkcs12Password.value.length < 8 ? '导出口令至少 8 个字符' : '';
+});
+const renewalPkcs12ConfirmError = computed(() => {
+  if (!renewalPkcs12ConfirmPassword.value) return '';
+  return renewalPkcs12ConfirmPassword.value !== renewalPkcs12Password.value ? '两次输入的口令不一致' : '';
+});
+const renewalPkcs12Ready = computed(
+  () => !hasRenewalRaTarget.value || (renewalPkcs12Password.value.length >= 8 && renewalPkcs12ConfirmPassword.value === renewalPkcs12Password.value)
+);
+const renewalUsbReady = computed(() =>
+  renewalTargets.value
+    .filter((target) => target.storageType === 'USB_KEY')
+    .every((target) => renewalUsbChecks.value[renewalTargetKey(target)]?.ready === true)
+);
+const renewalCanSubmit = computed(
+  () =>
+    renewalStaticReady.value &&
+    (!hasRenewalUsbTarget.value || (Boolean(renewalPin.value) && renewalUsbReady.value)) &&
+    renewalPkcs12Ready.value &&
+    (!hasRenewalClientTarget.value || renewalClientConfirmed.value)
+);
+const renewalReadyMessage = computed(() => {
+  if (!renewalStaticReady.value) return renewalConf.value.readinessMessage || '原存储信息不完整，不能执行续期';
+  if (hasRenewalUsbTarget.value && !renewalUsbReady.value) return '请连接原 USBKey，并检测原设备、应用和容器';
+  if (hasRenewalRaTarget.value && !renewalPkcs12Ready.value) return '请设置并确认至少 8 个字符的 PKCS#12 导出口令';
+  if (hasRenewalClientTarget.value && !renewalClientConfirmed.value) return '请确认原客户端私钥仍然存在且可用';
+  return '已具备按原存储方式续期的条件';
+});
+const isPostQuantumDual = computed(() => {
+  if (dualCertInfo.value?.certMode !== 'dual') return false;
+  const text =
+    `${current.value.rootName || ''} ${dualCertInfo.value.signProfileName || ''} ${dualCertInfo.value.encryptProfileName || ''} ${current.value.profileConf || ''}`.toUpperCase();
+  return text.includes('ML-DSA') || text.includes('MLDSA') || text.includes('ML-KEM') || text.includes('MLKEM');
+});
+const supportsDualRoot = computed(() => {
   const rootName = (current.value.rootName || '').toUpperCase();
-  return rootName.includes('SM2');
+  return isPostQuantumDual.value || rootName.includes('SM2') || rootName.includes('ML-DSA') || rootName.includes('MLDSA');
 });
 const queryFormRef = ref<FormInstance>();
 const issueFormRef = ref<FormInstance>();
@@ -313,11 +579,11 @@ const certDevices = ref<string[]>([]);
 const certApps = ref<string[]>([]);
 let skfClientPromise: Promise<any> | null = null;
 
-const issueTypeOptions = [
+const issueTypeOptions = computed(() => [
   { label: 'CSR', value: 'csr' },
-  { label: 'USB Key', value: 'usb_key' },
-  { label: '签发到文件', value: 'file' }
-];
+  { label: 'USB Key', value: 'usb_key', disabled: isPostQuantumDual.value },
+  { label: '签发到文件', value: 'file', disabled: isPostQuantumDual.value }
+]);
 
 const keyUsageOptions = [
   { value: 'digitalSignature', label: '数字签名' },
@@ -442,6 +708,20 @@ function resetQuery() {
 async function handleIssue(row: RaCertIssue) {
   const res = await getRaCertIssue(row.businessType, row.businessId);
   current.value = res.data || row;
+  if (current.value.businessType === 'cert_renewal') {
+    renewalPin.value = '';
+    renewalStep.value = '';
+    renewalPkcs12Password.value = '';
+    renewalPkcs12ConfirmPassword.value = '';
+    renewalRaDownloadStatus.value = 'idle';
+    renewalClientConfirmed.value = false;
+    renewalUsbChecks.value = {};
+    renewalOpen.value = true;
+    if (hasRenewalUsbTarget.value && renewalStaticReady.value) {
+      nextTick(() => checkRenewalStorage(false));
+    }
+    return;
+  }
   // 解析conf中的双证书信息
   dualCertInfo.value = null;
   if (current.value.conf) {
@@ -465,8 +745,221 @@ async function handleIssue(row: RaCertIssue) {
   issueForm.subject = current.value.subject || '';
   issueForm.subjectItems = buildSubjectItems(current.value.profileConf, current.value.subject);
   issueForm.extensionItems = buildIssueExtensionItems(parseJson(current.value.profileConf || '{}')?.extensions || []);
+  if (isPostQuantumDual.value) {
+    issueForm.issueType = 'csr';
+  }
   issueStep.value = '';
   issueOpen.value = true;
+}
+
+async function submitRenewal() {
+  if (!current.value.businessId) return;
+  if (!renewalStaticReady.value) {
+    ElMessage.error(renewalReadyMessage.value);
+    return;
+  }
+  if (hasRenewalClientTarget.value && !renewalClientConfirmed.value) {
+    ElMessage.warning('请确认原客户端私钥仍然存在且可用');
+    return;
+  }
+  if (hasRenewalRaTarget.value && !renewalPkcs12Ready.value) {
+    ElMessage.warning('请设置并确认至少 8 个字符的 PKCS#12 导出口令');
+    return;
+  }
+  if (hasRenewalUsbTarget.value) {
+    if (!renewalPin.value) {
+      ElMessage.warning('请输入 USBKey User PIN');
+      return;
+    }
+    renewalStep.value = '正在验证原 USBKey、目标容器和 User PIN...';
+    const ready = await checkRenewalStorage(true);
+    if (!ready) {
+      renewalStep.value = '原 USBKey 条件验证失败，请根据校验说明处理后重试';
+      return;
+    }
+  }
+  submitLoading.value = true;
+  let renewalId: string | number = current.value.businessId;
+  try {
+    renewalStep.value = '原存储条件验证通过，正在向 CA 发起续期签发...';
+    const res = await issueRaCert('cert_renewal', renewalId, {
+      originalPrivateKeyConfirmed: hasRenewalClientTarget.value ? renewalClientConfirmed.value : undefined
+    });
+    const result = res.data;
+    if (!result) throw new Error('续期接口未返回证书');
+    renewalId = result.renewalId || renewalId;
+    if (result.storageType === 'USB_KEY') {
+      renewalStep.value = `CA 已完成签发，正在写入签名证书到 ${storageLocationText(result.storageInfo)}...`;
+      await writeRenewedUsbCert(result.storageInfo, result.cert, true);
+    }
+    if (result.encStorageType === 'USB_KEY' && result.encCert) {
+      renewalStep.value = `正在写入加密证书到 ${storageLocationText(result.encStorageInfo)}...`;
+      await writeRenewedUsbCert(result.encStorageInfo, result.encCert, false);
+    }
+    if (result.storageType === 'RA' || result.encStorageType === 'RA') {
+      renewalStep.value = 'CA 已完成签发，正在使用原托管私钥生成 PKCS#12...';
+      try {
+        await downloadRenewedRaPkcs12(result);
+        renewalRaDownloadStatus.value = 'success';
+      } catch (error: any) {
+        renewalRaDownloadStatus.value = 'error';
+        ElMessage.warning(`续期成功，但 PKCS#12 自动下载失败：${error?.message || '请在证书列表中重新下载'}`);
+      }
+    }
+    renewalStep.value = '续期证书分发处理完成，正在确认结果...';
+    await confirmRaRenewalDistribution(renewalId, true, '续期证书已完成分发');
+    renewalOpen.value = false;
+    issueResult.value = result;
+    issueResultOpen.value = true;
+    const clientDownloaded = downloadRenewedClientCertificates(result);
+    ElMessage.success(clientDownloaded ? '证书续期成功，新证书已开始下载' : '证书续期并分发成功');
+    await getList();
+  } catch (error: any) {
+    renewalStep.value = `续期执行失败：${error?.message || '未知错误'}`;
+    await confirmRaRenewalDistribution(renewalId, false, error?.message || '续期证书分发失败').catch(() => undefined);
+    throw error;
+  } finally {
+    submitLoading.value = false;
+  }
+}
+
+function renewalTargetKey(target: RenewalStorageTarget) {
+  return String(target.certId || target.serialNumber || target.role || 'target');
+}
+
+function renewalTargetName(target: RenewalStorageTarget) {
+  return `${target.role === 'PAIRED' ? '配对证书' : '主证书'} · ${target.serialNumber || '-'}`;
+}
+
+function storageLocationText(storageJson?: string) {
+  const storage = parseJson(storageJson || '{}') || {};
+  return `${storage.application || '-'}/${storage.container || '-'}`;
+}
+
+function downloadRenewedClientCertificates(result: RaCertIssueResult) {
+  const certificates: string[] = [];
+  if (result.storageType === 'CLIENT' && result.cert) certificates.push(result.cert.trim());
+  if (result.encStorageType === 'CLIENT' && result.encCert) certificates.push(result.encCert.trim());
+  if (!certificates.length) return false;
+
+  const serial = result.serialNumber || 'renewed-cert';
+  const suffix = certificates.length > 1 ? 'dual-renewed' : 'renewed';
+  downloadPemContent(`${certificates.join('\n')}\n`, `${serial}_${suffix}`);
+  return true;
+}
+
+async function downloadRenewedRaPkcs12(result: RaCertIssueResult) {
+  const targets: Array<{ id: string | number; serial: string }> = [];
+  if (result.storageType === 'RA' && result.certId) targets.push({ id: result.certId, serial: result.serialNumber || 'renewed-cert' });
+  if (result.encStorageType === 'RA' && result.encCertId) {
+    targets.push({ id: result.encCertId, serial: result.encSerialNumber || 'renewed-enc-cert' });
+  }
+  if (!targets.length) return false;
+  for (const target of targets) {
+    const response = await downloadRaPkcs12(target.id, renewalPkcs12Password.value);
+    downloadBlob(toBlob(response, 'application/x-pkcs12'), `${target.serial}_renewed.p12`);
+  }
+  return true;
+}
+
+function toBlob(response: any, mimeType: string) {
+  const value = response?.data instanceof Blob ? response.data : response;
+  return value instanceof Blob ? value : new Blob([value], { type: mimeType });
+}
+
+function downloadBlob(blob: Blob, fileName: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function storageTypeName(storageType?: string) {
+  return (
+    {
+      USB_KEY: 'USBKey（写回原容器）',
+      RA: 'RA 托管文件',
+      CLIENT: '客户端持有'
+    }[String(storageType || '').toUpperCase()] ||
+    storageType ||
+    '未设置'
+  );
+}
+
+function keySourceName(keySource?: string) {
+  return { USB_KEY: 'USBKey', RA: 'RA 托管', CLIENT: '客户端', KMC: 'KMC 托管' }[String(keySource || '').toUpperCase()] || keySource || '-';
+}
+
+function renewalTargetReady(target: RenewalStorageTarget) {
+  if (target.ready === false) return false;
+  if (target.storageType === 'USB_KEY') return renewalUsbChecks.value[renewalTargetKey(target)]?.ready === true;
+  if (target.storageType === 'CLIENT') return renewalClientConfirmed.value;
+  return true;
+}
+
+function renewalTargetMessage(target: RenewalStorageTarget) {
+  const usbCheck = renewalUsbChecks.value[renewalTargetKey(target)];
+  return usbCheck?.message || target.message || '-';
+}
+
+async function checkRenewalStorage(verifyPin = false) {
+  const usbTargets = renewalTargets.value.filter((target) => target.storageType === 'USB_KEY');
+  if (!usbTargets.length) return true;
+  renewalCheckLoading.value = true;
+  const checks: Record<string, { ready: boolean; message: string }> = {};
+  const verifiedApps = new Set<string>();
+  let firstError = '';
+  try {
+    skfClientPromise = null;
+    const skf = await getSkfClient();
+    for (const target of usbTargets) {
+      const key = renewalTargetKey(target);
+      const storage = target.storageInfo || {};
+      try {
+        const providers = await withTimeout(skf.enumProvider(), 10000, '获取设备提供商超时');
+        if (!providers.includes(storage.provider)) throw new Error(`未找到原设备提供商：${storage.provider || '-'}`);
+        const devices = await withTimeout(skf.enumDevice(storage.provider), 10000, '获取 USBKey 设备超时');
+        if (!devices.includes(storage.device)) throw new Error(`未找到原 USBKey 设备：${storage.device || '-'}`);
+        const applications = await withTimeout(skf.enumApplication(storage.provider, storage.device), 10000, '获取 USBKey 应用超时');
+        if (!applications.includes(storage.application)) throw new Error(`未找到原应用：${storage.application || '-'}`);
+        const containers = await withTimeout(skf.enumContainer(storage.provider, storage.device, storage.application), 10000, '获取 USBKey 容器超时');
+        if (!containers.includes(storage.container)) throw new Error(`未找到原容器：${storage.container || '-'}`);
+        const appPath = `${storage.provider}/${storage.device}/${storage.application}`;
+        if (verifyPin && !verifiedApps.has(appPath)) {
+          const pinValid = await withTimeout(skf.checkPIN(appPath, renewalPin.value), 15000, '验证 PIN 超时');
+          if (pinValid === false) throw new Error('USBKey User PIN 验证失败');
+          verifiedApps.add(appPath);
+        }
+        checks[key] = { ready: true, message: verifyPin ? '原容器存在，PIN 验证通过' : '原设备、应用和容器均存在' };
+      } catch (error: any) {
+        const message = error?.message || String(error) || '原 USBKey 检测失败';
+        checks[key] = { ready: false, message };
+        if (!firstError) firstError = message;
+      }
+    }
+  } catch (error: any) {
+    firstError = error?.message || String(error) || '无法连接 SKF 服务';
+    usbTargets.forEach((target) => {
+      checks[renewalTargetKey(target)] = { ready: false, message: `无法连接 SKF 服务：${firstError}` };
+    });
+  } finally {
+    renewalUsbChecks.value = checks;
+    renewalCheckLoading.value = false;
+  }
+  if (firstError && verifyPin) ElMessage.error(firstError);
+  return !firstError;
+}
+
+async function writeRenewedUsbCert(storageJson: string | undefined, cert: string, isSignCert: boolean) {
+  const storage = parseJson(storageJson || '{}') || {};
+  if (!storage.provider || !storage.device || !storage.application || !storage.container) {
+    throw new Error('续期证书缺少原 USBKey 容器信息');
+  }
+  const skf = await getSkfClient();
+  await skf.checkPIN(`${storage.provider}/${storage.device}/${storage.application}`, renewalPin.value);
+  await skf.importCertificate(storage.provider, storage.device, storage.application, storage.container, isSignCert, cert);
 }
 
 async function handleDetail(row: RaCertIssue) {
@@ -481,6 +974,10 @@ function submitIssue() {
       return;
     }
     if (!validateIssueExtensions()) {
+      return;
+    }
+    if (isPostQuantumDual.value && issueForm.issueType !== 'csr') {
+      ElMessage.error('抗量子双证书只支持客户端生成 ML-DSA 密钥并提交 CSR');
       return;
     }
     submitLoading.value = true;
@@ -515,7 +1012,11 @@ function submitIssue() {
         subject: subject || undefined,
         extensions: buildIssueExtensionsPayload(),
         fileFormat: issueForm.issueType === 'file' ? issueForm.fileFormat : undefined,
-        filePassword: issueForm.issueType === 'file' ? issueForm.filePassword : undefined
+        filePassword: issueForm.issueType === 'file' ? issueForm.filePassword : undefined,
+        provider: issueForm.issueType === 'usb_key' ? issueForm.provider : undefined,
+        device: issueForm.issueType === 'usb_key' ? issueForm.device : undefined,
+        application: issueForm.issueType === 'usb_key' ? issueForm.appName : undefined,
+        container: issueForm.issueType === 'usb_key' ? issueForm.containerName : undefined
       });
       if (issueForm.issueType === 'usb_key' && res.data?.cert) {
         issueStep.value = '正在写入证书到 USB Key...';
@@ -525,6 +1026,31 @@ function submitIssue() {
           30000,
           '写入 USB Key 证书超时'
         );
+        if (res.data.encCert) {
+          if (!res.data.encryptionPrivateKey) {
+            throw new Error('CA未返回可写入 USBKey 的加密私钥材料');
+          }
+          issueStep.value = '正在写入 KMC 加密密钥对到 USB Key...';
+          await withTimeout(
+            skf.importKeyPair(
+              issueForm.provider,
+              issueForm.device,
+              issueForm.appName,
+              issueForm.containerName,
+              'SM2',
+              res.data.encryptionPrivateKey,
+              ''
+            ),
+            30000,
+            '写入 KMC 加密密钥对超时'
+          );
+          issueStep.value = '正在写入加密证书到 USB Key...';
+          await withTimeout(
+            skf.importCertificate(issueForm.provider, issueForm.device, issueForm.appName, issueForm.containerName, false, res.data.encCert),
+            30000,
+            '写入加密证书超时'
+          );
+        }
       }
       issueStep.value = '证书签发成功，正在刷新待签发列表...';
       issueResult.value = res.data || {};
@@ -564,6 +1090,11 @@ function resetIssueForm() {
 }
 
 async function handleIssueTypeChange(value: string | number | boolean) {
+  if (isPostQuantumDual.value && value !== 'csr') {
+    issueForm.issueType = 'csr';
+    ElMessage.warning('抗量子双证书不支持 USBKey 或 RA 生成密钥，请提交客户端生成的 ML-DSA CSR');
+    return;
+  }
   issueForm.issueType = value as any;
   issueFormRef.value?.clearValidate();
   if (issueForm.issueType === 'usb_key') {
@@ -929,11 +1460,15 @@ function downloadCert(result: Partial<RaCertIssueResult>) {
 
 function downloadCertPem(certPem?: string, fileName?: string) {
   if (!certPem) return;
-  const blob = new Blob([certPem], { type: 'application/x-pem-file;charset=utf-8' });
+  downloadPemContent(certPem, fileName || 'cert');
+}
+
+function downloadPemContent(content: string, fileName: string) {
+  const blob = new Blob([content], { type: 'application/x-pem-file;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = `${fileName || 'cert'}.pem`;
+  link.download = `${fileName}.pem`;
   link.click();
   URL.revokeObjectURL(url);
 }
@@ -963,6 +1498,77 @@ onMounted(() => {
 
 <style scoped lang="scss">
 .ra-cert-issue-page {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+
+  .query-panel {
+    margin-bottom: 12px;
+    padding: 14px 16px 0;
+    border: 1px solid var(--el-border-color-lighter);
+    border-radius: 6px;
+    background: var(--el-fill-color-extra-light);
+  }
+
+  .query-form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+
+    :deep(.el-form-item) {
+      margin-right: 20px;
+      margin-bottom: 14px;
+    }
+  }
+
+  .business-type-select {
+    width: 190px;
+  }
+
+  .keyword-input {
+    width: 300px;
+  }
+
+  .query-actions {
+    margin-left: auto;
+    margin-right: 0 !important;
+  }
+
+  .list-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 42px;
+    gap: 16px;
+  }
+
+  .list-heading,
+  .toolbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .list-title {
+    color: var(--el-text-color-primary);
+    font-size: 15px;
+    font-weight: 600;
+  }
+
+  .issue-table {
+    width: 100%;
+
+    :deep(.el-table__header th) {
+      color: var(--el-text-color-regular);
+      font-weight: 600;
+      background: var(--el-fill-color-light);
+    }
+
+    :deep(.el-table__cell) {
+      padding: 9px 0;
+    }
+  }
+
   .mb16 {
     margin-bottom: 16px;
   }
@@ -1232,13 +1838,75 @@ onMounted(() => {
 
   .result-actions {
     display: flex;
+    flex-wrap: wrap;
     justify-content: flex-end;
     gap: 10px;
     margin-bottom: 12px;
   }
 
+  .encryption-result {
+    margin-top: 18px;
+  }
+
+  .encryption-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 10px 0;
+  }
+
   .cert-result-textarea {
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+  }
+
+  .renewal-storage-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 18px 0 10px;
+    color: var(--el-text-color-primary);
+    font-size: 15px;
+    font-weight: 600;
+  }
+
+  .renewal-target-list {
+    display: grid;
+    gap: 12px;
+  }
+
+  .renewal-target {
+    padding: 12px;
+    border: 1px solid var(--el-border-color-lighter);
+    border-radius: 6px;
+  }
+
+  .renewal-target-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 28px;
+    margin-bottom: 10px;
+    font-weight: 600;
+  }
+
+  .renewal-client-confirm {
+    margin-top: 4px;
+  }
+
+  .renewal-write-target {
+    border-color: var(--el-color-primary-light-7);
+    background: var(--el-color-primary-light-9);
+  }
+
+  .renewal-ra-target {
+    border-color: var(--el-color-success-light-7);
+    background: var(--el-color-success-light-9);
+  }
+
+  .renewal-result-storage {
+    margin-top: 16px;
   }
 
   @media (max-width: 1200px) {
@@ -1267,6 +1935,45 @@ onMounted(() => {
   }
 
   @media (max-width: 760px) {
+    .query-panel {
+      padding: 12px 12px 0;
+    }
+
+    .query-form {
+      display: block;
+
+      :deep(.el-form-item) {
+        display: flex;
+        margin-right: 0;
+      }
+
+      :deep(.el-form-item__content) {
+        min-width: 0;
+      }
+    }
+
+    .business-type-select,
+    .keyword-input {
+      width: 100%;
+    }
+
+    .query-actions {
+      margin-left: 0;
+
+      :deep(.el-form-item__content) {
+        justify-content: flex-end;
+      }
+    }
+
+    .list-toolbar {
+      align-items: flex-start;
+    }
+
+    .result-actions,
+    .encryption-actions {
+      justify-content: flex-start;
+    }
+
     :global(.cert-issue-dialog .el-dialog__body) {
       max-height: calc(100vh - 132px);
       overflow: auto;
@@ -1286,8 +1993,29 @@ onMounted(() => {
   }
 }
 
+:global(.renewal-dialog) {
+  max-width: calc(100vw - 32px);
+}
+
+:global(.renewal-dialog .el-dialog__body) {
+  max-height: calc(100vh - 160px);
+  overflow: auto;
+}
+
 :global(.cert-issue-dialog) {
   max-width: calc(100vw - 32px);
+}
+
+:global(.cert-issue-dialog .el-dialog__header) {
+  margin-right: 0;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+}
+
+:global(.cert-issue-dialog .el-dialog__title) {
+  color: var(--el-text-color-primary);
+  font-size: 17px;
+  font-weight: 600;
 }
 
 :global(.cert-issue-dialog .el-dialog__body) {
@@ -1420,6 +2148,14 @@ onMounted(() => {
 
 :global(.cert-issue-dialog .params-section) {
   min-height: 100%;
+}
+
+:global(.cert-issue-dialog .params-section .issue-info-grid) {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+:global(.cert-issue-dialog .dual-cert-alert) {
+  margin-bottom: 14px;
 }
 
 :global(.cert-issue-dialog .subject-scroll-area) {

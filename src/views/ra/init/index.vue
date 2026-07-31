@@ -7,7 +7,6 @@
           <h1>RA 初始化向导</h1>
         </div>
         <div class="heading-actions">
-          <el-tag effect="plain" size="large">租户 {{ tenantCode.toUpperCase() || 'RA' }}</el-tag>
           <el-button :icon="Refresh" plain :loading="statusLoading" @click="loadInitInfo({ syncStep: true })">刷新状态</el-button>
         </div>
       </div>
@@ -590,7 +589,8 @@ const normalizeStatus = (data: any): RaInitStatus => {
     relationCount: Number(data.relationCount ?? 0),
     policyCount: Number(data.policyCount ?? 0),
     workflowCount: Number(data.workflowCount ?? 0),
-    userCount: Number(data.userCount ?? 0)
+    userCount: Number(data.userCount ?? 0),
+    accountCertCount: Number(data.accountCertCount ?? 0)
   };
 };
 
@@ -598,7 +598,12 @@ const resolveActiveStep = (tenantStatus: number | undefined, status: RaInitStatu
   if (status.initialized || tenantStatus === -1) {
     return 6;
   }
-  if ((status.userCount ?? 0) >= 2) {
+  // The tenant status is the persisted wizard step. Database counts are only a
+  // compatibility fallback for installations created before step persistence.
+  if (tenantStatus !== undefined && Number.isInteger(tenantStatus) && tenantStatus >= 0 && tenantStatus <= 5) {
+    return tenantStatus;
+  }
+  if ((status.accountCertCount ?? 0) >= 2) {
     return 5;
   }
   if ((status.policyCount ?? 0) > 0 || (status.workflowCount ?? 0) > 0 || tenantStatus === 3 || tenantStatus === 4) {
@@ -610,7 +615,7 @@ const resolveActiveStep = (tenantStatus: number | undefined, status: RaInitStatu
   if ((status.profileCount ?? 0) > 0 || (status.identityCertCount ?? 0) > 0 || tenantStatus === 1) {
     return 2;
   }
-  return tenantStatus === 0 ? 0 : activeStep.value;
+  return 0;
 };
 
 const loadInitInfo = async (options: { syncStep?: boolean } = {}) => {

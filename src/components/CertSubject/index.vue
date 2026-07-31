@@ -51,6 +51,9 @@ export const typeMapping: Record<string, { label: string; key: string; isSelect?
 
 // Common Regex Patterns
 const FQDN_REGEX = /^(?!:\/\/)([a-zA-Z0-9-_]+\.)*[a-zA-Z0-9][a-zA-Z0-9-_]+\.[a-zA-Z]{2,11}?$/;
+const IPV4_REGEX = /^(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)$/;
+const IPV6_REGEX = /^(?:[0-9a-fA-F]{1,4}:){2,7}[0-9a-fA-F]{0,4}$/;
+const URI_REGEX = /^[a-zA-Z][a-zA-Z0-9+.-]*:[^\s]+$/;
 
 // Sort weights from smallest scope to largest scope (从小到大)
 const orderWeights: Record<string, number> = {
@@ -113,6 +116,26 @@ const getRules = (item: SubjectItem) => {
       rules.push({
         pattern: FQDN_REGEX,
         message: `${meta.label}格式不正确，应为 FQDN (如: example.com)`,
+        trigger: 'blur'
+      });
+    } else if (item.regex === ':EMAIL') {
+      rules.push({
+        type: 'email',
+        message: `${meta.label}格式不正确 (如: user@example.com)`,
+        trigger: 'blur'
+      });
+    } else if (item.regex === ':IP') {
+      rules.push({
+        validator: (_rule: unknown, value: string, callback: (error?: Error) => void) => {
+          if (!value || IPV4_REGEX.test(value) || IPV6_REGEX.test(value)) callback();
+          else callback(new Error(`${meta.label}格式不正确，应为 IPv4 或 IPv6 地址`));
+        },
+        trigger: 'blur'
+      });
+    } else if (item.regex === ':URI') {
+      rules.push({
+        pattern: URI_REGEX,
+        message: `${meta.label}格式不正确 (如: https://example.com)`,
         trigger: 'blur'
       });
     } else {

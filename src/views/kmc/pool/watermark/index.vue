@@ -32,7 +32,15 @@
     <el-card shadow="never" class="table-card">
       <template #header>
         <div class="card-header">
-          <span>密钥池水位管理</span>
+          <div>
+            <div>密钥池水位管理</div>
+            <div class="schedule-info">
+              <span>自动补齐：{{ autoReplenishEnabled ? '已启用' : '已停用' }}</span>
+              <span>最近检查：{{ formatDateTime(lastCheckTime) }}</span>
+              <span>最近完成：{{ formatDateTime(lastCompletionTime) }}</span>
+              <span>下次检查：{{ autoReplenishEnabled ? formatDateTime(nextCheckTime) : '-' }}</span>
+            </div>
+          </div>
           <div>
             <el-button icon="Refresh" :loading="loading" @click="loadStatus">刷新</el-button>
             <el-button type="primary" icon="Operation" :loading="actionLoading" v-hasPermi="['kmc:poolwatermark:check']" @click="handleCheckAll">
@@ -79,10 +87,26 @@
         </el-table-column>
         <el-table-column label="操作" width="200" fixed="right" align="center">
           <template #default="{ row }">
-            <el-button link type="primary" icon="Operation" size="small" v-hasPermi="['kmc:poolwatermark:check']" @click="handleCheck(row.strategyId)">
+            <el-button
+              link
+              type="primary"
+              icon="Operation"
+              size="small"
+              :disabled="row.status === 'DISABLED' || row.status === 'SUSPENDED'"
+              v-hasPermi="['kmc:poolwatermark:check']"
+              @click="handleCheck(row.strategyId)"
+            >
               检查补齐
             </el-button>
-            <el-button link type="primary" icon="Plus" size="small" v-hasPermi="['kmc:poolwatermark:generate']" @click="handleGenerate(row.strategyId)">
+            <el-button
+              link
+              type="primary"
+              icon="Plus"
+              size="small"
+              :disabled="row.status === 'DISABLED'"
+              v-hasPermi="['kmc:poolwatermark:generate']"
+              @click="handleGenerate(row.strategyId)"
+            >
               生成
             </el-button>
           </template>
@@ -103,7 +127,9 @@
         <el-descriptions-item label="需要补齐">{{ lastResult.strategiesNeedingReplenishment ?? '-' }}</el-descriptions-item>
         <el-descriptions-item label="补齐成功">{{ lastResult.successfullyReplenished ?? '-' }}</el-descriptions-item>
         <el-descriptions-item label="补齐失败">
-          <span :style="{ color: (lastResult.failedReplenishment || 0) > 0 ? 'var(--el-color-danger)' : '' }">{{ lastResult.failedReplenishment ?? 0 }}</span>
+          <span :style="{ color: (lastResult.failedReplenishment || 0) > 0 ? 'var(--el-color-danger)' : '' }">{{
+            lastResult.failedReplenishment ?? 0
+          }}</span>
         </el-descriptions-item>
         <el-descriptions-item label="生成密钥">{{ lastResult.totalKeysGenerated ?? '-' }}</el-descriptions-item>
         <el-descriptions-item label="执行状态">
@@ -138,10 +164,14 @@ const actionLoading = ref(false);
 const rows = ref<any[]>([]);
 const lastResult = ref<any>(null);
 const lastResultType = ref<'all' | 'strategy'>('all');
+const autoReplenishEnabled = ref(false);
+const lastCheckTime = ref<string>();
+const lastCompletionTime = ref<string>();
+const nextCheckTime = ref<string>();
 
-const normalCount = computed(() => rows.value.filter((r) => statusTagType(r.status) === 'success').length);
-const lowCount = computed(() => rows.value.filter((r) => statusTagType(r.status) === 'danger').length);
-const highCount = computed(() => rows.value.filter((r) => statusTagType(r.status) === 'warning').length);
+const normalCount = computed(() => rows.value.filter((r) => r.status === 'NORMAL' || r.status === 'AT_HIGH').length);
+const lowCount = computed(() => rows.value.filter((r) => r.status === 'BELOW_LOW' || r.status === 'LOW').length);
+const highCount = computed(() => rows.value.filter((r) => r.status === 'ABOVE_HIGH').length);
 
 const watermarkPercentage = (row: any) => {
   const cur = Number(row.currentCount ?? 0);
@@ -173,25 +203,52 @@ const statusText = (status?: string) => {
     AT_HIGH: '达到高水位',
     ABOVE_HIGH: '超过高水位',
     LOW: '低水位',
-    REPLENISHING: '补充中'
+    REPLENISHING: '补齐中',
+    DISABLED: '已停用',
+    SUSPENDED: '已熔断'
   };
   return map[status || ''] || status || '-';
 };
 
 const statusTagType = (status?: string) => {
   if (status === 'BELOW_LOW' || status === 'LOW') return 'danger';
-  if (status === 'ABOVE_HIGH' || status === 'AT_HIGH') return 'warning';
+  if (status === 'ABOVE_HIGH') return 'warning';
+  if (status === 'AT_HIGH') return 'success';
   if (status === 'REPLENISHING') return 'info';
+  if (status === 'DISABLED') return 'info';
+  if (status === 'SUSPENDED') return 'danger';
   return 'success';
 };
 
 const loadStatus = async () => {
   loading.value = true;
   try {
-    rows.value = normalizeRows(unwrapKmcData(await getPoolWatermarkStatus()));
+    const data = unwrapKmcData<any>(await getPoolWatermarkStatus());
+    rows.value = normalizeRows(data);
+    autoReplenishEnabled.value = Boolean(data?.autoReplenishEnabled);
+    lastCheckTime.value = data?.lastCheckTime;
+    lastCompletionTime.value = data?.lastCompletionTime;
+    nextCheckTime.value = data?.nextCheckTime;
   } finally {
     loading.value = false;
   }
+};
+
+const formatDateTime = (value?: string) => {
+  if (!value) return '-';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? '-' : date.toLocaleString('zh-CN', { hour12: false });
+};
+
+const waitForReplenishment = async () => {
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    await new Promise((resolve) => window.setTimeout(resolve, 2000));
+    await loadStatus();
+    if (!rows.value.some((row) => row.status === 'REPLENISHING')) {
+      return;
+    }
+  }
+  ElMessage.info('补齐仍在后台执行，请稍后刷新查看');
 };
 
 const handleCheckAll = async () => {
@@ -200,11 +257,14 @@ const handleCheckAll = async () => {
     lastResult.value = unwrapKmcData(await checkAndReplenishPools());
     lastResultType.value = 'all';
     if (lastResult.value?.failedReplenishment > 0) {
-      ElMessage.warning(`检查完成，失败 ${lastResult.value.failedReplenishment} 个策略`);
+      ElMessage.warning(`检查提交完成，失败 ${lastResult.value.failedReplenishment} 个策略`);
     } else {
-      ElMessage.success(`检查完成，生成 ${lastResult.value?.totalKeysGenerated || 0} 个备用密钥`);
+      ElMessage.success('水位检查完成，低水位策略已提交后台补齐');
     }
     await loadStatus();
+    if (rows.value.some((row) => row.status === 'REPLENISHING')) {
+      await waitForReplenishment();
+    }
   } finally {
     actionLoading.value = false;
   }
@@ -217,6 +277,9 @@ const handleCheck = async (strategyId: string | number) => {
     ElMessage.error(lastResult.value.failureReason || '策略水位补齐失败');
   } else if ((lastResult.value?.generatedCount || 0) > 0) {
     ElMessage.success(`补齐完成，生成 ${lastResult.value.generatedCount} 个备用密钥`);
+  } else if (lastResult.value?.failureReason) {
+    ElMessage.success(lastResult.value.failureReason);
+    await waitForReplenishment();
   } else {
     ElMessage.success('水位正常，无需补齐');
   }
@@ -237,7 +300,7 @@ const handleGenerate = async (strategyId: string | number) => {
     await loadStatus();
     return;
   }
-  ElMessage.success('生成任务已提交');
+  ElMessage.success(`生成完成，共生成 ${result?.actualCount || 0} 个备用密钥`);
   await loadStatus();
 };
 
@@ -273,10 +336,18 @@ onMounted(loadStatus);
   color: var(--el-text-color-secondary);
 }
 
-.stat-total .stat-value { color: var(--el-color-primary); }
-.stat-normal .stat-value { color: var(--el-color-success); }
-.stat-low .stat-value { color: var(--el-color-danger); }
-.stat-high .stat-value { color: var(--el-color-warning); }
+.stat-total .stat-value {
+  color: var(--el-color-primary);
+}
+.stat-normal .stat-value {
+  color: var(--el-color-success);
+}
+.stat-low .stat-value {
+  color: var(--el-color-danger);
+}
+.stat-high .stat-value {
+  color: var(--el-color-warning);
+}
 
 .table-card,
 .result-card {
@@ -289,6 +360,16 @@ onMounted(loadStatus);
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+
+.schedule-info {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin-top: 6px;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  font-weight: 400;
 }
 
 .watermark-bar-cell {

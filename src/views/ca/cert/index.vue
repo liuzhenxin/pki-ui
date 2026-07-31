@@ -36,6 +36,12 @@
           <el-tag type="info">{{ getCertTypeLabel(scope.row.certType) }}</el-tag>
         </template>
       </el-table-column>
+      <el-table-column label="证书模式" align="center" width="100">
+        <template #default="scope">
+          <el-tag v-if="isDualPairedCert(scope.row)" type="primary" effect="plain">双证书</el-tag>
+          <el-tag v-else type="info" effect="plain">单证书</el-tag>
+        </template>
+      </el-table-column>
       <el-table-column label="密钥来源" align="center" prop="keySource" width="110">
         <template #default="scope">
           <el-tag :type="scope.row.keySource === 'KMC' ? 'success' : 'info'">{{ getKeySourceLabel(scope.row.keySource) }}</el-tag>
@@ -60,9 +66,7 @@
             <el-button link type="primary" icon="View" @click="handleView(scope.row)" v-hasPermi="['ca:cert:detail']"></el-button>
           </el-tooltip>
           <el-dropdown trigger="click" @command="(fmt: string) => handleDownloadFormat(fmt, scope.row)" v-hasPermi="['ca:cert:download']">
-            <el-tooltip content="下载" placement="top">
-              <el-button link type="primary" icon="Download"></el-button>
-            </el-tooltip>
+            <el-button link type="primary" icon="Download"></el-button>
             <template #dropdown>
               <el-dropdown-menu>
                 <el-dropdown-item command="pem">PEM (.pem)</el-dropdown-item>
@@ -82,18 +86,42 @@
             </el-button>
             <template #dropdown>
               <el-dropdown-menu>
-                <el-dropdown-item v-if="scope.row.status === 'VALID' || scope.row.status === 'EXPIRED'" v-hasPermi="['ca:cert:renew']" command="renew"
+                <el-dropdown-item
+                  v-if="!isDualPairedCert(scope.row) && (scope.row.status === 'VALID' || scope.row.status === 'EXPIRED')"
+                  v-hasPermi="['ca:cert:renew']"
+                  command="renew"
                   >续期</el-dropdown-item
                 >
-                <el-dropdown-item v-if="scope.row.status === 'VALID'" v-hasPermi="['ca:cert:update']" command="update"
+                <el-dropdown-item v-if="!isDualPairedCert(scope.row) && scope.row.status === 'VALID'" v-hasPermi="['ca:cert:update']" command="update"
                   >更新(换新密钥)</el-dropdown-item
                 >
-                <el-dropdown-item v-if="scope.row.status === 'VALID'" v-hasPermi="['ca:cert:reissue']" command="reissue">重签/补办</el-dropdown-item>
-                <el-dropdown-item v-if="scope.row.keySource === 'KMC'" v-hasPermi="['ca:cert:recover']" command="recover">密钥恢复</el-dropdown-item>
-                <el-dropdown-item v-if="scope.row.status === 'VALID'" v-hasPermi="['ca:cert:suspend']" command="suspend">挂起</el-dropdown-item>
-                <el-dropdown-item v-if="scope.row.status === 'HOLD'" v-hasPermi="['ca:cert:suspend']" command="resume">恢复</el-dropdown-item>
-                <el-dropdown-item v-if="scope.row.status === 'VALID' || scope.row.status === 'HOLD'" v-hasPermi="['ca:cert:revoke']" command="revoke">
-                  吊销
+                <el-dropdown-item
+                  v-if="!isDualPairedCert(scope.row) && scope.row.status === 'VALID'"
+                  v-hasPermi="['ca:cert:reissue']"
+                  command="reissue"
+                  >重签/补办</el-dropdown-item
+                >
+                <el-dropdown-item
+                  v-if="scope.row.keySource === 'KMC' && isEncryptionCertificate(scope.row)"
+                  v-hasPermi="['ca:cert:recover']"
+                  command="recover"
+                  >密钥恢复</el-dropdown-item
+                >
+                <el-dropdown-item
+                  v-if="!isDualPairedCert(scope.row) && scope.row.status === 'VALID'"
+                  v-hasPermi="['ca:cert:suspend']"
+                  command="suspend"
+                  >冻结</el-dropdown-item
+                >
+                <el-dropdown-item v-if="!isDualPairedCert(scope.row) && scope.row.status === 'HOLD'" v-hasPermi="['ca:cert:suspend']" command="resume"
+                  >解冻</el-dropdown-item
+                >
+                <el-dropdown-item
+                  v-if="!isDualPairedCert(scope.row) && (scope.row.status === 'VALID' || scope.row.status === 'HOLD')"
+                  v-hasPermi="['ca:cert:revoke']"
+                  command="revoke"
+                >
+                  注销
                 </el-dropdown-item>
                 <!-- 双证书操作（仅签名证书可见） -->
                 <template v-if="scope.row.certUsage === 'SIGNING'">
@@ -121,7 +149,7 @@
                     v-hasPermi="['ca:cert:revoke']"
                     command="revoke-dual"
                   >
-                    双证书吊销
+                    双证书注销
                   </el-dropdown-item>
                 </template>
               </el-dropdown-menu>
@@ -151,11 +179,11 @@
       </template>
     </el-dialog>
 
-    <!-- 吊销对话框 -->
-    <el-dialog v-model="revokeOpen" title="吊销证书" width="400px" append-to-body>
+    <!-- 注销对话框 -->
+    <el-dialog v-model="revokeOpen" :title="revokeForm.isDual ? '双证书注销' : '注销证书'" width="400px" append-to-body>
       <el-form :model="revokeForm" label-width="80px">
-        <el-form-item label="吊销原因">
-          <el-select v-model="revokeForm.reason" placeholder="请选择吊销原因" style="width: 100%">
+        <el-form-item label="注销原因">
+          <el-select v-model="revokeForm.reason" placeholder="请选择注销原因" style="width: 100%">
             <el-option label="未指定" :value="0" />
             <el-option label="密钥泄露" :value="1" />
             <el-option label="CA泄露" :value="2" />
@@ -184,7 +212,7 @@
         <div class="issue-top-grid">
           <el-form-item label="CSR来源">
             <el-select v-model="issueType" placeholder="请选择CSR来源" @change="handleIssueTypeChange">
-              <el-option label="USB Key" value="key" />
+              <el-option label="USB Key" value="key" :disabled="isPostQuantumDualSelected" />
               <el-option label="PKCS10 CSR" value="p10" />
             </el-select>
           </el-form-item>
@@ -198,11 +226,11 @@
               <el-radio-button value="single">单证书</el-radio-button>
               <el-tooltip
                 v-if="proxy?.$auth.hasPermiAnd(['ca:cert:issue-dual'])"
-                :content="isSm2Root ? '' : '仅 SM2 根证书支持双证书签发'"
-                :disabled="isSm2Root"
+                :content="supportsDualRoot ? '' : '仅 SM2 或 ML-DSA 根证书支持双证书签发'"
+                :disabled="supportsDualRoot"
                 placement="top"
               >
-                <el-radio-button value="dual" :disabled="!isSm2Root">双证书</el-radio-button>
+                <el-radio-button value="dual" :disabled="!supportsDualRoot">双证书</el-radio-button>
               </el-tooltip>
             </el-radio-group>
           </el-form-item>
@@ -276,10 +304,14 @@
                 <div v-for="(ext, extIndex) in issueForm.extensionItems" :key="ext.key" class="issue-extension-item">
                   <div class="issue-extension-title">
                     <span>{{ ext.label }}</span>
-                    <el-tag v-if="ext.required" type="danger" size="small" effect="plain">必填</el-tag>
-                    <el-tag v-else type="info" size="small" effect="plain">可选</el-tag>
+                    <el-tag v-if="ext.requestable && ext.required" type="danger" size="small" effect="plain">必填</el-tag>
+                    <el-tag v-else-if="ext.requestable" type="info" size="small" effect="plain">可选</el-tag>
+                    <el-tag v-else type="success" size="small" effect="plain">模板固定</el-tag>
                   </div>
-                  <template v-if="ext.kind === 'subjectAlternativeName'">
+                  <div v-if="!ext.requestable" class="readonly-extension">
+                    <span>{{ getTemplateExtensionSummary(ext) }}</span>
+                  </div>
+                  <template v-if="ext.requestable && ext.kind === 'subjectAlternativeName'">
                     <div v-for="(name, nameIndex) in ext.names" :key="`${ext.key}-${nameIndex}`" class="san-row">
                       <el-select v-model="name.type" placeholder="类型" style="width: 130px">
                         <el-option v-for="mode in ext.modes" :key="mode" :label="getSanModeLabel(mode)" :value="mode" />
@@ -289,22 +321,49 @@
                     </div>
                     <el-button type="primary" link icon="Plus" @click="addSanName(extIndex)">添加备用名称</el-button>
                   </template>
-                  <template v-else-if="ext.kind === 'keyUsage'">
+                  <template v-else-if="ext.requestable && ext.kind === 'keyUsage'">
                     <el-checkbox-group v-model="ext.usages" class="key-usage-checkbox-group">
                       <el-checkbox v-for="usage in keyUsageOptions" :key="usage.value" :label="usage.value">
                         {{ usage.label }}
                       </el-checkbox>
                     </el-checkbox-group>
                   </template>
-                  <template v-else-if="ext.kind === 'extendedKeyUsage'">
+                  <template v-else-if="ext.requestable && ext.kind === 'extendedKeyUsage'">
                     <el-checkbox-group v-model="ext.usages" class="key-usage-checkbox-group">
                       <el-checkbox v-for="usage in extendedKeyUsageOptions" :key="usage.value" :label="usage.value">
                         {{ usage.label }}
                       </el-checkbox>
                     </el-checkbox-group>
                   </template>
-                  <template v-else>
-                    <el-input v-model="ext.value" type="textarea" :rows="3" :placeholder="`请输入 ${ext.label} 的 JSON 或文本值`" />
+                  <template v-else-if="ext.requestable">
+                    <div class="generic-ext-row">
+                      <el-select v-model="ext.valueType" placeholder="值类型" style="width: 130px" @change="onGenericValueTypeChange(ext)">
+                        <el-option label="字符串" value="string" />
+                        <el-option label="整数" value="integer" />
+                        <el-option label="布尔值" value="boolean" />
+                        <el-option label="OID" value="oid" />
+                        <el-option label="字节串(Hex)" value="octetString" />
+                        <el-option label="JSON 对象" value="json" />
+                      </el-select>
+                      <el-input v-if="ext.valueType === 'string'" v-model="ext.value" :placeholder="`请输入 ${ext.label}`" />
+                      <el-input v-else-if="ext.valueType === 'integer'" v-model.number="ext.value" type="number" :placeholder="`请输入整数`" />
+                      <el-switch
+                        v-else-if="ext.valueType === 'boolean'"
+                        v-model="ext.value"
+                        :active-value="true"
+                        :inactive-value="false"
+                        active-text="true"
+                        inactive-text="false"
+                      />
+                      <el-input v-else-if="ext.valueType === 'oid'" v-model="ext.value" :placeholder="`请输入 OID，如 1.2.3.4.1`" />
+                      <el-input
+                        v-else
+                        v-model="ext.value"
+                        type="textarea"
+                        :rows="3"
+                        :placeholder="ext.valueType === 'octetString' ? '请输入十六进制字符串' : '请输入 JSON'"
+                      />
+                    </div>
                   </template>
                 </div>
               </div>
@@ -428,8 +487,8 @@
               {{ lifecycleRow.keySource === 'KMC' ? 'KMC' : lifecycleRow.keySource === 'CLIENT' ? '客户端' : lifecycleRow.keySource }}
             </el-tag>
           </el-descriptions-item>
-          <el-descriptions-item v-if="lifecycleCertInfo?.keyType" label="密钥类型">
-            <el-tag size="small" type="info">{{ lifecycleCertInfo.keyType }}</el-tag>
+          <el-descriptions-item label="密钥类型">
+            <el-tag size="small" type="info">{{ lifecycleKeyType }}</el-tag>
           </el-descriptions-item>
           <el-descriptions-item v-if="lifecycleCertInfo?.sigAlg" label="签名算法">
             <el-tag size="small" type="info">{{ lifecycleCertInfo.sigAlg }}</el-tag>
@@ -474,7 +533,7 @@
         <template v-if="lifecycleAction !== 'recover'">
           <el-form-item label="证书存储方式">
             <el-select v-model="lifecycleOutputMode" placeholder="请选择证书存储方式" @change="onLifecycleOutputModeChange">
-              <el-option label="USBKey" value="usbkey" />
+              <el-option label="USBKey" value="usbkey" :disabled="isPostQuantumLifecycle" />
               <el-option label="PEM" value="pem" />
               <el-option label="DER" value="der" />
             </el-select>
@@ -491,43 +550,79 @@
                   USBKey 写入设置
                 </span>
               </div>
-              <el-row :gutter="12">
-                <el-col :span="12">
-                  <el-form-item label="设备提供商" prop="provider">
-                    <el-select v-model="lifecycleForm.provider" placeholder="选择厂商" @change="onLifecycleProviderChange">
-                      <el-option v-for="p in lifecycleCertProviders" :key="p" :label="p" :value="p" />
-                    </el-select>
-                  </el-form-item>
-                </el-col>
-                <el-col :span="12">
-                  <el-form-item label="设备列表" prop="device">
-                    <el-select v-model="lifecycleForm.device" placeholder="选择设备" @change="onLifecycleDeviceChange">
-                      <el-option v-for="d in lifecycleCertDevices" :key="d" :label="d" :value="d" />
-                    </el-select>
-                  </el-form-item>
-                </el-col>
-              </el-row>
-              <el-row :gutter="12">
-                <el-col :span="12">
-                  <el-form-item label="应用" prop="appName">
-                    <el-select v-model="lifecycleForm.appName" placeholder="选择应用" @change="onLifecycleAppChange">
-                      <el-option v-for="a in lifecycleCertApps" :key="a" :label="a" :value="a" />
-                    </el-select>
-                  </el-form-item>
-                </el-col>
-                <el-col :span="12">
-                  <el-form-item label="目标容器" prop="containerName">
-                    <el-select
-                      v-model="lifecycleForm.containerName"
-                      filterable
-                      placeholder="选择已有容器（写入新证书）"
-                      @change="onLifecycleContainerChange"
-                    >
-                      <el-option v-for="c in lifecycleContainers" :key="c.name" :label="c.label || c.name" :value="c.name" />
-                    </el-select>
-                  </el-form-item>
-                </el-col>
-              </el-row>
+              <template v-if="isLifecycleRenewal">
+                <el-alert
+                  class="lifecycle-form-tip"
+                  type="info"
+                  show-icon
+                  :closable="false"
+                  description="续期证书将自动写回旧证书所在容器，无需选择目标容器。"
+                />
+                <div v-loading="lifecycleRenewalTargetLoading" class="renewal-usb-targets">
+                  <el-descriptions v-if="lifecycleRenewalTargets.signing" :column="1" border size="small">
+                    <el-descriptions-item :label="lifecycleAction === 'renew-dual' ? '签名证书容器' : '旧证书容器'">
+                      {{ formatUsbKeyTarget(lifecycleRenewalTargets.signing) }}
+                    </el-descriptions-item>
+                    <el-descriptions-item v-if="lifecycleRenewalTargets.encryption" label="加密证书容器">
+                      {{ formatUsbKeyTarget(lifecycleRenewalTargets.encryption) }}
+                    </el-descriptions-item>
+                  </el-descriptions>
+                </div>
+              </template>
+              <template v-else>
+                <el-row :gutter="12">
+                  <el-col :span="12">
+                    <el-form-item label="设备提供商" prop="provider">
+                      <el-select v-model="lifecycleForm.provider" placeholder="选择厂商" @change="onLifecycleProviderChange">
+                        <el-option v-for="p in lifecycleCertProviders" :key="p" :label="p" :value="p" />
+                      </el-select>
+                    </el-form-item>
+                  </el-col>
+                  <el-col :span="12">
+                    <el-form-item label="设备列表" prop="device">
+                      <el-select v-model="lifecycleForm.device" placeholder="选择设备" @change="onLifecycleDeviceChange">
+                        <el-option v-for="d in lifecycleCertDevices" :key="d" :label="d" :value="d" />
+                      </el-select>
+                    </el-form-item>
+                  </el-col>
+                </el-row>
+                <el-row :gutter="12">
+                  <el-col :span="12">
+                    <el-form-item label="应用" prop="appName">
+                      <el-select v-model="lifecycleForm.appName" placeholder="选择应用" @change="onLifecycleAppChange">
+                        <el-option v-for="a in lifecycleCertApps" :key="a" :label="a" :value="a" />
+                      </el-select>
+                    </el-form-item>
+                  </el-col>
+                  <el-col :span="12">
+                    <el-form-item v-if="usesLifecycleNewContainer" label="新容器" prop="containerName">
+                      <el-input v-model="lifecycleForm.containerName" readonly placeholder="选择应用后自动生成" />
+                    </el-form-item>
+                    <el-form-item v-else label="目标容器" prop="containerName">
+                      <el-select
+                        v-model="lifecycleForm.containerName"
+                        filterable
+                        placeholder="选择已有容器（写入新证书）"
+                        @change="onLifecycleContainerChange"
+                      >
+                        <el-option v-for="c in lifecycleContainers" :key="c.name" :label="c.label || c.name" :value="c.name" />
+                      </el-select>
+                    </el-form-item>
+                  </el-col>
+                </el-row>
+                <el-alert
+                  v-if="usesLifecycleNewContainer"
+                  class="lifecycle-form-tip"
+                  type="info"
+                  show-icon
+                  :closable="false"
+                  :description="
+                    lifecycleAction === 'update'
+                      ? '单证书更新将使用新容器，新密钥和新证书写入该容器。'
+                      : `${lifecycleAction === 'reissue-dual' ? '双证书补办' : '双证书更新'}将使用新容器，签名密钥、加密密钥和两张新证书写入同一容器。`
+                  "
+                />
+              </template>
               <el-form-item label="User PIN" prop="pin">
                 <el-input v-model="lifecycleForm.pin" type="password" show-password placeholder="请输入 USBKey User PIN" />
               </el-form-item>
@@ -578,7 +673,7 @@
             type="info"
             show-icon
             :closable="false"
-            description="更新会使用新CSR和新公钥重新签发证书，旧证书会被吊销并替换为新证书，请确认已备份原始数据。"
+            description="更新会使用新CSR和新公钥重新签发证书，旧证书会被注销并替换为新证书，请确认已备份原始数据。"
           />
           <template v-if="lifecycleOutputMode === 'usbkey'">
             <el-alert
@@ -625,9 +720,50 @@
           </el-row>
         </template>
         <template v-if="lifecycleAction === 'reissue' || lifecycleAction === 'reissue-dual'">
-          <el-form-item label="新CSR">
-            <el-input v-model="lifecycleForm.csr" type="textarea" :rows="5" placeholder="可选；不填时由后端按原证书或备份密钥处理" />
-          </el-form-item>
+          <div class="form-section">
+            <div class="section-title">证书主题（固定使用旧证书主题）</div>
+            <el-form-item label="原主题">
+              <div class="readonly-field">{{ lifecycleRow?.subject || '-' }}</div>
+            </el-form-item>
+          </div>
+          <div class="form-section">
+            <div class="section-title">新证书有效期（固定继承旧证书）</div>
+            <el-form-item label="生效时间">
+              <div class="readonly-field">{{ lifecycleRow?.notBefore || '-' }}</div>
+            </el-form-item>
+            <el-form-item label="过期时间">
+              <div class="readonly-field">{{ lifecycleRow?.notAfter || '-' }}</div>
+            </el-form-item>
+          </div>
+          <el-alert
+            class="lifecycle-form-tip"
+            type="info"
+            show-icon
+            :closable="false"
+            description="补办不延长证书期限；如需延长有效期，请使用证书续期。"
+          />
+          <template v-if="lifecycleOutputMode === 'usbkey'">
+            <el-alert
+              class="lifecycle-form-tip"
+              type="success"
+              show-icon
+              :closable="false"
+              description="USB Key 模式下，系统会使用旧证书主题在设备中生成新 CSR。"
+            />
+          </template>
+          <template v-else>
+            <el-form-item label="新CSR" :prop="lifecycleAction === 'reissue-dual' ? 'csr' : undefined">
+              <el-input
+                v-model="lifecycleForm.csr"
+                type="textarea"
+                :rows="5"
+                :placeholder="lifecycleAction === 'reissue-dual' ? '必填；请使用新的签名密钥生成 CSR' : '可选；不填时由后端按原证书或备份密钥处理'"
+              />
+            </el-form-item>
+            <el-form-item v-if="lifecycleAction === 'reissue-dual'" label="加密CSR">
+              <el-input v-model="lifecycleForm.encCsr" type="textarea" :rows="5" placeholder="可选；为空时由 KMC 生成新的加密密钥对" />
+            </el-form-item>
+          </template>
           <el-form-item label="补办原因">
             <el-input v-model="lifecycleForm.reason" type="textarea" :rows="3" placeholder="请输入补办原因" />
           </el-form-item>
@@ -708,11 +844,20 @@
             DER 下载加密证书
           </el-button>
         </template>
+        <el-button
+          v-if="issueResult.certificateChain"
+          type="info"
+          plain
+          icon="Download"
+          @click="downloadPem(issueResult.certificateChain, 'certificate_chain')"
+        >
+          PEM 下载证书链
+        </el-button>
         <el-button v-if="issueResult.encryptionPrivateKey" type="warning" plain icon="Download" @click="downloadEncPrivateKey">
           下载加密私钥 (BASE64)
         </el-button>
         <el-button
-          v-if="issueResult.cert && issueResult.encryptionCert && issueResult.encryptionPrivateKey"
+          v-if="issueResult.cert && issueResult.encryptionCert"
           type="warning"
           icon="Folder"
           @click="downloadDualCertZip"
@@ -721,6 +866,7 @@
         </el-button>
       </div>
     </el-dialog>
+    <KeyRecoveryDialog ref="keyRecoveryDialogRef" direct @recovered="handleKeyRecoveryCompleted" />
   </div>
 </template>
 
@@ -731,6 +877,9 @@ import { ArrowDown, MoreFilled, Refresh } from '@element-plus/icons-vue';
 import X509Cert from '@/components/X509Cert/index.vue';
 import SecurityConfirm from '@/components/SecurityConfirm/index.vue';
 import CertSubject, { type SubjectItem, typeMapping, sortSubjectItems } from '@/components/CertSubject/index.vue';
+import KeyRecoveryDialog from '@/views/kmc/components/KeyRecoveryDialog.vue';
+import { resolveUsedKeyByCertificate } from '@/api/kmc/keyRecovery';
+import { unwrapKmcData } from '@/api/kmc/common';
 import {
   pageCert,
   getCert,
@@ -754,12 +903,14 @@ import {
 } from '@/api/ca/cert';
 import { listRootCa, getRootCa } from '@/api/ca/root';
 import { listProfile, getProfile } from '@/api/ca/profile';
-import { X509 } from 'jsrsasign';
+import { ASN1HEX, X509 } from 'jsrsasign';
 import request from '@/utils/request';
 import { parseJson } from '@/utils/json';
 import SKFClient from '@/api/skf/skf_api';
 
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
+const keyRecoveryDialogRef = ref<InstanceType<typeof KeyRecoveryDialog>>();
+const recoveringCertId = ref<string | number>();
 
 const securityConfirm = reactive({
   visible: false,
@@ -806,11 +957,29 @@ const lifecycleCertInfo = computed(() => {
   }
   return null;
 });
+const lifecycleKeyType = computed(() => {
+  const parsedKeyType = lifecycleCertInfo.value?.keyType;
+  if (parsedKeyType && parsedKeyType !== '-') return parsedKeyType;
+  const rowKeyType = lifecycleRow.value?.keyType || lifecycleRow.value?.keyAlgorithm || lifecycleRow.value?.algorithm;
+  if (rowKeyType) return String(rowKeyType);
+  const signatureAlgorithm = String(lifecycleCertInfo.value?.sigAlg || lifecycleRow.value?.signatureAlgorithm || '').toUpperCase();
+  if (signatureAlgorithm.includes('SM2') || signatureAlgorithm.includes('SM3')) return 'SM2';
+  if (signatureAlgorithm.includes('RSA')) return 'RSA';
+  if (signatureAlgorithm.includes('ECDSA') || signatureAlgorithm.includes('EC')) return 'ECC';
+  return '-';
+});
 const lifecycleOutputMode = ref('usbkey');
 const lifecycleCertProviders = ref<string[]>([]);
 const lifecycleCertDevices = ref<string[]>([]);
 const lifecycleCertApps = ref<string[]>([]);
 const lifecycleContainers = ref<Array<{ name: string; label: string; hasSignCert?: boolean; hasEncCert?: boolean }>>([]);
+type UsbKeyCertTarget = { provider: string; device: string; appName: string; containerName: string };
+const lifecycleRenewalTargets = ref<{ signing?: UsbKeyCertTarget; encryption?: UsbKeyCertTarget }>({});
+const lifecycleRenewalTargetLoading = ref(false);
+const isLifecycleRenewal = computed(() => lifecycleAction.value === 'renew' || lifecycleAction.value === 'renew-dual');
+const usesLifecycleNewContainer = computed(
+  () => lifecycleAction.value === 'update' || lifecycleAction.value === 'update-dual' || lifecycleAction.value === 'reissue-dual'
+);
 const lifecycleFormRef = ref<FormInstance>();
 const issueResultOpen = ref(false);
 const issueResultTitle = ref('证书操作结果');
@@ -827,6 +996,8 @@ const certMode = ref('single');
 const rootList = ref([]);
 const selectedRootAlgo = ref('');
 const isSm2Root = computed(() => (selectedRootAlgo.value || '').toUpperCase().includes('SM2'));
+const isMlDsaRoot = computed(() => normalizeAlgorithmText(selectedRootAlgo.value).includes('MLDSA'));
+const supportsDualRoot = computed(() => isSm2Root.value || isMlDsaRoot.value);
 const singleProfileList = ref<any[]>([]);
 const allProfileList = ref([]);
 const profileLookupList = ref([]);
@@ -855,6 +1026,33 @@ const availableDualEntityProfiles = computed(() => {
 
 const selectedDualSignProfile = computed(() => findProfileById(issueForm.value.signProfileId));
 const selectedDualEncProfile = computed(() => findProfileById(issueForm.value.encProfileId));
+const selectedDualProfile = computed(() => findProfileById(issueForm.value.profileId));
+const isPostQuantumDualSelected = computed(() => {
+  const dualConf = parseJson(selectedDualProfile.value?.conf)?.dualCert;
+  return (
+    dualConf?.postQuantum === true ||
+    (profileUsesAlgorithm(selectedDualSignProfile.value, 'MLDSA', '2.16.840.1.101.3.4.3.') &&
+      profileUsesAlgorithm(selectedDualEncProfile.value, 'MLKEM', '2.16.840.1.101.3.4.4.'))
+  );
+});
+const isPostQuantumLifecycle = computed(() => {
+  const profile = findProfileById(lifecycleRow.value?.profileId);
+  return (
+    profileUsesAlgorithm(profile, 'MLDSA', '2.16.840.1.101.3.4.3.') ||
+    profileUsesAlgorithm(profile, 'MLKEM', '2.16.840.1.101.3.4.4.')
+  );
+});
+
+function normalizeAlgorithmText(value: any) {
+  return String(value || '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '');
+}
+
+function profileUsesAlgorithm(profile: any, name: string, oidPrefix: string) {
+  const confText = typeof profile?.conf === 'string' ? profile.conf : JSON.stringify(profile?.conf || {});
+  return normalizeAlgorithmText(confText).includes(name) || confText.includes(oidPrefix);
+}
 
 function getProfileCertLevel(profile: any) {
   return String(profile?.certLevel || profile?.type || parseJson(profile?.conf)?.certLevel || '');
@@ -906,7 +1104,12 @@ const extendedKeyUsageOptions = [
 
 const data = reactive({
   queryParams: { pageNum: 1, pageSize: 10, subject: undefined, serialNumber: undefined },
-  revokeForm: { certId: undefined as string | number | undefined, reason: 0, invalidityDate: undefined as string | undefined },
+  revokeForm: {
+    certId: undefined as string | number | undefined,
+    reason: 0,
+    invalidityDate: undefined as string | undefined,
+    isDual: false
+  },
   issueForm: {
     rootId: undefined as string | number | undefined,
     profileId: undefined as string | number | undefined,
@@ -966,12 +1169,16 @@ const lifecycleRules = computed(() => {
   const isUsbOutput = lifecycleOutputMode.value === 'usbkey';
 
   return {
-    provider: lifecycleAction.value !== 'recover' && isUsbOutput ? [{ required: true, message: '请选择厂商', trigger: 'change' }] : [],
-    device: lifecycleAction.value !== 'recover' && isUsbOutput ? [{ required: true, message: '请选择设备', trigger: 'change' }] : [],
-    appName: lifecycleAction.value !== 'recover' && isUsbOutput ? [{ required: true, message: '请选择应用', trigger: 'change' }] : [],
-    containerName: lifecycleAction.value !== 'recover' && isUsbOutput ? [{ required: true, message: '请输入容器名称', trigger: 'blur' }] : [],
+    provider: lifecycleAction.value !== 'recover' && isUsbOutput && !isRenew ? [{ required: true, message: '请选择厂商', trigger: 'change' }] : [],
+    device: lifecycleAction.value !== 'recover' && isUsbOutput && !isRenew ? [{ required: true, message: '请选择设备', trigger: 'change' }] : [],
+    appName: lifecycleAction.value !== 'recover' && isUsbOutput && !isRenew ? [{ required: true, message: '请选择应用', trigger: 'change' }] : [],
+    containerName:
+      lifecycleAction.value !== 'recover' && isUsbOutput && !isRenew ? [{ required: true, message: '请输入容器名称', trigger: 'blur' }] : [],
     pin: lifecycleAction.value !== 'recover' && isUsbOutput ? [{ required: true, message: '请输入PIN码', trigger: 'blur' }] : [],
-    csr: isUpdate && !isUsbOutput ? [{ required: true, message: '请输入新CSR', trigger: 'blur' }] : [],
+    csr:
+      (isUpdate || lifecycleAction.value === 'reissue-dual') && !isUsbOutput
+        ? [{ required: true, message: '请输入由新签名密钥生成的CSR', trigger: 'blur' }]
+        : [],
     encCsr: isDual && !isUsbOutput ? [{ required: false, message: '可选', trigger: 'blur' }] : [],
     notAfter: [
       {
@@ -1002,7 +1209,7 @@ function getLifecycleModeMeta(action: string) {
       description: '更新会用新公钥重新签发一张证书，并替换旧证书。',
       alertType: 'warning' as const,
       warningTitle: '更新与续期的主要区别',
-      warningDescription: '更新会更换密钥对，原证书状态会变更为已吊销；请确认新 CSR 来源可信。'
+      warningDescription: '更新会更换密钥对，原证书状态会变更为已注销；请确认新 CSR 来源可信。'
     },
     reissue: {
       title: '证书重签/补办',
@@ -1028,8 +1235,8 @@ function getLifecycleModeMeta(action: string) {
     },
     'reissue-dual': {
       title: '双证书补办',
-      description: '双证书补办可用于签名加密证书对的重新签发与替换。',
-      alertType: 'info' as const
+      description: '双证书补办会注销已丢失的旧证书，并使用两套新密钥重新签发证书信息一致的新证书对。',
+      alertType: 'warning' as const
     }
   }[action];
 
@@ -1203,10 +1410,10 @@ async function handleRootChange(val: any) {
     } catch (e) {
       selectedRootAlgo.value = '';
     }
-    // 如果根证书非 SM2，强制切换回单证书模式
-    if (!isSm2Root.value && certMode.value === 'dual') {
+    // 双证书根必须与国密或抗量子签名体系匹配。
+    if (!supportsDualRoot.value && certMode.value === 'dual') {
       certMode.value = 'single';
-      ElMessage.warning('当前根证书不是 SM2 算法，双证书功能不可用');
+      ElMessage.warning('当前根证书不是 SM2 或 ML-DSA 算法，双证书功能不可用');
     }
     issueForm.value.profileId = undefined;
     issueForm.value.signProfileId = undefined;
@@ -1254,8 +1461,21 @@ function prepareIssueFormForType(type: string) {
   stopDeviceMonitoring();
   issueStep.value = '';
   resetIssueForm();
-  issueForm.value.containerName = 'cert-' + Math.random().toString(36).substring(2, 10) + '-' + Date.now().toString(36);
+  issueForm.value.containerName = generateContainerName();
   if (type === 'key') refreshCertProviders();
+}
+
+function generateContainerName(prefix = 'cert') {
+  return `${prefix}-${Math.random().toString(36).substring(2, 10)}-${Date.now().toString(36)}`;
+}
+
+function generateUniqueLifecycleContainerName(existingNames: string[]) {
+  const existing = new Set(existingNames);
+  let containerName = generateContainerName('dual-replace');
+  while (existing.has(containerName)) {
+    containerName = generateContainerName('dual-replace');
+  }
+  return containerName;
 }
 
 function openIssueDialog() {
@@ -1282,16 +1502,27 @@ async function handleDualProfileChange(profileId: string | number | undefined) {
   issueForm.value.encProfileId = dualCert.encProfileId;
   await handleProfileChange(dualCert.signProfileId);
   issueProfileInfo.value = profile;
-  ElMessage.success('已自动绑定签名证书模板和加密证书模板');
+  if (isPostQuantumDualSelected.value) {
+    issueType.value = 'p10';
+    stopDeviceMonitoring();
+    ElMessage.info('抗量子双证书不支持USBKey，已切换为PKCS10 CSR和文件存储');
+  } else {
+    ElMessage.success('已自动绑定签名证书模板和加密证书模板');
+  }
 }
 
 function handleIssueTypeChange(type: string | number | boolean) {
+  if (String(type) === 'key' && isPostQuantumDualSelected.value) {
+    issueType.value = 'p10';
+    ElMessage.warning('抗量子双证书不支持USBKey存储方式');
+    return;
+  }
   prepareIssueFormForType(String(type));
 }
 
 function handleCertModeChange(mode: string | number | boolean) {
-  if (String(mode) === 'dual' && !isSm2Root.value) {
-    ElMessage.warning('仅 SM2 根证书支持双证书签发');
+  if (String(mode) === 'dual' && !supportsDualRoot.value) {
+    ElMessage.warning('仅 SM2 或 ML-DSA 根证书支持双证书签发');
     certMode.value = 'single';
     return;
   }
@@ -1402,60 +1633,79 @@ function getExtensionLabel(ext: any) {
 }
 
 function buildIssueExtensionItems(extensions: any[]) {
-  return (extensions || [])
-    .filter((ext: any) => ext?.inRequest === 'required' || ext?.inRequest === 'optional' || (ext?.required && ext?.subjectAltName))
-    .map((ext: any, index: number) => {
-      const meta = getExtensionTypeMeta(ext);
-      const key = normalizeExtensionKey(meta.description);
-      const modes = ext?.subjectAltName?.modes?.length ? ext.subjectAltName.modes : ['DNSName'];
-      if (key === 'subjectalternativename') {
-        return {
-          key: `${meta.oid || meta.description || 'san'}-${index}`,
-          kind: 'subjectAlternativeName',
-          label: getExtensionLabel(ext),
-          oid: meta.oid,
-          description: meta.description,
-          critical: !!ext.critical,
-          required: ext.inRequest === 'required' || !!ext.required,
-          modes,
-          names: [{ type: modes[0], value: '' }]
-        };
-      }
-      if (key === 'keyusage') {
-        return {
-          key: `${meta.oid || meta.description || 'keyUsage'}-${index}`,
-          kind: 'keyUsage',
-          label: getExtensionLabel(ext),
-          oid: meta.oid,
-          description: meta.description,
-          critical: !!ext.critical,
-          required: ext.inRequest === 'required' || !!ext.required,
-          usages: normalizeKeyUsageValues(ext?.keyUsage?.usages || ext?.usages || [])
-        };
-      }
-      if (key === 'extendedkeyusage') {
-        return {
-          key: `${meta.oid || meta.description || 'extendedKeyUsage'}-${index}`,
-          kind: 'extendedKeyUsage',
-          label: getExtensionLabel(ext),
-          oid: meta.oid,
-          description: meta.description,
-          critical: !!ext.critical,
-          required: ext.inRequest === 'required' || !!ext.required,
-          usages: normalizeExtendedKeyUsageValues(ext?.extendedKeyUsage?.usages || ext?.usages || [])
-        };
-      }
+  return (extensions || []).map((ext: any, index: number) => {
+    const meta = getExtensionTypeMeta(ext);
+    const key = normalizeExtensionKey(meta.description);
+    const modes = ext?.subjectAltName?.modes?.length ? ext.subjectAltName.modes : ['DNSName'];
+    const requestable = ext?.inRequest === 'required' || ext?.inRequest === 'optional' || (ext?.required && ext?.subjectAltName);
+    const required = requestable && (ext.inRequest === 'required' || !!ext.required);
+    if (key === 'subjectalternativename') {
       return {
-        key: `${meta.oid || meta.description || 'ext'}-${index}`,
-        kind: 'generic',
+        key: `${meta.oid || meta.description || 'san'}-${index}`,
+        kind: 'subjectAlternativeName',
+        requestable,
         label: getExtensionLabel(ext),
         oid: meta.oid,
         description: meta.description,
         critical: !!ext.critical,
-        required: ext.inRequest === 'required' || !!ext.required,
-        value: ''
+        required,
+        modes,
+        names: [{ type: modes[0], value: '' }]
       };
-    });
+    }
+    if (key === 'keyusage') {
+      return {
+        key: `${meta.oid || meta.description || 'keyUsage'}-${index}`,
+        kind: 'keyUsage',
+        requestable,
+        label: getExtensionLabel(ext),
+        oid: meta.oid,
+        description: meta.description,
+        critical: !!ext.critical,
+        required,
+        usages: normalizeKeyUsageValues(ext?.keyUsage?.usages || ext?.usages || [])
+      };
+    }
+    if (key === 'extendedkeyusage') {
+      return {
+        key: `${meta.oid || meta.description || 'extendedKeyUsage'}-${index}`,
+        kind: 'extendedKeyUsage',
+        requestable,
+        label: getExtensionLabel(ext),
+        oid: meta.oid,
+        description: meta.description,
+        critical: !!ext.critical,
+        required,
+        usages: normalizeExtendedKeyUsageValues(ext?.extendedKeyUsage?.usages || ext?.usages || [])
+      };
+    }
+    return {
+      key: `${meta.oid || meta.description || 'ext'}-${index}`,
+      kind: 'generic',
+      requestable,
+      valueType: 'string',
+      label: getExtensionLabel(ext),
+      oid: meta.oid,
+      description: meta.description,
+      critical: !!ext.critical,
+      required,
+      value: ''
+    };
+  });
+}
+
+function getTemplateExtensionSummary(ext: any) {
+  const parts = [];
+  if (ext.oid) parts.push(`OID: ${ext.oid}`);
+  parts.push(ext.critical ? '关键扩展' : '非关键扩展');
+  if (ext.kind === 'keyUsage' && ext.usages?.length) {
+    parts.push(`用途: ${normalizeKeyUsageValues(ext.usages).join(', ')}`);
+  } else if (ext.kind === 'extendedKeyUsage' && ext.usages?.length) {
+    parts.push(`用途: ${normalizeExtendedKeyUsageValues(ext.usages).join(', ')}`);
+  } else {
+    parts.push('由 CA 按模板自动生成，签发请求无需填写');
+  }
+  return parts.join('；');
 }
 
 function normalizeKeyUsageValues(usages: any[]) {
@@ -1513,6 +1763,7 @@ function removeSanName(extIndex: number, nameIndex: number) {
 function buildIssueExtensionsPayload() {
   const extensionItems = issueForm.value.extensionItems || [];
   const extensions = extensionItems
+    .filter((ext: any) => ext.requestable)
     .map((ext: any) => {
       if (ext.kind === 'subjectAlternativeName') {
         const names = (ext.names || [])
@@ -1543,11 +1794,8 @@ function buildIssueExtensionsPayload() {
           extendedKeyUsage: { usages }
         };
       }
-      if (!ext.value || !String(ext.value).trim()) return null;
-      let value: any = String(ext.value).trim();
-      try {
-        value = JSON.parse(value);
-      } catch (e) {}
+      if (ext.value == null || ext.value === '') return null;
+      const value: any = encodeGenericValue(ext.valueType, ext.value);
       return {
         type: { oid: ext.oid, description: ext.description },
         critical: ext.critical,
@@ -1558,8 +1806,43 @@ function buildIssueExtensionsPayload() {
   return extensions.length ? JSON.stringify(extensions) : undefined;
 }
 
+function onGenericValueTypeChange(ext: any) {
+  if (ext.valueType === 'boolean') {
+    ext.value = false;
+  } else if (ext.valueType === 'integer') {
+    ext.value = 0;
+  } else {
+    ext.value = '';
+  }
+}
+
+function encodeGenericValue(valueType: string, raw: any): any {
+  if (valueType === 'integer') {
+    const n = Number(raw);
+    return Number.isNaN(n) ? null : n;
+  }
+  if (valueType === 'boolean') {
+    return raw === true || raw === 'true';
+  }
+  if (valueType === 'oid') {
+    return { oid: String(raw).trim() };
+  }
+  if (valueType === 'octetString') {
+    return String(raw).trim().replace(/\s+/g, '');
+  }
+  if (valueType === 'json') {
+    try {
+      return JSON.parse(String(raw));
+    } catch (e) {
+      return String(raw);
+    }
+  }
+  return String(raw || '').trim();
+}
+
 function validateIssueExtensions() {
   for (const ext of issueForm.value.extensionItems || []) {
+    if (!ext.requestable) continue;
     if (!ext.required) continue;
     if (ext.kind === 'subjectAlternativeName') {
       const hasValue = (ext.names || []).some((name: any) => name.value && String(name.value).trim());
@@ -1587,6 +1870,9 @@ function validateIssueExtensions() {
 
 function shouldUseKmcSingleEncryption() {
   const profile = issueProfileInfo.value || singleProfileList.value.find((item: any) => String(item.id) === String(issueForm.value.profileId));
+  const keypairGeneration = resolveProfileKeypairGeneration(profile);
+  if (keypairGeneration === 'KMC') return true;
+  if (keypairGeneration === 'CLIENT') return false;
   const name = String(profile?.name || profile?.description || '').toLowerCase();
   if (name.includes('加密') || name.includes('enc')) return true;
   const conf = parseJson(profile?.conf);
@@ -1596,6 +1882,19 @@ function shouldUseKmcSingleEncryption() {
     const usages = ext?.keyUsage?.usages || ext?.usages || [];
     return description.includes('keyusage') && Array.isArray(usages) && usages.includes('keyEncipherment');
   });
+}
+
+function resolveProfileKeypairGeneration(profile: any) {
+  const conf = parseJson(profile?.conf);
+  const keypairGeneration = conf?.keypairGeneration || profile?.keypairGeneration;
+  if (typeof keypairGeneration === 'string') {
+    const value = keypairGeneration.toUpperCase();
+    if (value === 'KMC' || value === 'INHERITCA') return 'KMC';
+    if (value === 'CLIENT') return 'CLIENT';
+  }
+  if (keypairGeneration?.inheritCA === true) return 'KMC';
+  if (keypairGeneration?.forbidden === true) return 'CLIENT';
+  return '';
 }
 
 function resolveKmcKeyRequest() {
@@ -1705,11 +2004,16 @@ async function submitIssue() {
         ElMessage.warning('请选择已绑定签名证书模板和加密证书模板的双证书模板');
         return;
       }
+      if (certMode.value === 'dual' && isPostQuantumDualSelected.value && issueType.value === 'key') {
+        ElMessage.warning('抗量子双证书不支持USBKey存储方式');
+        return;
+      }
       if (!validateIssueExtensions()) {
         return;
       }
       issueLoading.value = true;
       let skf: any = null;
+      let attemptedKmcSingleEncryption = false;
       try {
         const appPath = `${issueForm.value.provider}/${issueForm.value.device}/${issueForm.value.appName}`;
         const subject = issueForm.value.subjectItems
@@ -1728,14 +2032,31 @@ async function submitIssue() {
 
         if (issueType.value === 'key' && certMode.value === 'single') {
           const kmcEncryption = shouldUseKmcSingleEncryption();
+          attemptedKmcSingleEncryption = kmcEncryption;
           let res: any;
           if (kmcEncryption) {
             const kmcKey = resolveKmcKeyRequest();
+            issueForm.value.containerName = generateContainerName('enc');
+            setIssueStep('正在 USB Key 中生成封装密钥并创建 CSR...');
+            const wrapP10Res = await withTimeout(
+              skf.createPKCS10(
+                issueForm.value.provider,
+                issueForm.value.device,
+                issueForm.value.appName,
+                subject,
+                'SM2',
+                256,
+                issueForm.value.containerName
+              ),
+              30000,
+              '生成封装 CSR 超时'
+            );
             setIssueStep(`正在向 KMC 申请 ${kmcKey.algorithm}${kmcKey.keySize || ''} 加密密钥...`);
             res = await issueCert({
               rootId: issueForm.value.rootId,
               profileId: issueForm.value.profileId,
               subject,
+              csrBase64: pemToBase64(wrapP10Res.pem),
               keyGenStrategy: 'KMC',
               keyAlgorithm: kmcKey.algorithm,
               keySize: kmcKey.keySize,
@@ -1769,6 +2090,26 @@ async function submitIssue() {
             });
           }
           if (res.data && res.data.cert) {
+            if (kmcEncryption) {
+              if (!res.data.encryptionPrivateKey) {
+                throw new Error('KMC未返回可写入 USB Key 的加密私钥材料');
+              }
+              // KMC 使用 createPKCS10 生成的公钥封装私钥，导入时必须保留该容器中对应的解包私钥。
+              setIssueStep('正在写入 KMC 加密密钥对到 USB Key...');
+              await withTimeout(
+                skf.importKeyPair(
+                  issueForm.value.provider,
+                  issueForm.value.device,
+                  issueForm.value.appName,
+                  issueForm.value.containerName,
+                  'SM2',
+                  res.data.encryptionPrivateKey,
+                  res.data.wrapKey || ''
+                ),
+                30000,
+                '写入 KMC 加密密钥对超时'
+              );
+            }
             setIssueStep(kmcEncryption ? '正在写入 KMC 加密证书到 USB Key...' : '正在写入签名证书到 USB Key...');
             await withTimeout(
               skf.importCertificate(
@@ -1812,6 +2153,7 @@ async function submitIssue() {
             encProfileId: issueForm.value.encProfileId,
             signCsrBase64: pemToBase64(p10Res.pem),
             keyGenStrategy: 'KMC',
+            storageType: 'USB_KEY',
             notBefore: issueForm.value.notBefore,
             notAfter: issueForm.value.notAfter,
             extensions: buildIssueExtensionsPayload()
@@ -1879,6 +2221,7 @@ async function submitIssue() {
             encProfileId: issueForm.value.encProfileId,
             signCsrBase64,
             keyGenStrategy: 'KMC',
+            storageType: isPostQuantumDualSelected.value ? 'SOFTWARE_KEYSTORE' : 'FILE',
             notBefore: issueForm.value.notBefore,
             notAfter: issueForm.value.notAfter,
             extensions: buildIssueExtensionsPayload()
@@ -1887,7 +2230,11 @@ async function submitIssue() {
           const res = await issueDualCert(payload);
           if (res.data && res.data.cert && res.data.encryptionCert) {
             ElMessage.success('双证书签发成功');
-            ElMessage.info('请点击"下载 ZIP 包"获取签名证书、加密证书和加密私钥');
+            ElMessage.info(
+              isPostQuantumDualSelected.value
+                ? 'ML-KEM私钥由KMC永久托管，仅可下载签名证书、加密证书和证书链'
+                : '请点击"下载 ZIP 包"获取双证书签发结果'
+            );
             showIssueResult(res.data, {
               primaryCertLabel: '签名证书',
               encryptionCertLabel: '加密证书',
@@ -1922,6 +2269,9 @@ async function submitIssue() {
       } catch (e: any) {
         const errorMsg = e?.message || (typeof e === 'string' ? e : '操作失败');
         ElMessage.error('签发失败: ' + errorMsg);
+        if (attemptedKmcSingleEncryption) {
+          issueForm.value.containerName = generateContainerName('enc');
+        }
       } finally {
         issueLoading.value = false;
         issueStep.value = '';
@@ -1968,7 +2318,7 @@ function getStatusLabel(status: string) {
     case 'HOLD':
       return '已冻结';
     case 'REVOKED':
-      return '已吊销';
+      return '已注销';
     case 'EXPIRED':
       return '已过期';
     default:
@@ -1992,35 +2342,41 @@ function handleView(row: any) {
   currentCertPem.value = row.cert || row.pem;
   showDetail.value = true;
 }
-function handleDownloadFormat(format: string, row: any) {
-  const pem = row.cert || row.pem;
-  if (!pem) {
-    ElMessage.error('证书内容为空');
+async function handleDownloadFormat(format: string, row: any) {
+  const baseName = row.serialNumber || 'cert';
+  if (format === 'p7b') {
+    downloadP7b(row.id, baseName);
     return;
   }
-  const baseName = row.serialNumber || 'cert';
-  switch (format) {
-    case 'pem':
-      downloadAs(pem, `${baseName}.pem`, 'application/x-pem-file');
-      break;
-    case 'crt':
-      downloadAs(pem, `${baseName}.crt`, 'application/x-x509-ca-cert');
-      break;
-    case 'cer': {
-      const der = pemToDer(pem);
-      const blob = new Blob([der], { type: 'application/x-x509-ca-cert' });
-      const link = document.createElement('a');
-      link.href = window.URL.createObjectURL(blob);
-      link.download = `${baseName}.cer`;
-      link.click();
-      window.URL.revokeObjectURL(link.href);
-      break;
+  try {
+    const detail = row.cert || row.pem ? row : (await getCert(row.id)).data;
+    const pem = detail?.cert || detail?.pem;
+    if (!pem) {
+      ElMessage.error('证书内容为空');
+      return;
     }
-    case 'p7b':
-      downloadP7b(row.id, row.serialNumber || 'cert');
-      break;
-    default:
-      ElMessage.error('不支持的下载格式');
+    switch (format) {
+      case 'pem':
+        downloadAs(pem, `${baseName}.pem`, 'application/x-pem-file');
+        break;
+      case 'crt':
+        downloadAs(pem, `${baseName}.crt`, 'application/x-x509-ca-cert');
+        break;
+      case 'cer': {
+        const der = pemToDer(pem);
+        const blob = new Blob([der], { type: 'application/x-x509-ca-cert' });
+        const link = document.createElement('a');
+        link.href = window.URL.createObjectURL(blob);
+        link.download = `${baseName}.cer`;
+        link.click();
+        window.URL.revokeObjectURL(link.href);
+        break;
+      }
+      default:
+        ElMessage.error('不支持的下载格式');
+    }
+  } catch (e) {
+    ElMessage.error('证书下载失败');
   }
 }
 function downloadAs(content: string, filename: string, mimeType: string) {
@@ -2031,13 +2387,23 @@ function downloadAs(content: string, filename: string, mimeType: string) {
   link.click();
   window.URL.revokeObjectURL(link.href);
 }
+
+function downloadPem(pem: string, filename: string) {
+  if (!pem?.trim()) {
+    ElMessage.error('证书内容为空，无法下载');
+    return;
+  }
+  const downloadName = filename.toLowerCase().endsWith('.pem') ? filename : `${filename}.pem`;
+  downloadAs(pem.trim() + '\n', downloadName, 'application/x-pem-file');
+}
+
 async function downloadP7b(certId: number, filename: string) {
   try {
-    const response = await request({
+    const response = (await request({
       url: `/ca/v1/certs/${certId}/p7b`,
       method: 'get',
       responseType: 'blob'
-    }) as any;
+    })) as any;
     const blob = response instanceof Blob ? response : new Blob([response]);
     const link = document.createElement('a');
     link.href = window.URL.createObjectURL(blob);
@@ -2094,16 +2460,22 @@ function downloadDualCertZip() {
   const cert = issueResult.value.cert;
   const encCert = issueResult.value.encryptionCert;
   const encKey = issueResult.value.encryptionPrivateKey;
-  if (!cert || !encCert || !encKey) {
-    ElMessage.error('缺少证书或私钥，无法生成 ZIP 包');
+  if (!cert || !encCert) {
+    ElMessage.error('缺少双证书，无法生成 ZIP 包');
     return;
   }
   const subject = (issueResult.value.subject || 'cert').replace(/[\\/:*?"<>|]/g, '_');
-  const zipBlob = createZip([
+  const files = [
     { name: 'sign.crt', content: cert },
-    { name: 'enc.crt', content: encCert },
-    { name: 'enc.key', content: encKey }
-  ]);
+    { name: 'enc.crt', content: encCert }
+  ];
+  if (issueResult.value.certificateChain) {
+    files.push({ name: 'chain.pem', content: issueResult.value.certificateChain });
+  }
+  if (encKey) {
+    files.push({ name: 'enc.key', content: encKey });
+  }
+  const zipBlob = createZip(files);
   const link = document.createElement('a');
   link.href = window.URL.createObjectURL(zipBlob);
   link.download = `${subject}_dual_certs.zip`;
@@ -2212,15 +2584,16 @@ function crc32(data: Uint8Array): number {
   return (crc ^ 0xffffffff) >>> 0;
 }
 
-function handleRevoke(row: any) {
+function handleRevoke(row: any, isDual = false) {
   revokeForm.value.certId = row.id;
   revokeForm.value.reason = 0;
   revokeForm.value.invalidityDate = undefined;
+  revokeForm.value.isDual = isDual;
   revokeOpen.value = true;
 }
 async function submitRevoke() {
   const isDual = revokeForm.value.isDual;
-  const label = isDual ? '双证书吊销' : '吊销证书';
+  const label = isDual ? '双证书注销' : '注销证书';
   securityConfirm.action = `${label} (ID: ${revokeForm.value.certId})`;
   securityConfirm.onConfirm = async () => {
     try {
@@ -2263,20 +2636,28 @@ function resetLifecycleForm() {
   lifecycleCertDevices.value = [];
   lifecycleCertApps.value = [];
   lifecycleContainers.value = [];
+  lifecycleRenewalTargets.value = {};
+  lifecycleRenewalTargetLoading.value = false;
   lifecycleFormRef.value?.resetFields();
 }
 
 function getDefaultLifecycleOutputMode(action: string) {
-  if (action === 'update' || action === 'update-dual' || action === 'reissue' || action === 'reissue-dual') {
+  if (action === 'update' || action === 'update-dual') {
     return 'pem';
   }
   return 'usbkey';
 }
 
 function getLifecycleEncCertId() {
-  const pairId = lifecycleRow.value?.certPairId;
-  const parsed = Number(pairId);
-  return Number.isFinite(parsed) ? parsed : undefined;
+  const row = lifecycleRow.value;
+  if (String(row?.certUsage || '').toUpperCase() === 'ENCRYPTION') {
+    return row?.id;
+  }
+  const reversePair = (certList.value as any[]).find(
+    (cert: any) => String(cert?.certUsage || '').toUpperCase() === 'ENCRYPTION' && String(cert?.certPairId) === String(row?.id)
+  );
+  const pairId = reversePair?.id ?? row?.certPairId;
+  return pairId === undefined || pairId === null || pairId === '' ? undefined : pairId;
 }
 
 function parseLifecycleSubject(value?: string) {
@@ -2316,7 +2697,21 @@ function buildLifecycleSubject(items: SubjectItem[]) {
     .join(',');
 }
 
+function getLifecycleOldSubject() {
+  return String(lifecycleRow.value?.subject || '').trim();
+}
+
+function initializeLifecycleSubjectFromOldCert() {
+  lifecycleForm.subjectItems = parseLifecycleSubject(getLifecycleOldSubject());
+}
+
 function initializeLifecycleSubjectForUpdate() {
+  if (lifecycleAction.value === 'reissue' || lifecycleAction.value === 'reissue-dual') {
+    initializeLifecycleSubjectFromOldCert();
+    lifecycleForm.notBefore = lifecycleRow.value?.notBefore;
+    lifecycleForm.notAfter = lifecycleRow.value?.notAfter;
+    return;
+  }
   if (lifecycleAction.value !== 'update' && lifecycleAction.value !== 'update-dual') return;
 
   const oldSubjectItems = parseLifecycleSubject(lifecycleRow.value?.subject);
@@ -2371,7 +2766,69 @@ function initializeLifecycleSubjectForUpdate() {
   }
 }
 
+function isDualPairedCert(row: any) {
+  const usage = String(row?.certUsage || '').toUpperCase();
+  const hasPairId = row?.certPairId !== undefined && row?.certPairId !== null && row?.certPairId !== '';
+  return hasPairId || usage === 'SIGNING';
+}
+
+function isEncryptionCertificate(row: any) {
+  const usage = String(row?.certUsage || '').toUpperCase();
+  if (usage === 'ENCRYPTION') return true;
+  if (usage === 'SIGNING') return false;
+  // KMC 单证书是加密证书；历史数据可能没有回填 certUsage。
+  return String(row?.keySource || '').toUpperCase() === 'KMC';
+}
+
+async function openKeyRecovery(row: any) {
+  if (String(row?.keySource || '').toUpperCase() !== 'KMC' || !isEncryptionCertificate(row)) {
+    ElMessage.warning('只允许恢复密钥来源为KMC的加密证书');
+    return;
+  }
+  try {
+    const detailResult: any = row?.cert || row?.pem ? null : await getCert(row.id);
+    const certificate = row?.cert || row?.pem || detailResult?.data?.cert || detailResult?.data?.pem;
+    if (!certificate) throw new Error('无法读取原加密证书');
+    const target: any = unwrapKmcData(await resolveUsedKeyByCertificate(certificate));
+    if (!target?.recoverable) {
+      throw new Error('该密钥为历史一次性数字信封，KMC未保留可重新封装的托管私钥');
+    }
+    recoveringCertId.value = row.id;
+    await keyRecoveryDialogRef.value?.open({
+      targetType: 'USED_KEY',
+      targetId: target.targetId,
+      serialNumber: row.serialNumber,
+      subject: row.subject || target.subject,
+      keyType: target.keyType,
+      keyBits: target.keyBits,
+      certificate
+    });
+  } catch (error: any) {
+    ElMessage.error('无法启动密钥恢复: ' + (error?.message || '未知错误'));
+  }
+}
+
+async function handleKeyRecoveryCompleted(payload: { judgeId: string; success: boolean; message?: string }) {
+  if (!recoveringCertId.value) return;
+  try {
+    await recoverKey({ certId: recoveringCertId.value, judgeId: payload.judgeId, success: payload.success, message: payload.message });
+    if (payload.success) ElMessage.success('原证书、序列号和有效期保持不变，恢复成功历史已记录');
+    getList();
+  } catch (error: any) {
+    ElMessage.error('记录CA密钥恢复结果失败: ' + (error?.message || '未知错误'));
+  }
+}
+
 function handleLifecycleCommand(command: string, row: any) {
+  const dualLifecycleCommands = new Set(['renew', 'update', 'reissue', 'suspend', 'resume', 'revoke']);
+  if (!command.endsWith('-dual') && isDualPairedCert(row) && dualLifecycleCommands.has(command)) {
+    if (row?.certUsage === 'SIGNING') {
+      handleDualLifecycleCommand(`${command}-dual`, row);
+    } else {
+      ElMessage.warning('该证书属于双证书对，请从配对的签名证书记录执行双证书操作');
+    }
+    return;
+  }
   // 双证书操作
   if (command.endsWith('-dual')) {
     handleDualLifecycleCommand(command, row);
@@ -2385,8 +2842,8 @@ function handleLifecycleCommand(command: string, row: any) {
     submitQuickLifecycle(command, row);
     return;
   }
-  if (command === 'recover' && row.keySource !== 'KMC') {
-    ElMessage.warning('只有密钥来源为 KMC 的证书支持密钥恢复');
+  if (command === 'recover') {
+    void openKeyRecovery(row);
     return;
   }
   lifecycleAction.value = command;
@@ -2405,7 +2862,11 @@ function handleLifecycleCommand(command: string, row: any) {
   }
   initializeLifecycleSubjectForUpdate();
   lifecycleOpen.value = true;
-  if (command !== 'recover') refreshLifecycleCertProviders();
+  if (command === 'renew') {
+    void resolveLifecycleRenewalTargets(true).catch(() => undefined);
+  } else if (command !== 'recover') {
+    refreshLifecycleCertProviders();
+  }
 }
 
 function handleDualLifecycleCommand(command: string, row: any) {
@@ -2429,6 +2890,9 @@ function handleDualLifecycleCommand(command: string, row: any) {
 
   resetLifecycleForm();
   lifecycleOutputMode.value = getDefaultLifecycleOutputMode(command);
+  if (isPostQuantumLifecycle.value) {
+    lifecycleOutputMode.value = 'pem';
+  }
   const titleMap: Record<string, string> = {
     renew: '双证书续期',
     update: '双证书更新',
@@ -2438,7 +2902,11 @@ function handleDualLifecycleCommand(command: string, row: any) {
   lifecycleForm.encCertId = getLifecycleEncCertId();
   initializeLifecycleSubjectForUpdate();
   lifecycleOpen.value = true;
-  refreshLifecycleCertProviders();
+  if (command === 'renew-dual' && !isPostQuantumLifecycle.value) {
+    void resolveLifecycleRenewalTargets(true).catch(() => undefined);
+  } else {
+    refreshLifecycleCertProviders();
+  }
 }
 
 function submitDualQuickLifecycle(action: string, row: any) {
@@ -2459,14 +2927,12 @@ function submitDualQuickLifecycle(action: string, row: any) {
 }
 
 function handleDualRevoke(row: any) {
-  revokeForm.value.certId = row.id;
-  revokeForm.value.isDual = true;
-  submitRevoke();
+  handleRevoke(row, true);
 }
 
 function submitQuickLifecycle(command: string, row: any) {
   const isSuspend = command === 'suspend';
-  securityConfirm.action = `${isSuspend ? '挂起' : '恢复'}证书 (序列号: ${row.serialNumber || row.id})`;
+  securityConfirm.action = `${isSuspend ? '冻结' : '解冻'}证书 (序列号: ${row.serialNumber || row.id})`;
   securityConfirm.onConfirm = async () => {
     try {
       if (isSuspend) {
@@ -2474,10 +2940,10 @@ function submitQuickLifecycle(command: string, row: any) {
       } else {
         await resumeCert({ certId: row.id });
       }
-      ElMessage.success(isSuspend ? '挂起成功' : '恢复成功');
+      ElMessage.success(isSuspend ? '冻结成功' : '解冻成功');
       getList();
     } catch (e) {
-      ElMessage.error(isSuspend ? '挂起失败' : '恢复失败');
+      ElMessage.error(isSuspend ? '冻结失败' : '解冻失败');
     }
   };
   securityConfirm.visible = true;
@@ -2497,14 +2963,38 @@ async function refreshLifecycleCertProviders() {
   }
 }
 
-function onLifecycleOutputModeChange() {
+async function onLifecycleOutputModeChange() {
+  if (isPostQuantumLifecycle.value && lifecycleOutputMode.value === 'usbkey') {
+    lifecycleOutputMode.value = 'pem';
+    ElMessage.warning('抗量子双证书不支持USBKey存储方式');
+    return;
+  }
+  if (isLifecycleRenewal.value) {
+    if (lifecycleOutputMode.value === 'usbkey') {
+      try {
+        await resolveLifecycleRenewalTargets(true);
+      } catch (_) {
+        // 已回退到 PEM，并由定位函数给出明确提示。
+      }
+    } else {
+      lifecycleRenewalTargets.value = {};
+    }
+    return;
+  }
   if (lifecycleAction.value === 'update' || lifecycleAction.value === 'update-dual') {
     if (lifecycleOutputMode.value === 'usbkey') {
       initializeLifecycleSubjectForUpdate();
+      if (usesLifecycleNewContainer.value && lifecycleCertProviders.value.length === 0) {
+        await refreshLifecycleCertProviders();
+      }
     } else {
       lifecycleForm.subjectItems = [];
       lifecycleForm.encCsr = '';
     }
+  } else if (lifecycleAction.value === 'reissue' || lifecycleAction.value === 'reissue-dual') {
+    lifecycleForm.csr = '';
+    lifecycleForm.encCsr = '';
+    initializeLifecycleSubjectFromOldCert();
   }
 }
 
@@ -2554,6 +3044,11 @@ async function onLifecycleAppChange() {
     const skf = await getSkfClient();
     const containers = await skf.enumContainer(lifecycleForm.provider, lifecycleForm.device, lifecycleForm.appName);
     const list = Array.isArray(containers) ? containers : [];
+    if (usesLifecycleNewContainer.value) {
+      lifecycleContainers.value = list.map((name: string) => ({ name, label: name }));
+      lifecycleForm.containerName = generateUniqueLifecycleContainerName(list);
+      return;
+    }
     // 查找匹配当前证书序列号的容器
     const certs = await skf.findCertificates('');
     const matchedContainers = list.map((name: string) => {
@@ -2565,7 +3060,7 @@ async function onLifecycleAppChange() {
     });
     lifecycleContainers.value = matchedContainers;
     // 自动选中匹配证书类型的容器
-    const isSigningCert = lifecycleRow.value?.certUsage === 'SIGNING' || lifecycleRow.value?.certUsage !== 'ENCRYPTION';
+    const isSigningCert = !isEncryptionCertificate(lifecycleRow.value);
     const auto = matchedContainers.find((c) => (isSigningCert ? c.hasSignCert : c.hasEncCert));
     if (auto) lifecycleForm.containerName = auto.name;
   } catch (e) {
@@ -2577,13 +3072,232 @@ function onLifecycleContainerChange() {
   // 容器选择变化时不需要额外操作
 }
 
-async function writeLifecycleCertToUsbKey(certPem: string, isSigning: boolean) {
+function normalizeCertData(cert?: string) {
+  return String(cert || '')
+    .replace(/-----BEGIN[^-]+-----/g, '')
+    .replace(/-----END[^-]+-----/g, '')
+    .replace(/\s+/g, '');
+}
+
+function parseUsbKeyCertTarget(cert: any): UsbKeyCertTarget | null {
+  const parts = String(cert?.key || '').split('/');
+  if (parts.length < 5) return null;
+  return {
+    provider: parts[0],
+    device: parts[1],
+    appName: parts[2],
+    containerName: parts[3]
+  };
+}
+
+function findUsbKeyCertTarget(certs: any[], certPem: string, type: 'Sign' | 'Enc') {
+  const matched = findUsbKeyCertRecord(certs, certPem, type);
+  return matched ? parseUsbKeyCertTarget(matched) : null;
+}
+
+function findUsbKeyCertRecord(certs: any[], certPem: string, type: 'Sign' | 'Enc') {
+  const expected = normalizeCertData(certPem);
+  if (!expected) return null;
+  return certs.find((cert: any) => cert?.type === type && normalizeCertData(cert?.cert) === expected) || null;
+}
+
+function formatUsbKeyTarget(target?: UsbKeyCertTarget) {
+  if (!target) return '-';
+  return `${target.provider} / ${target.device} / ${target.appName} / ${target.containerName}`;
+}
+
+async function getLifecycleEncryptionCert() {
+  const encCertId = getLifecycleEncCertId() || lifecycleForm.encCertId;
+  if (!encCertId) throw new Error('双证书缺少配对加密证书信息');
+  const result = await getCert(encCertId);
+  const cert = result?.data?.cert || result?.data?.pem;
+  if (!cert) throw new Error('无法读取旧加密证书');
+  return cert;
+}
+
+async function resolveLifecycleRenewalTargets(showMessage: boolean) {
+  lifecycleRenewalTargetLoading.value = true;
+  lifecycleRenewalTargets.value = {};
+  try {
+    const skf = await getSkfClient();
+    const certs = await skf.findCertificates('');
+    const oldCert = lifecycleRow.value?.cert || lifecycleRow.value?.pem;
+    const singleIsEncryption = lifecycleAction.value === 'renew' && isEncryptionCertificate(lifecycleRow.value);
+    const signing = findUsbKeyCertTarget(certs, oldCert, singleIsEncryption ? 'Enc' : 'Sign');
+    if (!signing) {
+      throw new Error(singleIsEncryption ? '旧加密证书不在 USBKey 中' : '旧签名证书不在 USBKey 中');
+    }
+
+    const targets: { signing?: UsbKeyCertTarget; encryption?: UsbKeyCertTarget } = { signing };
+    if (lifecycleAction.value === 'renew-dual') {
+      const oldEncryptionCert = await getLifecycleEncryptionCert();
+      const encryption = findUsbKeyCertTarget(certs, oldEncryptionCert, 'Enc');
+      if (!encryption) throw new Error('旧加密证书不在 USBKey 中');
+      targets.encryption = encryption;
+    }
+    lifecycleRenewalTargets.value = targets;
+    return targets;
+  } catch (error: any) {
+    lifecycleOutputMode.value = 'pem';
+    lifecycleRenewalTargets.value = {};
+    if (showMessage) {
+      ElMessage.warning(`${error?.message || '旧证书不在 USBKey 中'}，不能选择 USBKey 存储方式`);
+    }
+    throw error;
+  } finally {
+    lifecycleRenewalTargetLoading.value = false;
+  }
+}
+
+async function generateLifecycleUsbKeyCsr(subject: string, timeoutMessage: string) {
+  if (!lifecycleForm.provider || !lifecycleForm.device || !lifecycleForm.appName || !lifecycleForm.containerName || !lifecycleForm.pin) {
+    throw new Error('请先完善 USB Key 信息');
+  }
+  if (!subject) {
+    throw new Error('证书主题为空，无法生成 CSR');
+  }
   const skf = await getSkfClient();
-  const { provider, device, appName, containerName, pin } = lifecycleForm;
+  if (usesLifecycleNewContainer.value) {
+    const containers = await skf.enumContainer(lifecycleForm.provider, lifecycleForm.device, lifecycleForm.appName);
+    const existingNames = Array.isArray(containers) ? containers : [];
+    if (existingNames.includes(lifecycleForm.containerName)) {
+      lifecycleForm.containerName = generateUniqueLifecycleContainerName(existingNames);
+    }
+  }
+  await skf.checkPIN(`${lifecycleForm.provider}/${lifecycleForm.device}/${lifecycleForm.appName}`, lifecycleForm.pin);
+  const p10Res = await withTimeout(
+    skf.createPKCS10(lifecycleForm.provider, lifecycleForm.device, lifecycleForm.appName, subject, 'SM2', 256, lifecycleForm.containerName),
+    30000,
+    timeoutMessage
+  );
+  return pemToBase64(p10Res.pem);
+}
+
+async function cleanupUnusedLifecycleContainer() {
+  if (
+    !usesLifecycleNewContainer.value ||
+    !lifecycleForm.provider ||
+    !lifecycleForm.device ||
+    !lifecycleForm.appName ||
+    !lifecycleForm.containerName
+  ) {
+    return;
+  }
+  try {
+    const skf = await getSkfClient();
+    const containers = await skf.enumContainer(lifecycleForm.provider, lifecycleForm.device, lifecycleForm.appName);
+    if (Array.isArray(containers) && containers.includes(lifecycleForm.containerName)) {
+      await skf.deleteContainer(lifecycleForm.provider, lifecycleForm.device, lifecycleForm.appName, lifecycleForm.containerName);
+    }
+  } catch (_) {
+    // 清理失败不覆盖原始业务错误，下一次提交会自动换用新容器。
+  }
+}
+
+async function writeLifecycleCertToUsbKey(certPem: string, isSigning: boolean, target?: UsbKeyCertTarget) {
+  const skf = await getSkfClient();
+  const { pin } = lifecycleForm;
+  const { provider, device, appName, containerName } = target || lifecycleForm;
   const appPath = `${provider}/${device}/${appName}`;
   await skf.checkPIN(appPath, pin);
   // 续期复用原密钥对，新证书公钥与容器内密钥匹配，直接导入覆盖旧证书
   await skf.importCertificate(provider, device, appName, containerName, isSigning, certPem);
+}
+
+async function importLifecycleEncryptionKeyPair(encryptedPrivateKey: string, target?: UsbKeyCertTarget) {
+  if (!encryptedPrivateKey) {
+    throw new Error('KMC未返回可写入 USBKey 的加密私钥材料');
+  }
+  const skf = await getSkfClient();
+  const { pin } = lifecycleForm;
+  const { provider, device, appName, containerName } = target || lifecycleForm;
+  await skf.checkPIN(`${provider}/${device}/${appName}`, pin);
+  await withTimeout(skf.importKeyPair(provider, device, appName, containerName, 'SM2', encryptedPrivateKey, ''), 30000, '写入 KMC 加密密钥对超时');
+}
+
+async function verifyLifecycleDualUsbKeyInstall(signCert: string, encryptionCert: string, target?: UsbKeyCertTarget) {
+  const skf = await getSkfClient();
+  const expectedTarget = target || lifecycleForm;
+  const certs = await skf.findCertificates('');
+  const signTarget = findUsbKeyCertTarget(certs, signCert, 'Sign');
+  const encryptionTarget = findUsbKeyCertTarget(certs, encryptionCert, 'Enc');
+  const isExpectedTarget = (actual: UsbKeyCertTarget | null) =>
+    !!actual &&
+    actual.provider === expectedTarget.provider &&
+    actual.device === expectedTarget.device &&
+    actual.appName === expectedTarget.appName &&
+    actual.containerName === expectedTarget.containerName;
+  if (!isExpectedTarget(signTarget) || !isExpectedTarget(encryptionTarget)) {
+    throw new Error('USBKey 写入校验失败，未在目标容器中找到完整双证书');
+  }
+}
+
+function base64ToHex(value: string) {
+  return Array.from(atob(value), (char) => char.charCodeAt(0).toString(16).padStart(2, '0')).join('');
+}
+
+function hexToBase64(value: string) {
+  let binary = '';
+  for (let index = 0; index < value.length; index += 2) {
+    binary += String.fromCharCode(parseInt(value.slice(index, index + 2), 16));
+  }
+  return btoa(binary);
+}
+
+function sm2CertificatePublicKeyBlob(certPem: string) {
+  const publicKeyInfo = (X509 as any).getPublicKeyInfoPropOfCertPEM(certPem);
+  const pointHex = String(publicKeyInfo?.keyhex || '').toLowerCase();
+  if (!pointHex.startsWith('04') || pointHex.length !== 130) {
+    throw new Error('无法从新证书解析 SM2 公钥');
+  }
+  const x = pointHex.slice(2, 66).padStart(128, '0');
+  const y = pointHex.slice(66).padStart(128, '0');
+  return hexToBase64(`00010000${x}${y}`);
+}
+
+function sm2SignatureBlob(signatureDerBase64: string) {
+  const signatureHex = base64ToHex(signatureDerBase64);
+  const normalizeInteger = (value: string) => value.replace(/^00+/, '').padStart(128, '0');
+  const r = normalizeInteger(ASN1HEX.getVbyList(signatureHex, 0, [0], '02'));
+  const s = normalizeInteger(ASN1HEX.getVbyList(signatureHex, 0, [1], '02'));
+  if (r.length !== 128 || s.length !== 128) {
+    throw new Error('USBKey 返回的 SM2 签名格式无效');
+  }
+  return hexToBase64(`${r}${s}`);
+}
+
+async function verifyLifecycleSingleUsbKeyInstall(certPem: string, isSigning: boolean) {
+  const skf = await getSkfClient();
+  const certs = await skf.findCertificates('');
+  const certRecord = findUsbKeyCertRecord(certs, certPem, isSigning ? 'Sign' : 'Enc');
+  const actualTarget = certRecord ? parseUsbKeyCertTarget(certRecord) : null;
+  const expectedTarget: UsbKeyCertTarget = lifecycleForm;
+  if (
+    !actualTarget ||
+    actualTarget.provider !== expectedTarget.provider ||
+    actualTarget.device !== expectedTarget.device ||
+    actualTarget.appName !== expectedTarget.appName ||
+    actualTarget.containerName !== expectedTarget.containerName
+  ) {
+    throw new Error('USBKey 写入校验失败，未在新容器中找到更新后的证书');
+  }
+
+  const dataBase64 = btoa('liuzx-ca-usbkey-update-verify');
+  const digest = await skf.digest(expectedTarget.provider, expectedTarget.device, dataBase64, 'SM3');
+  if (!digest?.base64) {
+    throw new Error('USBKey SM3 摘要计算失败');
+  }
+  const signatureDerBase64 = await skf.signData(certRecord.key, digest.base64);
+  const verified = await skf.eccVerify(
+    expectedTarget.provider,
+    expectedTarget.device,
+    sm2CertificatePublicKeyBlob(certPem),
+    digest.base64,
+    sm2SignatureBlob(signatureDerBase64)
+  );
+  if (!verified) {
+    throw new Error('USBKey 私钥签名校验失败，新证书与容器密钥不匹配');
+  }
 }
 
 function submitLifecycle() {
@@ -2592,9 +3306,13 @@ function submitLifecycle() {
     securityConfirm.action = `${lifecycleTitle.value} (序列号: ${lifecycleRow.value.serialNumber || lifecycleRow.value.id})`;
     securityConfirm.onConfirm = async () => {
       lifecycleLoading.value = true;
+      let caOperationCompleted = false;
+      let lifecycleContainerCreated = false;
       try {
         const certId = lifecycleRow.value.id;
         const isUpdate = lifecycleAction.value === 'update' || lifecycleAction.value === 'update-dual';
+        const isReissue = lifecycleAction.value === 'reissue' || lifecycleAction.value === 'reissue-dual';
+        const isRenew = lifecycleAction.value === 'renew' || lifecycleAction.value === 'renew-dual';
         const isDual = lifecycleAction.value?.endsWith('-dual');
         const useUsbOutput = lifecycleOutputMode.value === 'usbkey';
         const encCertId = getLifecycleEncCertId() || lifecycleForm.encCertId;
@@ -2604,31 +3322,36 @@ function submitLifecycle() {
           throw new Error('双证书操作缺少配对加密证书ID，请刷新后重试');
         }
 
+        let renewalTargets: { signing?: UsbKeyCertTarget; encryption?: UsbKeyCertTarget } = {};
+        if (isRenew && useUsbOutput) {
+          renewalTargets = await resolveLifecycleRenewalTargets(false);
+        }
+
         let signCsrBase64: string | undefined;
         if (isUpdate) {
           if (useUsbOutput) {
-            if (!lifecycleForm.provider || !lifecycleForm.device || !lifecycleForm.appName || !lifecycleForm.pin) {
-              throw new Error('请先完善 USB Key 信息');
-            }
             if (!subject) {
               throw new Error('请先填写新主题');
             }
-            const skf = await getSkfClient();
-            await skf.checkPIN(`${lifecycleForm.provider}/${lifecycleForm.device}/${lifecycleForm.appName}`, lifecycleForm.pin);
-            const p10Res = await withTimeout(
-              skf.createPKCS10(lifecycleForm.provider, lifecycleForm.device, lifecycleForm.appName, subject, 'SM2', 256, lifecycleForm.containerName),
-              30000,
-              '生成更新 CSR 超时'
-            );
-            signCsrBase64 = pemToBase64(p10Res.pem);
+            signCsrBase64 = await generateLifecycleUsbKeyCsr(subject, '生成更新 CSR 超时');
+            lifecycleContainerCreated = usesLifecycleNewContainer.value;
           } else {
             signCsrBase64 = lifecycleForm.csr ? pemToBase64(lifecycleForm.csr) : undefined;
             if (!signCsrBase64) {
               throw new Error('请输入新CSR');
             }
           }
-        } else if ((lifecycleAction.value === 'reissue' || lifecycleAction.value === 'reissue-dual') && lifecycleForm.csr) {
-          signCsrBase64 = pemToBase64(lifecycleForm.csr);
+        } else if (isReissue) {
+          if (useUsbOutput) {
+            const oldSubject = getLifecycleOldSubject();
+            signCsrBase64 = await generateLifecycleUsbKeyCsr(oldSubject, '生成补办 CSR 超时');
+            lifecycleContainerCreated = usesLifecycleNewContainer.value;
+          } else if (lifecycleForm.csr) {
+            signCsrBase64 = pemToBase64(lifecycleForm.csr);
+          }
+          if (lifecycleAction.value === 'reissue-dual' && !signCsrBase64) {
+            throw new Error('双证书补办必须提供由新签名密钥生成的CSR');
+          }
         }
 
         let res: any;
@@ -2645,12 +3368,13 @@ function submitLifecycle() {
             })
           );
         } else if (lifecycleAction.value === 'reissue') {
-          res = await reissueCert(compactLifecyclePayload({ certId, csrBase64: pemToBase64(lifecycleForm.csr), reason: lifecycleForm.reason }));
+          res = await reissueCert(compactLifecyclePayload({ certId, csrBase64: signCsrBase64, reason: lifecycleForm.reason }));
         } else if (lifecycleAction.value === 'renew-dual') {
           res = await renewDualCert(
             compactLifecyclePayload({
               signCertId: certId,
               encCertId,
+              storageType: isPostQuantumLifecycle.value ? 'FILE' : lifecycleOutputMode.value === 'usbkey' ? 'USB_KEY' : 'FILE',
               notBefore: lifecycleForm.notBefore,
               notAfter: lifecycleForm.notAfter
             })
@@ -2662,7 +3386,9 @@ function submitLifecycle() {
               encCertId,
               subject: subject || undefined,
               signCsrBase64,
-              encCsrBase64: lifecycleForm.encCsr ? pemToBase64(lifecycleForm.encCsr) : undefined,
+              encCsrBase64: !isPostQuantumLifecycle.value && lifecycleForm.encCsr ? pemToBase64(lifecycleForm.encCsr) : undefined,
+              keyGenStrategy: isPostQuantumLifecycle.value || (useUsbOutput && !lifecycleForm.encCsr) ? 'KMC' : undefined,
+              storageType: isPostQuantumLifecycle.value ? 'FILE' : useUsbOutput ? 'USB_KEY' : 'FILE',
               notBefore: lifecycleForm.notBefore,
               notAfter: lifecycleForm.notAfter
             })
@@ -2673,13 +3399,16 @@ function submitLifecycle() {
               signCertId: certId,
               encCertId,
               signCsrBase64,
-              encCsrBase64: lifecycleForm.encCsr ? pemToBase64(lifecycleForm.encCsr) : undefined,
+              encCsrBase64: !isPostQuantumLifecycle.value && lifecycleForm.encCsr ? pemToBase64(lifecycleForm.encCsr) : undefined,
+              keyGenStrategy: !lifecycleForm.encCsr ? 'KMC' : undefined,
+              storageType: isPostQuantumLifecycle.value ? 'FILE' : useUsbOutput ? 'USB_KEY' : 'FILE',
               reason: lifecycleForm.reason
             })
           );
         } else {
           res = await recoverKey(compactLifecyclePayload({ certId, authCode: lifecycleForm.authCode }));
         }
+        caOperationCompleted = true;
         // 根据证书存储方式处理结果
         const data = res?.data;
         if (!data) {
@@ -2688,13 +3417,28 @@ function submitLifecycle() {
         if (data?.cert) {
           if (lifecycleOutputMode.value === 'usbkey' && lifecycleAction.value !== 'recover') {
             // USB Key 写入
-            await refreshLifecycleCertProviders();
-            if (lifecycleCertProviders.value.length === 0) {
-              throw new Error('未检测到 USB Key 设备，无法写入证书');
+            if (!isRenew) {
+              await refreshLifecycleCertProviders();
+              if (lifecycleCertProviders.value.length === 0) {
+                throw new Error('未检测到 USB Key 设备，无法写入证书');
+              }
             }
-            await writeLifecycleCertToUsbKey(data.cert, true);
+            if (lifecycleAction.value === 'update-dual' || lifecycleAction.value === 'reissue-dual') {
+              await importLifecycleEncryptionKeyPair(data.encryptionPrivateKey);
+            }
+            const primaryIsSigning = !isEncryptionCertificate(lifecycleRow.value);
+            await writeLifecycleCertToUsbKey(data.cert, primaryIsSigning, isRenew ? renewalTargets.signing : undefined);
+            if (lifecycleAction.value === 'update') {
+              await verifyLifecycleSingleUsbKeyInstall(data.cert, primaryIsSigning);
+            }
             if (isDual && data.encryptionCert) {
-              await writeLifecycleCertToUsbKey(data.encryptionCert, false);
+              await writeLifecycleCertToUsbKey(data.encryptionCert, false, isRenew ? renewalTargets.encryption : undefined);
+            }
+            if (lifecycleAction.value === 'update-dual' || lifecycleAction.value === 'reissue-dual') {
+              if (!data.encryptionCert) {
+                throw new Error('CA未返回更新后的加密证书');
+              }
+              await verifyLifecycleDualUsbKeyInstall(data.cert, data.encryptionCert);
             }
             ElMessage.success('操作成功，证书已写入 USB Key');
           } else if (lifecycleOutputMode.value !== 'usbkey' && lifecycleAction.value !== 'recover') {
@@ -2722,7 +3466,14 @@ function submitLifecycle() {
         });
         getList();
       } catch (e: any) {
-        ElMessage.error('操作失败: ' + (e?.message || ''));
+        if (lifecycleContainerCreated && !caOperationCompleted && lifecycleOutputMode.value === 'usbkey') {
+          await cleanupUnusedLifecycleContainer();
+        }
+        if (caOperationCompleted && lifecycleOutputMode.value === 'usbkey') {
+          ElMessage.error('CA 操作已成功，但 USBKey 安装未完整完成: ' + (e?.message || '未知错误'));
+        } else {
+          ElMessage.error('操作失败: ' + (e?.message || ''));
+        }
       } finally {
         lifecycleLoading.value = false;
       }
@@ -2742,7 +3493,7 @@ function handleDelete(row: any) {
 }
 async function handleExport() {
   try {
-    const res = await exportCert(ids.value);
+    const res = await exportCert({ ids: ids.value });
     const link = document.createElement('a');
     link.href = window.URL.createObjectURL(new Blob([res]));
     link.download = `certs_${Date.now()}.zip`;
@@ -2762,16 +3513,21 @@ function parseCertInfo(certPem: string) {
     const serialNumber = x509.getSerialNumberHex();
     let sigAlg = x509.getSignatureAlgorithmName() || '-';
     let keyType = '-';
-    // 提取公钥算法 OID
+    // 提取 SubjectPublicKeyInfo 的算法和曲线 OID。
     try {
-      const ASN1HEX = (window as any).ASN1HEX || (x509 as any).constructor?.ASN1HEX;
-      let oidHex = '';
-      try { oidHex = (x509 as any).hex ? (window as any).ASN1HEX?.getVbyList((x509 as any).hex, 0, [0, 6, 0, 0]) : ''; } catch (e) {}
-      if (!oidHex) {
-        try { oidHex = (window as any).ASN1HEX?.getVbyList((x509 as any).hex, 0, [0, 5, 0, 0]); } catch (e) {}
-      }
-      if (oidHex) {
-        const oid = (window as any).ASN1HEX?.hextooidstr(oidHex) || '';
+      const getOid = (path: number[]) => {
+        try {
+          const oidHex = ASN1HEX.getVbyList((x509 as any).hex, 0, path);
+          return oidHex ? ASN1HEX.hextooidstr(oidHex) : '';
+        } catch (e) {
+          return '';
+        }
+      };
+      const publicKeyOid = getOid([0, 6, 0, 0]) || getOid([0, 5, 0, 0]);
+      const curveOid = getOid([0, 6, 0, 1]) || getOid([0, 5, 0, 1]);
+      if (curveOid === '1.2.156.10197.1.301') {
+        keyType = 'SM2';
+      } else if (publicKeyOid) {
         const algMap: Record<string, string> = {
           '1.2.156.10197.1.301': 'SM2',
           '1.2.840.10045.2.1': 'ECC',
@@ -2779,10 +3535,13 @@ function parseCertInfo(certPem: string) {
           '2.16.840.1.101.3.4.3.17': 'ML-DSA-44',
           '2.16.840.1.101.3.4.3.18': 'ML-DSA-65',
           '2.16.840.1.101.3.4.3.19': 'ML-DSA-87',
+          '2.16.840.1.101.3.4.4.1': 'ML-KEM-512',
+          '2.16.840.1.101.3.4.4.2': 'ML-KEM-768',
+          '2.16.840.1.101.3.4.4.3': 'ML-KEM-1024',
           '1.3.101.112': 'Ed25519',
           '1.3.101.113': 'Ed448'
         };
-        keyType = algMap[oid] || oid;
+        keyType = algMap[publicKeyOid] || publicKeyOid;
       }
     } catch (e) {}
     if (keyType === '-') {
@@ -2803,6 +3562,9 @@ function parseCertInfo(certPem: string) {
       '2.16.840.1.101.3.4.3.19': 'ML-DSA-87'
     };
     sigAlg = sigAlgMap[sigAlg] || sigAlg.replace(/_/g, '');
+    if (keyType === '-' && /SM2|SM3|1\.2\.156\.10197/i.test(sigAlg)) {
+      keyType = 'SM2';
+    }
     return {
       issuer,
       subject,
@@ -2995,6 +3757,11 @@ onMounted(async () => {
   padding-left: 16px;
 }
 
+.renewal-usb-targets {
+  min-height: 44px;
+  margin-bottom: 16px;
+}
+
 .usb-title {
   display: inline-flex;
   align-items: center;
@@ -3130,6 +3897,18 @@ onMounted(async () => {
   border-bottom: 1px solid var(--el-border-color-lighter);
   &:last-child {
     border-bottom: 0;
+  }
+}
+
+.generic-ext-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  & > .el-input,
+  & > .el-textarea {
+    flex: 1;
+    min-width: 200px;
   }
 }
 

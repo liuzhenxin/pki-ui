@@ -39,11 +39,10 @@
 
     <el-table v-loading="loading" :data="userList" @selection-change="handleSelectionChange">
       <el-table-column type="selection" width="50" align="center" />
-      <el-table-column label="用户编号" align="center" key="id" prop="id" v-if="columns[0].visible" />
-      <el-table-column label="用户名称" align="center" key="username" prop="username" v-if="columns[1].visible" :show-overflow-tooltip="true" />
-      <el-table-column label="邮箱" align="center" key="mail" prop="mail" v-if="columns[2].visible" :show-overflow-tooltip="true" />
-      <el-table-column label="手机号码" align="center" key="mobile" prop="mobile" v-if="columns[3].visible" width="120" />
-      <el-table-column label="状态" align="center" key="status" v-if="columns[4].visible">
+      <el-table-column label="用户名称" align="center" key="username" prop="username" v-if="columns[0].visible" :show-overflow-tooltip="true" />
+      <el-table-column label="邮箱" align="center" key="mail" prop="mail" v-if="columns[1].visible" :show-overflow-tooltip="true" />
+      <el-table-column label="手机号码" align="center" key="mobile" prop="mobile" v-if="columns[2].visible" width="120" />
+      <el-table-column label="状态" align="center" key="status" v-if="columns[3].visible">
         <template #default="scope">
           <el-switch
             v-model="scope.row.status"
@@ -53,7 +52,7 @@
           ></el-switch>
         </template>
       </el-table-column>
-      <el-table-column label="创建时间" align="center" prop="createTime" v-if="columns[5].visible" width="160">
+      <el-table-column label="创建时间" align="center" prop="createTime" v-if="columns[4].visible" width="160">
         <template #default="scope">
           <span>{{ parseTime(scope.row.createTime) }}</span>
         </template>
@@ -279,12 +278,11 @@ const upload = reactive({
 });
 
 const columns = ref([
-  { key: 0, label: `用户编号`, visible: true },
-  { key: 1, label: `用户名称`, visible: true },
-  { key: 2, label: `邮箱`, visible: true },
-  { key: 3, label: `手机号码`, visible: true },
-  { key: 4, label: `状态`, visible: true },
-  { key: 5, label: `创建时间`, visible: true }
+  { key: 0, label: `用户名称`, visible: true },
+  { key: 1, label: `邮箱`, visible: true },
+  { key: 2, label: `手机号码`, visible: true },
+  { key: 3, label: `状态`, visible: true },
+  { key: 4, label: `创建时间`, visible: true }
 ]);
 
 const data = reactive<{

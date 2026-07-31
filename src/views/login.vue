@@ -102,6 +102,20 @@
                 <template #prefix><svg-icon icon-class="password" class="el-input__icon input-icon" /></template>
               </el-input>
             </el-form-item>
+            <el-form-item v-if="radiusRequired" prop="radiusPassword">
+              <el-input
+                v-model="loginForm.radiusPassword"
+                type="password"
+                size="large"
+                auto-complete="one-time-code"
+                show-password
+                :placeholder="`RADIUS ${radiusAuthMethod} 动态口令`"
+                aria-label="RADIUS 动态口令"
+                @keyup.enter="handleLogin"
+              >
+                <template #prefix><svg-icon icon-class="lock" class="el-input__icon input-icon" /></template>
+              </el-input>
+            </el-form-item>
             <el-form-item v-if="captchaEnabled" prop="code" class="code-form-item">
               <el-input
                 v-model="loginForm.code"
@@ -213,6 +227,7 @@ import { to } from 'await-to-js';
 import { HttpStatus } from '@/enums/RespEnum';
 import { useI18n } from 'vue-i18n';
 import { v4 as uuidv4 } from 'uuid';
+import { getRadiusStatus } from '@/api/ops';
 
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
 
@@ -227,6 +242,7 @@ const loginForm = ref<LoginData>({
   tenantCode: localStorage.getItem('tenantCode') || '',
   username: localStorage.getItem('username') || 'admin',
   password: '',
+  radiusPassword: '',
   rememberMe: localStorage.getItem('rememberMe') === 'true',
   code: '',
   uuid: ''
@@ -237,6 +253,7 @@ const loginData = ref<LoginData>({
   tenantCode: '',
   username: '',
   password: '',
+  radiusPassword: '',
   rememberMe: false,
   code: '',
   uuid: ''
@@ -246,6 +263,7 @@ const loginRules: ElFormRules = {
   tenantId: [{ required: true, trigger: 'blur', message: t('login.rule.tenantId.required') }],
   username: [{ required: true, trigger: 'blur', message: t('login.rule.username.required') }],
   password: [{ required: true, trigger: 'blur', message: t('login.rule.password.required') }],
+  radiusPassword: [{ required: true, trigger: 'blur', message: '请输入 RADIUS 动态口令' }],
   code: [{ required: true, trigger: 'change', message: t('login.rule.code.required') }]
 };
 
@@ -267,6 +285,8 @@ const loginRef = ref<ElFormInstance>();
 const secretKey = ref('');
 const loginTitle = ref(proxy.$t('login.title'));
 const authMode = ref<'password' | 'certificate'>('password');
+const radiusRequired = ref(false);
+const radiusAuthMethod = ref<'PAP' | 'CHAP'>('PAP');
 
 watch(
   () => router.currentRoute.value,
@@ -369,6 +389,9 @@ const isPkiTenant = (item: any) => {
 };
 
 const getTenantAppTitle = (tenantName: string, tenantId: string) => {
+  if (tenantId === '1') {
+    return `${tenantName} (平台运维中心)`;
+  }
   if (tenantId === '2') {
     return `${tenantName} (License授权系统)`;
   }
@@ -416,6 +439,7 @@ const initTenantList = async () => {
       // 初始化标题
       if (loginForm.value.tenantId) {
         getTenantInfo(loginForm.value.tenantId);
+        refreshRadiusStatus(loginForm.value.tenantCode);
       }
     }
   } catch (error) {
@@ -431,6 +455,21 @@ const handleTenantChange = (val: string) => {
     localStorage.setItem('tenantId', String(tenant.tenantId));
     localStorage.setItem('tenantCode', String(tenant.tenantCode));
     getTenantInfo(val);
+    refreshRadiusStatus(tenant.tenantCode);
+  }
+};
+
+const refreshRadiusStatus = async (tenantCode?: string) => {
+  try {
+    const response = await getRadiusStatus(tenantCode);
+    radiusRequired.value = Boolean(response.data?.enabled);
+    radiusAuthMethod.value = response.data?.authMethod || 'PAP';
+    if (!radiusRequired.value) {
+      loginForm.value.radiusPassword = '';
+    }
+  } catch (error) {
+    radiusRequired.value = false;
+    console.error('获取 RADIUS 状态失败:', error);
   }
 };
 
@@ -500,10 +539,12 @@ onMounted(() => {
   content: '';
   pointer-events: none;
   background-image:
-    linear-gradient(rgba(224, 242, 254, 0.18) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(224, 242, 254, 0.18) 1px, transparent 1px),
+    linear-gradient(rgba(224, 242, 254, 0.18) 1px, transparent 1px), linear-gradient(90deg, rgba(224, 242, 254, 0.18) 1px, transparent 1px),
     linear-gradient(135deg, transparent 0 48%, rgba(125, 211, 252, 0.22) 49%, transparent 50%);
-  background-size: 56px 56px, 56px 56px, 180px 180px;
+  background-size:
+    56px 56px,
+    56px 56px,
+    180px 180px;
   mask-image: linear-gradient(90deg, rgba(0, 0, 0, 0.72), transparent 88%);
 }
 
@@ -537,10 +578,14 @@ onMounted(() => {
   border-radius: 8px;
   background:
     linear-gradient(135deg, rgba(255, 255, 255, 0.84), rgba(191, 244, 255, 0.2) 54%, rgba(13, 148, 136, 0.18)),
-    linear-gradient(90deg, rgba(14, 116, 144, 0.16) 1px, transparent 1px),
-    linear-gradient(rgba(14, 116, 144, 0.14) 1px, transparent 1px);
-  background-size: auto, 18px 18px, 18px 18px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.74), inset 0 0 42px rgba(34, 211, 238, 0.16);
+    linear-gradient(90deg, rgba(14, 116, 144, 0.16) 1px, transparent 1px), linear-gradient(rgba(14, 116, 144, 0.14) 1px, transparent 1px);
+  background-size:
+    auto,
+    18px 18px,
+    18px 18px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.74),
+    inset 0 0 42px rgba(34, 211, 238, 0.16);
 }
 
 .cert-visual::before {
@@ -568,7 +613,9 @@ onMounted(() => {
   background:
     radial-gradient(circle, rgba(255, 255, 255, 0.9) 0 27%, transparent 28%),
     repeating-conic-gradient(from 10deg, rgba(15, 118, 110, 0.8) 0 10deg, rgba(45, 212, 191, 0.35) 10deg 20deg);
-  box-shadow: 0 0 0 8px rgba(45, 212, 191, 0.12), 0 0 26px rgba(34, 211, 238, 0.42);
+  box-shadow:
+    0 0 0 8px rgba(45, 212, 191, 0.12),
+    0 0 26px rgba(34, 211, 238, 0.42);
 }
 
 .cert-visual i,
@@ -647,7 +694,9 @@ onMounted(() => {
   content: '';
   border: 11px solid rgba(191, 244, 255, 0.62);
   border-radius: 50%;
-  box-shadow: inset 0 0 28px rgba(34, 211, 238, 0.2), 0 0 24px rgba(34, 211, 238, 0.22);
+  box-shadow:
+    inset 0 0 28px rgba(34, 211, 238, 0.2),
+    0 0 24px rgba(34, 211, 238, 0.22);
 }
 
 .key-visual::after {
@@ -760,7 +809,9 @@ onMounted(() => {
   height: 7px;
   border-radius: 50%;
   background: #67e8f9;
-  box-shadow: 0 0 0 7px rgba(103, 232, 249, 0.1), 0 0 34px rgba(103, 232, 249, 0.7);
+  box-shadow:
+    0 0 0 7px rgba(103, 232, 249, 0.1),
+    0 0 34px rgba(103, 232, 249, 0.7);
 }
 
 .field-node::before,
@@ -889,7 +940,11 @@ onMounted(() => {
   background: transparent;
   font-size: 14px;
   font-weight: 700;
-  transition: color 0.18s ease, background-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+  transition:
+    color 0.18s ease,
+    background-color 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.18s ease;
 }
 
 .auth-mode-button .svg-icon {
@@ -907,7 +962,9 @@ onMounted(() => {
 .auth-mode-button.active {
   color: #0f766e;
   background: #ffffff;
-  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.08), 0 0 0 1px rgba(15, 118, 110, 0.16) inset;
+  box-shadow:
+    0 8px 22px rgba(15, 23, 42, 0.08),
+    0 0 0 1px rgba(15, 118, 110, 0.16) inset;
 }
 
 .auth-mode-button:active {
@@ -924,8 +981,13 @@ onMounted(() => {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(239, 252, 255, 0.9)),
     linear-gradient(90deg, rgba(14, 165, 233, 0.08) 1px, transparent 1px);
-  background-size: auto, 24px 24px;
-  box-shadow: 0 28px 80px rgba(15, 23, 42, 0.3), 0 0 0 1px rgba(45, 212, 191, 0.08), 0 0 46px rgba(14, 165, 233, 0.18);
+  background-size:
+    auto,
+    24px 24px;
+  box-shadow:
+    0 28px 80px rgba(15, 23, 42, 0.3),
+    0 0 0 1px rgba(45, 212, 191, 0.08),
+    0 0 46px rgba(14, 165, 233, 0.18);
   backdrop-filter: blur(20px);
 
   &::before {
@@ -949,9 +1011,7 @@ onMounted(() => {
     pointer-events: none;
     border-right: 1px solid rgba(14, 116, 144, 0.2);
     border-bottom: 1px solid rgba(14, 116, 144, 0.2);
-    background:
-      linear-gradient(90deg, rgba(14, 116, 144, 0.18) 1px, transparent 1px),
-      linear-gradient(rgba(14, 116, 144, 0.18) 1px, transparent 1px);
+    background: linear-gradient(90deg, rgba(14, 116, 144, 0.18) 1px, transparent 1px), linear-gradient(rgba(14, 116, 144, 0.18) 1px, transparent 1px);
     background-size: 12px 12px;
     opacity: 0.55;
   }
@@ -975,7 +1035,9 @@ onMounted(() => {
     border-radius: 8px;
     background: rgba(255, 255, 255, 0.78);
     box-shadow: 0 0 0 1px #c5d7e7 inset;
-    transition: box-shadow 0.18s ease, background-color 0.18s ease;
+    transition:
+      box-shadow 0.18s ease,
+      background-color 0.18s ease;
   }
 
   :deep(.el-input__wrapper:hover),
@@ -985,7 +1047,9 @@ onMounted(() => {
 
   :deep(.el-input__wrapper.is-focus),
   :deep(.el-select__wrapper.is-focused) {
-    box-shadow: 0 0 0 1px #0f766e inset, 0 0 0 4px rgba(15, 118, 110, 0.12);
+    box-shadow:
+      0 0 0 1px #0f766e inset,
+      0 0 0 4px rgba(15, 118, 110, 0.12);
   }
 
   .input-icon {
@@ -1012,7 +1076,10 @@ onMounted(() => {
   background: #f8fafc;
   border: 1px solid #d7dee8;
   border-radius: 8px;
-  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.18s ease;
 
   img {
     vertical-align: middle;
@@ -1075,9 +1142,10 @@ onMounted(() => {
   border: 1px solid rgba(45, 212, 191, 0.28);
   border-radius: 8px;
   background:
-    linear-gradient(135deg, rgba(236, 253, 245, 0.9), rgba(240, 249, 255, 0.78)),
-    linear-gradient(90deg, rgba(14, 116, 144, 0.1) 1px, transparent 1px);
-  background-size: auto, 18px 18px;
+    linear-gradient(135deg, rgba(236, 253, 245, 0.9), rgba(240, 249, 255, 0.78)), linear-gradient(90deg, rgba(14, 116, 144, 0.1) 1px, transparent 1px);
+  background-size:
+    auto,
+    18px 18px;
 }
 
 .cert-reader-icon {
@@ -1200,15 +1268,22 @@ onMounted(() => {
   border: none;
   border-radius: 8px;
   background: linear-gradient(135deg, #0891b2 0%, #0f766e 54%, #0f172a 100%);
-  box-shadow: 0 14px 34px rgba(8, 145, 178, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  box-shadow:
+    0 14px 34px rgba(8, 145, 178, 0.34),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22);
   font-weight: 700;
-  transition: transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease;
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    filter 0.18s ease;
 }
 
 .login-button:hover,
 .login-button:focus {
   filter: brightness(1.05);
-  box-shadow: 0 18px 38px rgba(8, 145, 178, 0.42), 0 0 24px rgba(20, 184, 166, 0.2);
+  box-shadow:
+    0 18px 38px rgba(8, 145, 178, 0.42),
+    0 0 24px rgba(20, 184, 166, 0.2);
 }
 
 .login-button:active {

@@ -96,7 +96,7 @@
         <el-form-item label="签发类型" prop="certMode">
           <el-radio-group v-model="form.certMode" @change="handleCertModeChange">
             <el-radio-button label="single">单证书</el-radio-button>
-            <el-radio-button label="dual" :disabled="!isSm2Root">双证书</el-radio-button>
+            <el-radio-button label="dual" :disabled="!supportsDualRoot">双证书</el-radio-button>
           </el-radio-group>
         </el-form-item>
         <el-form-item v-if="form.certMode !== 'dual'" label="证书模板" prop="profileId">
@@ -313,7 +313,10 @@ const selectedRoot = computed<RaUserCertScopeRoot | undefined>(() => {
   return rootOptions.value.find((root) => String(root.id) === rootId);
 });
 
-const isSm2Root = computed(() => (selectedRoot.value?.algorithm || form.rootAlgorithm || '').toUpperCase() === 'SM2');
+const supportsDualRoot = computed(() => {
+  const algorithm = (selectedRoot.value?.algorithm || form.rootAlgorithm || '').toUpperCase();
+  return dualProfileOptions.value.length > 0 || algorithm === 'SM2' || algorithm.includes('ML-DSA') || algorithm.includes('MLDSA');
+});
 
 const profileOptions = computed<RaUserCertScopeProfile[]>(() => {
   const rootId = form.rootId === undefined ? undefined : String(form.rootId);
@@ -519,7 +522,8 @@ function handleRootChange(rootId?: string | number) {
   const root = rootOptions.value.find((item) => String(item.id) === String(rootId));
   form.rootName = root?.name;
   form.rootAlgorithm = root?.algorithm;
-  if ((root?.algorithm || '').toUpperCase() !== 'SM2') {
+  const algorithm = (root?.algorithm || '').toUpperCase();
+  if (algorithm !== 'SM2' && !algorithm.includes('ML-DSA') && !algorithm.includes('MLDSA')) {
     form.certMode = 'single';
   }
   clearProfiles();

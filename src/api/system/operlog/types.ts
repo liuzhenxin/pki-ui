@@ -4,7 +4,7 @@ export interface OperLogForm {
   moduleName?: string;
   methodName?: string;
   operator?: string;
-  ip?: string;
+  ipAddress?: string;
   address?: string;
   requestType?: string;
   uri?: string;

@@ -26,7 +26,6 @@
       <template #header>
         <div class="card-header">
           <span>三员审批记录</span>
-          <el-button type="primary" plain icon="Plus" v-hasPermi="['kmc:judge:save']" @click="handleAdd">新增</el-button>
         </div>
       </template>
       <el-table v-loading="loading" :data="rows" border>

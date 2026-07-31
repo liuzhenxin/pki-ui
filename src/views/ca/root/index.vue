@@ -351,7 +351,7 @@
     <el-drawer v-model="showRootCrlHelp" title="CRL配置说明" direction="rtl" size="520px">
       <div class="crl-help-content">
         <h4>签发调度</h4>
-        <p>CRL配置用于控制根CA吊销列表的周期签发。创建根CA后，可在根证书列表的“CRL配置”中维护同一组参数并启动签发线程。</p>
+        <p>CRL配置用于控制根CA注销列表的周期签发。创建根CA后，可在根证书列表的“CRL配置”中维护同一组参数并启动签发线程。</p>
         <ul>
           <li><strong>更新间隔(小时)：</strong>签发线程检查CRL的基础周期，单位为小时。</li>
           <li><strong>全量CRL间隔：</strong>每经过多少个更新间隔签发一次全量CRL。默认4，更新间隔为6小时时即每24小时发布一次。</li>
@@ -1999,13 +1999,13 @@ async function handleDisable(row: any) {
   } catch (error) {}
 }
 
-/** 吊销按钮操作 */
+/** 注销按钮操作 */
 async function handleRevoke(row: any) {
   try {
-    const { value: reason } = await proxy?.$modal.prompt('请输入吊销原因', '吊销根证书', {
+    const { value: reason } = await proxy?.$modal.prompt('请输入注销原因', '注销根证书', {
       confirmButtonText: '确定',
       cancelButtonText: '取消',
-      inputPlaceholder: '请输入吊销原因 (例如: keyCompromise, superseded)',
+      inputPlaceholder: '请输入注销原因 (例如: keyCompromise, superseded)',
       inputValidator: (val: string) => {
         if (!val) return '原因不能为空';
       }
@@ -2013,11 +2013,11 @@ async function handleRevoke(row: any) {
 
     if (reason) {
       // 触发安全确认
-      securityConfirm.action = `吊销根证书 "${row.name}" (原因: ${reason})`;
+      securityConfirm.action = `注销根证书 "${row.name}" (原因: ${reason})`;
       securityConfirm.onConfirm = async () => {
         try {
           await revokeRootCa(row.id, reason);
-          ElMessage.success('吊销成功');
+          ElMessage.success('注销成功');
           getList();
         } catch (error) {}
       };

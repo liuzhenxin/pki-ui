@@ -192,6 +192,18 @@ export default class SKFClient {
   }
 
   /**
+   * Create a container in a specific application.
+   * @param {string} provider Provider name
+   * @param {string} deviceName Device name
+   * @param {string} appName Application name
+   * @param {string} containerName Container name
+   * @returns {Promise<string|boolean>} Created container name or true if successful
+   */
+  async createContainer(provider, deviceName, appName, containerName) {
+    return this.call('CreateContainer', [provider, deviceName, appName, containerName]);
+  }
+
+  /**
    * Issue a certificate from a CSR (for testing).
    * @param {string} csr PEM or Base64 encoded PKCS#10 CSR
    * @param {boolean} [double=false] If true, generate double cert (sign + enc + ENVELOPEDKEYBLOB)
@@ -226,8 +238,8 @@ export default class SKFClient {
    * @param {string} [wrapKey=""] Base64 encoded wrap key (RSA only)
    * @returns {Promise<boolean>} Success status
    */
-  async importKeyPair(provider, deviceName, appName, containerName, alg, encKeyPair, wrapKey = '') {
-    return this.call('ImportKeyPair', [provider, deviceName, appName, containerName, alg, encKeyPair, wrapKey]);
+  async importKeyPair(provider, deviceName, appName, containerName, alg, encKeyPair, wrapKey = '', symmetricMode = 'ECB') {
+    return this.call('ImportKeyPair', [provider, deviceName, appName, containerName, alg, encKeyPair, wrapKey, symmetricMode]);
   }
 
   /**
@@ -276,6 +288,19 @@ export default class SKFClient {
    */
   async signData(certKey, dataBase64) {
     return this.call('SignData', [certKey, dataBase64]);
+  }
+
+  /**
+   * Verify an ECC/SM2 signature using the public key from a certificate.
+   * @param {string} providerName Provider name
+   * @param {string} deviceName Device name
+   * @param {string} pubKeyBase64 ECCPUBLICKEYBLOB (base64 encoded)
+   * @param {string} dataBase64 Original data (base64 encoded)
+   * @param {string} signatureBase64 ECCSIGNATUREBLOB (base64 encoded)
+   * @returns {Promise<boolean>} True if signature is valid
+   */
+  async eccVerify(providerName, deviceName, pubKeyBase64, dataBase64, signatureBase64) {
+    return this.call('ECCVerify', [providerName, deviceName, pubKeyBase64, dataBase64, signatureBase64]);
   }
 
   /**

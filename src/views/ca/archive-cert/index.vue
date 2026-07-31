@@ -10,7 +10,7 @@
       <el-form-item label="归档原因" prop="archiveReason">
         <el-select v-model="queryParams.archiveReason" placeholder="请选择归档原因" clearable style="width: 160px">
           <el-option label="已过期" value="EXPIRED" />
-          <el-option label="已吊销" value="REVOKED" />
+          <el-option label="已注销" value="REVOKED" />
         </el-select>
       </el-form-item>
       <el-form-item>
@@ -259,7 +259,7 @@ function getCertTypeLabel(certType?: string) {
 }
 
 function getArchiveReasonLabel(reason?: string) {
-  if (reason === 'REVOKED') return '已吊销';
+  if (reason === 'REVOKED') return '已注销';
   if (reason === 'EXPIRED') return '已过期';
   return reason || '-';
 }

@@ -1,7 +1,7 @@
 import request from '@/utils/request';
 
 export type KeyRecoveryTargetType = 'USED_KEY' | 'ARCHIVE_KEY';
-export type KeyRecoveryMediaType = 'FILE' | 'USB_KEY';
+export type KeyRecoveryMediaType = 'FILE' | 'USB_KEY' | 'KMC_SERVICE';
 
 export interface KeyRecoverySubmitPayload {
   targetType: KeyRecoveryTargetType;
@@ -42,6 +42,7 @@ export interface KeyRecoveryExecutePayload {
   containerName?: string;
   pin?: string;
   usbEncryptedKeyPairBase64?: string;
+  usbWrappingCsrBase64?: string;
   usbWrapKeyBase64?: string;
   usbSm4Mode?: string;
   certificate?: string;
@@ -118,6 +119,14 @@ export const submitKeyRecovery = (data: KeyRecoverySubmitPayload) => {
   });
 };
 
+export const submitDirectUsedKeyRecovery = (data: KeyRecoverySubmitPayload) => {
+  return request({
+    url: '/kmc/v1/key-recovery/submit-direct-used-key',
+    method: 'post',
+    data
+  });
+};
+
 export const approveKeyRecovery = (params: KeyRecoveryApproveParams) => {
   return request({
     url: '/kmc/v1/key-recovery/sign',
@@ -149,6 +158,14 @@ export const recoverKey = (data: KeyRecoveryExecutePayload) => {
   });
 };
 
+export const confirmKeyRecovery = (data: { judgeId: string | number; success: boolean; message?: string; operator?: string }) => {
+  return request({
+    url: '/kmc/v1/key-recovery/confirm',
+    method: 'post',
+    data
+  });
+};
+
 export const recoverArchiveKey = (archiveKeyId: string | number, judgeId: string | number) => {
   return recoverKey({
     judgeId,
@@ -169,5 +186,13 @@ export const getKeyRecoveryDetail = (judgeId: string | number) => {
   return request({
     url: `/kmc/v1/key-recovery/detail/${judgeId}`,
     method: 'get'
+  });
+};
+
+export const resolveUsedKeyByCertificate = (certificate: string) => {
+  return request({
+    url: '/kmc/v1/key-recovery/resolve-used-key',
+    method: 'post',
+    data: { certificate }
   });
 };

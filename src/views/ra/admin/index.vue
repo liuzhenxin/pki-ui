@@ -329,7 +329,15 @@
 </template>
 
 <script setup name="User" lang="ts">
-import { listUser, getUser, delUser, updateUser, resetUserPwd, changeStatus, addUser } from '@/api/ra/user';
+import {
+  listAdminUser as listUser,
+  getAdminUser as getUser,
+  delAdminUser as delUser,
+  updateAdminUser as updateUser,
+  resetAdminUserPwd as resetUserPwd,
+  changeAdminUserStatus as changeStatus,
+  addAdminUser as addUser
+} from '@/api/ra/adminUser';
 import { getToken } from '@/utils/auth';
 import { UserForm, UserQuery, UserVO } from '@/api/system/user/types';
 import { FormInstance, FormRules } from 'element-plus';
@@ -548,7 +556,16 @@ function handleCertRootChange() {
 
 async function loadDeptOptions() {
   const res = await listDeptSelectTree({});
-  deptOptions.value = (res.data || []) as RaDeptTreeOption[];
+  deptOptions.value = normalizeDeptTree((res.data || []) as RaDeptTreeOption[]);
+}
+
+function normalizeDeptTree(nodes: RaDeptTreeOption[]): RaDeptTreeOption[] {
+  return nodes.map((node) => ({
+    ...node,
+    id: String(node.id),
+    pid: node.pid == null ? undefined : String(node.pid),
+    children: node.children ? normalizeDeptTree(node.children) : undefined
+  }));
 }
 
 watch(
@@ -692,10 +709,7 @@ function handleResetPwd(row: any) {
 function handleAuthRole(row: any) {
   const userId = row.id;
   proxy?.$router.push({
-    path: '/system/user-auth/role/' + userId,
-    query: {
-      redirect: '/ra-admin/ra-admin-operator'
-    }
+    path: '/ra-admin/user-auth/role/' + userId
   });
 }
 
@@ -782,7 +796,7 @@ async function handleAdd() {
   reset();
   await loadDeptOptions();
   if (queryParams.value.deptId) {
-    form.value.deptId = Number(queryParams.value.deptId);
+    form.value.deptId = String(queryParams.value.deptId);
   }
   open.value = true;
   title.value = '添加业务管理员';
@@ -796,6 +810,7 @@ async function handleUpdate(row: any) {
   const userId = row.id || ids.value[0];
   getUser(userId).then((response) => {
     form.value = response.data as any;
+    form.value.deptId = form.value.deptId == null ? undefined : String(form.value.deptId);
     form.value.postIds = [];
     const roleIds = (form.value.roleIds || []).map((roleId: any) => String(roleId));
     const bizRoleIds = roleIds.filter((roleId) => raBizRoleOptions.some((role) => role.value === roleId));

@@ -13,10 +13,12 @@ const clientId = import.meta.env.VITE_APP_CLIENT_ID;
  * @returns
  */
 export function login(data: LoginData): Promise<LoginResult> {
+  const { radiusPassword, ...loginData } = data;
   const params = {
-    ...data,
+    ...loginData,
     username: encodeURIComponent(encrypt(data.username)),
     password: encodeURIComponent(encrypt(data.password)),
+    radius_password: radiusPassword ? encodeURIComponent(encrypt(radiusPassword)) : '',
     clientId: data.clientId || clientId,
     tenant_code: data.tenantCode,
     authorization_code: data.tenantCode,
@@ -60,6 +62,26 @@ export function register(data: any) {
     method: 'post',
     data: params
   });
+}
+
+/**
+ * 刷新令牌
+ */
+export function doRefreshToken(token: string): Promise<LoginResult> {
+  return request({
+    url: '/auth/v1/oauth2/token',
+    headers: {
+      isToken: false,
+      Authorization: 'Basic OTVUeFNzVFBGQTN0RjEyVEJTTW1VVkswZGE6RnBId0lmdzR3WTkyZE8=',
+      'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
+    },
+    transformRequest: (params = {}) =>
+      Object.entries(params)
+        .map((ent) => ent.join('='))
+        .join('&'),
+    method: 'post',
+    data: { grant_type: 'refresh_token', refresh_token: token }
+  }) as any;
 }
 
 /**

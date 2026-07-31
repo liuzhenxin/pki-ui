@@ -145,12 +145,12 @@
                 <el-icon><CircleClose /></el-icon>
               </div>
               <div class="stat-info">
-                <div class="stat-label">已吊销证书</div>
+                <div class="stat-label">已注销证书</div>
                 <div class="stat-value">{{ stats.revokedCerts }}</div>
               </div>
             </div>
             <div class="stat-footer">
-              <div class="footer-desc">包含手动吊销及异常证书</div>
+              <div class="footer-desc">包含手动注销及异常证书</div>
             </div>
           </el-card>
         </el-col>
@@ -199,6 +199,92 @@
           </el-card>
         </el-col>
       </el-row>
+
+      <!-- 系统信息 -->
+      <el-card class="system-info-card mt20" shadow="hover">
+        <template #header>
+          <div class="card-header">
+            <el-icon><InfoFilled /></el-icon>
+            <span>系统信息</span>
+          </div>
+        </template>
+        <div class="body">
+          <el-row :gutter="20">
+            <el-col :xs="24" :sm="24" :md="8">
+              <div class="contact-info-box">
+                <div class="contact-item">
+                  <div class="icon-box">
+                    <el-icon><User /></el-icon>
+                  </div>
+                  <div class="info">
+                    <span class="label">技术支持</span>
+                    <a href="mailto:liuzhenxin@ec.com.cn">liuzhenxin@ec.com.cn</a>
+                  </div>
+                </div>
+                <div class="contact-item">
+                  <div class="icon-box">
+                    <el-icon><Phone /></el-icon>
+                  </div>
+                  <div class="info">
+                    <span class="label">联系电话</span>
+                    <a href="javascript:;">010-12345678</a>
+                  </div>
+                </div>
+              </div>
+            </el-col>
+            <el-col :xs="24" :sm="24" :md="16">
+              <h4 style="margin: 0 0 15px 0; font-size: 16px; color: #303133; font-weight: 600">版本信息</h4>
+              <div class="version-info-box">
+                <div class="version-item">
+                  <div class="icon-box">
+                    <el-icon><Monitor /></el-icon>
+                  </div>
+                  <div class="info">
+                    <span class="label">系统版本</span>
+                    <span class="value">{{ systemVersion }}</span>
+                  </div>
+                </div>
+                <div class="version-item">
+                  <div class="icon-box">
+                    <el-icon><Stamp /></el-icon>
+                  </div>
+                  <div class="info">
+                    <span class="label">证书模板</span>
+                    <span class="value">{{ systemInfo.profileCount }} 个</span>
+                  </div>
+                </div>
+                <div class="version-item">
+                  <div class="icon-box">
+                    <el-icon><Key /></el-icon>
+                  </div>
+                  <div class="info">
+                    <span class="label">根CA</span>
+                    <span class="value">{{ systemInfo.rootCount }} 个</span>
+                  </div>
+                </div>
+                <div class="version-item">
+                  <div class="icon-box">
+                    <el-icon><Connection /></el-icon>
+                  </div>
+                  <div class="info">
+                    <span class="label">签名者</span>
+                    <span class="value">{{ systemInfo.signerCount }} 个</span>
+                  </div>
+                </div>
+                <div class="version-item">
+                  <div class="icon-box">
+                    <el-icon><Tickets /></el-icon>
+                  </div>
+                  <div class="info">
+                    <span class="label">发布者</span>
+                    <span class="value">{{ systemInfo.publisherCount }} 个</span>
+                  </div>
+                </div>
+              </div>
+            </el-col>
+          </el-row>
+        </div>
+      </el-card>
 
       <!-- 底部：近期证书与审计日志 -->
       <el-row v-if="isCaBusinessAdmin" :gutter="20" class="mt20">
@@ -253,11 +339,13 @@ import { list as listLoginLog } from '@/api/system/loginlog';
 import { list as listOperateLog } from '@/api/system/operlog';
 import { useUserStore } from '@/store/modules/user';
 import { X509, ASN1HEX } from 'jsrsasign';
+import { getInitStatus } from '@/api/ca/init';
 
 const router = useRouter();
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
 const userStore = useUserStore();
 const hasPermission = (permission: string) => (userStore.permissions || []).includes(permission) || (userStore.permissions || []).includes('*:*:*');
+const canViewInitStatus = computed(() => hasPermission('setup') || hasPermission('ca:setup'));
 const isAuditManagerAccount = computed(() => String(userStore.name || '').toLowerCase() === 'audit' || String(userStore.userId || '') === '402');
 const isCaAuditManager = computed(() => isAuditManagerAccount.value || (hasPermission('ca:audit') && !hasPermission('ca:cert:page')));
 const canViewLoginLog = computed(() => hasPermission('sys:login-log:page'));
@@ -278,6 +366,14 @@ let algoChart: echarts.ECharts | null = null;
 
 const isInitialized = ref(false);
 const loadingStatus = ref(true);
+const systemVersion = ref<string>(import.meta.env.VITE_APP_VERSION || '3.5.5');
+const systemInfo = reactive({
+  profileCount: 0,
+  rootCount: 0,
+  signerCount: 0,
+  publisherCount: 0,
+  requestorCount: 0
+});
 
 const stats = reactive({
   totalCerts: 0,
@@ -376,13 +472,30 @@ const checkInitialization = async () => {
   }
 };
 
+const fetchSystemInfo = async () => {
+  if (!canViewInitStatus.value) {
+    return;
+  }
+  try {
+    const res = await getInitStatus();
+    const data = res?.data || {};
+    systemInfo.profileCount = data.profileCount || 0;
+    systemInfo.rootCount = data.rootCount || 0;
+    systemInfo.signerCount = data.signerCount || 0;
+    systemInfo.publisherCount = data.publisherCount || 0;
+    systemInfo.requestorCount = data.requestorCount || 0;
+  } catch (error) {
+    console.error('获取CA系统信息失败:', error);
+  }
+};
+
 const getStatusType = (status: string) => {
   const types: any = { VALID: 'success', REVOKED: 'danger', EXPIRED: 'warning', HOLD: 'info' };
   return types[status] || 'info';
 };
 
 const getStatusLabel = (status: string) => {
-  const labels: any = { VALID: '有效', REVOKED: '已吊销', EXPIRED: '已过期', HOLD: '已冻结' };
+  const labels: any = { VALID: '有效', REVOKED: '已注销', EXPIRED: '已过期', HOLD: '已冻结' };
   return labels[status] || status;
 };
 
@@ -582,7 +695,7 @@ const updateSecurityLogs = () => {
     .slice(0, 5)
     .map((cert) => ({
       time: cert.createTime || cert.issueTimeText,
-      content: `${cert.status === 'REVOKED' ? '证书已吊销' : '证书已签发'} [Serial: ${shortSerial(cert.serialNumber)}] ${cert.subject || ''}`,
+      content: `${cert.status === 'REVOKED' ? '证书已注销' : '证书已签发'} [Serial: ${shortSerial(cert.serialNumber)}] ${cert.subject || ''}`,
       type: cert.status === 'REVOKED' ? 'danger' : cert.status === 'EXPIRED' ? 'warning' : 'primary'
     }));
   if (stats.expiringSoon > 0) {
@@ -688,6 +801,7 @@ const handleResize = () => {
 onMounted(async () => {
   await checkInitialization();
   if (isInitialized.value) {
+    fetchSystemInfo();
     if (isCaAuditHome.value) {
       await fetchAuditHomeData();
     } else {
@@ -1054,6 +1168,111 @@ watch(timeRange, () => {
       time {
         grid-column: 2;
         text-align: left;
+      }
+    }
+  }
+
+  .system-info-card {
+    .contact-info-box {
+      background-color: #f8f9fa;
+      padding: 25px;
+      border-radius: 8px;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+
+      .contact-item {
+        display: flex;
+        align-items: center;
+        margin-bottom: 20px;
+
+        &:last-child {
+          margin-bottom: 0;
+        }
+
+        .icon-box {
+          width: 40px;
+          height: 40px;
+          border-radius: 50%;
+          background-color: #e6f7ff;
+          color: #1890ff;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin-right: 15px;
+          font-size: 20px;
+        }
+
+        .info {
+          display: flex;
+          flex-direction: column;
+
+          .label {
+            font-size: 12px;
+            color: #909399;
+            margin-bottom: 2px;
+          }
+
+          a {
+            color: #303133;
+            text-decoration: none;
+            font-weight: 500;
+            font-size: 15px;
+            transition: color 0.3s;
+
+            &:hover {
+              color: #409eff;
+            }
+          }
+        }
+      }
+    }
+
+    .version-info-box {
+      background-color: #f8f9fa;
+      padding: 20px 25px;
+      border-radius: 8px;
+      height: 100%;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 16px;
+      align-content: start;
+
+      .version-item {
+        display: flex;
+        align-items: center;
+
+        .icon-box {
+          width: 40px;
+          height: 40px;
+          border-radius: 50%;
+          background-color: #f0f5ff;
+          color: #597ef7;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin-right: 12px;
+          font-size: 18px;
+          flex-shrink: 0;
+        }
+
+        .info {
+          display: flex;
+          flex-direction: column;
+
+          .label {
+            font-size: 12px;
+            color: #909399;
+            margin-bottom: 2px;
+          }
+
+          .value {
+            color: #303133;
+            font-weight: 500;
+            font-size: 14px;
+          }
+        }
       }
     }
   }

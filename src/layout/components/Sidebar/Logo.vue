@@ -43,7 +43,9 @@ const sideTheme = computed(() => settingsStore.sideTheme);
 
 function syncLogoText(tenantId?: string | number | null) {
   const idStr = String(tenantId || '');
-  if (idStr === '2' || route.path.startsWith('/license')) {
+  if (idStr === '1' || route.path.startsWith('/ops')) {
+    logoText.value = 'OPS';
+  } else if (idStr === '2' || route.path.startsWith('/license')) {
     logoText.value = 'LIC';
   } else if (idStr === '3') {
     logoText.value = 'KMC';
@@ -67,7 +69,10 @@ onMounted(() => {
         name.value = res.data.name;
         // 动态设置 Logo 标题
         const idStr = String(tenantId);
-        if (idStr === '2') {
+        if (idStr === '1') {
+          title.value = '平台运维中心';
+          name.value = '平台运维中心';
+        } else if (idStr === '2') {
           title.value = 'License授权系统';
           name.value = '授权系统';
         } else if (idStr === '3') {

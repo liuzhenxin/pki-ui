@@ -121,7 +121,7 @@ export function recoverKey(data: any): Promise<Result<any>> {
   }) as any;
 }
 
-// 挂起证书
+// 冻结证书
 export function suspendCert(data: any): Promise<Result<any>> {
   return request({
     url: '/ca/v1/certs/suspend',
@@ -139,7 +139,7 @@ export function resumeCert(data: any): Promise<Result<any>> {
   }) as any;
 }
 
-// 吊销证书
+// 注销证书
 export function revokeCert(data: any): Promise<Result<any>> {
   return request({
     url: '/ca/v1/certs/revoke',
@@ -193,7 +193,7 @@ export function resumeDualCert(data: any): Promise<Result<any>> {
   }) as any;
 }
 
-// 双证书吊销
+// 双证书注销
 export function revokeDualCert(data: any): Promise<Result<any>> {
   return request({
     url: '/ca/v1/certs/revoke-dual',

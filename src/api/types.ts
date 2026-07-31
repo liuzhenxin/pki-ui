@@ -19,6 +19,7 @@ export interface LoginData {
   tenantCode?: string;
   username?: string;
   password?: string;
+  radiusPassword?: string;
   rememberMe?: boolean;
   socialCode?: string;
   socialState?: string;

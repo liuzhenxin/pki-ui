@@ -324,7 +324,7 @@
     <el-dialog v-model="syncDialog.visible" title="同步CA授权" width="760px" append-to-body class="sync-ca-dialog">
       <el-form :model="syncForm" label-width="96px">
         <el-form-item label="CA地址">
-          <el-input v-model="syncForm.caAddress" placeholder="例如：http://127.0.0.1 或 http://127.0.0.1/prod-api" clearable />
+          <el-input v-model="syncForm.caAddress" placeholder="请先在RA初始化或系统配置中设置CA地址" :disabled="syncAddressLoading" clearable />
         </el-form-item>
       </el-form>
       <el-alert
@@ -530,7 +530,7 @@ import SecurityConfirm from '@/components/SecurityConfirm/index.vue';
 import CertProfile from '@/components/CertProfile/index.vue';
 import CertSubject, { typeMapping, sortSubjectItems } from '@/components/CertSubject/index.vue';
 import { listProfile, getProfile } from '@/api/ca/profile';
-import { listRaRootCa, syncAuthorizedCa, type RaAuthorizedCaSyncResult } from '@/api/ra/root';
+import { getConfiguredCaAddress, listRaRootCa, syncAuthorizedCa, type RaAuthorizedCaSyncResult } from '@/api/ra/root';
 import { listSigner } from '@/api/ca/signer';
 import {
   genRootCa,
@@ -583,6 +583,7 @@ const crlConfigForm = reactive({
 
 const loading = ref(false);
 const syncLoading = ref(false);
+const syncAddressLoading = ref(false);
 const showSearch = ref(true);
 const total = ref(0);
 const certList = ref([]);
@@ -609,7 +610,7 @@ const syncDialog = reactive({
   visible: false
 });
 const syncForm = reactive({
-  caAddress: 'http://127.0.0.1'
+  caAddress: ''
 });
 const syncResult = ref<RaAuthorizedCaSyncResult | null>(null);
 
@@ -874,9 +875,22 @@ function resetQuery() {
   handleQuery();
 }
 
-function openSyncDialog() {
+async function openSyncDialog() {
   syncResult.value = null;
   syncDialog.visible = true;
+  syncAddressLoading.value = true;
+  try {
+    const res = await getConfiguredCaAddress();
+    syncForm.caAddress = res.data?.caAddress?.trim() || '';
+    if (!syncForm.caAddress) {
+      ElMessage.warning('未找到初始化时配置的CA地址，请先完成CA接入配置');
+    }
+  } catch (error: any) {
+    syncForm.caAddress = '';
+    ElMessage.error(error.response?.data?.msg || error.message || '读取CA地址失败');
+  } finally {
+    syncAddressLoading.value = false;
+  }
 }
 
 async function handleSyncAuthorizedCa() {
@@ -1455,7 +1469,9 @@ function applyCrlConfig(data: any) {
   crlConfigForm.intervalTime = config?.intervalTime || '01:00';
   crlConfigForm.nextCrlNumber = toNumberValue(config?.nextCrlNumber, 2);
   crlConfigForm.crlUris = (config?.crlUris && config.crlUris.length > 0 ? config.crlUris : ['']).map((value: string) => ({ value }));
-  crlConfigForm.deltaCrlUris = (config?.deltaCrlUris && config.deltaCrlUris.length > 0 ? config.deltaCrlUris : ['']).map((value: string) => ({ value }));
+  crlConfigForm.deltaCrlUris = (config?.deltaCrlUris && config.deltaCrlUris.length > 0 ? config.deltaCrlUris : ['']).map((value: string) => ({
+    value
+  }));
   crlConfigForm.schedulerRunning = !!config?.schedulerRunning;
 }
 

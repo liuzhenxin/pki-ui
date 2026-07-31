@@ -2,7 +2,7 @@
 export interface LoginLogForm {
   id?: string | number;
   username?: string;
-  ip?: string;
+  ipAddress?: string;
   address?: string;
   browser?: string;
   os?: string;
@@ -15,7 +15,7 @@ export interface LoginLogForm {
 export interface LoginLogQuery {
   pageNum?: number;
   pageSize?: number;
-  ip?: string;
+  ipAddress?: string;
   username?: string;
   status?: number;
   beginTime?: string;

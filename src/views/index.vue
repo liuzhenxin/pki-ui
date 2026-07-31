@@ -1,7 +1,7 @@
 <template>
   <div class="app-container home">
     <!-- 头部介绍 -->
-    <el-card v-if="!isLicense" class="box-card header-card" shadow="hover">
+    <el-card v-if="!isLicense && !isOps" class="box-card header-card" shadow="hover">
       <div class="header">
         <div class="icon-wrapper">
           <el-icon :size="48" color="#fff"><Platform /></el-icon>
@@ -10,6 +10,48 @@
           <h2>{{ systemTitle }}</h2>
           <p>{{ systemDesc }}</p>
         </div>
+      </div>
+    </el-card>
+
+    <OpsOverview v-if="isOps" />
+
+    <el-card v-if="isOps" class="box-card ops-system-card" shadow="hover">
+      <template #header>
+        <div class="card-header">
+          <el-icon><InfoFilled /></el-icon>
+          <span>系统信息</span>
+        </div>
+      </template>
+      <div class="ops-system-layout">
+        <section class="ops-info-section">
+          <div class="ops-section-title">
+            <el-icon><Monitor /></el-icon>
+            <span>运行信息</span>
+          </div>
+          <div class="ops-info-grid">
+            <div v-for="item in opsSystemItems" :key="item.label" class="ops-info-item">
+              <span>{{ item.label }}</span>
+              <strong>{{ item.value }}</strong>
+            </div>
+          </div>
+        </section>
+        <section class="ops-info-section">
+          <div class="ops-section-title">
+            <el-icon><Connection /></el-icon>
+            <span>版本信息</span>
+          </div>
+          <div class="ops-version-list">
+            <div v-for="item in opsVersionItems" :key="item.label" class="ops-version-item">
+              <div class="ops-version-icon">
+                <el-icon><component :is="item.icon" /></el-icon>
+              </div>
+              <div>
+                <span>{{ item.label }}</span>
+                <strong>{{ item.value }}</strong>
+              </div>
+            </div>
+          </div>
+        </section>
       </div>
     </el-card>
 
@@ -307,7 +349,7 @@
       </el-row>
     </div>
 
-    <el-row v-if="!isLicense && !isNAS && !isCA && !isRA" :gutter="20" class="main-content">
+    <el-row v-if="!isLicense && !isNAS && !isCA && !isRA && !isOps" :gutter="20" class="main-content">
       <!-- 左侧：核心功能 -->
       <el-col :xs="24" :sm="24" :lg="16">
         <el-card class="box-card feature-card" shadow="hover">
@@ -492,7 +534,7 @@
     </el-row>
 
     <!-- 系统信息 (全宽) -->
-    <el-card v-if="!isLicense && !isNAS && !isCA && !isRA" class="box-card update-log" shadow="hover">
+    <el-card v-if="!isLicense && !isNAS && !isCA && !isRA && !isOps" class="box-card update-log" shadow="hover">
       <template #header>
         <div class="card-header">
           <el-icon><InfoFilled /></el-icon>
@@ -523,86 +565,112 @@
               </div>
             </div>
           </el-col>
-          <el-col v-if="!isKMC" :xs="24" :sm="24" :md="16">
+          <el-col v-if="isKMC" :xs="24" :sm="24" :md="16">
+            <h4 style="margin: 0 0 15px 0; font-size: 16px; color: #303133; font-weight: 600">版本信息</h4>
+            <div class="version-info-box">
+              <div class="version-item">
+                <div class="icon-box">
+                  <el-icon><Monitor /></el-icon>
+                </div>
+                <div class="info">
+                  <span class="label">系统版本</span>
+                  <span class="value">{{ systemVersion }}</span>
+                </div>
+              </div>
+              <div class="version-item">
+                <div class="icon-box">
+                  <el-icon><Cpu /></el-icon>
+                </div>
+                <div class="info">
+                  <span class="label">密码服务</span>
+                  <span class="value">{{ kmcDashboardStats?.systemHealth?.cryptoProvider || '国密算法 (SM2/SM3/SM4)' }}</span>
+                </div>
+              </div>
+              <div class="version-item">
+                <div class="icon-box">
+                  <el-icon><Connection /></el-icon>
+                </div>
+                <div class="info">
+                  <span class="label">HSM 状态</span>
+                  <el-tag
+                    :type="kmcDashboardStats?.systemHealth?.hsmStatus === 'UP' ? 'success' : 'danger'"
+                    size="small"
+                    effect="light"
+                  >
+                    {{ kmcDashboardStats?.systemHealth?.hsmStatus || '未检测' }}
+                  </el-tag>
+                </div>
+              </div>
+              <div class="version-item">
+                <div class="icon-box">
+                  <el-icon><Coin /></el-icon>
+                </div>
+                <div class="info">
+                  <span class="label">数据库状态</span>
+                  <el-tag
+                    :type="kmcDashboardStats?.systemHealth?.dbStatus === 'UP' ? 'success' : 'danger'"
+                    size="small"
+                    effect="light"
+                  >
+                    {{ kmcDashboardStats?.systemHealth?.dbStatus || '未检测' }}
+                  </el-tag>
+                </div>
+              </div>
+              <div class="version-item">
+                <div class="icon-box">
+                  <el-icon><Timer /></el-icon>
+                </div>
+                <div class="info">
+                  <span class="label">API 延迟</span>
+                  <span class="value">{{ kmcDashboardStats?.systemHealth?.apiLatency || '检测中...' }}</span>
+                </div>
+              </div>
+            </div>
+          </el-col>
+          <el-col v-else :xs="24" :sm="24" :md="16">
             <h4 style="margin: 0 0 15px 0; font-size: 16px; color: #303133; font-weight: 600">更新日志</h4>
             <el-collapse accordion>
               <el-collapse-item title="v4.1.2 - 2025-11-25" name="1">
                 <ol>
-                  <template v-if="isKMC">
-                    <li>新增：密钥库状态监控面板，实时显示备用、在用、历史密钥库状态</li>
-                    <li>优化：密钥分发流程，增强分发安全性</li>
-                    <li>修复：密钥备份恢复功能的问题</li>
-                  </template>
-                  <template v-else>
-                    <li>新增：请求者管理功能，支持API/LDAP/DATABASE三种类型</li>
-                    <li>新增：请求者证书管理，支持证书PEM数据的查看和管理</li>
-                    <li>新增：根证书授权模板功能，支持模板授权管理</li>
-                    <li>优化：证书模板管理，支持RootCA类型模板筛选</li>
-                    <li>优化：业务管理员管理，支持证书签发和USBKey集成</li>
-                    <li>修复：证书状态显示问题</li>
-                  </template>
+                  <li>新增：请求者管理功能，支持API/LDAP/DATABASE三种类型</li>
+                  <li>新增：请求者证书管理，支持证书PEM数据的查看和管理</li>
+                  <li>新增：根证书授权模板功能，支持模板授权管理</li>
+                  <li>优化：证书模板管理，支持RootCA类型模板筛选</li>
+                  <li>优化：业务管理员管理，支持证书签发和USBKey集成</li>
+                  <li>修复：证书状态显示问题</li>
                 </ol>
               </el-collapse-item>
               <el-collapse-item title="v4.1.1 - 2025-08-20" name="2">
                 <ol>
-                  <template v-if="isKMC">
-                    <li>优化：密钥生成算法，提高生成效率</li>
-                    <li>新增：密钥使用情况统计报表</li>
-                    <li>修复：密钥库容量预警不准确的问题</li>
-                  </template>
-                  <template v-else>
-                    <li>新增：证书吊销列表（CRL）管理功能</li>
-                    <li>新增：CRL导入导出功能</li>
-                    <li>优化：证书模板管理界面，使用标签页展示基本信息、主题信息、扩展信息</li>
-                    <li>优化：证书主题组件，支持动态配置字段</li>
-                    <li>修复：证书模板保存时的数据格式问题</li>
-                  </template>
+                  <li>新增：证书吊销列表（CRL）管理功能</li>
+                  <li>新增：CRL导入导出功能</li>
+                  <li>优化：证书模板管理界面，使用标签页展示基本信息、主题信息、扩展信息</li>
+                  <li>优化：证书主题组件，支持动态配置字段</li>
+                  <li>修复：证书模板保存时的数据格式问题</li>
                 </ol>
               </el-collapse-item>
               <el-collapse-item title="v4.1.0 - 2025-05-10" name="3">
                 <ol>
-                  <template v-if="isKMC">
-                    <li>新增：CA机构管理功能，支持注册、更新、冻结、解冻操作</li>
-                    <li>新增：密钥更新自动化流程</li>
-                    <li>优化：密钥备份策略，支持多级备份</li>
-                    <li>修复：审计日志记录不完整的问题</li>
-                  </template>
-                  <template v-else>
-                    <li>新增：证书管理功能，支持证书申请、签发、查询、吊销</li>
-                    <li>新增：证书模板管理，支持自定义证书模板配置</li>
-                    <li>新增：X509证书解析组件，支持证书详细信息查看</li>
-                    <li>新增：证书主题组件，支持证书主题信息配置</li>
-                    <li>优化：证书状态查询（OCSP）性能</li>
-                  </template>
+                  <li>新增：证书管理功能，支持证书申请、签发、查询、吊销</li>
+                  <li>新增：证书模板管理，支持自定义证书模板配置</li>
+                  <li>新增：X509证书解析组件，支持证书详细信息查看</li>
+                  <li>新增：证书主题组件，支持证书主题信息配置</li>
+                  <li>优化：证书状态查询（OCSP）性能</li>
                 </ol>
               </el-collapse-item>
               <el-collapse-item title="v4.0.2 - 2025-03-15" name="4">
                 <ol>
-                  <template v-if="isKMC">
-                    <li>优化：三权分立权限管理，增强系统安全性</li>
-                    <li>新增：密钥分发日志记录</li>
-                    <li>修复：密钥恢复失败的问题</li>
-                  </template>
-                  <template v-else>
-                    <li>新增：根证书管理功能，支持根证书创建和管理</li>
-                    <li>新增：根证书初始化功能</li>
-                    <li>优化：CA系统整体架构，提升系统稳定性</li>
-                    <li>修复：用户权限控制问题</li>
-                  </template>
+                  <li>新增：根证书管理功能，支持根证书创建和管理</li>
+                  <li>新增：根证书初始化功能</li>
+                  <li>优化：CA系统整体架构，提升系统稳定性</li>
+                  <li>修复：用户权限控制问题</li>
                 </ol>
               </el-collapse-item>
               <el-collapse-item title="v4.0.1 - 2025-01-20" name="5">
                 <ol>
-                  <template v-if="isKMC">
-                    <li>KMC 密钥管理中心初始版本发布</li>
-                    <li>遵循 GM/T 0038 规范实现密钥全生命周期管理</li>
-                    <li>集成国密算法支持</li>
-                  </template>
-                  <template v-else>
-                    <li>CA 证书认证系统初始版本发布</li>
-                    <li>支持全生命周期证书管理</li>
-                    <li>全面支持国密算法体系</li>
-                  </template>
+                  <li>CA 证书认证系统初始版本发布</li>
+                  <li>支持全生命周期证书管理</li>
+                  <li>全面支持国密算法体系</li>
                 </ol>
               </el-collapse-item>
             </el-collapse>
@@ -625,6 +693,7 @@ import { listLicense, listProduct } from '@/api/license/license';
 import { LicenseVO, ProductVO } from '@/api/license/license/types';
 import NASDashboard from '@/views/nas/index.vue';
 import CADashboard from '@/views/ca/index.vue';
+import OpsOverview from '@/views/ops/overview/index.vue';
 
 const router = useRouter();
 const userStore = useUserStore();
@@ -638,17 +707,21 @@ let historyKeyChart: echarts.ECharts | null = null;
 
 const tenantInfo = ref<any>(null);
 const kmcDashboardStats = ref<any>({});
+const systemVersion = ref<string>(import.meta.env.VITE_APP_VERSION || '3.5.5');
 const currentTenantId = computed(() => userStore.tenantId || localStorage.getItem('tenantId'));
+const isOps = computed(() => String(currentTenantId.value) === '1');
 const isKMC = computed(() => String(currentTenantId.value) === '3');
 const isNAS = computed(() => String(currentTenantId.value) === '10');
 const isCA = computed(() => String(currentTenantId.value) === '4');
 const isRA = computed(() => String(currentTenantId.value) === '5');
 const isLicense = computed(() => String(currentTenantId.value) === '2');
+const opsVersion = computed(() => import.meta.env.VITE_APP_VERSION || '4.1.2');
 
 const systemTitle = computed(() => {
   if (tenantInfo.value && tenantInfo.value.name) {
     return tenantInfo.value.name;
   }
+  if (isOps.value) return '平台运维中心';
   if (isKMC.value) return 'PKI-Cloud-KMC密钥管理中心';
   if (isNAS.value) return 'PKI-Cloud-NAS网络存储管理系统';
   if (isRA.value) return 'PKI-Cloud-RA注册认证中心';
@@ -657,6 +730,9 @@ const systemTitle = computed(() => {
 });
 
 const systemDesc = computed(() => {
+  if (isOps.value) {
+    return '集中展示云平台基础设施、服务发现、平台服务和业务服务的服务器、容器、组件依赖与运行状态。';
+  }
   if (isLicense.value) {
     return '面向 CA、KMC、RA、ZX-TrustReader 等产品签发 License 授权文件，提供授权校验、吊销、下载和到期风险管理。';
   }
@@ -671,6 +747,22 @@ const systemDesc = computed(() => {
   }
   return '提供数字证书的全生命周期管理服务，包括证书申请、签发、查询、吊销、更新等，构建可信的网络安全基础环境。';
 });
+
+const opsSystemItems = computed(() => [
+  { label: '系统名称', value: '平台运维中心' },
+  { label: '租户代码', value: 'ops' },
+  { label: '租户 ID', value: '1' },
+  { label: '接口代理', value: import.meta.env.VITE_APP_OPS_API || '/ops-api' },
+  { label: '服务端口', value: '18080 / 5050' },
+  { label: '数据来源', value: 'Agent + docker ps' }
+]);
+
+const opsVersionItems = computed(() => [
+  { label: '前端版本', value: opsVersion.value, icon: 'Monitor' },
+  { label: '后端镜像', value: `liuzx-ops:${opsVersion.value}`, icon: 'Box' },
+  { label: '采集端', value: 'liuzx-ops-agent', icon: 'Cpu' },
+  { label: '采集模式', value: '轻量 Agent 主动上报', icon: 'Connection' }
+]);
 
 const licenseList = ref<LicenseVO[]>([]);
 const backendLicenseProducts = ref<ProductVO[]>([]);
@@ -1063,6 +1155,115 @@ const handleResize = () => {
           max-width: 800px;
         }
       }
+    }
+  }
+
+  .ops-system-card {
+    .ops-system-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 16px;
+    }
+
+    .ops-info-section {
+      min-width: 0;
+      padding: 18px;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      background: #f8fafc;
+    }
+
+    .ops-section-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 14px;
+      color: #303133;
+      font-size: 15px;
+      font-weight: 600;
+
+      .el-icon {
+        color: #2563eb;
+        font-size: 18px;
+      }
+    }
+
+    .ops-info-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .ops-info-item,
+    .ops-version-item {
+      min-width: 0;
+      padding: 12px;
+      border-radius: 8px;
+      background: #fff;
+      border: 1px solid #eef2f7;
+    }
+
+    .ops-info-item {
+      span,
+      strong {
+        display: block;
+      }
+
+      span {
+        margin-bottom: 6px;
+        color: #64748b;
+        font-size: 12px;
+      }
+
+      strong {
+        color: #111827;
+        font-size: 14px;
+        font-weight: 600;
+        overflow-wrap: anywhere;
+      }
+    }
+
+    .ops-version-list {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .ops-version-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+
+      span,
+      strong {
+        display: block;
+      }
+
+      span {
+        color: #64748b;
+        font-size: 12px;
+      }
+
+      strong {
+        margin-top: 4px;
+        color: #111827;
+        font-size: 14px;
+        font-weight: 600;
+        overflow-wrap: anywhere;
+      }
+    }
+
+    .ops-version-icon {
+      width: 38px;
+      height: 38px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      border-radius: 8px;
+      color: #0f766e;
+      background: #ccfbf1;
+      font-size: 18px;
     }
   }
 
@@ -1931,6 +2132,53 @@ const handleResize = () => {
         }
       }
     }
+
+    .version-info-box {
+      background-color: #f8f9fa;
+      padding: 20px 25px;
+      border-radius: 8px;
+      height: 100%;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 16px;
+      align-content: start;
+
+      .version-item {
+        display: flex;
+        align-items: center;
+
+        .icon-box {
+          width: 40px;
+          height: 40px;
+          border-radius: 50%;
+          background-color: #f0f5ff;
+          color: #597ef7;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin-right: 12px;
+          font-size: 18px;
+          flex-shrink: 0;
+        }
+
+        .info {
+          display: flex;
+          flex-direction: column;
+
+          .label {
+            font-size: 12px;
+            color: #909399;
+            margin-bottom: 2px;
+          }
+
+          .value {
+            color: #303133;
+            font-weight: 500;
+            font-size: 14px;
+          }
+        }
+      }
+    }
   }
 
   .mr-2 {
@@ -1940,6 +2188,12 @@ const handleResize = () => {
   @media (max-width: 992px) {
     .license-hero {
       grid-template-columns: 1fr;
+    }
+
+    .ops-system-card {
+      .ops-system-layout {
+        grid-template-columns: 1fr;
+      }
     }
 
     .license-product-list,
@@ -1984,6 +2238,13 @@ const handleResize = () => {
     .license-flow,
     .license-action-panel .license-actions {
       grid-template-columns: 1fr;
+    }
+
+    .ops-system-card {
+      .ops-info-grid,
+      .ops-version-list {
+        grid-template-columns: 1fr;
+      }
     }
 
     .license-service-grid,

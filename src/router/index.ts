@@ -90,6 +90,19 @@ export const constantRoutes: RouteRecordRaw[] = [
     ]
   },
   {
+    path: '/ops/business-service',
+    component: Layout,
+    hidden: true,
+    children: [
+      {
+        path: '',
+        component: () => import('@/views/ops/business-service/index.vue'),
+        name: 'OpsBusinessService',
+        meta: { title: '业务服务', activeMenu: '/ops/business-service' }
+      }
+    ]
+  },
+  {
     path: '/system/user-auth',
     component: Layout,
     hidden: true,
@@ -99,6 +112,19 @@ export const constantRoutes: RouteRecordRaw[] = [
         component: () => import('@/views/system/user/authRole.vue'),
         name: 'AuthRole',
         meta: { title: '分配角色', activeMenu: '/system/user' }
+      }
+    ]
+  },
+  {
+    path: '/ra-admin/user-auth',
+    component: Layout,
+    hidden: true,
+    children: [
+      {
+        path: 'role/:userId',
+        component: () => import('@/views/ra/admin/authRole.vue'),
+        name: 'RaAdminAuthRole',
+        meta: { title: '分配业务权限', activeMenu: '/ra-admin/ra-admin-operator' }
       }
     ]
   },
@@ -207,7 +233,7 @@ export const constantRoutes: RouteRecordRaw[] = [
         meta: { title: 'License授权管理', activeMenu: '/license/admin' }
       }
     ]
-  },
+  }
 ];
 
 // 动态路由，基于用户权限动态去加载

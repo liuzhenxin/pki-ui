@@ -33,7 +33,9 @@
             <el-button v-hasPermi="['ca:signer:save']" type="primary" plain icon="Plus" @click="handleAdd">新增</el-button>
           </el-col>
           <el-col :span="1.5">
-            <el-button v-hasPermi="['ca:signer:remove']" type="danger" plain icon="Delete" :disabled="multiple" @click="handleDelete()">删除</el-button>
+            <el-button v-hasPermi="['ca:signer:remove']" type="danger" plain icon="Delete" :disabled="multiple" @click="handleDelete()"
+              >删除</el-button
+            >
           </el-col>
           <right-toolbar v-model:show-search="showSearch" @query-table="getList"></right-toolbar>
         </el-row>
@@ -60,7 +62,9 @@
         </el-table-column>
         <el-table-column label="证书状态" align="center" width="120">
           <template #default="scope">
-            <el-tag :type="isCertConfigured(scope.row) ? 'success' : 'warning'" effect="plain">{{ isCertConfigured(scope.row) ? '已配置' : '未配置' }}</el-tag>
+            <el-tag :type="isCertConfigured(scope.row) ? 'success' : 'warning'" effect="plain">{{
+              isCertConfigured(scope.row) ? '已配置' : '未配置'
+            }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="创建时间" align="center" prop="createTime" width="180">
@@ -114,7 +118,13 @@
           <el-col :xs="24" :sm="12">
             <el-form-item label="签名算法" prop="algo">
               <el-select v-model="form.algo" placeholder="请选择签名算法" style="width: 100%" @change="handleAlgorithmChange">
-                <el-option v-for="item in algorithmOptions" :key="item.value" :label="item.label" :value="item.value" />
+                <el-option
+                  v-for="item in algorithmOptions"
+                  :key="item.value"
+                  :label="item.label"
+                  :value="item.value"
+                  :disabled="form.signerType === 'SDF' && item.softwareOnly"
+                />
               </el-select>
             </el-form-item>
           </el-col>
@@ -213,7 +223,10 @@ const categoryOptions = [{ label: '签发者', value: 'ISSUER' }];
 const algorithmOptions = [
   { label: 'SM2', value: 'SM2' },
   { label: 'RSA', value: 'RSA' },
-  { label: 'ECDSA', value: 'ECDSA' }
+  { label: 'ECDSA', value: 'ECDSA' },
+  { label: 'ML-DSA-44（后量子）', value: 'ML-DSA-44', softwareOnly: true },
+  { label: 'ML-DSA-65（后量子）', value: 'ML-DSA-65', softwareOnly: true },
+  { label: 'ML-DSA-87（后量子）', value: 'ML-DSA-87', softwareOnly: true }
 ];
 
 const rsaKeySizeOptions = [
@@ -247,11 +260,22 @@ const validateKeySize = (_rule: any, value: any, callback: any) => {
   callback();
 };
 
+const validateAlgorithm = (_rule: any, value: any, callback: any) => {
+  if (form.value.signerType === 'SDF' && String(value || '').startsWith('ML-DSA-')) {
+    callback(new Error('当前 SDF 设备签名者不支持 ML-DSA，请选择 PKCS12'));
+    return;
+  }
+  callback();
+};
+
 const rules = reactive({
   name: [{ required: true, message: '签名者名称不能为空', trigger: 'blur' }],
   signerType: [{ required: true, message: '签名者类型不能为空', trigger: 'change' }],
   category: [{ required: true, message: '用途类别不能为空', trigger: 'change' }],
-  algo: [{ required: true, message: '签名算法不能为空', trigger: 'change' }],
+  algo: [
+    { required: true, message: '签名算法不能为空', trigger: 'change' },
+    { validator: validateAlgorithm, trigger: 'change' }
+  ],
   keyIndex: [{ validator: validateKeyIndex, trigger: 'change' }],
   keySize: [{ validator: validateKeySize, trigger: 'change' }]
 });
@@ -341,6 +365,9 @@ function handleUpdate(row: any) {
 function handleSignerTypeChange(value: string) {
   if (value === 'SDF' && !form.value.keyIndex) {
     form.value.keyIndex = 1;
+  }
+  if (value === 'SDF' && String(form.value.algo || '').startsWith('ML-DSA-')) {
+    form.value.algo = 'SM2';
   }
 }
 

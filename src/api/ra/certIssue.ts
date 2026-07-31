@@ -46,6 +46,11 @@ export interface RaCertIssueForm {
   extensions?: string;
   fileFormat?: 'PKCS12';
   filePassword?: string;
+  provider?: string;
+  device?: string;
+  application?: string;
+  container?: string;
+  originalPrivateKeyConfirmed?: boolean;
 }
 
 export interface RaCertIssueResult {
@@ -59,6 +64,13 @@ export interface RaCertIssueResult {
   encCertId?: number;
   encSerialNumber?: string;
   encCert?: string;
+  storageType?: string;
+  storageInfo?: string;
+  encStorageType?: string;
+  encStorageInfo?: string;
+  renewalId?: string | number;
+  encryptionPrivateKey?: string;
+  certificateChain?: string;
 }
 
 export function pageRaCertIssue(query: RaCertIssueQuery): Promise<Result<any>> {
@@ -81,5 +93,13 @@ export function issueRaCert(businessType: string, businessId: string | number, d
     url: `/ra/v1/cert-issues/${businessType}/${businessId}/issue`,
     method: 'post',
     data
+  }) as any;
+}
+
+export function confirmRaRenewalDistribution(businessId: string | number, success: boolean, message?: string): Promise<Result<void>> {
+  return request({
+    url: `/ra/v1/cert-issues/cert_renewal/${businessId}/distribution`,
+    method: 'post',
+    data: { success, message }
   }) as any;
 }

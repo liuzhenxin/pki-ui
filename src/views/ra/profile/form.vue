@@ -997,6 +997,7 @@ function isKeyUsageRequired(extIndex: number, value: string): boolean {
 /** 处理密钥用法复选框组变化 */
 function handleKeyUsageGroupChange(extIndex: number, values: string[]) {
   const ext = form.extensions[extIndex];
+  selectedKeyUsages.value[extIndex] = [...values];
 
   if (!ext.keyUsage) {
     ext.keyUsage = { usages: [] };
@@ -1077,6 +1078,7 @@ function isExtendedKeyUsageRequired(extIndex: number, value: string): boolean {
 /** 处理增强密钥用法复选框组变化 */
 function handleExtendedKeyUsageGroupChange(extIndex: number, values: string[]) {
   const ext = form.extensions[extIndex];
+  selectedExtendedKeyUsages.value[extIndex] = [...values];
 
   if (!ext.extendedKeyUsage) {
     ext.extendedKeyUsage = { usages: [] };
@@ -1752,7 +1754,7 @@ onMounted(() => {
                                   @change="handleKeyUsageRequiredChange(index, opt.value, $event)"
                                   size="small"
                                 >
-                                  必须
+                                  强制包含
                                 </el-checkbox>
                               </el-col>
                             </el-row>
@@ -1765,7 +1767,14 @@ onMounted(() => {
                     <template v-if="ext.type === 'ExtendedKeyUsage'">
                       <el-divider content-position="left" style="margin: 15px 0">增强密钥用法配置</el-divider>
                       <div class="keyusages-checkbox-list">
-                        <div class="keyusage-grid">
+                        <el-alert
+                          v-if="availableExtendedKeyUsageOptions.length === 0"
+                          type="info"
+                          :closable="false"
+                          show-icon
+                          title="当前证书级别不建议配置增强密钥用法"
+                        />
+                        <div v-else class="keyusage-grid">
                           <div v-for="opt in availableExtendedKeyUsageOptions" :key="opt.value" class="keyusage-checkbox-item">
                             <el-row :gutter="8" align="middle">
                               <el-col :span="16">
@@ -1794,7 +1803,7 @@ onMounted(() => {
                                   @change="handleExtendedKeyUsageRequiredChange(index, opt.value, $event)"
                                   size="small"
                                 >
-                                  必须
+                                  强制包含
                                 </el-checkbox>
                               </el-col>
                             </el-row>

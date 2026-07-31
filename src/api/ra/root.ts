@@ -20,6 +20,10 @@ export interface RaAuthorizedCaSyncRequest {
   caAddress: string;
 }
 
+export interface RaCaAddressConfig {
+  caAddress: string;
+}
+
 export interface RaAuthorizedCaSyncRoot {
   id: string | number;
   name: string;
@@ -40,5 +44,12 @@ export function syncAuthorizedCa(data: RaAuthorizedCaSyncRequest): Promise<Resul
     url: '/ra/v1/init/sync-ca',
     method: 'post',
     data
+  });
+}
+
+export function getConfiguredCaAddress(): Promise<Result<RaCaAddressConfig>> {
+  return request({
+    url: '/ra/v1/init/ca-address',
+    method: 'get'
   });
 }

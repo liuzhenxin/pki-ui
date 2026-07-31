@@ -22,25 +22,9 @@
                 <span>密钥生成</span>
               </div>
             </template>
-            <el-form-item label="硬件生成" prop="keyGeneration.enableHardwareGeneration">
-              <el-switch v-model="form.keyGeneration.enableHardwareGeneration" active-text="启用" inactive-text="停用" />
-            </el-form-item>
-            <el-form-item label="默认算法" prop="keyGeneration.defaultKeyType">
-              <el-select v-model="form.keyGeneration.defaultKeyType" style="width: 100%">
-                <el-option label="SM2" value="SM2" />
-                <el-option label="RSA" value="RSA" />
-              </el-select>
-            </el-form-item>
-            <el-form-item label="默认长度" prop="keyGeneration.defaultKeySize">
-              <el-select v-model="form.keyGeneration.defaultKeySize" style="width: 100%">
-                <el-option label="256" :value="256" />
-                <el-option label="2048" :value="2048" />
-                <el-option label="3072" :value="3072" />
-                <el-option label="4096" :value="4096" />
-              </el-select>
-            </el-form-item>
-            <el-form-item label="批量大小" prop="keyGeneration.batchSize">
+            <el-form-item label="单批生成数量" prop="keyGeneration.batchSize">
               <el-input-number v-model="form.keyGeneration.batchSize" :min="1" :max="1000" controls-position="right" />
+              <div class="form-tip">备用密钥池补齐时，每批生成并写入数据库的密钥数量。算法和长度由密钥池策略决定。</div>
             </el-form-item>
           </el-card>
         </el-col>
@@ -100,7 +84,12 @@
               <el-input-number v-model="form.keyRecovery.totalApprovers" :min="1" :max="100" controls-position="right" />
             </el-form-item>
             <el-form-item label="必需审批人数" prop="keyRecovery.requiredApprovers">
-              <el-input-number v-model="form.keyRecovery.requiredApprovers" :min="1" :max="form.keyRecovery.totalApprovers || 1" controls-position="right" />
+              <el-input-number
+                v-model="form.keyRecovery.requiredApprovers"
+                :min="1"
+                :max="form.keyRecovery.totalApprovers || 1"
+                controls-position="right"
+              />
             </el-form-item>
           </el-card>
         </el-col>
@@ -178,9 +167,7 @@ const numberRule = (min: number, label: string) => ({
 });
 
 const rules = reactive<FormRules<KmcRuntimeConfig>>({
-  'keyGeneration.defaultKeyType': [{ required: true, message: '默认算法不能为空', trigger: 'change' }],
-  'keyGeneration.defaultKeySize': [{ required: true, message: '默认长度不能为空', trigger: 'change' }],
-  'keyGeneration.batchSize': [numberRule(1, '批量大小')],
+  'keyGeneration.batchSize': [numberRule(1, '单批生成数量')],
   'reservePool.watermarkCheckInterval': [numberRule(10, '检查间隔')],
   'reservePool.generationRateLimit': [numberRule(1, '生成限速')],
   'audit.retentionDays': [numberRule(1, '保留天数')],
@@ -292,6 +279,13 @@ loadConfig();
   .unit {
     margin-left: 8px;
     color: var(--el-text-color-secondary);
+  }
+
+  .form-tip {
+    margin-top: 6px;
+    color: var(--el-text-color-secondary);
+    font-size: 12px;
+    line-height: 18px;
   }
 }
 

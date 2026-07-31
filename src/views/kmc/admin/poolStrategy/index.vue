@@ -40,6 +40,17 @@
       <el-table-column label="算法类型" align="center" prop="algType" />
       <el-table-column label="低水位阈值" align="center" prop="lowWatermark" />
       <el-table-column label="高水位阈值" align="center" prop="highWatermark" />
+      <el-table-column label="自动补齐" align="center" prop="autoReplenish">
+        <template #default="{ row }">
+          <el-tag :type="row.suspendedTime ? 'danger' : row.autoReplenish === 1 ? 'success' : 'info'">
+            {{ row.suspendedTime ? '已熔断' : row.autoReplenish === 1 ? '启用' : '停用' }}
+          </el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column label="连续失败" align="center" prop="consecutiveFailures" width="100" />
+      <el-table-column label="最近失败原因" align="center" prop="lastFailureReason" min-width="180" show-overflow-tooltip>
+        <template #default="{ row }">{{ row.lastFailureReason || '-' }}</template>
+      </el-table-column>
       <el-table-column label="状态" align="center" prop="status">
         <template #default="scope">
           <el-tag :type="scope.row.status === 1 ? 'success' : 'danger'">
@@ -65,7 +76,14 @@
     <el-dialog :title="dialog.title" v-model="dialog.visible" width="500px" append-to-body>
       <el-form ref="poolStrategyFormRef" :model="form" :rules="rules" label-width="120px">
         <el-form-item label="密码算法类型" prop="algType">
-          <el-select v-model="form.algType" placeholder="请选择密码算法类型" filterable style="width: 100%">
+          <el-select
+            v-model="form.algType"
+            :disabled="Boolean(form.id)"
+            placeholder="请选择密码算法类型"
+            filterable
+            style="width: 100%"
+            @change="handleAlgTypeChange"
+          >
             <el-option v-for="item in algTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
           </el-select>
         </el-form-item>
@@ -80,6 +98,13 @@
             <el-radio :value="1">启用</el-radio>
             <el-radio :value="0">停用</el-radio>
           </el-radio-group>
+        </el-form-item>
+        <el-form-item label="自动补齐" prop="autoReplenish">
+          <el-radio-group v-model="form.autoReplenish">
+            <el-radio :value="1">启用</el-radio>
+            <el-radio :value="0">停用</el-radio>
+          </el-radio-group>
+          <div class="form-tip">启用后仅在库存低于低水位时补齐至高水位；连续失败 3 次会自动熔断。</div>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -114,6 +139,11 @@ const algTypeOptions = [
   { label: 'RSA2048', value: 'RSA2048' },
   { label: 'RSA4096', value: 'RSA4096' }
 ];
+const watermarkDefaults: Record<string, { lowWatermark: number; highWatermark: number }> = {
+  SM2: { lowWatermark: 500, highWatermark: 5000 },
+  RSA2048: { lowWatermark: 100, highWatermark: 500 },
+  RSA4096: { lowWatermark: 10, highWatermark: 50 }
+};
 
 const dialog = reactive<DialogOption>({
   visible: false,
@@ -139,7 +169,8 @@ const data = reactive<PageData<PoolStrategyForm, PoolStrategyQuery>>({
     keyUsage: 'ENCRYPT',
     lowWatermark: 10,
     highWatermark: 50,
-    status: 1
+    status: 0,
+    autoReplenish: 0
   },
   queryParams: {
     pageNum: 1,
@@ -161,7 +192,8 @@ const data = reactive<PageData<PoolStrategyForm, PoolStrategyQuery>>({
       { type: 'number', min: 1, message: '必须是大于0的数字', trigger: 'blur' },
       { validator: validateWatermark, trigger: 'blur' }
     ],
-    status: [{ required: true, message: '状态不能为空', trigger: 'change' }]
+    status: [{ required: true, message: '状态不能为空', trigger: 'change' }],
+    autoReplenish: [{ required: true, message: '请选择是否自动补齐', trigger: 'change' }]
   }
 });
 
@@ -196,9 +228,19 @@ const reset = () => {
     keyUsage: 'ENCRYPT',
     lowWatermark: 10,
     highWatermark: 50,
-    status: 1
+    status: 0,
+    autoReplenish: 0
   };
   poolStrategyFormRef.value?.resetFields();
+};
+
+const handleAlgTypeChange = (algType: string) => {
+  const defaults = watermarkDefaults[algType];
+  if (!defaults) {
+    return;
+  }
+  form.value.lowWatermark = defaults.lowWatermark;
+  form.value.highWatermark = defaults.highWatermark;
 };
 
 /** 搜索按钮操作 */

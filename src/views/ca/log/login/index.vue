@@ -5,8 +5,8 @@
       <div v-show="showSearch" class="mb-[10px]">
         <el-card shadow="hover">
           <el-form ref="queryFormRef" :model="queryParams" :inline="true">
-            <el-form-item label="登录地址" prop="ip">
-              <el-input v-model="queryParams.ip" placeholder="请输入登录地址" clearable @keyup.enter="handleQuery" />
+            <el-form-item label="登录地址" prop="ipAddress">
+              <el-input v-model="queryParams.ipAddress" placeholder="请输入登录地址" clearable @keyup.enter="handleQuery" />
             </el-form-item>
             <el-form-item label="用户名称" prop="username">
               <el-input v-model="queryParams.username" placeholder="请输入用户名称" clearable @keyup.enter="handleQuery" />
@@ -50,7 +50,7 @@
       <el-table v-loading="loading" :data="loginLogList" border :default-sort="defaultSort" @sort-change="handleSortChange">
         <el-table-column label="访问编号" align="center" prop="id" width="100" />
         <el-table-column label="用户名称" align="center" prop="username" width="120" :show-overflow-tooltip="true" sortable="custom" />
-        <el-table-column label="登录地址" align="center" prop="ip" width="140" :show-overflow-tooltip="true" />
+        <el-table-column label="登录地址" align="center" prop="ipAddress" width="140" :show-overflow-tooltip="true" />
         <el-table-column label="登录地点" align="center" prop="address" width="140" :show-overflow-tooltip="true" />
         <el-table-column label="浏览器" align="center" prop="browser" :show-overflow-tooltip="true" min-width="120" />
         <el-table-column label="操作系统" align="center" prop="os" min-width="120" :show-overflow-tooltip="true" />
@@ -96,7 +96,7 @@ const data = reactive({
   queryParams: {
     pageNum: 1,
     pageSize: 10,
-    ip: '',
+    ipAddress: '',
     username: '',
     status: '',
     orderByColumn: defaultSort.value.prop,
@@ -111,7 +111,7 @@ const buildQuery = () => {
     pageNum: queryParams.value.pageNum,
     pageSize: queryParams.value.pageSize,
     username: queryParams.value.username || undefined,
-    ip: queryParams.value.ip || undefined,
+    ipAddress: queryParams.value.ipAddress || undefined,
     status: queryParams.value.status === '' ? undefined : queryParams.value.status
   };
   if (dateRange.value?.[0] && dateRange.value?.[1]) {

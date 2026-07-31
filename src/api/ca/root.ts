@@ -96,7 +96,7 @@ export function disableRootCa(id: string | number): Promise<Result<any>> {
   }) as any;
 }
 
-// 吊销根证书
+// 注销根证书
 export function revokeRootCa(id: string | number, reason: string): Promise<Result<any>> {
   return request({
     url: `/ca/v1/roots/${id}/revoke`,

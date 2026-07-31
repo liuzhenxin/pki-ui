@@ -256,7 +256,7 @@ const adaptRows = (rows: any[]): OperLogVO[] => {
     operName: row.operator ?? row.operName,
     deptName: row.deptName ?? '',
     operUrl: row.uri ?? row.operUrl,
-    operIp: row.ip ?? row.operIp,
+    operIp: row.ipAddress ?? row.ip ?? row.operIp,
     operLocation: row.address ?? row.operLocation,
     operParam: row.requestParams ?? row.operParam,
     jsonResult: row.jsonResult ?? '',

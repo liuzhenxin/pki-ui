@@ -61,7 +61,9 @@
       "Bash(git commit -m 'feat: 更新CA/KMC/RA/OCSP前端页面和API接口 *)",
       "Bash(cat)",
       "Bash(bash /tmp/ca-login-test.sh)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(npx vue-tsc *)",
+      "Bash(docker cp *)"
     ]
   }
 }

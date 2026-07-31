@@ -69,6 +69,8 @@ export interface RaOperationSubmitForm {
   certId: string | number;
   reason: string;
   csr?: string;
+  notBefore?: string;
+  notAfter?: string;
 }
 
 export function pageRaWorkflowTodo(query: RaWorkflowTaskQuery): Promise<Result<any>> {

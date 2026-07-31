@@ -199,7 +199,9 @@ const handleRecovery = (row: UsedKeyVO) => {
     targetType: 'USED_KEY',
     targetId: row.id,
     serialNumber: row.serialNumber,
-    subject: row.subject
+    subject: row.subject,
+    keyType: (row as any).keyType,
+    keyBits: (row as any).keyBits
   });
 };
 

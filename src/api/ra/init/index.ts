@@ -62,6 +62,7 @@ export interface RaInitStatus {
   policyCount?: number;
   workflowCount?: number;
   userCount?: number;
+  accountCertCount?: number;
 }
 
 export interface RaInitAccount {

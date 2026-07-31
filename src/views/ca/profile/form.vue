@@ -378,13 +378,26 @@ const commonOIDs = [
   { value: 'commonName', label: '通用名称(CN)', oid: '2.5.4.3' },
   { value: 'stateOrProvince', label: '省/州(ST)', oid: '2.5.4.8' },
   { value: 'locality', label: '城市(L)', oid: '2.5.4.7' },
+  { value: 'streetAddress', label: '街道地址', oid: '2.5.4.9' },
+  { value: 'postalCode', label: '邮政编码', oid: '2.5.4.17' },
   { value: 'serialNumber', label: '序列号(SN)', oid: '2.5.4.5' },
   { value: 'emailAddress', label: '邮箱(E)', oid: '1.2.840.113549.1.9.1' },
   { value: 'givenName', label: '名字(GN)', oid: '2.5.4.42' },
   { value: 'surname', label: '姓氏(SN)', oid: '2.5.4.4' },
+  { value: 'initials', label: '姓名首字母', oid: '2.5.4.43' },
+  { value: 'generationQualifier', label: '代际限定符', oid: '2.5.4.44' },
   { value: 'title', label: '头衔(T)', oid: '2.5.4.12' },
   { value: 'userId', label: '用户ID(UID)', oid: '0.9.2342.19200300.100.1.1' },
+  { value: 'uniqueIdentifier', label: '唯一标识符', oid: '2.5.4.45' },
+  { value: 'dnQualifier', label: 'DN限定符', oid: '2.5.4.46' },
+  { value: 'pseudonym', label: '假名', oid: '2.5.4.65' },
   { value: 'domainComponent', label: '域名组件(DC)', oid: '0.9.2342.19200300.100.1.25' },
+  { value: 'businessCategory', label: '业务类别', oid: '2.5.4.15' },
+  { value: 'unstructuredName', label: '非结构化名称', oid: '1.2.840.113549.1.9.2' },
+  { value: 'unstructuredAddress', label: '非结构化地址', oid: '1.2.840.113549.1.9.8' },
+  { value: 'jurisdictionLocalityName', label: '管辖城市', oid: '1.3.6.1.4.1.311.60.2.1.1' },
+  { value: 'jurisdictionStateOrProvinceName', label: '管辖省/州', oid: '1.3.6.1.4.1.311.60.2.1.2' },
+  { value: 'jurisdictionCountryName', label: '管辖国家', oid: '1.3.6.1.4.1.311.60.2.1.3' },
   { value: 'organizationIdentifier', label: '组织标识符', oid: '2.5.4.97' }
 ];
 
@@ -396,13 +409,26 @@ const subjectLabelMap: Record<string, string> = {
   commonName: '通用名称(CN)',
   stateOrProvince: '省/州(ST)',
   locality: '城市(L)',
+  streetAddress: '街道地址',
+  postalCode: '邮政编码',
   serialNumber: '序列号(SN)',
   emailAddress: '邮箱(E)',
   givenName: '名字(GN)',
   surname: '姓氏(SN)',
+  initials: '姓名首字母',
+  generationQualifier: '代际限定符',
   title: '头衔(T)',
   userId: '用户ID(UID)',
+  uniqueIdentifier: '唯一标识符',
+  dnQualifier: 'DN限定符',
+  pseudonym: '假名',
   domainComponent: '域名组件(DC)',
+  businessCategory: '业务类别',
+  unstructuredName: '非结构化名称',
+  unstructuredAddress: '非结构化地址',
+  jurisdictionLocalityName: '管辖城市',
+  jurisdictionStateOrProvinceName: '管辖省/州',
+  jurisdictionCountryName: '管辖国家',
   description: '描述',
   organizationIdentifier: '组织标识符'
 };
@@ -415,13 +441,32 @@ const subjectValueToDescriptionMap: Record<string, string> = {
   cn: 'commonName',
   st: 'stateOrProvince',
   l: 'locality',
+  street: 'streetAddress',
+  streetaddress: 'streetAddress',
+  postalcode: 'postalCode',
   serialnumber: 'serialNumber',
   emailaddress: 'emailAddress',
   gn: 'givenName',
+  givenname: 'givenName',
   sn: 'surname',
+  surname: 'surname',
+  initials: 'initials',
+  generationqualifier: 'generationQualifier',
   t: 'title',
+  title: 'title',
   uid: 'userId',
+  userid: 'userId',
+  uniqueidentifier: 'uniqueIdentifier',
+  dnqualifier: 'dnQualifier',
+  pseudonym: 'pseudonym',
   dc: 'domainComponent',
+  domaincomponent: 'domainComponent',
+  businesscategory: 'businessCategory',
+  unstructuredname: 'unstructuredName',
+  unstructuredaddress: 'unstructuredAddress',
+  jurisdictionlocalityname: 'jurisdictionLocalityName',
+  jurisdictionstateorprovincename: 'jurisdictionStateOrProvinceName',
+  jurisdictioncountryname: 'jurisdictionCountryName',
   organizationidentifier: 'organizationIdentifier'
 };
 
@@ -1096,6 +1141,7 @@ function isKeyUsageRequired(extIndex: number, value: string): boolean {
 /** 处理密钥用法复选框组变化 */
 function handleKeyUsageGroupChange(extIndex: number, values: string[]) {
   const ext = form.extensions[extIndex];
+  selectedKeyUsages.value[extIndex] = [...values];
 
   if (!ext.keyUsage) {
     ext.keyUsage = { usages: [] };
@@ -1176,6 +1222,7 @@ function isExtendedKeyUsageRequired(extIndex: number, value: string): boolean {
 /** 处理增强密钥用法复选框组变化 */
 function handleExtendedKeyUsageGroupChange(extIndex: number, values: string[]) {
   const ext = form.extensions[extIndex];
+  selectedExtendedKeyUsages.value[extIndex] = [...values];
 
   if (!ext.extendedKeyUsage) {
     ext.extendedKeyUsage = { usages: [] };
@@ -1754,7 +1801,7 @@ onMounted(() => {
                 <div class="quick-add-title">常用字段快捷添加：</div>
                 <el-space wrap>
                   <el-tag
-                    v-for="common in allowedSubjectOptions"
+                    v-for="common in commonOIDs"
                     :key="common.value"
                     type="info"
                     effect="plain"
@@ -1868,7 +1915,7 @@ onMounted(() => {
                                   @change="handleKeyUsageRequiredChange(index, opt.value, $event)"
                                   size="small"
                                 >
-                                  必须
+                                  强制包含
                                 </el-checkbox>
                               </el-col>
                             </el-row>
@@ -1881,7 +1928,14 @@ onMounted(() => {
                     <template v-if="ext.type === 'ExtendedKeyUsage'">
                       <el-divider content-position="left" style="margin: 15px 0">增强密钥用法配置</el-divider>
                       <div class="keyusages-checkbox-list">
-                        <div class="keyusage-grid">
+                        <el-alert
+                          v-if="availableExtendedKeyUsageOptions.length === 0"
+                          type="info"
+                          :closable="false"
+                          show-icon
+                          title="当前证书级别不建议配置增强密钥用法"
+                        />
+                        <div v-else class="keyusage-grid">
                           <div v-for="opt in availableExtendedKeyUsageOptions" :key="opt.value" class="keyusage-checkbox-item">
                             <el-row :gutter="8" align="middle">
                               <el-col :span="16">
@@ -1910,7 +1964,7 @@ onMounted(() => {
                                   @change="handleExtendedKeyUsageRequiredChange(index, opt.value, $event)"
                                   size="small"
                                 >
-                                  必须
+                                  强制包含
                                 </el-checkbox>
                               </el-col>
                             </el-row>

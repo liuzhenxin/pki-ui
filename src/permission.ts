@@ -49,6 +49,9 @@ const isInitRoute = (path: string) =>
 const isTenantInitialized = (status: unknown) => Number(status) === -1;
 
 const getTenantAppTitle = (tenantName: string, tenantId: string, longName = false) => {
+  if (tenantId === '1') {
+    return `${tenantName} (${longName ? '平台运维中心' : 'OPS'})`;
+  }
   if (tenantId === '2') {
     return `${tenantName} (${longName ? 'License授权系统' : 'License'})`;
   }

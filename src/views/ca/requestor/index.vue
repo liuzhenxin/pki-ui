@@ -7,8 +7,8 @@
             <el-form-item label="请求者名称" prop="name">
               <el-input v-model="queryParams.name" placeholder="请输入请求者名称" clearable @keyup.enter="handleQuery" />
             </el-form-item>
-            <el-form-item label="请求者类型" prop="requestorType">
-              <el-select v-model="queryParams.requestorType" placeholder="请求者类型" clearable>
+            <el-form-item label="主体类型" prop="requestorType">
+              <el-select v-model="queryParams.requestorType" placeholder="主体类型" clearable>
                 <el-option v-for="item in requestorTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
               </el-select>
             </el-form-item>
@@ -49,7 +49,7 @@
         <el-table-column type="selection" width="50" align="center" />
         <el-table-column type="index" label="序号" width="80" align="center" />
         <el-table-column label="请求者名称" align="center" prop="name" :show-overflow-tooltip="true" />
-        <el-table-column label="请求者类型" align="center" prop="requestorType" width="150">
+        <el-table-column label="主体类型" align="center" prop="requestorType" width="150">
           <template #default="scope">
             <el-tag v-if="scope.row.requestorType === 'RA'" type="warning">RA(证书注册系统)</el-tag>
             <el-tag v-else-if="scope.row.requestorType === 'BUSINESS'" type="primary">业务系统</el-tag>
@@ -58,10 +58,12 @@
         </el-table-column>
         <el-table-column label="接入协议" align="center" prop="type" width="120">
           <template #default="scope">
-            <el-tag v-if="scope.row.type === 'API'" type="primary">API</el-tag>
-            <el-tag v-else-if="scope.row.type === 'CMP'" type="success">CMP</el-tag>
-            <el-tag v-else-if="scope.row.type === 'ACME'" type="warning">ACME</el-tag>
-            <el-tag v-else type="info">{{ scope.row.type || '-' }}</el-tag>
+            <el-space v-if="scope.row.type">
+              <el-tag v-for="protocol in String(scope.row.type).split(',')" :key="protocol" :type="protocol.trim() === 'CMP' ? 'success' : 'primary'">
+                {{ protocol.trim() }}
+              </el-tag>
+            </el-space>
+            <span v-else>-</span>
           </template>
         </el-table-column>
         <el-table-column label="状态" align="center" prop="status" width="100">
@@ -72,7 +74,7 @@
         <el-table-column label="证书主体" align="center" prop="subjectDn" min-width="220" :show-overflow-tooltip="true" />
         <el-table-column label="序列号" align="center" prop="serialNumber" width="180" :show-overflow-tooltip="true" />
         <el-table-column label="有效期至" align="center" prop="notAfter" width="180" />
-        <el-table-column label="证书" align="center" prop="conf" width="100">
+        <el-table-column label="协议身份证书" align="center" prop="conf" width="120">
           <template #default="scope">
             <el-button v-if="scope.row.conf" link type="success" @click="handleViewCert(scope.row)">
               <el-icon :size="20"><Document /></el-icon>
@@ -91,7 +93,7 @@
               <el-button link type="primary" icon="Edit" @click="handleUpdate(scope.row)"></el-button>
             </el-tooltip>
             <el-tooltip content="授权" placement="top">
-              <el-button link type="success" icon="Key" @click="handleAuthorize(scope.row)"></el-button>
+              <el-button v-hasPermi="['ca:requestor:authorize']" link type="success" icon="Key" @click="handleAuthorize(scope.row)"></el-button>
             </el-tooltip>
             <el-tooltip content="删除" placement="top">
               <el-button link type="danger" icon="Delete" @click="handleDelete(scope.row)"></el-button>
@@ -109,8 +111,8 @@
         <el-form-item label="请求者名称" prop="name">
           <el-input v-model="form.name" placeholder="请输入请求者名称" />
         </el-form-item>
-        <el-form-item label="请求者类型" prop="requestorType">
-          <el-select v-model="form.requestorType" placeholder="请选择请求者类型" style="width: 100%">
+        <el-form-item label="主体类型" prop="requestorType">
+          <el-select v-model="form.requestorType" placeholder="请选择主体类型" style="width: 100%">
             <el-option v-for="item in requestorTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
           </el-select>
         </el-form-item>
@@ -125,9 +127,9 @@
             <el-radio-button label="DISABLED">停用</el-radio-button>
           </el-radio-group>
         </el-form-item>
-        <el-form-item label="证书" prop="certificatePem">
+        <el-form-item label="协议身份证书" prop="certificatePem">
           <el-input v-model="form.certificatePem" type="textarea" placeholder="请输入证书PEM数据" :rows="12" @blur="parseFormCertificate" />
-          <div class="text-xs text-gray-500 mt-1">证书的PEM编码数据</div>
+          <div class="text-xs text-gray-500 mt-1">用于 API 请求签名或 CMP 消息保护的 PEM 证书</div>
         </el-form-item>
         <el-form-item v-if="form.subjectDn" label="证书主体">
           <el-input v-model="form.subjectDn" readonly />
@@ -349,7 +351,7 @@ const requestorTypeOptions = [
 const protocolTypeOptions = [
   { label: 'API', value: 'API' },
   { label: 'CMP', value: 'CMP' },
-  { label: 'ACME', value: 'ACME' }
+  { label: 'API + CMP', value: 'API,CMP' }
 ];
 
 // 查询参数
@@ -367,9 +369,9 @@ const form = ref<RequestorForm>({});
 // 表单校验
 const rules = reactive({
   name: [{ required: true, message: '请求者名称不能为空', trigger: 'blur' }],
-  requestorType: [{ required: true, message: '请求者类型不能为空', trigger: 'change' }],
+  requestorType: [{ required: true, message: '主体类型不能为空', trigger: 'change' }],
   type: [{ required: true, message: '接入协议不能为空', trigger: 'change' }],
-  certificatePem: [{ required: true, message: '请求者证书不能为空', trigger: 'blur' }]
+  certificatePem: [{ required: true, message: '协议身份证书不能为空', trigger: 'blur' }]
 });
 
 // 上传参数

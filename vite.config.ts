@@ -24,6 +24,16 @@ export default defineConfig(({ mode, command }) => {
       open: true,
       allowedHosts: ['liuzx.org'],
       proxy: {
+        ...(env.VITE_APP_OPS_API
+          ? {
+              [env.VITE_APP_OPS_API]: {
+                target: 'http://127.0.0.1:18080',
+                changeOrigin: true,
+                ws: true,
+                rewrite: (path) => path.replace(new RegExp('^' + env.VITE_APP_OPS_API), '')
+              }
+            }
+          : {}),
         [env.VITE_APP_BASE_API]: {
           // Nginx单体代理地址
           // target: 'http://nginx:99',

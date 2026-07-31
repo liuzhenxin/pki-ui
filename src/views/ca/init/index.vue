@@ -157,7 +157,6 @@
               <el-form-item label="签名器类型" prop="signerType">
                 <el-select v-model="signerForm.signerType" style="width: 100%">
                   <el-option label="PKCS12" value="PKCS12" />
-                  <el-option label="JKS" value="JKS" />
                   <el-option label="SDF" value="SDF" />
                 </el-select>
               </el-form-item>
@@ -1418,6 +1417,22 @@ const readFileContent = async (file: File): Promise<string | null> => {
   });
 };
 
+// 随机容器名生成（使用加密安全随机数）
+const randomContainerName = (prefix: string) => {
+  const bytes = new Uint8Array(4);
+  if (window.crypto?.getRandomValues) {
+    window.crypto.getRandomValues(bytes);
+  } else {
+    for (let index = 0; index < bytes.length; index++) {
+      bytes[index] = Math.floor(Math.random() * 256);
+    }
+  }
+  const suffix = Array.from(bytes)
+    .map((item) => item.toString(16).padStart(2, '0'))
+    .join('');
+  return `${prefix}-${suffix}`;
+};
+
 // 管理员设置
 const adminFormRef = ref<FormInstance>();
 const adminCertPem = ref<string>('');
@@ -1431,7 +1446,7 @@ const adminForm = reactive({
   provider: '',
   device: '',
   appName: '',
-  containerName: 'admin',
+  containerName: randomContainerName('admin'),
   pin: '',
   validityValue: 5,
   validityUnit: 'y',
@@ -1636,7 +1651,7 @@ const auditorForm = reactive({
   provider: '',
   device: '',
   appName: '',
-  containerName: 'auditor',
+  containerName: randomContainerName('auditor'),
   pin: '',
   validityValue: 5,
   validityUnit: 'y',
