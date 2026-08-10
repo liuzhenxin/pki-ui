@@ -49,6 +49,7 @@ export interface OpsServer {
   memoryUsage?: number;
   diskUsage?: number;
   loadAverage?: number;
+  logicalProcessorCount?: number;
   lastHeartbeatAt?: string;
   runningContainerCount: number;
   components: OpsComponent[];
@@ -155,4 +156,21 @@ export interface SyslogStatus {
   lastSuccessTime?: string;
   lastFailureTime?: string;
   lastError?: string;
+}
+
+export interface BusinessServiceItem {
+  code: string;
+  name: string;
+  layerCode: string;
+  layerName: string;
+  layerOrder: number;
+  componentOrder: number;
+  containerMatchRule?: string;
+  description?: string;
+  enabled: boolean;
+  dependencies: string[];
+}
+
+export interface BusinessServiceConfig {
+  services: BusinessServiceItem[];
 }

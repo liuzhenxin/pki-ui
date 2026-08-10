@@ -1,5 +1,6 @@
 import request from '@/utils/request';
 import type {
+  BusinessServiceConfig,
   CryptoMonitorInstance,
   OpsContainer,
   OpsContainerLogs,
@@ -45,6 +46,23 @@ export function getOpsServers(): Promise<OpsServer[]> {
     baseURL,
     url: '/v1/servers',
     method: 'get'
+  }) as any;
+}
+
+export function getBusinessServiceConfig(): Promise<Result<BusinessServiceConfig>> {
+  return request({
+    baseURL,
+    url: '/v1/business-services',
+    method: 'get'
+  }) as any;
+}
+
+export function saveBusinessServiceConfig(data: BusinessServiceConfig): Promise<Result<void>> {
+  return request({
+    baseURL,
+    url: '/v1/business-services',
+    method: 'put',
+    data
   }) as any;
 }
 

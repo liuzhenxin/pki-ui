@@ -2,10 +2,13 @@
   <div class="ops-page">
     <div class="ops-toolbar">
       <div>
-        <h2>业务服务</h2>
-        <span>根据实际业务服务配置展示运行情况 · 最近采集时间：{{ dateTimeText(overview?.collectedAt) }}</span>
+        <h2>应用服务</h2>
+        <span>根据实际应用服务配置展示运行情况 · 最近采集时间：{{ dateTimeText(overview?.collectedAt) }}</span>
       </div>
-      <el-button type="primary" icon="Refresh" :loading="loading" @click="loadData">刷新</el-button>
+      <div class="ops-toolbar-actions">
+        <el-button v-hasPermi="['ops:business-service:edit']" type="primary" plain icon="Setting" @click="openConfig">配置</el-button>
+        <el-button type="primary" icon="Refresh" :loading="loading" @click="loadData">刷新</el-button>
+      </div>
     </div>
 
     <el-card shadow="never" class="ops-query">
@@ -46,7 +49,7 @@
     <el-card shadow="never" class="ops-panel">
       <template #header>
         <div class="ops-panel-header">
-          <span>业务服务列表</span>
+          <span>应用服务列表</span>
           <el-tag effect="plain" :type="abnormalCount > 0 ? 'warning' : 'success'">正常 {{ runningCount }}/{{ serviceRows.length }}</el-tag>
         </div>
       </template>
@@ -86,7 +89,7 @@
           </template>
         </el-table-column>
       </el-table>
-      <el-empty v-if="!loading && filteredRows.length === 0" description="暂无业务服务数据" />
+      <el-empty v-if="!loading && filteredRows.length === 0" description="暂无应用服务数据" />
     </el-card>
 
     <el-drawer v-model="drawerVisible" :size="drawerSize" destroy-on-close>
@@ -100,7 +103,7 @@
       <el-descriptions v-if="selectedRow" :column="1" border>
         <el-descriptions-item label="服务编码">{{ selectedRow.name }}</el-descriptions-item>
         <el-descriptions-item label="服务名称">{{ selectedRow.displayName }}</el-descriptions-item>
-        <el-descriptions-item label="所属层级">{{ selectedRow.layerName || '业务服务' }}</el-descriptions-item>
+        <el-descriptions-item label="所属层级">{{ selectedRow.layerName || '应用服务' }}</el-descriptions-item>
         <el-descriptions-item label="运行状态">{{ selectedRow.statusText }}</el-descriptions-item>
         <el-descriptions-item label="容器名称">{{ selectedRow.containerName || '-' }}</el-descriptions-item>
         <el-descriptions-item label="容器 ID">{{ selectedRow.containerId || '-' }}</el-descriptions-item>
@@ -117,12 +120,62 @@
         </el-descriptions-item>
       </el-descriptions>
     </el-drawer>
+
+    <el-dialog v-model="configVisible" title="应用服务监控配置" width="900px" destroy-on-close>
+      <div class="ops-config-tip">配置了哪些服务就监控哪些 · 停用（关闭开关）后该服务不再出现在监控列表</div>
+      <el-form ref="configFormRef" :model="configForm" :rules="configRules">
+        <el-table :data="configForm.services" border>
+          <el-table-column label="启用" width="70" align="center">
+            <template #default="{ row }">
+              <el-switch v-model="row.enabled" />
+            </template>
+          </el-table-column>
+          <el-table-column label="服务编码" min-width="160">
+            <template #default="{ row, $index }">
+              <el-form-item :prop="`services.${$index}.code`" :rules="configRules.code">
+                <el-input v-model="row.code" placeholder="如 liuzx-crypto" />
+              </el-form-item>
+            </template>
+          </el-table-column>
+          <el-table-column label="服务名称" min-width="150">
+            <template #default="{ row, $index }">
+              <el-form-item :prop="`services.${$index}.name`" :rules="configRules.name">
+                <el-input v-model="row.name" placeholder="如 数据加密服务" />
+              </el-form-item>
+            </template>
+          </el-table-column>
+          <el-table-column label="容器匹配规则" min-width="190">
+            <template #default="{ row }">
+              <el-input v-model="row.containerMatchRule" placeholder="如 name:liuzx-crypto" />
+            </template>
+          </el-table-column>
+          <el-table-column label="依赖" min-width="200">
+            <template #default="{ row }">
+              <el-select v-model="row.dependencies" multiple filterable allow-create default-first-option placeholder="依赖组件" style="width: 100%">
+                <el-option v-for="dep in dependencyOptions" :key="dep" :label="dep" :value="dep" />
+              </el-select>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="80" align="center">
+            <template #default="{ $index }">
+              <el-button link type="danger" icon="Delete" @click="removeService($index)">删除</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+        <el-button type="primary" plain icon="Plus" style="margin-top: 12px" @click="addService">添加服务</el-button>
+      </el-form>
+      <template #footer>
+        <el-button @click="configVisible = false">取消</el-button>
+        <el-button type="primary" :loading="configSaving" @click="saveConfig">保存</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup name="OpsBusinessService" lang="ts">
-import { getOpsOverview, getOpsServers } from '@/api/ops';
-import type { OpsOverview, OpsServer } from '@/api/ops/types';
+import type { FormInstance, FormRules } from 'element-plus';
+import { getBusinessServiceConfig, getOpsOverview, getOpsServers, saveBusinessServiceConfig } from '@/api/ops';
+import type { BusinessServiceConfig, OpsOverview, OpsServer } from '@/api/ops/types';
 import { dateTimeText, flattenComponents, statusTagType, statusText } from '@/views/ops/utils';
 
 interface BusinessServiceRow {
@@ -143,13 +196,6 @@ interface BusinessServiceRow {
   serverHost?: string;
 }
 
-const BUSINESS_SERVICES = [
-  { name: 'liuzx-ca', displayName: '证书认证中心' },
-  { name: 'liuzx-ra', displayName: '注册认证中心' },
-  { name: 'liuzx-kmc', displayName: '密钥管理中心' },
-  { name: 'liuzx-ocsp', displayName: '在线证书状态服务' }
-] as const;
-
 const loading = ref(false);
 const overview = ref<OpsOverview>();
 const servers = ref<OpsServer[]>([]);
@@ -159,9 +205,11 @@ const query = ref({
   serviceName: '',
   status: ''
 });
+const businessConfig = ref<BusinessServiceConfig>({ services: [] });
 
+const enabledServices = computed(() => businessConfig.value.services.filter((service) => service.enabled));
 const businessComponentMap = computed(() => new Map(flattenComponents(overview.value).map((component) => [component.name, component] as const)));
-const serviceOptions = BUSINESS_SERVICES;
+const serviceOptions = computed(() => enabledServices.value.map((service) => ({ name: service.code, displayName: service.name })));
 
 const findServerByContainerName = (containerName?: string) => {
   if (!containerName) {
@@ -171,17 +219,17 @@ const findServerByContainerName = (containerName?: string) => {
 };
 
 const serviceRows = computed<BusinessServiceRow[]>(() =>
-  BUSINESS_SERVICES.map((service) => {
-    const component = businessComponentMap.value.get(service.name);
+  enabledServices.value.map((service) => {
+    const component = businessComponentMap.value.get(service.code);
     const container = component?.container;
     const server = findServerByContainerName(container?.name);
     const running = Boolean(container?.running);
     const statusKey = running ? 'running' : 'abnormal';
     return {
-      name: service.name,
-      displayName: component?.displayName || service.displayName,
+      name: service.code,
+      displayName: component?.displayName || service.name,
       layerName: component?.layerName,
-      dependencies: component?.dependencies || [],
+      dependencies: component?.dependencies || service.dependencies || [],
       running,
       statusKey,
       statusText: statusText(container?.state, container?.running, container?.present),
@@ -223,11 +271,70 @@ const openDetail = (row: BusinessServiceRow) => {
 const loadData = async () => {
   loading.value = true;
   try {
-    const [overviewRes, serverRes] = await Promise.all([getOpsOverview(), getOpsServers()]);
+    const [overviewRes, serverRes, configRes] = await Promise.all([getOpsOverview(), getOpsServers(), getBusinessServiceConfig()]);
     overview.value = overviewRes;
     servers.value = serverRes || [];
+    businessConfig.value = configRes?.data || { services: [] };
   } finally {
     loading.value = false;
+  }
+};
+
+const configVisible = ref(false);
+const configSaving = ref(false);
+const configFormRef = ref<FormInstance>();
+const configForm = reactive<BusinessServiceConfig>({ services: [] });
+const configRules: FormRules = {
+  code: [{ required: true, message: '请输入服务编码', trigger: 'blur' }],
+  name: [{ required: true, message: '请输入服务名称', trigger: 'blur' }]
+};
+const dependencyOptions = ['mysql8', 'redis8', 'kafka', 'liuzx-nacos', 'liuzx-gateway', 'liuzx-auth', 'liuzx-admin', 'liuzx-crypto', 'liuzx-ca', 'liuzx-kmc', 'liuzx-ra', 'liuzx-ocsp', 'liuzx-ops'];
+
+const openConfig = () => {
+  configForm.services = businessConfig.value.services.map((service) => ({
+    code: service.code,
+    name: service.name,
+    layerCode: service.layerCode,
+    layerName: service.layerName,
+    layerOrder: service.layerOrder,
+    componentOrder: service.componentOrder,
+    containerMatchRule: service.containerMatchRule,
+    description: service.description,
+    enabled: service.enabled,
+    dependencies: [...(service.dependencies || [])]
+  }));
+  configVisible.value = true;
+};
+
+const addService = () => {
+  configForm.services.push({
+    code: '',
+    name: '',
+    layerCode: 'app',
+    layerName: '第四层 - 应用服务',
+    layerOrder: 4,
+    componentOrder: configForm.services.length * 10 + 100,
+    containerMatchRule: '',
+    description: '',
+    enabled: true,
+    dependencies: []
+  });
+};
+
+const removeService = (index: number) => {
+  configForm.services.splice(index, 1);
+};
+
+const saveConfig = async () => {
+  await configFormRef.value?.validate();
+  configSaving.value = true;
+  try {
+    await saveBusinessServiceConfig(JSON.parse(JSON.stringify(configForm)));
+    ElMessage.success('应用服务监控配置已保存');
+    configVisible.value = false;
+    await loadData();
+  } finally {
+    configSaving.value = false;
   }
 };
 
@@ -251,6 +358,21 @@ onMounted(loadData);
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+
+.ops-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ops-config-tip {
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: rgb(69 123 157 / 10%);
+  color: #457b9d;
+  font-size: 13px;
 }
 
 .ops-toolbar {

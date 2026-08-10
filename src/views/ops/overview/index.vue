@@ -36,7 +36,7 @@
           <b>{{ percentText(averageCpuUsage) }}</b>
         </div>
         <div class="ops-meter-row">
-          <span>最大负载</span>
+          <span>最大 1 分钟负载</span>
           <el-progress :percentage="safePercent(maxLoadPercent)" :stroke-width="10" />
           <b>{{ maxLoadAverageText }}</b>
         </div>
@@ -225,7 +225,7 @@
         <el-card shadow="never" class="ops-panel">
           <template #header>
             <div class="ops-panel-header">
-              <span>业务服务</span>
+              <span>应用服务</span>
               <el-tag effect="plain" :type="businessAbnormalCount > 0 ? 'warning' : 'success'">
                 正常 {{ businessRunningCount }}/{{ businessComponents.length }}
               </el-tag>
@@ -274,7 +274,7 @@
                   </el-button>
                 </div>
               </div>
-              <el-empty v-if="!loading && businessComponents.length === 0" description="暂无业务服务配置" />
+              <el-empty v-if="!loading && businessComponents.length === 0" description="暂无应用服务配置" />
             </div>
           </el-skeleton>
         </el-card>
@@ -481,7 +481,7 @@ const componentContainerNames = computed(() => new Set(components.value.map((com
 const unboundContainers = computed(() =>
   allContainers.value.filter((container) => container.name && !componentContainerNames.value.has(container.name))
 );
-const businessComponents = computed(() => components.value.filter((component) => component.layer === 'business'));
+const businessComponents = computed(() => components.value.filter((component) => component.layer === 'app'));
 const businessRunningCount = computed(() => businessComponents.value.filter((component) => component.container?.running).length);
 const businessAbnormalCount = computed(() => businessComponents.value.length - businessRunningCount.value);
 const overallStatus = computed(() => {
@@ -533,7 +533,16 @@ const averageCpuUsage = computed(() => average(servers.value.map((server) => ser
 const averageMemoryUsage = computed(() => average(servers.value.map((server) => server.memoryUsage)));
 const averageDiskUsage = computed(() => average(servers.value.map((server) => server.diskUsage)));
 const maxLoadAverage = computed(() => Math.max(0, ...servers.value.map((server) => server.loadAverage || 0)));
-const maxLoadPercent = computed(() => (maxLoadAverage.value > 0 ? Math.min(maxLoadAverage.value * 10, 100) : undefined));
+const maxLoadPercent = computed(() => {
+  const server = servers.value.reduce<OpsServer | undefined>(
+    (current, candidate) => (!current || (candidate.loadAverage || 0) > (current.loadAverage || 0) ? candidate : current),
+    undefined
+  );
+  if (!server?.loadAverage || !server.logicalProcessorCount) {
+    return undefined;
+  }
+  return Math.min((server.loadAverage / server.logicalProcessorCount) * 100, 100);
+});
 const maxLoadAverageText = computed(() => (maxLoadAverage.value > 0 ? maxLoadAverage.value.toFixed(2) : '-'));
 
 const metricCards = computed(() => [
@@ -546,7 +555,7 @@ const metricCards = computed(() => [
   { label: '在线服务器', value: `${summary.value.onlineServerCount}/${summary.value.serverCount}`, icon: 'Monitor', tone: 'blue' },
   { label: '运行容器', value: `${summary.value.runningContainerCount}/${summary.value.containerCount}`, icon: 'Box', tone: 'cyan' },
   {
-    label: '业务服务',
+    label: '应用服务',
     value: `${businessRunningCount.value}/${businessComponents.value.length}`,
     icon: 'Connection',
     tone: businessAbnormalCount.value > 0 ? 'orange' : 'green'
