@@ -6,7 +6,7 @@
         <span>根据实际应用服务配置展示运行情况 · 最近采集时间：{{ dateTimeText(overview?.collectedAt) }}</span>
       </div>
       <div class="ops-toolbar-actions">
-        <el-button v-hasPermi="['ops:business-service:edit']" type="primary" plain icon="Setting" @click="openConfig">配置</el-button>
+        <el-button v-hasPermi="['ops:app-service:edit']" type="primary" plain icon="Setting" @click="openConfig">配置</el-button>
         <el-button type="primary" icon="Refresh" :loading="loading" @click="loadData">刷新</el-button>
       </div>
     </div>
@@ -172,13 +172,13 @@
   </div>
 </template>
 
-<script setup name="OpsBusinessService" lang="ts">
+<script setup name="OpsAppService" lang="ts">
 import type { FormInstance, FormRules } from 'element-plus';
-import { getBusinessServiceConfig, getOpsOverview, getOpsServers, saveBusinessServiceConfig } from '@/api/ops';
-import type { BusinessServiceConfig, OpsOverview, OpsServer } from '@/api/ops/types';
+import { getAppServiceConfig, getOpsOverview, getOpsServers, saveAppServiceConfig } from '@/api/ops';
+import type { AppServiceConfig, OpsOverview, OpsServer } from '@/api/ops/types';
 import { dateTimeText, flattenComponents, statusTagType, statusText } from '@/views/ops/utils';
 
-interface BusinessServiceRow {
+interface AppServiceRow {
   name: string;
   displayName: string;
   layerName?: string;
@@ -200,15 +200,17 @@ const loading = ref(false);
 const overview = ref<OpsOverview>();
 const servers = ref<OpsServer[]>([]);
 const drawerVisible = ref(false);
-const selectedRow = ref<BusinessServiceRow>();
+const selectedRow = ref<AppServiceRow>();
 const query = ref({
   serviceName: '',
   status: ''
 });
-const businessConfig = ref<BusinessServiceConfig>({ services: [] });
+const appConfig = ref<AppServiceConfig>({ services: [] });
 
-const enabledServices = computed(() => businessConfig.value.services.filter((service) => service.enabled));
-const businessComponentMap = computed(() => new Map(flattenComponents(overview.value).map((component) => [component.name, component] as const)));
+const enabledServices = computed(() =>
+  appConfig.value.services.filter((service) => service.enabled && service.menuEnabled)
+);
+const appComponentMap = computed(() => new Map(flattenComponents(overview.value).map((component) => [component.name, component] as const)));
 const serviceOptions = computed(() => enabledServices.value.map((service) => ({ name: service.code, displayName: service.name })));
 
 const findServerByContainerName = (containerName?: string) => {
@@ -218,9 +220,9 @@ const findServerByContainerName = (containerName?: string) => {
   return servers.value.find((server) => server.containers?.some((container) => container.name === containerName));
 };
 
-const serviceRows = computed<BusinessServiceRow[]>(() =>
+const serviceRows = computed<AppServiceRow[]>(() =>
   enabledServices.value.map((service) => {
-    const component = businessComponentMap.value.get(service.code);
+    const component = appComponentMap.value.get(service.code);
     const container = component?.container;
     const server = findServerByContainerName(container?.name);
     const running = Boolean(container?.running);
@@ -263,7 +265,7 @@ const resetQuery = () => {
   query.value.status = '';
 };
 
-const openDetail = (row: BusinessServiceRow) => {
+const openDetail = (row: AppServiceRow) => {
   selectedRow.value = row;
   drawerVisible.value = true;
 };
@@ -271,10 +273,10 @@ const openDetail = (row: BusinessServiceRow) => {
 const loadData = async () => {
   loading.value = true;
   try {
-    const [overviewRes, serverRes, configRes] = await Promise.all([getOpsOverview(), getOpsServers(), getBusinessServiceConfig()]);
+    const [overviewRes, serverRes, configRes] = await Promise.all([getOpsOverview(), getOpsServers(), getAppServiceConfig()]);
     overview.value = overviewRes;
     servers.value = serverRes || [];
-    businessConfig.value = configRes?.data || { services: [] };
+    appConfig.value = configRes?.data || { services: [] };
   } finally {
     loading.value = false;
   }
@@ -283,7 +285,7 @@ const loadData = async () => {
 const configVisible = ref(false);
 const configSaving = ref(false);
 const configFormRef = ref<FormInstance>();
-const configForm = reactive<BusinessServiceConfig>({ services: [] });
+const configForm = reactive<AppServiceConfig>({ services: [] });
 const configRules: FormRules = {
   code: [{ required: true, message: '请输入服务编码', trigger: 'blur' }],
   name: [{ required: true, message: '请输入服务名称', trigger: 'blur' }]
@@ -291,7 +293,7 @@ const configRules: FormRules = {
 const dependencyOptions = ['mysql8', 'redis8', 'kafka', 'liuzx-nacos', 'liuzx-gateway', 'liuzx-auth', 'liuzx-admin', 'liuzx-crypto', 'liuzx-ca', 'liuzx-kmc', 'liuzx-ra', 'liuzx-ocsp', 'liuzx-ops'];
 
 const openConfig = () => {
-  configForm.services = businessConfig.value.services.map((service) => ({
+  configForm.services = appConfig.value.services.map((service) => ({
     code: service.code,
     name: service.name,
     layerCode: service.layerCode,
@@ -301,6 +303,7 @@ const openConfig = () => {
     containerMatchRule: service.containerMatchRule,
     description: service.description,
     enabled: service.enabled,
+    menuEnabled: service.menuEnabled,
     dependencies: [...(service.dependencies || [])]
   }));
   configVisible.value = true;
@@ -317,6 +320,7 @@ const addService = () => {
     containerMatchRule: '',
     description: '',
     enabled: true,
+    menuEnabled: true,
     dependencies: []
   });
 };
@@ -329,7 +333,7 @@ const saveConfig = async () => {
   await configFormRef.value?.validate();
   configSaving.value = true;
   try {
-    await saveBusinessServiceConfig(JSON.parse(JSON.stringify(configForm)));
+    await saveAppServiceConfig(JSON.parse(JSON.stringify(configForm)));
     ElMessage.success('应用服务监控配置已保存');
     configVisible.value = false;
     await loadData();

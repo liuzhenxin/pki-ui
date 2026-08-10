@@ -14,6 +14,7 @@
     <el-tabs v-model="activeTab" class="security-tabs">
       <el-tab-pane label="RADIUS 登录认证" name="radius" />
       <el-tab-pane label="Syslog 日志转发" name="syslog" />
+      <el-tab-pane label="菜单显示配置" name="menu" />
     </el-tabs>
 
     <el-form v-show="activeTab === 'radius'" ref="formRef" v-loading="loading" :model="form" :rules="rules" label-position="top">
@@ -120,6 +121,8 @@
 
     <SyslogConfigPane v-if="activeTab === 'syslog'" class="syslog-pane" />
 
+    <MenuDisplayConfigPane v-if="activeTab === 'menu'" class="syslog-pane" />
+
     <el-dialog v-if="activeTab === 'radius'" v-model="testVisible" title="测试 RADIUS 认证" width="460px" destroy-on-close>
       <el-alert type="info" :closable="false" show-icon> 测试账号和动态口令仅用于本次请求，不会保存。 </el-alert>
       <el-form ref="testFormRef" :model="testForm" :rules="testRules" label-position="top" class="test-form">
@@ -143,6 +146,7 @@ import type { FormInstance, FormRules } from 'element-plus';
 import { getRadiusConfig, saveRadiusConfig, testRadiusAuthentication } from '@/api/ops';
 import type { RadiusConfig } from '@/api/ops/types';
 import SyslogConfigPane from './SyslogConfigPane.vue';
+import MenuDisplayConfigPane from './MenuDisplayConfigPane.vue';
 
 const defaultConfig = (): RadiusConfig => ({
   enabled: false,
@@ -157,7 +161,7 @@ const defaultConfig = (): RadiusConfig => ({
 });
 
 const loading = ref(false);
-const activeTab = ref<'radius' | 'syslog'>('radius');
+const activeTab = ref<'radius' | 'syslog' | 'menu'>('radius');
 const saving = ref(false);
 const testing = ref(false);
 const testVisible = ref(false);

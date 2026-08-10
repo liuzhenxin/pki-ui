@@ -78,7 +78,7 @@
             <span>运行容器</span>
           </div>
           <div>
-            <strong>{{ businessRunningCount }}</strong>
+            <strong>{{ appRunningCount }}</strong>
             <span>业务正常</span>
           </div>
           <div>
@@ -226,23 +226,23 @@
           <template #header>
             <div class="ops-panel-header">
               <span>应用服务</span>
-              <el-tag effect="plain" :type="businessAbnormalCount > 0 ? 'warning' : 'success'">
-                正常 {{ businessRunningCount }}/{{ businessComponents.length }}
+              <el-tag effect="plain" :type="appAbnormalCount > 0 ? 'warning' : 'success'">
+                正常 {{ appRunningCount }}/{{ appComponents.length }}
               </el-tag>
             </div>
           </template>
           <el-skeleton :loading="loading" animated :rows="4">
-            <div class="ops-business-grid">
+            <div class="ops-app-grid">
               <div
-                v-for="component in businessComponents"
+                v-for="component in appComponents"
                 :key="component.name"
-                class="ops-business-item"
+                class="ops-app-item"
                 role="button"
                 tabindex="0"
                 @click="openComponentDetail(component)"
                 @keydown.enter.prevent="openComponentDetail(component)"
               >
-                <div class="ops-business-head">
+                <div class="ops-app-head">
                   <div>
                     <b>{{ component.displayName }}</b>
                     <span>{{ component.name }}</span>
@@ -254,11 +254,11 @@
                     {{ statusText(component.container?.state, component.container?.running, component.container?.present) }}
                   </el-tag>
                 </div>
-                <div class="ops-business-meta">
+                <div class="ops-app-meta">
                   <span>实例</span>
                   <b>{{ component.container?.running ? '1/1' : '0/1' }}</b>
                 </div>
-                <div class="ops-business-meta">
+                <div class="ops-app-meta">
                   <span>依赖</span>
                   <b>{{ component.dependencies?.length ? component.dependencies.join(' / ') : '无' }}</b>
                 </div>
@@ -274,7 +274,7 @@
                   </el-button>
                 </div>
               </div>
-              <el-empty v-if="!loading && businessComponents.length === 0" description="暂无应用服务配置" />
+              <el-empty v-if="!loading && appComponents.length === 0" description="暂无应用服务配置" />
             </div>
           </el-skeleton>
         </el-card>
@@ -481,9 +481,9 @@ const componentContainerNames = computed(() => new Set(components.value.map((com
 const unboundContainers = computed(() =>
   allContainers.value.filter((container) => container.name && !componentContainerNames.value.has(container.name))
 );
-const businessComponents = computed(() => components.value.filter((component) => component.layer === 'app'));
-const businessRunningCount = computed(() => businessComponents.value.filter((component) => component.container?.running).length);
-const businessAbnormalCount = computed(() => businessComponents.value.length - businessRunningCount.value);
+const appComponents = computed(() => components.value.filter((component) => component.layer === 'app'));
+const appRunningCount = computed(() => appComponents.value.filter((component) => component.container?.running).length);
+const appAbnormalCount = computed(() => appComponents.value.length - appRunningCount.value);
 const overallStatus = computed(() => {
   if (summary.value.abnormalComponentCount > 0 || summary.value.serverCount !== summary.value.onlineServerCount) {
     return 'DEGRADED';
@@ -556,9 +556,9 @@ const metricCards = computed(() => [
   { label: '运行容器', value: `${summary.value.runningContainerCount}/${summary.value.containerCount}`, icon: 'Box', tone: 'cyan' },
   {
     label: '应用服务',
-    value: `${businessRunningCount.value}/${businessComponents.value.length}`,
+    value: `${appRunningCount.value}/${appComponents.value.length}`,
     icon: 'Connection',
-    tone: businessAbnormalCount.value > 0 ? 'orange' : 'green'
+    tone: appAbnormalCount.value > 0 ? 'orange' : 'green'
   },
   { label: '当前告警', value: currentAlerts.value.length, icon: 'Warning', tone: currentAlerts.value.length > 0 ? 'red' : 'gray' }
 ]);
@@ -948,13 +948,13 @@ onMounted(loadData);
   font-size: 12px;
 }
 
-.ops-business-grid {
+.ops-app-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 10px;
 }
 
-.ops-business-item {
+.ops-app-item {
   display: flex;
   flex-direction: column;
   width: 100%;
@@ -977,7 +977,7 @@ onMounted(loadData);
   }
 }
 
-.ops-business-head {
+.ops-app-head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -1000,7 +1000,7 @@ onMounted(loadData);
   }
 }
 
-.ops-business-meta {
+.ops-app-meta {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -1416,7 +1416,7 @@ onMounted(loadData);
   }
 
   .ops-component-grid,
-  .ops-business-grid,
+  .ops-app-grid,
   .ops-container-grid {
     grid-template-columns: 1fr;
   }

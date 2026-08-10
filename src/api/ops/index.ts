@@ -1,11 +1,12 @@
 import request from '@/utils/request';
 import type {
-  BusinessServiceConfig,
+  AppServiceConfig,
   CryptoMonitorInstance,
   OpsContainer,
   OpsContainerLogs,
   OpsOverview,
   OpsServer,
+  PlatformServiceMenuConfig,
   RadiusConfig,
   RadiusStatus,
   RadiusTestRequest,
@@ -49,18 +50,35 @@ export function getOpsServers(): Promise<OpsServer[]> {
   }) as any;
 }
 
-export function getBusinessServiceConfig(): Promise<Result<BusinessServiceConfig>> {
+export function getAppServiceConfig(): Promise<Result<AppServiceConfig>> {
   return request({
     baseURL,
-    url: '/v1/business-services',
+    url: '/v1/app-services',
     method: 'get'
   }) as any;
 }
 
-export function saveBusinessServiceConfig(data: BusinessServiceConfig): Promise<Result<void>> {
+export function saveAppServiceConfig(data: AppServiceConfig): Promise<Result<void>> {
   return request({
     baseURL,
-    url: '/v1/business-services',
+    url: '/v1/app-services',
+    method: 'put',
+    data
+  }) as any;
+}
+
+export function getPlatformServiceMenuConfig(): Promise<Result<PlatformServiceMenuConfig>> {
+  return request({
+    baseURL,
+    url: '/v1/platform-services/menus/config',
+    method: 'get'
+  }) as any;
+}
+
+export function savePlatformServiceMenuConfig(data: PlatformServiceMenuConfig): Promise<Result<void>> {
+  return request({
+    baseURL,
+    url: '/v1/platform-services/menus/config',
     method: 'put',
     data
   }) as any;

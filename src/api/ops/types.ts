@@ -158,7 +158,7 @@ export interface SyslogStatus {
   lastError?: string;
 }
 
-export interface BusinessServiceItem {
+export interface AppServiceItem {
   code: string;
   name: string;
   layerCode: string;
@@ -168,9 +168,21 @@ export interface BusinessServiceItem {
   containerMatchRule?: string;
   description?: string;
   enabled: boolean;
+  menuEnabled: boolean;
   dependencies: string[];
 }
 
-export interface BusinessServiceConfig {
-  services: BusinessServiceItem[];
+export interface AppServiceConfig {
+  services: AppServiceItem[];
+}
+
+export interface PlatformServiceMenuConfigItem {
+  serviceCode: string;
+  name: string;
+  menuEnabled: boolean;
+  sort: number;
+}
+
+export interface PlatformServiceMenuConfig {
+  items: PlatformServiceMenuConfigItem[];
 }

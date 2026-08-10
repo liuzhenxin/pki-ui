@@ -90,15 +90,15 @@ export const constantRoutes: RouteRecordRaw[] = [
     ]
   },
   {
-    path: '/ops/business-service',
+    path: '/ops/app-service',
     component: Layout,
     hidden: true,
     children: [
       {
         path: '',
-        component: () => import('@/views/ops/business-service/index.vue'),
-        name: 'OpsBusinessService',
-        meta: { title: '业务服务', activeMenu: '/ops/business-service' }
+        component: () => import('@/views/ops/app-service/index.vue'),
+        name: 'OpsAppService',
+        meta: { title: '应用服务', activeMenu: '/ops/app-service' }
       }
     ]
   },
