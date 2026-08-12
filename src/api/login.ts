@@ -2,7 +2,7 @@ import request from '@/utils/request';
 import { AxiosPromise } from 'axios';
 import { LoginData, LoginResult, Result, SecretsResult, TenantInfo } from './types';
 import { UserInfo } from '@/api/system/user/types';
-import { encrypt } from '@/utils/jsencrypt';
+import { encryptExt } from '@/utils/jsencrypt';
 import { getToken } from '@/utils/auth';
 import setting from '@/settings';
 
@@ -13,12 +13,15 @@ const clientId = import.meta.env.VITE_APP_CLIENT_ID;
  * @returns
  */
 export function login(data: LoginData): Promise<LoginResult> {
-  const { radiusPassword, ...loginData } = data;
+  const { radiusPassword, publicKey, ...loginData } = data;
+  if (!publicKey) {
+    return Promise.reject(new Error('未获取到登录加密公钥'));
+  }
   const params = {
     ...loginData,
-    username: encodeURIComponent(encrypt(data.username)),
-    password: encodeURIComponent(encrypt(data.password)),
-    radius_password: radiusPassword ? encodeURIComponent(encrypt(radiusPassword)) : '',
+    username: encodeURIComponent(encryptExt(data.username, publicKey)),
+    password: encodeURIComponent(encryptExt(data.password, publicKey)),
+    radius_password: radiusPassword ? encodeURIComponent(encryptExt(radiusPassword, publicKey)) : '',
     clientId: data.clientId || clientId,
     tenant_code: data.tenantCode,
     authorization_code: data.tenantCode,

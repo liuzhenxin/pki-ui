@@ -196,7 +196,7 @@ export const updateUserPwd = (oldPassword: string, newPassword: string) => {
     newPassword
   };
   return request({
-    url: '/admin/v1/users/profile/updatePwd',
+    url: '/admin/v1/users/modify-pwd',
     method: 'put',
     headers: {
       isEncrypt: true,

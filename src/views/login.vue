@@ -213,7 +213,6 @@
 </template>
 
 <script setup lang="ts">
-import { encryptExt } from '@/utils/jsencrypt';
 import { getCodeImg, getSecrets } from '@/api/login';
 
 import { getTenant } from '@/api/system/tenant';
@@ -301,9 +300,6 @@ const handleLogin = () => {
     if (valid) {
       loading.value = true;
 
-      //const encUserName = encodeURIComponent(encryptExt(loginForm.value.username, secretKey.value));
-      //const encPassword = encodeURIComponent(encryptExt(loginForm.value.password, secretKey.value));
-
       // 勾选了需要记住密码设置在 localStorage 中设置记住用户名和密码
       if (loginForm.value.rememberMe) {
         localStorage.setItem('tenantId', String(loginForm.value.tenantId));
@@ -321,7 +317,7 @@ const handleLogin = () => {
       }
       // 调用action的登录方法
       //const [err] = await to(userStore.login(loginForm.value));
-      loginData.value = loginForm.value;
+      loginData.value = { ...loginForm.value, publicKey: secretKey.value };
 
       const [err] = await to(userStore.login(loginData.value));
       if (!err) {
@@ -374,9 +370,13 @@ const getLoginData = () => {
   const username = localStorage.getItem('username');
   const password = localStorage.getItem('password');
   const rememberMe = localStorage.getItem('rememberMe');
+  // 租户优先用下拉选择（loginForm），localStorage 仅作无选择时的默认，
+  // 避免缓存的上一个系统租户覆盖当前 UI 下拉选中的租户。
+  const formTenantId = String(loginForm.value.tenantId || '');
+  const formTenantCode = String(loginForm.value.tenantCode || '');
   loginForm.value = {
-    tenantId: tenantId === null ? String(loginForm.value.tenantId) : tenantId,
-    tenantCode: tenantCode === null ? String(loginForm.value.tenantCode) : tenantCode,
+    tenantId: formTenantId || tenantId || '',
+    tenantCode: formTenantCode || tenantCode || '',
     username: username === null ? String(loginForm.value.username) : username,
     password: password === null ? String(loginForm.value.password) : String(password),
     rememberMe: rememberMe === null ? false : rememberMe === 'true'
@@ -418,9 +418,17 @@ const initTenantList = async () => {
     const { data } = await getTenantList(false);
     // data is TenantCO[] from backend (id, name, code fields)
     const list: any[] = (Array.isArray(data) ? data : []).filter(isPkiTenant);
-    tenantEnabled.value = list.length > 0;
+    // 按本 UI 部署的系统过滤租户（VITE_APP_TENANT_IDS 逗号分隔；空 = 全部 PKI 租户）
+    const tenantIds: string[] = (import.meta.env.VITE_APP_TENANT_IDS || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const filtered: any[] = tenantIds.length
+      ? list.filter((t) => tenantIds.includes(String(t.id)))
+      : list;
+    tenantEnabled.value = filtered.length > 0;
     if (tenantEnabled.value) {
-      tenantList.value = list.map((item: any) => ({
+      tenantList.value = filtered.map((item: any) => ({
         tenantId: String(item.id),
         companyName: item.name,
         tenantCode: item.code,

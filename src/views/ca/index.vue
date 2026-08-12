@@ -102,9 +102,91 @@
       </el-row>
     </div>
 
+    <div v-else-if="isCaSystemAdmin" class="ca-admin-home">
+      <header class="admin-home-header">
+        <div class="admin-home-title">
+          <span>系统管理工作台</span>
+          <h1>CA 配置与运行概览</h1>
+          <p>维护 CA 信任体系、接入配置和业务管理员，证书业务由业务管理员独立操作。</p>
+        </div>
+        <div class="admin-home-controls">
+          <div class="admin-system-state">
+            <span class="state-indicator"></span>
+            <div>
+              <strong>系统运行正常</strong>
+              <small>版本 {{ systemVersion }}</small>
+            </div>
+          </div>
+          <el-button icon="Refresh" :loading="systemInfoLoading" @click="refreshAdminHome">刷新状态</el-button>
+        </div>
+      </header>
+
+      <section class="admin-metric-grid" aria-label="CA 核心配置统计">
+        <button v-for="item in adminMetrics" :key="item.label" type="button" class="admin-metric" @click="goTarget(item.path)">
+          <span class="admin-metric-icon" :class="item.tone">
+            <el-icon><component :is="item.icon" /></el-icon>
+          </span>
+          <span class="admin-metric-copy">
+            <small>{{ item.label }}</small>
+            <strong>{{ item.value }}</strong>
+            <em>{{ item.hint }}</em>
+          </span>
+          <el-icon class="admin-metric-arrow"><ArrowRight /></el-icon>
+        </button>
+      </section>
+
+      <div class="admin-workspace-grid">
+        <section class="admin-workspace-section">
+          <div class="admin-section-heading">
+            <div>
+              <h2>常用管理</h2>
+              <p>按配置顺序维护 CA 核心资源。</p>
+            </div>
+          </div>
+          <div class="admin-action-grid">
+            <button v-for="action in adminQuickActions" :key="action.title" type="button" @click="goTarget(action.path)">
+              <span class="admin-action-icon">
+                <el-icon><component :is="action.icon" /></el-icon>
+              </span>
+              <span>
+                <strong>{{ action.title }}</strong>
+                <small>{{ action.desc }}</small>
+              </span>
+              <el-icon class="admin-action-arrow"><ArrowRight /></el-icon>
+            </button>
+          </div>
+        </section>
+
+        <section class="admin-workspace-section admin-readiness-section">
+          <div class="admin-section-heading">
+            <div>
+              <h2>配置就绪度</h2>
+              <p>核心组件缺失时及时补充配置。</p>
+            </div>
+            <span class="readiness-total">{{ readyItemCount }}/{{ adminReadiness.length }}</span>
+          </div>
+          <div class="admin-readiness-list">
+            <button v-for="item in adminReadiness" :key="item.label" type="button" @click="goTarget(item.path)">
+              <el-icon :class="item.ready ? 'is-ready' : 'needs-attention'">
+                <CircleCheck v-if="item.ready" />
+                <Warning v-else />
+              </el-icon>
+              <span>
+                <strong>{{ item.label }}</strong>
+                <small>{{ item.detail }}</small>
+              </span>
+              <el-tag :type="item.ready ? 'success' : 'warning'" effect="plain" size="small">
+                {{ item.ready ? '已就绪' : '待配置' }}
+              </el-tag>
+            </button>
+          </div>
+        </section>
+      </div>
+    </div>
+
     <div v-else>
       <!-- 数据概览 -->
-      <el-row :gutter="20">
+      <el-row v-if="canViewCerts" :gutter="20">
         <el-col :span="6">
           <el-card shadow="hover" class="stat-card">
             <div class="stat-content">
@@ -173,7 +255,7 @@
       </el-row>
 
       <!-- 图表展示 -->
-      <el-row :gutter="20" class="mt20">
+      <el-row v-if="canViewCerts" :gutter="20" class="mt20">
         <el-col :span="16">
           <el-card shadow="hover">
             <template #header>
@@ -352,10 +434,12 @@ const canViewLoginLog = computed(() => hasPermission('sys:login-log:page'));
 const canViewOperateLog = computed(() => hasPermission('sys:operate-log:page'));
 const isCaAuditor = computed(() => canViewLoginLog.value || canViewOperateLog.value);
 const isCaAuditHome = computed(() => isCaAuditManager.value || isCaAuditor.value);
+const canViewCerts = computed(() => hasPermission('ca:cert:page'));
+const isCaSystemAdmin = computed(() => canViewInitStatus.value && !canViewCerts.value && !isCaAuditHome.value);
 const isCaBusinessAdmin = computed(() => {
   const permissions = userStore.permissions || [];
   const isAdmin = permissions.includes('ca:admin') || permissions.includes('setup');
-  const hasCertAccess = permissions.includes('ca:cert:page') || permissions.includes('ca:archive-cert:page');
+  const hasCertAccess = canViewCerts.value || permissions.includes('ca:archive-cert:page');
   return hasCertAccess && !isAdmin;
 });
 const timeRange = ref('week');
@@ -372,8 +456,59 @@ const systemInfo = reactive({
   rootCount: 0,
   signerCount: 0,
   publisherCount: 0,
-  requestorCount: 0
+  requestorCount: 0,
+  userCount: 0
 });
+const systemInfoLoading = ref(false);
+
+const adminMetrics = computed(() => [
+  { label: '根 CA', value: systemInfo.rootCount, hint: '信任锚', icon: 'Key', tone: 'blue', path: '/ca-security/ca-root-cert' },
+  { label: '证书模板', value: systemInfo.profileCount, hint: '签发策略', icon: 'Document', tone: 'green', path: '/ca-security/ca-profile' },
+  { label: '签名者', value: systemInfo.signerCount, hint: '签名能力', icon: 'Stamp', tone: 'orange', path: '/ca-security/ca-signer' },
+  { label: '请求者', value: systemInfo.requestorCount, hint: '接入实体', icon: 'Connection', tone: 'cyan', path: '/ca-security/ca-requestor' },
+  { label: '发布者', value: systemInfo.publisherCount, hint: '证书发布', icon: 'Upload', tone: 'red', path: '/ca-security/ca-publisher' }
+]);
+
+const adminQuickActions = computed(() =>
+  [
+    { title: '根证书管理', desc: '维护根 CA、证书链与 CRL 配置', icon: 'Key', path: '/ca-security/ca-root-cert', permission: 'ca:root' },
+    { title: '证书模板', desc: '配置算法、有效期与证书扩展', icon: 'Document', path: '/ca-security/ca-profile', permission: 'ca:profile' },
+    { title: '签名者管理', desc: '维护签名密钥与签名服务', icon: 'Stamp', path: '/ca-security/ca-signer', permission: 'ca:signer' },
+    { title: '请求者管理', desc: '管理 CMP 请求者及授权范围', icon: 'Connection', path: '/ca-security/ca-requestor', permission: 'ca:requestor' },
+    { title: '发布者管理', desc: '配置证书与 CRL 发布目标', icon: 'Upload', path: '/ca-security/ca-publisher', permission: 'ca:publisher' },
+    { title: '业务管理员', desc: '创建并维护证书业务操作账号', icon: 'UserFilled', path: '/ca-admin/ca-admin-operator', permission: 'ca:admin' },
+    { title: '系统配置', desc: '维护 CA 服务参数和安全策略', icon: 'Setting', path: '/ca-security/ca-config', permission: 'ca:config' },
+    { title: 'CMP 接入监控', desc: '检查协议状态与交易记录', icon: 'Monitor', path: '/ca-monitor/ca-cmp', permission: 'ca:cmp' }
+  ].filter((item) => hasPermission(item.permission))
+);
+
+const adminReadiness = computed(() => [
+  {
+    label: '根 CA 信任锚',
+    detail: systemInfo.rootCount > 0 ? `已配置 ${systemInfo.rootCount} 个根 CA` : '尚未配置根 CA',
+    ready: systemInfo.rootCount > 0,
+    path: '/ca-security/ca-root-cert'
+  },
+  {
+    label: '证书签发模板',
+    detail: systemInfo.profileCount > 0 ? `已配置 ${systemInfo.profileCount} 个模板` : '尚未配置证书模板',
+    ready: systemInfo.profileCount > 0,
+    path: '/ca-security/ca-profile'
+  },
+  {
+    label: '签名服务',
+    detail: systemInfo.signerCount > 0 ? `已配置 ${systemInfo.signerCount} 个签名者` : '尚未配置签名者',
+    ready: systemInfo.signerCount > 0,
+    path: '/ca-security/ca-signer'
+  },
+  {
+    label: '管理账号',
+    detail: systemInfo.userCount >= 2 ? `已配置 ${systemInfo.userCount} 个管理账号` : '管理账号配置不完整',
+    ready: systemInfo.userCount >= 2,
+    path: '/ca-admin/ca-admin-operator'
+  }
+]);
+const readyItemCount = computed(() => adminReadiness.value.filter((item) => item.ready).length);
 
 const stats = reactive({
   totalCerts: 0,
@@ -484,8 +619,18 @@ const fetchSystemInfo = async () => {
     systemInfo.signerCount = data.signerCount || 0;
     systemInfo.publisherCount = data.publisherCount || 0;
     systemInfo.requestorCount = data.requestorCount || 0;
+    systemInfo.userCount = data.userCount || 0;
   } catch (error) {
     console.error('获取CA系统信息失败:', error);
+  }
+};
+
+const refreshAdminHome = async () => {
+  systemInfoLoading.value = true;
+  try {
+    await fetchSystemInfo();
+  } finally {
+    systemInfoLoading.value = false;
   }
 };
 
@@ -585,6 +730,9 @@ const renderAlgoChart = () => {
 };
 
 const fetchDashboardData = async () => {
+  if (!canViewCerts.value) {
+    return;
+  }
   try {
     const certs = await fetchAllCerts();
     allCerts.value = certs.map(normalizeCert);
@@ -806,10 +954,12 @@ onMounted(async () => {
       await fetchAuditHomeData();
     } else {
       await fetchDashboardData();
-      nextTick(() => {
-        initTrendChart();
-        initAlgoChart();
-      });
+      if (canViewCerts.value) {
+        nextTick(() => {
+          initTrendChart();
+          initAlgoChart();
+        });
+      }
     }
   }
   window.addEventListener('resize', handleResize);
@@ -1169,6 +1319,374 @@ watch(timeRange, () => {
         grid-column: 2;
         text-align: left;
       }
+    }
+  }
+
+  .ca-admin-home {
+    color: #303133;
+  }
+
+  .admin-home-header {
+    min-height: 132px;
+    padding: 24px 28px;
+    border: 1px solid #dcdfe6;
+    border-left: 4px solid #1677ff;
+    border-radius: 8px;
+    background: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+  }
+
+  .admin-home-title {
+    min-width: 0;
+
+    > span {
+      color: #1677ff;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    h1 {
+      margin: 8px 0 6px;
+      color: #1f2329;
+      font-size: 24px;
+      line-height: 1.35;
+      letter-spacing: 0;
+    }
+
+    p {
+      margin: 0;
+      color: #646a73;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+  }
+
+  .admin-home-controls {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-shrink: 0;
+  }
+
+  .admin-system-state {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+
+    .state-indicator {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #16a34a;
+      box-shadow: 0 0 0 4px #dcfce7;
+    }
+
+    div {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    strong {
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    small {
+      color: #8f959e;
+      font-size: 12px;
+    }
+  }
+
+  .admin-metric-grid {
+    margin-top: 16px;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .admin-metric {
+    min-width: 0;
+    min-height: 104px;
+    padding: 16px;
+    border: 1px solid #e4e7ed;
+    border-radius: 8px;
+    background: #fff;
+    display: grid;
+    grid-template-columns: 42px minmax(0, 1fr) 18px;
+    align-items: center;
+    gap: 12px;
+    text-align: left;
+    cursor: pointer;
+    transition:
+      border-color 180ms ease,
+      box-shadow 180ms ease,
+      transform 180ms ease;
+
+    &:hover,
+    &:focus-visible {
+      border-color: #91caff;
+      box-shadow: 0 4px 12px rgb(31 35 41 / 8%);
+      transform: translateY(-1px);
+      outline: none;
+    }
+  }
+
+  .admin-metric-icon {
+    width: 42px;
+    height: 42px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 21px;
+
+    &.blue {
+      color: #1677ff;
+      background: #eaf3ff;
+    }
+    &.green {
+      color: #16803c;
+      background: #eaf8ef;
+    }
+    &.orange {
+      color: #b45309;
+      background: #fff4e5;
+    }
+    &.cyan {
+      color: #087f8c;
+      background: #e7f8fa;
+    }
+    &.red {
+      color: #c2414b;
+      background: #fff0f1;
+    }
+  }
+
+  .admin-metric-copy {
+    min-width: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: baseline;
+    gap: 2px 8px;
+
+    small {
+      color: #646a73;
+      font-size: 13px;
+      white-space: nowrap;
+    }
+
+    strong {
+      grid-row: span 2;
+      color: #1f2329;
+      font-size: 26px;
+      font-variant-numeric: tabular-nums;
+      line-height: 1;
+    }
+
+    em {
+      color: #8f959e;
+      font-size: 12px;
+      font-style: normal;
+      white-space: nowrap;
+    }
+  }
+
+  .admin-metric-arrow,
+  .admin-action-arrow {
+    color: #b8bdc5;
+  }
+
+  .admin-workspace-grid {
+    margin-top: 20px;
+    display: grid;
+    grid-template-columns: minmax(0, 1.55fr) minmax(320px, 0.8fr);
+    gap: 24px;
+  }
+
+  .admin-workspace-section {
+    min-width: 0;
+    padding-top: 18px;
+    border-top: 1px solid #dcdfe6;
+  }
+
+  .admin-section-heading {
+    min-height: 44px;
+    margin-bottom: 14px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+
+    h2 {
+      margin: 0 0 4px;
+      color: #1f2329;
+      font-size: 17px;
+      line-height: 1.4;
+      letter-spacing: 0;
+    }
+
+    p {
+      margin: 0;
+      color: #8f959e;
+      font-size: 13px;
+    }
+  }
+
+  .readiness-total {
+    color: #1677ff;
+    font-size: 18px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .admin-action-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+
+    button {
+      min-width: 0;
+      min-height: 76px;
+      padding: 12px 14px;
+      border: 1px solid #e4e7ed;
+      border-radius: 8px;
+      background: #fff;
+      display: grid;
+      grid-template-columns: 38px minmax(0, 1fr) 18px;
+      align-items: center;
+      gap: 12px;
+      text-align: left;
+      cursor: pointer;
+
+      &:hover,
+      &:focus-visible {
+        border-color: #91caff;
+        background: #f7fbff;
+        outline: none;
+      }
+
+      > span:nth-child(2) {
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+
+      strong {
+        color: #303133;
+        font-size: 14px;
+        font-weight: 600;
+      }
+
+      small {
+        overflow: hidden;
+        color: #8f959e;
+        font-size: 12px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+    }
+  }
+
+  .admin-action-icon {
+    width: 38px;
+    height: 38px;
+    border-radius: 8px;
+    background: #f0f5ff;
+    color: #315efb;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 19px;
+  }
+
+  .admin-readiness-list {
+    display: grid;
+    gap: 4px;
+
+    button {
+      width: 100%;
+      min-height: 62px;
+      padding: 10px 4px;
+      border: 0;
+      border-bottom: 1px solid #ebeef5;
+      background: transparent;
+      display: grid;
+      grid-template-columns: 24px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 10px;
+      text-align: left;
+      cursor: pointer;
+
+      &:hover,
+      &:focus-visible {
+        background: #f7f8fa;
+        outline: none;
+      }
+
+      > span {
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+      }
+
+      strong {
+        color: #303133;
+        font-size: 13px;
+      }
+
+      small {
+        overflow: hidden;
+        color: #8f959e;
+        font-size: 12px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .is-ready {
+        color: #16a34a;
+      }
+
+      .needs-attention {
+        color: #d97706;
+      }
+    }
+  }
+
+  @media (max-width: 1180px) {
+    .admin-metric-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .admin-workspace-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .admin-home-header {
+      padding: 20px;
+      align-items: flex-start;
+      flex-direction: column;
+    }
+
+    .admin-home-controls {
+      width: 100%;
+      justify-content: space-between;
+    }
+
+    .admin-metric-grid,
+    .admin-action-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .admin-metric {
+      min-height: 88px;
     }
   }
 

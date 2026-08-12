@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "vite serve --mode development",
     "build:prod": "vite build --mode production",
+    "build:ca": "VITE_APP_TENANT_IDS=4 VITE_APP_CLIENT_ID=95TxSsTPFA3tF12TBSMmUVK0da vite build --mode production",
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
     "lint:eslint": "eslint",

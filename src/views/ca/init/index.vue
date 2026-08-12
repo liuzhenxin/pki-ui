@@ -1237,7 +1237,8 @@ const loadProfileToForm = async (id: string | number, form: any, defaultValues?:
         const rdns = Array.isArray(conf.subject) ? conf.subject : conf.subject.rdns || [];
         rdns.forEach((rdn: any) => {
           const rdnType = rdn.type || {};
-          let compType = (rdnType.description || rdnType.oid || '').toLowerCase();
+          // 兼容字符串 type（如 "country"）与对象 type（{ description, oid }）两种模板格式
+          let compType = (typeof rdnType === 'string' ? rdnType : (rdnType.description || rdnType.oid || '')).toLowerCase();
           for (const [type, meta] of Object.entries(typeMapping)) {
             if (meta.key.toLowerCase() === compType || type.toLowerCase() === compType) {
               compType = type;

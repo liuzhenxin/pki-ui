@@ -19,6 +19,8 @@ interface ImportMetaEnv {
   VITE_APP_RSA_PUBLIC_KEY: string;
   VITE_APP_RSA_PRIVATE_KEY: string;
   VITE_APP_CLIENT_ID: string;
+  // 本 UI 部署服务的租户 ID（逗号分隔；空 = 全部 PKI 租户）
+  VITE_APP_TENANT_IDS: string;
   VITE_APP_WEBSOCKET: string;
   VITE_APP_SSE: string;
   VITE_APP_VERSION: string;

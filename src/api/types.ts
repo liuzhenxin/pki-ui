@@ -28,6 +28,7 @@ export interface LoginData {
   uuid?: string;
   clientId: string;
   grantType: string;
+  publicKey?: string;
 }
 
 /**
