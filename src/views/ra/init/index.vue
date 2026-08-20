@@ -395,7 +395,7 @@ import {
   unwrapRaData
 } from '@/api/ra/init';
 import type { RaAdminCertOptions, RaAdminCertProfileOption, RaAdminCertRootOption, RaCaSyncResult, RaCaSyncRoot, RaInitStatus } from '@/api/ra/init';
-import { getTenant, updateTenant } from '@/api/system/tenant';
+import { getTenant } from '@/api/system/tenant';
 import { useUserStore } from '@/store/modules/user';
 import Agreement from '@/components/Agreement/index.vue';
 import CertSubject, { sortSubjectItems, typeMapping } from '@/components/CertSubject/index.vue';
@@ -913,28 +913,10 @@ const syncCaFromRemote = async () => {
   }
 };
 
-const saveTenantStatus = async (statusValue: number) => {
-  const tenantId = userStore.tenantId || localStorage.getItem('tenantId') || '';
-  if (!tenantId) {
-    return;
-  }
-  const tenantRes = await getTenant(tenantId);
-  const tenantInfo: any = tenantRes.data;
-  if (!tenantInfo) {
-    return;
-  }
-  await updateTenant({
-    co: {
-      id: tenantInfo.id,
-      tenantId: tenantInfo.tenantId,
-      name: tenantInfo.name,
-      code: tenantInfo.code,
-      status: statusValue as any,
-      sourceId: tenantInfo.sourceId,
-      packageId: tenantInfo.packageId,
-      companyName: tenantInfo.companyName
-    }
-  } as any);
+// 向导步骤状态由后端 InitController.markTenantStatus 直接写入 sys_tenant，
+// 此处仅同步前端内存中的租户初始化状态，不再调用 admin 的 PUT /v1/tenants
+// （该接口要求 write + sys:tenant:modify 权限，引导账号不具备，会返回 Access Denied）。
+const syncTenantInitStatus = (statusValue: number) => {
   userStore.setTenantInitStatus(statusValue);
 };
 
@@ -996,7 +978,7 @@ const next = async () => {
         await loadInitInfo();
         ElMessage.success('CA已同步');
         activeStep.value++;
-        await saveTenantStatus(activeStep.value);
+        syncTenantInitStatus(activeStep.value);
         return;
       }
       ElMessage.warning('请先同步 CA，获取已授权的根证书和模板');
@@ -1023,7 +1005,7 @@ const next = async () => {
       return;
     }
     activeStep.value++;
-    await saveTenantStatus(activeStep.value);
+    syncTenantInitStatus(activeStep.value);
   } finally {
     loading.value = false;
   }
@@ -1034,7 +1016,7 @@ const prev = async () => {
     loading.value = true;
     try {
       activeStep.value--;
-      await saveTenantStatus(activeStep.value);
+      syncTenantInitStatus(activeStep.value);
     } finally {
       loading.value = false;
     }
