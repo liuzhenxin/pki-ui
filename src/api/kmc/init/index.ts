@@ -32,3 +32,24 @@ export function getInitStatus(): Promise<Result<any>> {
     method: 'get'
   });
 }
+
+/**
+ * 获取当前 KMP 服务身份
+ */
+export function getIdentity(): Promise<Result<any>> {
+  return request({
+    url: '/kmc/v1/init/identity',
+    method: 'get'
+  });
+}
+
+/**
+ * 生成或导入 KMP 服务身份
+ */
+export function initIdentity(data: any): Promise<Result<any>> {
+  return request({
+    url: '/kmc/v1/init/identity',
+    method: 'post',
+    data
+  });
+}

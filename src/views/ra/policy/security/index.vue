@@ -107,7 +107,7 @@
       <div class="help-content">
         <div class="help-item">策略状态为启用且处于生效时间范围内时，系统按优先级应用当前配置；优先级数值越小，匹配顺序越靠前。</div>
         <div class="help-item">登录安全、验证码策略和会话安全用于控制登录失败锁定、验证码触发和令牌/空闲超时等访问行为。</div>
-        <div class="help-item">敏感操作、审计策略和证书业务用于控制二次认证、双人复核、审计保留、证书申请和吊销审批。</div>
+        <div class="help-item">敏感操作、审计策略和证书业务用于控制二次认证、双人复核、审计保留。证书申请/吊销审批开关不生效，以证书模板为准。</div>
         <div class="help-item">修改规则后需要点击保存才会提交；刷新会重新读取服务端当前策略并覆盖页面未保存内容。</div>
       </div>
     </el-drawer>
@@ -207,9 +207,9 @@ const policySections = [
     key: 'certificateBusinessPolicy',
     title: '证书业务',
     items: [
-      { key: 'approvalRequired', label: '证书申请需审批', type: 'boolean', defaultValue: false },
+      { key: 'approvalRequired', label: '证书申请需审批（不生效，以证书模板为准）', type: 'boolean', defaultValue: false },
       { key: 'maxActiveCertsPerSubject', label: '主体最大有效证书数', type: 'number' },
-      { key: 'revocationApprovalRequired', label: '吊销需审批', type: 'boolean', defaultValue: false },
+      { key: 'revocationApprovalRequired', label: '吊销需审批（不生效，以证书模板为准）', type: 'boolean', defaultValue: false },
       { key: 'downloadLinkExpireMinutes', label: '下载链接有效期（分钟）', type: 'number' },
       { key: 'disabledCertPolicyRejectApply', label: '禁用证书策略拒绝申请', type: 'boolean', defaultValue: false }
     ]

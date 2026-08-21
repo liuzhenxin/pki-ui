@@ -29,7 +29,15 @@
 
     <el-table v-loading="loading" :data="rows" border stripe class="issue-table" empty-text="暂无待签发申请">
       <el-table-column label="业务编号" prop="businessId" width="120" align="center" />
-      <el-table-column label="业务类型" prop="businessTypeName" width="120" align="center" />
+      <el-table-column label="业务类型" prop="businessTypeName" width="160" align="center">
+        <template #default="{ row }">
+          <div class="business-type-cell">
+            <span>{{ row.businessTypeName }}</span>
+            <el-tag v-if="row.businessType === 'cert_update'" size="small" type="warning" effect="plain">换密钥</el-tag>
+            <el-tag v-if="updateKindTag(row)" size="small" effect="plain">{{ updateKindTag(row) }}</el-tag>
+          </div>
+        </template>
+      </el-table-column>
       <el-table-column label="申请用户" prop="userName" min-width="140" show-overflow-tooltip />
       <el-table-column label="所属部门" prop="deptName" min-width="140" show-overflow-tooltip />
       <el-table-column label="原证书序列号" prop="serialNumber" min-width="170" show-overflow-tooltip />
@@ -60,11 +68,12 @@
 
     <pagination v-show="total > 0" :total="total" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" @pagination="getList" />
 
-    <el-dialog v-model="issueOpen" title="证书签发" width="1180px" append-to-body top="3vh" class="cert-issue-dialog" @close="closeIssueDialog">
+    <el-dialog v-model="issueOpen" :title="isCertUpdate ? '执行证书更新（换密钥）' : '证书签发'" width="1180px" append-to-body top="3vh" class="cert-issue-dialog" @close="closeIssueDialog">
+      <el-alert v-if="isCertUpdate" class="issue-step-alert" title="换密钥：使用新 CSR/公钥签发新序列号证书，旧证书将按 superseded 吊销。" type="warning" show-icon :closable="false" />
       <el-alert v-if="issueStep" class="issue-step-alert" :title="issueStep" type="info" show-icon :closable="false" />
       <el-form ref="issueFormRef" :model="issueForm" :rules="rules" label-width="108px" class="issue-form">
         <div class="issue-top-grid">
-          <el-form-item class="issue-type-item" label="CSR来源" prop="issueType">
+          <el-form-item class="issue-type-item" :label="isRsaKmcEncryption ? '分发方式' : 'CSR来源'" prop="issueType">
             <el-segmented v-model="issueForm.issueType" :options="issueTypeOptions" @change="handleIssueTypeChange" />
           </el-form-item>
           <el-form-item label="根证书">
@@ -98,17 +107,19 @@
               <div class="section-title">签发参数</div>
               <el-alert v-if="dualCertInfo?.certMode === 'dual' && isPostQuantumDual" class="dual-cert-alert" type="info" :closable="false" show-icon>
                 <template #title>
-                  抗量子双证书签发：ML-DSA 签名密钥由客户端生成并提交 CSR；ML-KEM 加密私钥由 KMC 永久托管，不支持 USBKey
+                  抗量子双证书{{ isCertUpdate ? '更新' : '签发' }}：ML-DSA 签名密钥由客户端生成并提交 CSR；ML-KEM 加密私钥由 KMC 永久托管，不支持 USBKey
                 </template>
               </el-alert>
               <el-alert v-else-if="dualCertInfo?.certMode === 'dual' && supportsDualRoot" class="dual-cert-alert" type="success" :closable="false" show-icon>
                 <template #title>
-                  双证书签发：签名模板「{{ dualCertInfo.signProfileName }}」+ 加密模板「{{ dualCertInfo.encryptProfileName }}」 — 签名证书由 USB Key
-                  生成，加密证书由 KMC 生成
+                  双证书{{ isCertUpdate ? '更新（换密钥）' : '签发' }}：签名模板「{{ dualCertInfo.signProfileName }}」+ 加密模板「{{ dualCertInfo.encryptProfileName }}」 — 签名侧提交新 CSR，加密侧默认 KMC 换钥
                 </template>
               </el-alert>
               <el-alert v-if="dualCertInfo?.certMode === 'dual' && !supportsDualRoot" class="dual-cert-alert" type="error" :closable="false" show-icon>
-                <template #title>双证书签发异常：当前根证书算法不支持双证书。</template>
+                <template #title>双证书{{ isCertUpdate ? '更新' : '签发' }}异常：当前根证书算法不支持双证书。</template>
+              </el-alert>
+              <el-alert v-else-if="isRsaKmcEncryption" class="dual-cert-alert" type="success" :closable="false" show-icon>
+                <template #title>{{ isCertUpdate ? 'RSA 加密证书由 KMC 换钥，无需提交 CSR。新证书可写入 USB Key 或导出到文件。' : 'RSA 加密单证：密钥由 KMC 生成，无需提交 CSR。证书可写入 USB Key 或导出到文件。' }}</template>
               </el-alert>
               <el-form-item v-if="issueForm.issueType === 'csr'" label="CSR" prop="csr" class="csr-form-item">
                 <el-input v-model="issueForm.csr" type="textarea" :rows="8" placeholder="请输入证书请求CSR" />
@@ -135,7 +146,7 @@
                     </el-select>
                   </el-form-item>
                   <el-form-item label="容器名" prop="containerName">
-                    <el-input v-model="issueForm.containerName" placeholder="请输入或使用自动生成的容器名" />
+                    <el-input v-model="issueForm.containerName" :placeholder="isCertUpdate ? '请输入新容器名，禁止使用原容器' : '请输入或使用自动生成的容器名'" />
                   </el-form-item>
                   <el-form-item label="User PIN" prop="pin">
                     <el-input v-model="issueForm.pin" type="password" show-password placeholder="请输入 USBKey User PIN" />
@@ -155,7 +166,7 @@
                 </div>
               </template>
 
-              <div class="issue-extension-section">
+              <div v-if="!isCertUpdate" class="issue-extension-section">
                 <div class="section-subtitle">证书主题</div>
                 <template v-if="issueForm.issueType !== 'csr'">
                   <div v-if="issueForm.subjectItems.length > 0" class="subject-scroll-area">
@@ -170,7 +181,7 @@
                 </el-descriptions>
               </div>
 
-              <div class="issue-extension-section">
+              <div v-if="!isCertUpdate" class="issue-extension-section">
                 <div class="section-subtitle">扩展信息</div>
                 <div v-if="issueForm.extensionItems.length > 0" class="extension-scroll-area">
                   <div v-for="(ext, extIndex) in issueForm.extensionItems" :key="ext.key" class="issue-extension-item">
@@ -217,7 +228,7 @@
       <template #footer>
         <div class="dialog-footer">
           <el-button @click="issueOpen = false">取消</el-button>
-          <el-button type="primary" icon="Stamp" :loading="submitLoading" @click="submitIssue">确认签发</el-button>
+          <el-button type="primary" icon="Stamp" :loading="submitLoading" @click="submitIssue">{{ isCertUpdate ? '确认更新' : '确认签发' }}</el-button>
         </div>
       </template>
     </el-dialog>
@@ -563,14 +574,44 @@ const renewalReadyMessage = computed(() => {
   return '已具备按原存储方式续期的条件';
 });
 const isPostQuantumDual = computed(() => {
+  if (current.value.businessType === 'cert_update') {
+    const kind = String(updateConf.value.updateKind || '');
+    if (kind === 'pq-dual') return true;
+    if (kind === 'pq-single') return false;
+  }
   if (dualCertInfo.value?.certMode !== 'dual') return false;
   const text =
     `${current.value.rootName || ''} ${dualCertInfo.value.signProfileName || ''} ${dualCertInfo.value.encryptProfileName || ''} ${current.value.profileConf || ''}`.toUpperCase();
   return text.includes('ML-DSA') || text.includes('MLDSA') || text.includes('ML-KEM') || text.includes('MLKEM');
 });
+const isCertUpdate = computed(() => current.value.businessType === 'cert_update');
+const updateConf = computed<any>(() => parseJson(String(current.value.conf || '{}')) || {});
+const isPostQuantumUpdate = computed(() => {
+  const kind = String(updateConf.value.updateKind || '');
+  return kind === 'pq-dual' || kind === 'pq-single' || Boolean(updateConf.value.postQuantum) || isPostQuantumDual.value;
+});
 const supportsDualRoot = computed(() => {
   const rootName = (current.value.rootName || '').toUpperCase();
   return isPostQuantumDual.value || rootName.includes('SM2') || rootName.includes('ML-DSA') || rootName.includes('MLDSA');
+});
+const isRsaKmcEncryption = computed(() => {
+  if (dualCertInfo.value?.certMode === 'dual') {
+    return false;
+  }
+  const conf = parseJson(String(current.value.conf || '{}')) || {};
+  if (String(conf.updateKind || '') === 'rsa-kmc-enc') {
+    return true;
+  }
+  const rsaRoot = String(conf.rootAlgorithm || current.value.rootName || '')
+    .toUpperCase()
+    .includes('RSA');
+  if (!rsaRoot) {
+    return false;
+  }
+  if (String(conf.certUsage || '').toUpperCase() === 'ENCRYPTION' && String(conf.keySource || '').toUpperCase() === 'KMC') {
+    return true;
+  }
+  return isEncryptionProfileConf(current.value.profileConf, current.value.profileName);
 });
 const queryFormRef = ref<FormInstance>();
 const issueFormRef = ref<FormInstance>();
@@ -579,11 +620,19 @@ const certDevices = ref<string[]>([]);
 const certApps = ref<string[]>([]);
 let skfClientPromise: Promise<any> | null = null;
 
-const issueTypeOptions = computed(() => [
-  { label: 'CSR', value: 'csr' },
-  { label: 'USB Key', value: 'usb_key', disabled: isPostQuantumDual.value },
-  { label: '签发到文件', value: 'file', disabled: isPostQuantumDual.value }
-]);
+const issueTypeOptions = computed(() => {
+  if (isRsaKmcEncryption.value) {
+    return [
+      { label: 'USB Key', value: 'usb_key' },
+      { label: '签发到文件', value: 'file' }
+    ];
+  }
+  return [
+    { label: 'CSR', value: 'csr' },
+    { label: 'USB Key', value: 'usb_key', disabled: isPostQuantumUpdate.value },
+    { label: '签发到文件', value: 'file', disabled: isPostQuantumUpdate.value }
+  ];
+});
 
 const keyUsageOptions = [
   { value: 'digitalSignature', label: '数字签名' },
@@ -634,11 +683,15 @@ const issueForm = reactive({
 });
 
 const rules: FormRules = {
-  issueType: [{ required: true, message: '请选择CSR来源', trigger: 'change' }],
+  issueType: [{ required: true, message: '请选择签发方式', trigger: 'change' }],
   csr: [
     {
       validator: (_rule, value, callback) => {
-        if (issueForm.issueType === 'csr' && !String(value || '').trim()) {
+        if (isRsaKmcEncryption.value || issueForm.issueType !== 'csr') {
+          callback();
+          return;
+        }
+        if (!String(value || '').trim()) {
           callback(new Error('CSR不能为空'));
           return;
         }
@@ -650,7 +703,11 @@ const rules: FormRules = {
   subject: [
     {
       validator: (_rule, value, callback) => {
-        if (issueForm.issueType !== 'csr' && issueForm.subjectItems.length === 0 && !String(value || '').trim()) {
+        if ((issueForm.issueType !== 'csr' || isRsaKmcEncryption.value) && issueForm.subjectItems.length === 0 && !String(value || '').trim()) {
+          if (isCertUpdate.value) {
+            callback();
+            return;
+          }
           callback(new Error('证书主题不能为空'));
           return;
         }
@@ -674,6 +731,15 @@ function parsePage(res: any) {
     rows: page.rows || page.records || [],
     total: page.total || 0
   };
+}
+
+function updateKindTag(row: RaCertIssue) {
+  if (row.businessType !== 'cert_update') return '';
+  const kind = String((parseJson(String(row.conf || '{}')) || {}).updateKind || '');
+  if (kind.endsWith('-dual')) return '双证';
+  if (kind === 'rsa-kmc-enc') return 'RSA-KMC';
+  if (kind.startsWith('pq-')) return '抗量子';
+  return '';
 }
 
 async function getList() {
@@ -727,7 +793,7 @@ async function handleIssue(row: RaCertIssue) {
   if (current.value.conf) {
     try {
       const confData = typeof current.value.conf === 'string' ? JSON.parse(current.value.conf) : current.value.conf;
-      if (confData?.certMode === 'dual') {
+      if (confData?.certMode === 'dual' || String(confData?.updateKind || '').endsWith('-dual')) {
         dualCertInfo.value = {
           certMode: 'dual',
           signProfileId: confData.signProfileId || current.value.profileId,
@@ -745,11 +811,16 @@ async function handleIssue(row: RaCertIssue) {
   issueForm.subject = current.value.subject || '';
   issueForm.subjectItems = buildSubjectItems(current.value.profileConf, current.value.subject);
   issueForm.extensionItems = buildIssueExtensionItems(parseJson(current.value.profileConf || '{}')?.extensions || []);
-  if (isPostQuantumDual.value) {
+  if (isPostQuantumUpdate.value) {
     issueForm.issueType = 'csr';
+  } else if (isRsaKmcEncryption.value) {
+    issueForm.issueType = 'usb_key';
   }
   issueStep.value = '';
   issueOpen.value = true;
+  if (issueForm.issueType === 'usb_key') {
+    await refreshCertProviders();
+  }
 }
 
 async function submitRenewal() {
@@ -973,15 +1044,26 @@ function submitIssue() {
     if (!valid || !current.value.businessType || current.value.businessId === undefined) {
       return;
     }
-    if (!validateIssueExtensions()) {
+    if (!isCertUpdate.value && !validateIssueExtensions()) {
       return;
     }
-    if (isPostQuantumDual.value && issueForm.issueType !== 'csr') {
-      ElMessage.error('抗量子双证书只支持客户端生成 ML-DSA 密钥并提交 CSR');
+    if (isPostQuantumUpdate.value && issueForm.issueType !== 'csr') {
+      ElMessage.error('抗量子证书只支持客户端生成密钥并提交 CSR');
       return;
+    }
+    if (isRsaKmcEncryption.value && issueForm.issueType === 'csr') {
+      ElMessage.error('RSA加密单证由 KMC 生成密钥，请选择 USB Key 或签发到文件');
+      return;
+    }
+    if (isCertUpdate.value && issueForm.issueType === 'usb_key') {
+      const oldContainer = String(updateConf.value?.storageInfo?.container || '');
+      if (oldContainer && oldContainer === issueForm.containerName) {
+        ElMessage.error('USBKey 更新必须使用新容器，禁止覆盖旧容器');
+        return;
+      }
     }
     submitLoading.value = true;
-    issueStep.value = '正在调用 CA 执行证书签发...';
+    issueStep.value = isCertUpdate.value ? '正在调用 CA 执行证书更新（换密钥）...' : '正在调用 CA 执行证书签发...';
     try {
       const subject = resolveIssueSubject();
       let csr = issueForm.csr;
@@ -990,21 +1072,25 @@ function submitIssue() {
         const skf = await getSkfClient();
         const appPath = `${issueForm.provider}/${issueForm.device}/${issueForm.appName}`;
         await withTimeout(skf.checkPIN(appPath, issueForm.pin), 15000, '验证 PIN 超时');
-        issueStep.value = '正在 USB Key 中生成密钥并创建 CSR...';
-        const p10Res = await withTimeout(
-          skf.createPKCS10(
-            issueForm.provider,
-            issueForm.device,
-            issueForm.appName,
-            subject,
-            resolveKeyAlgorithm(),
-            resolveKeySize(),
-            issueForm.containerName
-          ),
-          30000,
-          '生成 CSR 超时'
-        );
-        csr = p10Res?.pem || p10Res?.csr || p10Res;
+        if (!isRsaKmcEncryption.value) {
+          issueStep.value = '正在 USB Key 中生成密钥并创建 CSR...';
+          const p10Res = await withTimeout(
+            skf.createPKCS10(
+              issueForm.provider,
+              issueForm.device,
+              issueForm.appName,
+              subject,
+              resolveKeyAlgorithm(),
+              resolveKeySize(),
+              issueForm.containerName
+            ),
+            30000,
+            '生成 CSR 超时'
+          );
+          csr = p10Res?.pem || p10Res?.csr || p10Res;
+        } else {
+          issueStep.value = '正在向 CA 申请 KMC 生成的 RSA 加密证书...';
+        }
       }
       const res = await issueRaCert(current.value.businessType, current.value.businessId, {
         issueType: issueForm.issueType,
@@ -1019,37 +1105,63 @@ function submitIssue() {
         container: issueForm.issueType === 'usb_key' ? issueForm.containerName : undefined
       });
       if (issueForm.issueType === 'usb_key' && res.data?.cert) {
-        issueStep.value = '正在写入证书到 USB Key...';
         const skf = await getSkfClient();
-        await withTimeout(
-          skf.importCertificate(issueForm.provider, issueForm.device, issueForm.appName, issueForm.containerName, true, res.data.cert),
-          30000,
-          '写入 USB Key 证书超时'
-        );
-        if (res.data.encCert) {
+        if (isRsaKmcEncryption.value) {
           if (!res.data.encryptionPrivateKey) {
-            throw new Error('CA未返回可写入 USBKey 的加密私钥材料');
+            throw new Error('CA未返回可写入 USBKey 的 RSA 加密私钥材料');
           }
-          issueStep.value = '正在写入 KMC 加密密钥对到 USB Key...';
+          issueStep.value = '正在写入 KMC RSA 加密密钥对到 USB Key...';
           await withTimeout(
             skf.importKeyPair(
               issueForm.provider,
               issueForm.device,
               issueForm.appName,
               issueForm.containerName,
-              'SM2',
+              'RSA',
               res.data.encryptionPrivateKey,
               ''
             ),
             30000,
-            '写入 KMC 加密密钥对超时'
+            '写入 KMC RSA 加密密钥对超时'
           );
           issueStep.value = '正在写入加密证书到 USB Key...';
           await withTimeout(
-            skf.importCertificate(issueForm.provider, issueForm.device, issueForm.appName, issueForm.containerName, false, res.data.encCert),
+            skf.importCertificate(issueForm.provider, issueForm.device, issueForm.appName, issueForm.containerName, false, res.data.cert),
             30000,
-            '写入加密证书超时'
+            '写入 USB Key 证书超时'
           );
+        } else {
+          issueStep.value = '正在写入证书到 USB Key...';
+          await withTimeout(
+            skf.importCertificate(issueForm.provider, issueForm.device, issueForm.appName, issueForm.containerName, true, res.data.cert),
+            30000,
+            '写入 USB Key 证书超时'
+          );
+          if (res.data.encCert) {
+            if (!res.data.encryptionPrivateKey) {
+              throw new Error('CA未返回可写入 USBKey 的加密私钥材料');
+            }
+            issueStep.value = '正在写入 KMC 加密密钥对到 USB Key...';
+            await withTimeout(
+              skf.importKeyPair(
+                issueForm.provider,
+                issueForm.device,
+                issueForm.appName,
+                issueForm.containerName,
+                'SM2',
+                res.data.encryptionPrivateKey,
+                ''
+              ),
+              30000,
+              '写入 KMC 加密密钥对超时'
+            );
+            issueStep.value = '正在写入加密证书到 USB Key...';
+            await withTimeout(
+              skf.importCertificate(issueForm.provider, issueForm.device, issueForm.appName, issueForm.containerName, false, res.data.encCert),
+              30000,
+              '写入加密证书超时'
+            );
+          }
         }
       }
       issueStep.value = '证书签发成功，正在刷新待签发列表...';
@@ -1090,9 +1202,14 @@ function resetIssueForm() {
 }
 
 async function handleIssueTypeChange(value: string | number | boolean) {
-  if (isPostQuantumDual.value && value !== 'csr') {
+  if (isPostQuantumUpdate.value && value !== 'csr') {
     issueForm.issueType = 'csr';
-    ElMessage.warning('抗量子双证书不支持 USBKey 或 RA 生成密钥，请提交客户端生成的 ML-DSA CSR');
+    ElMessage.warning('抗量子证书不支持 USBKey 或 RA 生成密钥，请提交客户端 CSR');
+    return;
+  }
+  if (isRsaKmcEncryption.value && value === 'csr') {
+    issueForm.issueType = 'usb_key';
+    ElMessage.warning('RSA加密单证由 KMC 生成密钥，无需提交 CSR');
     return;
   }
   issueForm.issueType = value as any;
@@ -1143,7 +1260,7 @@ function parseSubject(subject?: string) {
 }
 
 function resolveIssueSubject() {
-  if (issueForm.issueType === 'csr') {
+  if (issueForm.issueType === 'csr' && !isRsaKmcEncryption.value) {
     return issueForm.subject || undefined;
   }
   if (issueForm.subjectItems.length === 0) {
@@ -1381,6 +1498,61 @@ function resolveKeySize() {
   return resolveKeyAlgorithm() === 'RSA' ? Number(match?.[1] || 2048) : 256;
 }
 
+function isEncryptionProfileConf(profileConf?: string, profileName?: string) {
+  const name = String(profileName || '');
+  const upperName = name.toUpperCase();
+  if (name.includes('加密') || upperName.includes('ENCRYPTION') || upperName.includes('TLS_ENC') || upperName.includes('TLS-ENC')) {
+    return true;
+  }
+  let conf: any = {};
+  try {
+    conf = parseJson(profileConf || '{}') || {};
+  } catch {
+    conf = {};
+  }
+  const category = String(conf.profileCategory || conf.certLevel || conf.metadata?.category || '').toUpperCase();
+  if (category === 'DUAL_ENC' || category === 'TLS_ENC' || category.includes('ENCRYPTION')) {
+    return true;
+  }
+  if (String(conf.dualCert?.role || '').toUpperCase() === 'ENCRYPTION') {
+    return true;
+  }
+  const usages = collectProfileKeyUsages(conf);
+  const hasSign = usages.some((usage) => usage.includes('digitalsignature') || usage.includes('nonrepudiation') || usage.includes('contentcommitment'));
+  const hasEnc = usages.some((usage) => usage.includes('encipher') || usage.includes('encrypt'));
+  return hasEnc && !hasSign;
+}
+
+function collectProfileKeyUsages(conf: any) {
+  const usages: string[] = [];
+  const push = (value: any) => {
+    if (value == null) {
+      return;
+    }
+    if (typeof value === 'string') {
+      usages.push(value.toLowerCase());
+      return;
+    }
+    if (typeof value === 'object') {
+      const token = String(value.value || value.description || value.oid || '').toLowerCase();
+      if (token) {
+        usages.push(token);
+      }
+    }
+  };
+  if (Array.isArray(conf?.certUsages)) {
+    conf.certUsages.forEach(push);
+  }
+  const extensions = Array.isArray(conf?.extensions) ? conf.extensions : [];
+  extensions.forEach((ext: any) => {
+    const items = ext?.keyUsage?.usages || ext?.usages;
+    if (Array.isArray(items)) {
+      items.forEach(push);
+    }
+  });
+  return usages;
+}
+
 const getSkfClient = async () => {
   if (skfClientPromise) {
     return skfClientPromise;
@@ -1567,6 +1739,13 @@ onMounted(() => {
     :deep(.el-table__cell) {
       padding: 9px 0;
     }
+  }
+
+  .business-type-cell {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
   }
 
   .mb16 {

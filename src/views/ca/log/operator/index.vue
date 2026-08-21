@@ -54,6 +54,32 @@
           </div>
         </el-card>
       </el-col>
+      <el-col :xs="24" :sm="12" :md="6">
+        <el-card shadow="hover" class="stat-card">
+          <div class="stat-content">
+            <div class="stat-icon" style="background-color: #67c23a">
+              <el-icon :size="28"><Timer /></el-icon>
+            </div>
+            <div class="stat-info">
+              <div class="stat-value">{{ statistics.successAvgTime }}ms</div>
+              <div class="stat-label">成功平均耗时</div>
+            </div>
+          </div>
+        </el-card>
+      </el-col>
+      <el-col :xs="24" :sm="12" :md="6">
+        <el-card shadow="hover" class="stat-card">
+          <div class="stat-content">
+            <div class="stat-icon" style="background-color: #f56c6c">
+              <el-icon :size="28"><Timer /></el-icon>
+            </div>
+            <div class="stat-info">
+              <div class="stat-value">{{ statistics.failAvgTime }}ms</div>
+              <div class="stat-label">失败平均耗时</div>
+            </div>
+          </div>
+        </el-card>
+      </el-col>
     </el-row>
 
     <!-- 搜索表单 -->
@@ -148,7 +174,7 @@
 import { ref, reactive, toRefs, getCurrentInstance, ComponentInternalInstance, onMounted, computed } from 'vue';
 import { ElFormInstance, ElTableInstance } from 'element-plus';
 import { Document, SuccessFilled, CircleCloseFilled, Timer } from '@element-plus/icons-vue';
-import { list } from '@/api/system/operlog';
+import { list, statistics as queryStatistics } from '@/api/system/operlog';
 import { OperLogForm, OperLogQuery, OperLogVO } from '@/api/monitor/operlog/types';
 import OperInfoDialog from '@/views/monitor/operlog/oper-info-dialog.vue';
 
@@ -172,7 +198,9 @@ const statistics = reactive({
   total: 0,
   success: 0,
   fail: 0,
-  avgTime: 0
+  avgTime: 0,
+  successAvgTime: 0,
+  failAvgTime: 0
 });
 
 const data = reactive<PageData<OperLogForm, OperLogQuery>>({
@@ -215,17 +243,6 @@ const data = reactive<PageData<OperLogForm, OperLogQuery>>({
 
 const { queryParams } = toRefs(data);
 
-/** 计算统计数据 */
-const computeStatistics = (list: OperLogVO[]) => {
-  const successCount = list.filter((item) => item.status === 0).length;
-  const failCount = list.filter((item) => item.status === 1).length;
-  const totalTime = list.reduce((sum, item) => sum + (item.costTime || 0), 0);
-  statistics.total = total.value;
-  statistics.success = successCount;
-  statistics.fail = failCount;
-  statistics.avgTime = list.length > 0 ? Math.round(totalTime / list.length) : 0;
-};
-
 const buildQuery = () => {
   const query: Record<string, unknown> = {
     pageNum: queryParams.value.pageNum,
@@ -236,8 +253,11 @@ const buildQuery = () => {
     status: queryParams.value.status === '' ? undefined : queryParams.value.status
   };
   if (dateRange.value?.[0] && dateRange.value?.[1]) {
-    query.beginTime = dateRange.value[0];
-    query.endTime = dateRange.value[1];
+    // 后端 OperateLogPageQry 通过 params.startTime/endTime 过滤 create_time
+    query.params = {
+      startTime: dateRange.value[0],
+      endTime: dateRange.value[1]
+    };
   }
   return query;
 };
@@ -267,6 +287,22 @@ const adaptRows = (rows: any[]): OperLogVO[] => {
   }));
 };
 
+/** 统计当前查询条件对应的全部日志（后端 SQL 聚合，避免仅统计当前页导致失真） */
+const loadStatistics = async () => {
+  try {
+    const statsRes = await queryStatistics(buildQuery());
+    const stats = statsRes.data || statsRes;
+    statistics.total = stats.total ?? total.value;
+    statistics.success = stats.success ?? 0;
+    statistics.fail = stats.fail ?? 0;
+    statistics.avgTime = stats.avgTime ?? 0;
+    statistics.successAvgTime = stats.successAvgTime ?? 0;
+    statistics.failAvgTime = stats.failAvgTime ?? 0;
+  } catch {
+    // 统计失败不阻塞列表展示，保持原值
+  }
+};
+
 /** 查询操作日志 */
 const getList = async () => {
   loading.value = true;
@@ -275,10 +311,10 @@ const getList = async () => {
     const page = res.data || res;
     operlogList.value = adaptRows(page.records || page.rows || []);
     total.value = page.total || 0;
-    computeStatistics(operlogList.value);
   } finally {
     loading.value = false;
   }
+  loadStatistics();
 };
 
 /** 搜索按钮操作 */

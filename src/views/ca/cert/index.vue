@@ -323,14 +323,24 @@
                   </template>
                   <template v-else-if="ext.requestable && ext.kind === 'keyUsage'">
                     <el-checkbox-group v-model="ext.usages" class="key-usage-checkbox-group">
-                      <el-checkbox v-for="usage in keyUsageOptions" :key="usage.value" :label="usage.value">
+                      <el-checkbox
+                        v-for="usage in getAllowedUsageOptions(keyUsageOptions, ext)"
+                        :key="usage.value"
+                        :label="usage.value"
+                        :disabled="ext.requiredUsages.includes(usage.value)"
+                      >
                         {{ usage.label }}
                       </el-checkbox>
                     </el-checkbox-group>
                   </template>
                   <template v-else-if="ext.requestable && ext.kind === 'extendedKeyUsage'">
                     <el-checkbox-group v-model="ext.usages" class="key-usage-checkbox-group">
-                      <el-checkbox v-for="usage in extendedKeyUsageOptions" :key="usage.value" :label="usage.value">
+                      <el-checkbox
+                        v-for="usage in getAllowedUsageOptions(extendedKeyUsageOptions, ext)"
+                        :key="usage.value"
+                        :label="usage.value"
+                        :disabled="ext.requiredUsages.includes(usage.value)"
+                      >
                         {{ usage.label }}
                       </el-checkbox>
                     </el-checkbox-group>
@@ -1654,6 +1664,7 @@ function buildIssueExtensionItems(extensions: any[]) {
       };
     }
     if (key === 'keyusage') {
+      const usageRule = extractUsageRule(ext?.keyUsage || { usages: ext?.usages || [] }, normalizeKeyUsageValues);
       return {
         key: `${meta.oid || meta.description || 'keyUsage'}-${index}`,
         kind: 'keyUsage',
@@ -1662,11 +1673,14 @@ function buildIssueExtensionItems(extensions: any[]) {
         oid: meta.oid,
         description: meta.description,
         critical: !!ext.critical,
-        required,
-        usages: normalizeKeyUsageValues(ext?.keyUsage?.usages || ext?.usages || [])
+        required: required || usageRule.required.length > 0,
+        requiredUsages: usageRule.required,
+        allowedUsages: usageRule.allowed,
+        usages: [...usageRule.required]
       };
     }
     if (key === 'extendedkeyusage') {
+      const usageRule = extractUsageRule(ext?.extendedKeyUsage || { usages: ext?.usages || [] }, normalizeExtendedKeyUsageValues);
       return {
         key: `${meta.oid || meta.description || 'extendedKeyUsage'}-${index}`,
         kind: 'extendedKeyUsage',
@@ -1675,8 +1689,10 @@ function buildIssueExtensionItems(extensions: any[]) {
         oid: meta.oid,
         description: meta.description,
         critical: !!ext.critical,
-        required,
-        usages: normalizeExtendedKeyUsageValues(ext?.extendedKeyUsage?.usages || ext?.usages || [])
+        required: required || usageRule.required.length > 0,
+        requiredUsages: usageRule.required,
+        allowedUsages: usageRule.allowed,
+        usages: [...usageRule.required]
       };
     }
     return {
@@ -1692,6 +1708,39 @@ function buildIssueExtensionItems(extensions: any[]) {
       value: ''
     };
   });
+}
+
+function extractUsageRule(config: any, normalize: (values: any[]) => string[]) {
+  const required: any[] = [];
+  const optional: any[] = [];
+  const addValues = (target: any[], values: any) => {
+    if (Array.isArray(values)) target.push(...values);
+  };
+  addValues(required, config?.required);
+  addValues(optional, config?.optional);
+  const entries = Array.isArray(config?.usages) ? config.usages : [];
+  entries.forEach((entry: any) => {
+    if (typeof entry === 'string') {
+      optional.push(entry);
+      return;
+    }
+    if (entry?.value || entry?.oid || entry?.description) {
+      (entry.required ? required : optional).push(entry.value || entry.oid || entry.description);
+    }
+    addValues(required, entry?.required);
+    addValues(optional, entry?.optional);
+  });
+  const normalizedRequired = normalize(required);
+  const normalizedOptional = normalize(optional).filter((usage) => !normalizedRequired.includes(usage));
+  return {
+    required: normalizedRequired,
+    allowed: [...normalizedRequired, ...normalizedOptional]
+  };
+}
+
+function getAllowedUsageOptions(options: Array<{ value: string; label: string }>, ext: any) {
+  const allowed = new Set(ext.allowedUsages || []);
+  return options.filter((option) => allowed.has(option.value));
 }
 
 function getTemplateExtensionSummary(ext: any) {

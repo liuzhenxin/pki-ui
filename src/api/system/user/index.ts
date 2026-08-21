@@ -181,7 +181,12 @@ export const updateUserProfile = (data: UserForm) => {
   return request({
     url: '/admin/v1/users/profile',
     method: 'put',
-    data: { co: data }
+    data: {
+      co: {
+        mobile: data.phonenumber || data.mobile,
+        mail: data.email || data.mail
+      }
+    }
   });
 };
 

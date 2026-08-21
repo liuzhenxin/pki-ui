@@ -83,7 +83,7 @@ export function doRefreshToken(token: string): Promise<LoginResult> {
         .map((ent) => ent.join('='))
         .join('&'),
     method: 'post',
-    data: { grant_type: 'refresh_token', refresh_token: token }
+    data: { grant_type: 'refresh_token', refresh_token: encodeURIComponent(token) }
   }) as any;
 }
 

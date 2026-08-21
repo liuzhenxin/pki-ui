@@ -102,7 +102,7 @@
           <div class="sync-panel">
             <el-form :model="caSyncForm" label-width="104px" class="sync-form">
               <el-form-item label="CA地址">
-                <el-input v-model="caSyncForm.caAddress" placeholder="例如：http://127.0.0.1 或 http://127.0.0.1/prod-api" clearable />
+                <el-input v-model="caSyncForm.caAddress" placeholder="例如：http://pki-gateway:5555/api-gateway/ca" clearable />
               </el-form-item>
             </el-form>
             <div class="sync-action">
@@ -439,7 +439,7 @@ const identityForm = reactive({
 });
 
 const caSyncForm = reactive({
-  caAddress: 'http://127.0.0.1'
+  caAddress: 'http://pki-gateway:5555/api-gateway/ca'
 });
 
 const randomContainerName = (prefix: string) => {

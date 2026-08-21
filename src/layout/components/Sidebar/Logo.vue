@@ -45,7 +45,7 @@ function syncLogoText(tenantId?: string | number | null) {
   const idStr = String(tenantId || '');
   if (idStr === '1' || route.path.startsWith('/ops')) {
     logoText.value = 'OPS';
-  } else if (idStr === '2' || route.path.startsWith('/license')) {
+  } else if (idStr === '100' || route.path.startsWith('/license')) {
     logoText.value = 'LIC';
   } else if (idStr === '3') {
     logoText.value = 'KMC';
@@ -72,7 +72,7 @@ onMounted(() => {
         if (idStr === '1') {
           title.value = '平台运维中心';
           name.value = '平台运维中心';
-        } else if (idStr === '2') {
+        } else if (idStr === '100') {
           title.value = 'License授权系统';
           name.value = '授权系统';
         } else if (idStr === '3') {

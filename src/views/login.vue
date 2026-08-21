@@ -392,7 +392,7 @@ const getTenantAppTitle = (tenantName: string, tenantId: string) => {
   if (tenantId === '1') {
     return `${tenantName} (平台运维中心)`;
   }
-  if (tenantId === '2') {
+  if (tenantId === '100') {
     return `${tenantName} (License授权系统)`;
   }
   if (tenantId === '3') {
@@ -423,9 +423,7 @@ const initTenantList = async () => {
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean);
-    const filtered: any[] = tenantIds.length
-      ? list.filter((t) => tenantIds.includes(String(t.id)))
-      : list;
+    const filtered: any[] = tenantIds.length ? list.filter((t) => tenantIds.includes(String(t.id))) : list;
     tenantEnabled.value = filtered.length > 0;
     if (tenantEnabled.value) {
       tenantList.value = filtered.map((item: any) => ({

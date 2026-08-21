@@ -1,5 +1,4 @@
 import axios, { AxiosResponse, InternalAxiosRequestConfig } from 'axios';
-import { useUserStore } from '@/store/modules/user';
 import { getToken, setToken, getRefreshToken, setRefreshToken, removeToken, removeRefreshToken } from '@/utils/auth';
 import { tansParams, blobValidate } from '@/utils/ruoyi';
 import cache from '@/plugins/cache';
@@ -14,12 +13,72 @@ import router from '@/router';
 
 const encryptHeader = 'encrypt-key';
 let downloadLoadingInstance: LoadingInstance;
-// 是否显示重新登录
+// 是否显示重新登录（路由守卫拉用户信息时也会置位，不能再用来阻止跳转登录页）
 export const isRelogin = { show: false };
 // 是否正在刷新令牌
 let isRefreshing = false;
 // 等待刷新的请求队列
 let pendingRequests: Array<{ resolve: (value: any) => void; reject: (reason?: any) => void; config: any }> = [];
+let sessionRedirectScheduled = false;
+const sessionExpiredMessage = '登录状态已过期，请重新登录';
+
+const isRefreshTokenRequest = (config: any) => {
+  if (!config) {
+    return false;
+  }
+  if (config._isRefreshRequest) {
+    return true;
+  }
+  const url = String(config.url || '');
+  if (!url.includes('/oauth2/token')) {
+    return false;
+  }
+  const data = config.data;
+  if (typeof data === 'string') {
+    return /(^|&)grant_type=refresh_token(&|$)/.test(data);
+  }
+  return data?.grant_type === 'refresh_token';
+};
+
+const isOAuthErrorBody = (data: any) => !!data && typeof data === 'object' && typeof data.error === 'string' && !data.access_token;
+
+export const resetSessionGuard = () => {
+  sessionRedirectScheduled = false;
+  isRelogin.show = false;
+  isRefreshing = false;
+  pendingRequests = [];
+};
+
+/**
+ * 统一接管 access_token / refresh_token 失效场景。
+ * 会话已无法继续时不再允许留在当前页，避免进入重复刷新和 401 循环。
+ */
+const handleSessionExpired = () => {
+  const sessionError = new Error(sessionExpiredMessage);
+  removeToken();
+  removeRefreshToken();
+  pendingRequests.forEach((request) => request.reject(sessionError));
+  pendingRequests = [];
+  isRefreshing = false;
+
+  const currentPath = router.currentRoute.value.fullPath;
+  if (sessionRedirectScheduled || currentPath.startsWith('/login')) {
+    return sessionError;
+  }
+
+  sessionRedirectScheduled = true;
+  isRelogin.show = true;
+  ElMessage({ message: sessionExpiredMessage, type: 'warning', duration: 3000 });
+
+  const loginUrl = router.resolve({
+    path: '/login',
+    query: currentPath ? { redirect: currentPath } : undefined
+  }).href;
+  location.replace(loginUrl);
+
+  return sessionError;
+};
+
 export const globalHeaders = () => {
   return {
     Authorization: 'Bearer ' + getToken(),
@@ -167,32 +226,14 @@ service.interceptors.response.use(
     if (res.data.code === 'Unauthorized' || res.data.code === 'Bad credentials' || res.data.code === 'oauth2_token_error') {
       code = 401;
     }
+    const config = (res as any).config;
+    if (isRefreshTokenRequest(config) && (isOAuthErrorBody(res.data) || !res.data?.access_token)) {
+      return Promise.reject(handleSessionExpired());
+    }
     if (code === 401) {
-      const config = (res as any).config;
       // 如果本身就是刷新令牌的请求返回了 401，说明 refresh_token 也过期了
-      if (config?._isRefreshRequest) {
-        removeToken();
-        removeRefreshToken();
-        // 拒绝所有等待中的请求
-        pendingRequests.forEach((p) => p.reject('刷新令牌失败，请重新登录。'));
-        pendingRequests = [];
-        isRefreshing = false;
-        if (!isRelogin.show) {
-          isRelogin.show = true;
-          ElMessageBox.confirm('登录状态已过期，您可以继续留在该页面，或者重新登录', '系统提示', {
-            confirmButtonText: '重新登录',
-            cancelButtonText: '取消',
-            type: 'warning'
-          }).then(() => {
-            isRelogin.show = false;
-            useUserStore().logout().then(() => {
-              location.href = '/login';
-            });
-          }).catch(() => {
-            isRelogin.show = false;
-          });
-        }
-        return Promise.reject('刷新令牌失败，请重新登录。');
+      if (isRefreshTokenRequest(config)) {
+        return Promise.reject(handleSessionExpired());
       }
 
       // 如果正在刷新令牌，将当前请求加入等待队列
@@ -205,23 +246,7 @@ service.interceptors.response.use(
       // 开始刷新令牌
       const refreshTokenValue = getRefreshToken();
       if (!refreshTokenValue) {
-        // 没有 refresh_token，直接走失败流程
-        if (!isRelogin.show) {
-          isRelogin.show = true;
-          ElMessageBox.confirm('登录状态已过期，您可以继续留在该页面，或者重新登录', '系统提示', {
-            confirmButtonText: '重新登录',
-            cancelButtonText: '取消',
-            type: 'warning'
-          }).then(() => {
-            isRelogin.show = false;
-            useUserStore().logout().then(() => {
-              location.href = '/login';
-            });
-          }).catch(() => {
-            isRelogin.show = false;
-          });
-        }
-        return Promise.reject('无效的会话，或者会话已过期，请重新登录。');
+        return Promise.reject(handleSessionExpired());
       }
 
       isRefreshing = true;
@@ -238,47 +263,28 @@ service.interceptors.response.use(
             .map((ent: any) => ent.join('='))
             .join('&'),
         method: 'post',
-        data: { grant_type: 'refresh_token', refresh_token: refreshTokenValue },
+        data: { grant_type: 'refresh_token', refresh_token: encodeURIComponent(refreshTokenValue) },
         _isRefreshRequest: true
-      } as any).then((refreshRes: any) => {
-        const newToken = refreshRes.access_token;
-        const newRefreshToken = refreshRes.refresh_token;
-        setToken(newToken);
-        setRefreshToken(newRefreshToken);
-        // 重放排队中的请求
-        pendingRequests.forEach(({ resolve, reject, config: reqConfig }) => {
-          reqConfig.headers['Authorization'] = 'Bearer ' + newToken;
-          service(reqConfig).then(resolve).catch(reject);
-        });
-        pendingRequests = [];
-        isRefreshing = false;
-        // 重试当前失败的请求
-        config.headers['Authorization'] = 'Bearer ' + newToken;
-        return service(config);
-      }).catch(() => {
-        // 刷新失败
-        removeToken();
-        removeRefreshToken();
-        pendingRequests.forEach((p) => p.reject('刷新令牌失败，请重新登录。'));
-        pendingRequests = [];
-        isRefreshing = false;
-        if (!isRelogin.show) {
-          isRelogin.show = true;
-          ElMessageBox.confirm('登录状态已过期，您可以继续留在该页面，或者重新登录', '系统提示', {
-            confirmButtonText: '重新登录',
-            cancelButtonText: '取消',
-            type: 'warning'
-          }).then(() => {
-            isRelogin.show = false;
-            useUserStore().logout().then(() => {
-              location.href = '/login';
-            });
-          }).catch(() => {
-            isRelogin.show = false;
+      } as any)
+        .then((refreshRes: any) => {
+          const newToken = refreshRes.access_token;
+          const newRefreshToken = refreshRes.refresh_token;
+          setToken(newToken);
+          setRefreshToken(newRefreshToken);
+          // 重放排队中的请求
+          pendingRequests.forEach(({ resolve, reject, config: reqConfig }) => {
+            reqConfig.headers['Authorization'] = 'Bearer ' + newToken;
+            service(reqConfig).then(resolve).catch(reject);
           });
-        }
-        return Promise.reject('刷新令牌失败，请重新登录。');
-      });
+          pendingRequests = [];
+          isRefreshing = false;
+          // 重试当前失败的请求
+          config.headers['Authorization'] = 'Bearer ' + newToken;
+          return service(config);
+        })
+        .catch(() => {
+          return Promise.reject(handleSessionExpired());
+        });
     } else if (code === HttpStatus.SERVER_ERROR) {
       if (!(res.config as any).hideErrorNotify) {
         ElMessage({ message: msg, type: 'error' });
@@ -299,6 +305,17 @@ service.interceptors.response.use(
     }
   },
   (error: any) => {
+    const status = error.response?.status;
+    const refreshFailed =
+      isRefreshTokenRequest(error.config) &&
+      (status === HttpStatus.PARAM_ERROR ||
+        status === HttpStatus.UNAUTHORIZED ||
+        isOAuthErrorBody(error.response?.data) ||
+        error.response?.data?.error === 'invalid_grant');
+    if (refreshFailed) {
+      return Promise.reject(handleSessionExpired());
+    }
+
     console.log(error);
     let { message } = error;
     if (error.response != null && error.response.data != null && error.response.data.error_description != null) {

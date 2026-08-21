@@ -662,9 +662,9 @@ import { useRouter } from 'vue-router';
 import { listProfile, listInitProfile, getProfile, initProfiles } from '@/api/ca/profile';
 import { listSigner, saveSigner, removeSigner, modifySigner } from '@/api/ca/signer';
 import { uploadUserCert, resetUserPwd } from '@/api/system/user';
-import { getTenant, updateTenant } from '@/api/system/tenant';
+import { getTenant } from '@/api/system/tenant';
 import { genRootCa, importExternalCert, issueAdminCert, deleteAllRootCa } from '@/api/ca/root';
-import { getInitStatus } from '@/api/ca/init';
+import { getInitStatus, completeInit, initAdmin as submitInitAdmin } from '@/api/ca/init';
 import { useUserStore } from '@/store/modules/user';
 import { useTagsViewStore } from '@/store/modules/tagsView';
 import X509Cert from '@/components/X509Cert/index.vue';
@@ -1879,38 +1879,16 @@ const canNext = computed(() => {
   return true;
 });
 
-const saveTenantStatus = async (statusValue: number) => {
-  try {
-    const tenantId = userStore.tenantId || localStorage.getItem('tenantId') || '';
-    const tenantRes = await getTenant(tenantId);
-    if (tenantRes.data) {
-      const tenantInfo = tenantRes.data;
-      const updateData = {
-        co: {
-          id: tenantInfo.id,
-          tenantId: tenantInfo.tenantId,
-          name: tenantInfo.name,
-          code: tenantInfo.code,
-          status: statusValue as any,
-          sourceId: tenantInfo.sourceId,
-          packageId: tenantInfo.packageId,
-          companyName: tenantInfo.companyName
-        }
-      };
-      await updateTenant(updateData);
-      userStore.setTenantInitStatus(statusValue);
-    } else {
-      throw new Error('获取租户信息为空，无法更新状态');
-    }
-  } catch (error: any) {
-    ElMessage.error('更新租户状态失败: ' + (error.message || error));
-    throw error; // Rethrow so caller knows it failed
-  }
+// 向导步骤状态由 CA InitController（initAdmin / complete）写入 sys_tenant，
+// 此处仅同步前端内存，不再调用 admin 的 PUT /v1/tenants
+// （该接口要求 write + sys:tenant:modify，引导账号不具备，会返回 Access Denied）。
+const syncTenantInitStatus = (statusValue: number) => {
+  userStore.setTenantInitStatus(statusValue);
 };
 
 const updateTenantStep = async () => {
   active.value++;
-  await saveTenantStatus(active.value);
+  syncTenantInitStatus(active.value);
 };
 
 const next = async () => {
@@ -2065,6 +2043,10 @@ const next = async () => {
             await resetUserPwd(AUDITOR_USER_ID, auditorForm.password);
 
             ElMessage.success('审计员设置成功');
+            await submitInitAdmin({
+              admin: { username: adminForm.username, password: adminForm.password },
+              auditor: { username: auditorForm.username, password: auditorForm.password }
+            });
             await updateTenantStep();
           } catch (error) {
             ElMessage.error('审计员设置或激活租户失败');
@@ -2084,8 +2066,8 @@ const next = async () => {
   } else {
     loading.value = true;
     try {
-      // 更新租户状态为 -1 (系统已完成初始化)
-      await saveTenantStatus(-1);
+      await completeInit();
+      userStore.setTenantInitStatus(-1);
 
       // 完成向导
       ElMessage.success('初始化完成，请重新登录');
@@ -2112,7 +2094,7 @@ const next = async () => {
 const prev = async () => {
   if (active.value > 0) {
     active.value--;
-    await saveTenantStatus(active.value);
+    syncTenantInitStatus(active.value);
   }
 };
 

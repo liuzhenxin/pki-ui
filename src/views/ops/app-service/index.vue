@@ -2,8 +2,8 @@
   <div class="ops-page">
     <div class="ops-toolbar">
       <div>
-        <h2>应用服务</h2>
-        <span>根据实际应用服务配置展示运行情况 · 最近采集时间：{{ dateTimeText(overview?.collectedAt) }}</span>
+        <h2>业务领域服务</h2>
+        <span>根据实际业务领域服务配置展示运行情况 · 最近采集时间：{{ dateTimeText(overview?.collectedAt) }}</span>
       </div>
       <div class="ops-toolbar-actions">
         <el-button v-hasPermi="['ops:app-service:edit']" type="primary" plain icon="Setting" @click="openConfig">配置</el-button>
@@ -49,7 +49,7 @@
     <el-card shadow="never" class="ops-panel">
       <template #header>
         <div class="ops-panel-header">
-          <span>应用服务列表</span>
+          <span>业务领域服务列表</span>
           <el-tag effect="plain" :type="abnormalCount > 0 ? 'warning' : 'success'">正常 {{ runningCount }}/{{ serviceRows.length }}</el-tag>
         </div>
       </template>
@@ -89,7 +89,7 @@
           </template>
         </el-table-column>
       </el-table>
-      <el-empty v-if="!loading && filteredRows.length === 0" description="暂无应用服务数据" />
+      <el-empty v-if="!loading && filteredRows.length === 0" description="暂无业务领域服务数据" />
     </el-card>
 
     <el-drawer v-model="drawerVisible" :size="drawerSize" destroy-on-close>
@@ -103,7 +103,7 @@
       <el-descriptions v-if="selectedRow" :column="1" border>
         <el-descriptions-item label="服务编码">{{ selectedRow.name }}</el-descriptions-item>
         <el-descriptions-item label="服务名称">{{ selectedRow.displayName }}</el-descriptions-item>
-        <el-descriptions-item label="所属层级">{{ selectedRow.layerName || '应用服务' }}</el-descriptions-item>
+        <el-descriptions-item label="所属层级">{{ selectedRow.layerName || '业务领域服务' }}</el-descriptions-item>
         <el-descriptions-item label="运行状态">{{ selectedRow.statusText }}</el-descriptions-item>
         <el-descriptions-item label="容器名称">{{ selectedRow.containerName || '-' }}</el-descriptions-item>
         <el-descriptions-item label="容器 ID">{{ selectedRow.containerId || '-' }}</el-descriptions-item>
@@ -121,7 +121,7 @@
       </el-descriptions>
     </el-drawer>
 
-    <el-dialog v-model="configVisible" title="应用服务监控配置" width="900px" destroy-on-close>
+    <el-dialog v-model="configVisible" title="业务领域服务监控配置" width="900px" destroy-on-close>
       <div class="ops-config-tip">配置了哪些服务就监控哪些 · 停用（关闭开关）后该服务不再出现在监控列表</div>
       <el-form ref="configFormRef" :model="configForm" :rules="configRules">
         <el-table :data="configForm.services" border>
@@ -133,7 +133,7 @@
           <el-table-column label="服务编码" min-width="160">
             <template #default="{ row, $index }">
               <el-form-item :prop="`services.${$index}.code`" :rules="configRules.code">
-                <el-input v-model="row.code" placeholder="如 liuzx-crypto" />
+                <el-input v-model="row.code" placeholder="如 pki-crypto" />
               </el-form-item>
             </template>
           </el-table-column>
@@ -146,7 +146,7 @@
           </el-table-column>
           <el-table-column label="容器匹配规则" min-width="190">
             <template #default="{ row }">
-              <el-input v-model="row.containerMatchRule" placeholder="如 name:liuzx-crypto" />
+              <el-input v-model="row.containerMatchRule" placeholder="如 name:pki-crypto" />
             </template>
           </el-table-column>
           <el-table-column label="依赖" min-width="200">
@@ -207,9 +207,7 @@ const query = ref({
 });
 const appConfig = ref<AppServiceConfig>({ services: [] });
 
-const enabledServices = computed(() =>
-  appConfig.value.services.filter((service) => service.enabled && service.menuEnabled)
-);
+const enabledServices = computed(() => appConfig.value.services.filter((service) => service.enabled && service.menuEnabled));
 const appComponentMap = computed(() => new Map(flattenComponents(overview.value).map((component) => [component.name, component] as const)));
 const serviceOptions = computed(() => enabledServices.value.map((service) => ({ name: service.code, displayName: service.name })));
 
@@ -290,7 +288,21 @@ const configRules: FormRules = {
   code: [{ required: true, message: '请输入服务编码', trigger: 'blur' }],
   name: [{ required: true, message: '请输入服务名称', trigger: 'blur' }]
 };
-const dependencyOptions = ['mysql8', 'redis8', 'kafka', 'liuzx-nacos', 'liuzx-gateway', 'liuzx-auth', 'liuzx-admin', 'liuzx-crypto', 'liuzx-ca', 'liuzx-kmc', 'liuzx-ra', 'liuzx-ocsp', 'liuzx-ops'];
+const dependencyOptions = [
+  'mysql8',
+  'redis8',
+  'kafka',
+  'pki-nacos',
+  'pki-gateway',
+  'pki-auth',
+  'pki-admin',
+  'pki-crypto',
+  'pki-ca',
+  'pki-kmc',
+  'pki-ra',
+  'pki-ocsp',
+  'pki-ops'
+];
 
 const openConfig = () => {
   configForm.services = appConfig.value.services.map((service) => ({
@@ -313,9 +325,9 @@ const addService = () => {
   configForm.services.push({
     code: '',
     name: '',
-    layerCode: 'app',
-    layerName: '第四层 - 应用服务',
-    layerOrder: 4,
+    layerCode: 'domain',
+    layerName: '第五层 - 业务领域服务',
+    layerOrder: 5,
     componentOrder: configForm.services.length * 10 + 100,
     containerMatchRule: '',
     description: '',
@@ -334,7 +346,7 @@ const saveConfig = async () => {
   configSaving.value = true;
   try {
     await saveAppServiceConfig(JSON.parse(JSON.stringify(configForm)));
-    ElMessage.success('应用服务监控配置已保存');
+    ElMessage.success('业务领域服务监控配置已保存');
     configVisible.value = false;
     await loadData();
   } finally {

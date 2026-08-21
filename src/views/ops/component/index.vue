@@ -10,38 +10,63 @@
 
     <el-card shadow="never" class="ops-panel">
       <el-skeleton :loading="loading" animated :rows="10">
-        <div class="topology">
-          <section v-for="layer in overview?.layers || []" :key="layer.code" class="topology-layer">
-            <div class="layer-title">
-              <b>{{ layer.name }}</b>
-              <el-tag effect="plain">{{ layer.components.length }} 个组件</el-tag>
-            </div>
-            <div class="component-list">
-              <article v-for="component in layer.components" :key="component.name" class="component-item">
-                <div class="component-head">
-                  <div>
-                    <b>{{ component.displayName }}</b>
-                    <span>{{ component.name }}</span>
+        <div class="topology-architecture">
+          <div class="external-entry">
+            <span>流量来源</span>
+            <b>客户端 / 上级负载设备</b>
+          </div>
+          <div v-if="topologyRows.length" class="flow-connector" aria-hidden="true"><span>↓</span></div>
+
+          <template v-for="(row, rowIndex) in topologyRows" :key="row.map((layer) => layer.code).join('-')">
+            <div class="topology-row" :class="{ 'is-parallel': row.length > 1 }">
+              <section v-for="layer in row" :key="layer.code" class="topology-layer">
+                <div class="layer-title">
+                  <div class="stack-identity">
+                    <b>{{ stackName(layer.code) }}</b>
+                    <span>{{ layer.name }}</span>
                   </div>
-                  <el-tag :type="statusTagType(component.container?.state, component.container?.running, component.container?.present)" effect="plain">
-                    {{ statusText(component.container?.state, component.container?.running, component.container?.present) }}
-                  </el-tag>
+                  <el-tag effect="plain">{{ layer.components.length }} 个组件</el-tag>
                 </div>
-                <div class="component-container">
-                  <span>容器</span>
-                  <b>{{ component.container?.name || '-' }}</b>
+                <div class="component-list">
+                  <article v-for="component in layer.components" :key="component.name" class="component-item">
+                    <div class="component-head">
+                      <div>
+                        <b>{{ component.displayName }}</b>
+                        <span>{{ component.name }}</span>
+                      </div>
+                      <el-tag
+                        :type="statusTagType(component.container?.state, component.container?.running, component.container?.present)"
+                        effect="plain"
+                      >
+                        {{ statusText(component.container?.state, component.container?.running, component.container?.present) }}
+                      </el-tag>
+                    </div>
+                    <div class="component-container">
+                      <span>容器</span>
+                      <b>{{ component.container?.name || '-' }}</b>
+                    </div>
+                    <div class="component-image">
+                      <span>镜像</span>
+                      <b>{{ component.container?.image || '-' }}</b>
+                    </div>
+                    <div class="dependency-list">
+                      <el-tag v-for="dep in component.dependencies" :key="dep" size="small" effect="plain">{{ dep }}</el-tag>
+                      <span v-if="!component.dependencies?.length">无前置依赖</span>
+                    </div>
+                  </article>
                 </div>
-                <div class="component-image">
-                  <span>镜像</span>
-                  <b>{{ component.container?.image || '-' }}</b>
-                </div>
-                <div class="dependency-list">
-                  <el-tag v-for="dep in component.dependencies" :key="dep" size="small" effect="plain">{{ dep }}</el-tag>
-                  <span v-if="!component.dependencies?.length">无前置依赖</span>
-                </div>
-              </article>
+              </section>
             </div>
-          </section>
+
+            <div
+              v-if="rowIndex < topologyRows.length - 1"
+              class="flow-connector"
+              :class="{ 'is-split': topologyRows[rowIndex + 1]?.length > 1, 'is-merge': row.length > 1 }"
+              aria-hidden="true"
+            >
+              <span>{{ topologyRows[rowIndex + 1]?.length > 1 ? '↙　↘' : row.length > 1 ? '↘　↙' : '↓' }}</span>
+            </div>
+          </template>
         </div>
       </el-skeleton>
     </el-card>
@@ -50,11 +75,28 @@
 
 <script setup name="OpsComponent" lang="ts">
 import { getOpsOverview } from '@/api/ops';
-import type { OpsOverview } from '@/api/ops/types';
+import type { OpsLayer, OpsOverview } from '@/api/ops/types';
 import { dateTimeText, statusTagType, statusText } from '@/views/ops/utils';
 
 const loading = ref(false);
 const overview = ref<OpsOverview>();
+const stackNames: Record<string, string> = {
+  ui: 'pki-ui-stack',
+  gateway: 'pki-gateway-stack',
+  platform: 'pki-platform-stack',
+  domain: 'pki-domain-stack',
+  discovery: 'pki-discovery-stack',
+  infrastructure: 'pki-infra-stack'
+};
+
+const topologyRows = computed<OpsLayer[][]>(() => {
+  const layers = new Map((overview.value?.layers || []).map((layer) => [layer.code, layer]));
+  return [['ui'], ['gateway'], ['platform', 'domain'], ['discovery'], ['infrastructure']]
+    .map((codes) => codes.map((code) => layers.get(code)).filter((layer): layer is OpsLayer => Boolean(layer)))
+    .filter((row) => row.length > 0);
+});
+
+const stackName = (code: string) => stackNames[code] || `${code}-stack`;
 
 const loadData = async () => {
   loading.value = true;
@@ -97,18 +139,104 @@ onMounted(loadData);
   border-radius: 8px;
 }
 
-.topology {
+.topology-architecture {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 12px 20px;
+}
+
+.external-entry {
+  width: min(100%, 720px);
+  padding: 16px 20px;
+  border: 1px solid #bfdbfe;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #eff6ff, #eef2ff);
+  text-align: center;
+
+  span,
+  b {
+    display: block;
+  }
+
+  span {
+    margin-bottom: 4px;
+    color: #64748b;
+    font-size: 12px;
+  }
+
+  b {
+    color: #1e3a8a;
+    font-size: 16px;
+  }
+}
+
+.flow-connector {
+  position: relative;
+  display: flex;
+  width: 40px;
+  height: 38px;
+  align-items: center;
+  justify-content: center;
+  color: #64748b;
+
+  &::before {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    width: 2px;
+    background: #cbd5e1;
+    content: '';
+    transform: translateX(-50%);
+  }
+
+  span {
+    position: relative;
+    z-index: 1;
+    padding: 0 5px;
+    background: #fff;
+    font-size: 20px;
+    line-height: 1;
+  }
+
+  &.is-split,
+  &.is-merge {
+    width: 220px;
+
+    &::before {
+      display: none;
+    }
+
+    span {
+      padding: 0;
+      color: #64748b;
+      font-size: 24px;
+      letter-spacing: 18px;
+      white-space: nowrap;
+    }
+  }
+}
+
+.topology-row {
   display: grid;
-  grid-template-columns: repeat(4, minmax(230px, 1fr));
-  gap: 12px;
+  width: min(100%, 960px);
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+
+  &.is-parallel {
+    width: 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .topology-layer {
   min-width: 0;
-  padding: 12px;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  background: #f9fafb;
+  padding: 16px;
+  border: 1px solid #dbe3ee;
+  border-radius: 12px;
+  background: #f8fafc;
+  box-shadow: 0 6px 18px rgb(15 23 42 / 6%);
 }
 
 .layer-title,
@@ -123,15 +251,35 @@ onMounted(loadData);
 
 .layer-title {
   align-items: center;
-  margin-bottom: 12px;
+  margin-bottom: 14px;
 
   b {
-    color: #111827;
+    color: #0f172a;
+  }
+}
+
+.stack-identity {
+  min-width: 0;
+
+  b,
+  span {
+    display: block;
+  }
+
+  b {
+    font-size: 16px;
+  }
+
+  span {
+    margin-top: 3px;
+    color: #64748b;
+    font-size: 12px;
   }
 }
 
 .component-list {
   display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 10px;
 }
 
@@ -188,14 +336,20 @@ onMounted(loadData);
   font-size: 12px;
 }
 
-@media (max-width: 1400px) {
-  .topology {
-    grid-template-columns: repeat(2, minmax(230px, 1fr));
-  }
-}
-
 @media (max-width: 768px) {
-  .topology {
+  .topology-architecture {
+    padding-inline: 0;
+  }
+
+  .topology-row.is-parallel {
+    grid-template-columns: 1fr;
+  }
+
+  .topology-layer {
+    padding: 12px;
+  }
+
+  .component-list {
     grid-template-columns: 1fr;
   }
 }

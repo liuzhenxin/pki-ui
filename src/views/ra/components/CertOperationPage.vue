@@ -53,6 +53,14 @@
           <el-form-item label="已选证书">
             <el-input :model-value="selectedRows.length ? `${selectedRows.length} 张` : '未选择'" disabled />
           </el-form-item>
+          <el-alert
+            v-if="action === 'update'"
+            class="mb-3"
+            type="warning"
+            show-icon
+            :closable="false"
+            title="换密钥更新：签发时采集新 CSR，生成新序列号，旧证书将按 superseded 吊销。若所选为双证书任一侧，将同时更新签名与加密证书。"
+          />
           <el-form-item :label="action === 'renewal' ? '申请原因（选填）' : '申请原因'">
             <el-input
               v-model="form.reason"
@@ -61,7 +69,7 @@
               :placeholder="action === 'renewal' ? '可填写续期原因' : `请输入${actionName}原因`"
             />
           </el-form-item>
-          <template v-if="action === 'renewal'">
+          <template v-if="action === 'renewal' || action === 'update'">
             <el-form-item label="新生效时间">
               <el-date-picker
                 v-model="form.notBefore"
@@ -71,12 +79,12 @@
                 style="width: 100%"
               />
             </el-form-item>
-            <el-form-item label="新失效时间" required>
+            <el-form-item :label="action === 'update' ? '新失效时间' : '新失效时间'" :required="action === 'renewal'">
               <el-date-picker
                 v-model="form.notAfter"
                 type="datetime"
                 value-format="YYYY-MM-DD HH:mm:ss"
-                placeholder="请选择续期后的失效时间"
+                :placeholder="action === 'update' ? '可选，默认保持原失效时间' : '请选择续期后的失效时间'"
                 style="width: 100%"
               />
             </el-form-item>
@@ -98,7 +106,7 @@
 import { computed, reactive, ref } from 'vue';
 import { pageRaOperationCert, submitRaOperation, RaOperationCert } from '@/api/ra/workflowTask';
 
-type OperationAction = 'reissue' | 'freeze' | 'unfreeze' | 'renewal';
+type OperationAction = 'reissue' | 'freeze' | 'unfreeze' | 'renewal' | 'update';
 
 const props = defineProps<{
   action: OperationAction;
@@ -118,6 +126,15 @@ const actionMeta = {
     title: '证书续期',
     subtitle: '保留原证书密钥、主体、扩展和序列号，仅更新证书有效期。',
     icon: 'Timer',
+    statusOptions: [
+      { label: '有效', value: 'valid' },
+      { label: '已过期', value: 'expired' }
+    ]
+  },
+  update: {
+    title: '证书更新',
+    subtitle: '换密钥，不是续期：签发新 CSR、新序列号，旧证书 superseded 吊销。',
+    icon: 'Refresh',
     statusOptions: [
       { label: '有效', value: 'valid' },
       { label: '已过期', value: 'expired' }

@@ -348,11 +348,7 @@ const requestorTypeOptions = [
   { label: 'RA(证书注册系统)', value: 'RA' },
   { label: '业务系统', value: 'BUSINESS' }
 ];
-const protocolTypeOptions = [
-  { label: 'API', value: 'API' },
-  { label: 'CMP', value: 'CMP' },
-  { label: 'API + CMP', value: 'API,CMP' }
-];
+const protocolTypeOptions = [{ label: 'API + CMP', value: 'API,CMP' }];
 
 // 查询参数
 const queryParams = reactive<RequestorQuery>({
@@ -411,7 +407,7 @@ function resetForm() {
     id: undefined,
     name: undefined,
     requestorType: 'BUSINESS',
-    type: undefined,
+    type: 'API,CMP',
     conf: undefined,
     certificatePem: undefined,
     status: 'ENABLED',
@@ -462,7 +458,13 @@ function submitForm() {
   requestorFormRef.value?.validate((valid: boolean) => {
     if (valid) {
       const submitData = {
-        ...form.value,
+        id: form.value.id,
+        name: form.value.name,
+        requestorType: form.value.requestorType,
+        type: 'API,CMP',
+        status: form.value.status,
+        remark: form.value.remark,
+        certificatePem: form.value.certificatePem,
         conf: buildRequestorConf(form.value)
       };
       const commandData = {
@@ -873,6 +875,7 @@ function toRequestorForm(data: any) {
   return {
     ...data,
     requestorType: normalizeRequestorType(data),
+    type: 'API,CMP',
     certificatePem: config.certificatePem || data?.certificatePem || data?.conf,
     status: data?.status || config.status || 'ENABLED',
     remark: data?.remark || config.remark || ''

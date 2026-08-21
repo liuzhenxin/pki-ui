@@ -22,73 +22,6 @@
       </div>
     </div>
 
-    <div class="ops-resource-dashboard">
-      <section class="ops-resource-card">
-        <div class="ops-resource-card-header">
-          <div class="ops-resource-icon blue">
-            <el-icon><Monitor /></el-icon>
-          </div>
-          <h3>CPU 使用情况</h3>
-        </div>
-        <div class="ops-meter-row">
-          <span>平均 CPU</span>
-          <el-progress :percentage="safePercent(averageCpuUsage)" :stroke-width="10" />
-          <b>{{ percentText(averageCpuUsage) }}</b>
-        </div>
-        <div class="ops-meter-row">
-          <span>最大 1 分钟负载</span>
-          <el-progress :percentage="safePercent(maxLoadPercent)" :stroke-width="10" />
-          <b>{{ maxLoadAverageText }}</b>
-        </div>
-      </section>
-
-      <section class="ops-resource-card">
-        <div class="ops-resource-card-header">
-          <div class="ops-resource-icon green">
-            <el-icon><Cpu /></el-icon>
-          </div>
-          <h3>内存与磁盘</h3>
-        </div>
-        <div class="ops-meter-row">
-          <span>平均内存</span>
-          <el-progress :percentage="safePercent(averageMemoryUsage)" :stroke-width="10" />
-          <b>{{ percentText(averageMemoryUsage) }}</b>
-        </div>
-        <div class="ops-meter-row">
-          <span>平均磁盘</span>
-          <el-progress :percentage="safePercent(averageDiskUsage)" :stroke-width="10" />
-          <b>{{ percentText(averageDiskUsage) }}</b>
-        </div>
-      </section>
-
-      <section class="ops-resource-card">
-        <div class="ops-resource-card-header">
-          <div class="ops-resource-icon cyan">
-            <el-icon><Connection /></el-icon>
-          </div>
-          <h3>运行分布</h3>
-        </div>
-        <div class="ops-data-grid">
-          <div>
-            <strong>{{ summary.onlineServerCount }}</strong>
-            <span>在线服务器</span>
-          </div>
-          <div>
-            <strong>{{ summary.runningContainerCount }}</strong>
-            <span>运行容器</span>
-          </div>
-          <div>
-            <strong>{{ appRunningCount }}</strong>
-            <span>业务正常</span>
-          </div>
-          <div>
-            <strong>{{ currentAlerts.length }}</strong>
-            <span>当前告警</span>
-          </div>
-        </div>
-      </section>
-    </div>
-
     <el-row :gutter="12">
       <el-col :xs="24" :lg="16">
         <el-card shadow="never" class="ops-panel">
@@ -147,7 +80,12 @@
                       </div>
                       <div>
                         <span>状态:</span>
-                        <b>{{ component.container?.status || statusText(component.container?.state, component.container?.running, component.container?.present) }}</b>
+                        <b>
+                          {{
+                            component.container?.status ||
+                            statusText(component.container?.state, component.container?.running, component.container?.present)
+                          }}
+                        </b>
                       </div>
                     </div>
                     <div class="ops-deps" v-if="component.dependencies?.length">依赖：{{ component.dependencies.join(' / ') }}</div>
@@ -219,63 +157,6 @@
               </el-tab-pane>
               <el-empty v-if="!loading && !overview?.layers?.length && unboundContainers.length === 0" description="暂无组件与容器数据" />
             </el-tabs>
-          </el-skeleton>
-        </el-card>
-
-        <el-card shadow="never" class="ops-panel">
-          <template #header>
-            <div class="ops-panel-header">
-              <span>应用服务</span>
-              <el-tag effect="plain" :type="appAbnormalCount > 0 ? 'warning' : 'success'">
-                正常 {{ appRunningCount }}/{{ appComponents.length }}
-              </el-tag>
-            </div>
-          </template>
-          <el-skeleton :loading="loading" animated :rows="4">
-            <div class="ops-app-grid">
-              <div
-                v-for="component in appComponents"
-                :key="component.name"
-                class="ops-app-item"
-                role="button"
-                tabindex="0"
-                @click="openComponentDetail(component)"
-                @keydown.enter.prevent="openComponentDetail(component)"
-              >
-                <div class="ops-app-head">
-                  <div>
-                    <b>{{ component.displayName }}</b>
-                    <span>{{ component.name }}</span>
-                  </div>
-                  <el-tag
-                    :type="statusTagType(component.container?.state, component.container?.running, component.container?.present)"
-                    effect="plain"
-                  >
-                    {{ statusText(component.container?.state, component.container?.running, component.container?.present) }}
-                  </el-tag>
-                </div>
-                <div class="ops-app-meta">
-                  <span>实例</span>
-                  <b>{{ component.container?.running ? '1/1' : '0/1' }}</b>
-                </div>
-                <div class="ops-app-meta">
-                  <span>依赖</span>
-                  <b>{{ component.dependencies?.length ? component.dependencies.join(' / ') : '无' }}</b>
-                </div>
-                <div class="ops-card-actions">
-                  <el-button
-                    class="ops-log-btn ops-card-log-btn"
-                    icon="Document"
-                    size="small"
-                    :disabled="!component.container?.present || !findServerByContainerName(component.container?.name)"
-                    @click.stop="openLogsForComponent(component)"
-                  >
-                    查看日志
-                  </el-button>
-                </div>
-              </div>
-              <el-empty v-if="!loading && appComponents.length === 0" description="暂无应用服务配置" />
-            </div>
           </el-skeleton>
         </el-card>
       </el-col>
@@ -391,7 +272,9 @@
           <el-descriptions-item label="容器名称">{{ selectedComponent.container?.name || '-' }}</el-descriptions-item>
           <el-descriptions-item label="容器 ID">{{ selectedComponent.container?.containerId || '-' }}</el-descriptions-item>
           <el-descriptions-item label="镜像">{{ selectedComponent.container?.image || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="容器状态">{{ selectedComponent.container?.status || selectedComponent.container?.state || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="容器状态">
+            {{ selectedComponent.container?.status || selectedComponent.container?.state || '-' }}
+          </el-descriptions-item>
           <el-descriptions-item label="端口">{{ selectedComponent.container?.ports || '-' }}</el-descriptions-item>
           <el-descriptions-item label="所在服务器">{{ selectedServerText }}</el-descriptions-item>
         </el-descriptions>
@@ -451,7 +334,7 @@
 <script setup name="OpsOverview" lang="ts">
 import { getOpsContainerLogs, getOpsContainers, getOpsOverview, getOpsServers } from '@/api/ops';
 import type { OpsComponent, OpsContainer, OpsContainerLogs, OpsOverview, OpsServer, OpsSummary } from '@/api/ops/types';
-import { buildSummary, collectContainers, dateTimeText, flattenComponents, percentText, statusTagType, statusText } from '@/views/ops/utils';
+import { buildSummary, collectContainers, dateTimeText, flattenComponents, statusTagType, statusText } from '@/views/ops/utils';
 
 type OpsContainerWithServer = OpsContainer & {
   serverCode?: string;
@@ -481,7 +364,7 @@ const componentContainerNames = computed(() => new Set(components.value.map((com
 const unboundContainers = computed(() =>
   allContainers.value.filter((container) => container.name && !componentContainerNames.value.has(container.name))
 );
-const appComponents = computed(() => components.value.filter((component) => component.layer === 'app'));
+const appComponents = computed(() => components.value.filter((component) => component.layer === 'domain'));
 const appRunningCount = computed(() => appComponents.value.filter((component) => component.container?.running).length);
 const appAbnormalCount = computed(() => appComponents.value.length - appRunningCount.value);
 const overallStatus = computed(() => {
@@ -522,28 +405,6 @@ const selectedServerText = computed(() => {
   return `${selectedServer.value.name}（${selectedServer.value.host || selectedServer.value.code}）`;
 });
 const drawerSize = computed(() => (window.innerWidth < 768 ? '92%' : '520px'));
-const average = (values: Array<number | undefined>) => {
-  const validValues = values.filter((value): value is number => value !== undefined && value !== null && !Number.isNaN(value));
-  if (validValues.length === 0) {
-    return undefined;
-  }
-  return validValues.reduce((total, value) => total + value, 0) / validValues.length;
-};
-const averageCpuUsage = computed(() => average(servers.value.map((server) => server.cpuUsage)));
-const averageMemoryUsage = computed(() => average(servers.value.map((server) => server.memoryUsage)));
-const averageDiskUsage = computed(() => average(servers.value.map((server) => server.diskUsage)));
-const maxLoadAverage = computed(() => Math.max(0, ...servers.value.map((server) => server.loadAverage || 0)));
-const maxLoadPercent = computed(() => {
-  const server = servers.value.reduce<OpsServer | undefined>(
-    (current, candidate) => (!current || (candidate.loadAverage || 0) > (current.loadAverage || 0) ? candidate : current),
-    undefined
-  );
-  if (!server?.loadAverage || !server.logicalProcessorCount) {
-    return undefined;
-  }
-  return Math.min((server.loadAverage / server.logicalProcessorCount) * 100, 100);
-});
-const maxLoadAverageText = computed(() => (maxLoadAverage.value > 0 ? maxLoadAverage.value.toFixed(2) : '-'));
 
 const metricCards = computed(() => [
   {
@@ -555,7 +416,7 @@ const metricCards = computed(() => [
   { label: '在线服务器', value: `${summary.value.onlineServerCount}/${summary.value.serverCount}`, icon: 'Monitor', tone: 'blue' },
   { label: '运行容器', value: `${summary.value.runningContainerCount}/${summary.value.containerCount}`, icon: 'Box', tone: 'cyan' },
   {
-    label: '应用服务',
+    label: '业务领域服务',
     value: `${appRunningCount.value}/${appComponents.value.length}`,
     icon: 'Connection',
     tone: appAbnormalCount.value > 0 ? 'orange' : 'green'
@@ -663,8 +524,7 @@ onMounted(loadData);
   padding: 24px;
   background:
     radial-gradient(circle at 12% 8%, rgb(168 237 234 / 52%), transparent 30%),
-    radial-gradient(circle at 88% 16%, rgb(254 214 227 / 70%), transparent 36%),
-    linear-gradient(135deg, #a8edea 0%, #f4f6fb 48%, #fed6e3 100%);
+    radial-gradient(circle at 88% 16%, rgb(254 214 227 / 70%), transparent 36%), linear-gradient(135deg, #a8edea 0%, #f4f6fb 48%, #fed6e3 100%);
   color: #1d3557;
 }
 
@@ -948,78 +808,6 @@ onMounted(loadData);
   font-size: 12px;
 }
 
-.ops-app-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 10px;
-}
-
-.ops-app-item {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  min-height: 164px;
-  padding: 12px;
-  border: 1px solid rgb(69 123 157 / 18%);
-  border-radius: 12px;
-  background: rgb(255 255 255 / 76%);
-  cursor: pointer;
-  text-align: left;
-  transition:
-    border-color 0.16s ease,
-    box-shadow 0.16s ease,
-    transform 0.16s ease;
-
-  &:hover {
-    border-color: #2a9d8f;
-    box-shadow: 0 12px 28px rgb(69 123 157 / 16%);
-    transform: translateY(-1px);
-  }
-}
-
-.ops-app-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 10px;
-
-  b,
-  span {
-    display: block;
-  }
-
-  b {
-    color: #1d3557;
-  }
-
-  span {
-    margin-top: 3px;
-    color: #6c757d;
-    font-size: 12px;
-  }
-}
-
-.ops-app-meta {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 8px;
-  margin-top: 8px;
-  color: #6c757d;
-  font-size: 12px;
-
-  b {
-    max-width: 70%;
-    overflow: hidden;
-    color: #1d3557;
-    font-weight: 500;
-    text-align: right;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-}
-
 .ops-alert-list {
   display: grid;
   gap: 10px;
@@ -1110,127 +898,6 @@ onMounted(loadData);
   font-size: 12px;
 }
 
-.ops-resource-dashboard {
-  max-width: 1420px;
-  margin: 0 auto 16px;
-}
-
-.ops-resource-dashboard {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(260px, 1fr));
-  gap: 16px;
-}
-
-.ops-resource-card {
-  border: 1px solid rgb(255 255 255 / 56%);
-  border-radius: 12px;
-  background: rgb(255 255 255 / 88%);
-  box-shadow: 0 12px 28px rgb(29 53 87 / 10%);
-  backdrop-filter: blur(10px);
-}
-
-.ops-resource-card {
-  min-height: 178px;
-  padding: 22px;
-}
-
-.ops-resource-card-header,
-.ops-container-title {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.ops-resource-card-header {
-  padding-bottom: 16px;
-  margin-bottom: 16px;
-  border-bottom: 1px solid rgb(29 53 87 / 7%);
-
-  h3 {
-    margin: 0;
-    color: #1d3557;
-    font-size: 18px;
-    font-weight: 800;
-  }
-}
-
-.ops-resource-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 42px;
-  height: 42px;
-  border-radius: 12px;
-  color: #fff;
-  font-size: 20px;
-
-  &.blue {
-    background: linear-gradient(135deg, #457b9d, #4cc9f0);
-  }
-
-  &.green {
-    background: linear-gradient(135deg, #2a9d8f, #457b9d);
-  }
-
-  &.cyan {
-    background: linear-gradient(135deg, #2a9d8f, #4cc9f0);
-  }
-}
-
-.ops-meter-row {
-  display: grid;
-  grid-template-columns: 72px 1fr 58px;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 0;
-  color: #495057;
-  font-weight: 600;
-
-  b {
-    color: #1d3557;
-    text-align: right;
-  }
-
-  :deep(.el-progress-bar__outer) {
-    background-color: #e9ecef;
-  }
-
-  :deep(.el-progress-bar__inner) {
-    background: linear-gradient(90deg, #2a9d8f, #457b9d);
-  }
-}
-
-.ops-data-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
-
-  div {
-    min-height: 68px;
-    padding: 12px;
-    border-radius: 8px;
-    background: rgb(42 157 143 / 7%);
-    text-align: center;
-  }
-
-  strong,
-  span {
-    display: block;
-  }
-
-  strong {
-    color: #2a9d8f;
-    font-size: 22px;
-    font-weight: 800;
-  }
-
-  span {
-    margin-top: 4px;
-    color: #6c757d;
-    font-size: 12px;
-  }
-}
-
 .ops-container-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(285px, 1fr));
@@ -1266,6 +933,9 @@ onMounted(loadData);
 }
 
 .ops-container-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
   margin-bottom: 14px;
   color: #457b9d;
 
@@ -1399,10 +1069,6 @@ onMounted(loadData);
   .ops-metrics-grid {
     grid-template-columns: repeat(3, minmax(150px, 1fr));
   }
-
-  .ops-resource-dashboard {
-    grid-template-columns: 1fr;
-  }
 }
 
 @media (max-width: 768px) {
@@ -1416,17 +1082,12 @@ onMounted(loadData);
   }
 
   .ops-component-grid,
-  .ops-app-grid,
   .ops-container-grid {
     grid-template-columns: 1fr;
   }
 
   .ops-page {
     padding: 14px;
-  }
-
-  .ops-meter-row {
-    grid-template-columns: 64px 1fr 48px;
   }
 }
 </style>

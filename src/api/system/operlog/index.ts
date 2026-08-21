@@ -9,6 +9,15 @@ export function list(query: any) {
   });
 }
 
+/** 统计操作日志（总数/成功/失败/平均耗时/成功平均耗时/失败平均耗时） */
+export function statistics(query: any) {
+  return request({
+    url: '/admin/v1/operate-logs/statistics',
+    method: 'post',
+    data: query
+  });
+}
+
 /** 查询操作日志详细 */
 export function getOperLog(id: string | number) {
   return request({

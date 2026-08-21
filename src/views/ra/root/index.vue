@@ -33,7 +33,9 @@
             <div class="profile-expand-header">
               <div>
                 <div class="profile-expand-title">授权模板</div>
-                <div class="profile-expand-subtitle">点击模板可查看完整配置详情</div>
+                <div class="profile-expand-subtitle">
+                  自动审核只跳过审核员，不跳过制证员，也不会自动调用 CA。双证书需两侧模板都设为自动审核才会跳过审核。
+                </div>
               </div>
               <el-tag type="primary" effect="light">{{ scope.row.profiles?.length || 0 }} 个模板</el-tag>
             </div>
@@ -54,8 +56,23 @@
               <el-table-column label="有效期" width="110" align="center">
                 <template #default="profileScope">{{ getProfileValidity(profileScope.row) }}</template>
               </el-table-column>
-              <el-table-column label="说明" min-width="220" show-overflow-tooltip>
+              <el-table-column label="说明" min-width="180" show-overflow-tooltip>
                 <template #default="profileScope">{{ getProfileDescription(profileScope.row) }}</template>
+              </el-table-column>
+              <el-table-column label="审核策略" min-width="320">
+                <template #default="profileScope">
+                  <div @click.stop>
+                    <el-radio-group
+                      :model-value="profileScope.row.approvalMode || 'required'"
+                      size="small"
+                      :disabled="!canSaveApproval || savingProfileId === profileScope.row.id"
+                      @change="(value: string) => handleApprovalChange(profileScope.row, value)"
+                    >
+                      <el-radio-button value="required">人工审核</el-radio-button>
+                      <el-radio-button value="optional">自动审核</el-radio-button>
+                    </el-radio-group>
+                  </div>
+                </template>
               </el-table-column>
               <el-table-column label="操作" width="96" align="center" fixed="right">
                 <template #default="profileScope">
@@ -531,6 +548,8 @@ import CertProfile from '@/components/CertProfile/index.vue';
 import CertSubject, { typeMapping, sortSubjectItems } from '@/components/CertSubject/index.vue';
 import { listProfile, getProfile } from '@/api/ca/profile';
 import { getConfiguredCaAddress, listRaRootCa, syncAuthorizedCa, type RaAuthorizedCaSyncResult } from '@/api/ra/root';
+import { saveRaProfileApprovalMode } from '@/api/ra/profile';
+import { checkPermi } from '@/utils/permission';
 import { listSigner } from '@/api/ca/signer';
 import {
   genRootCa,
@@ -552,6 +571,8 @@ import { parseTime } from '@/utils/ruoyi';
 
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
 const router = useRouter();
+const canSaveApproval = checkPermi(['ra:profile:save']);
+const savingProfileId = ref<number | string>();
 
 const securityConfirm = reactive({
   visible: false,
@@ -1657,6 +1678,35 @@ function handleDownload(row: any) {
   link.download = `${row.name}.crt`;
   link.click();
 }
+
+const syncApprovalMode = (profileId: number | string, value: 'required' | 'optional') => {
+  certList.value.forEach((root: any) => {
+    (root.profiles || []).forEach((profile: any) => {
+      if (String(profile.id) === String(profileId)) {
+        profile.approvalMode = value;
+      }
+    });
+  });
+};
+
+const handleApprovalChange = (row: any, value: string) => {
+  if (value !== 'required' && value !== 'optional') {
+    return;
+  }
+  const previous = row.approvalMode === 'optional' ? 'optional' : 'required';
+  syncApprovalMode(row.id, value);
+  savingProfileId.value = row.id;
+  saveRaProfileApprovalMode(row.id, value)
+    .then(() => {
+      ElMessage.success('审核策略已保存，仅对后续新提交生效');
+    })
+    .catch(() => {
+      syncApprovalMode(row.id, previous);
+    })
+    .finally(() => {
+      savingProfileId.value = undefined;
+    });
+};
 
 /** 授权模板按钮操作 */
 function handleAuthorizeProfile(row: any) {

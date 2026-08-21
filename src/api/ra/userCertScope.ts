@@ -5,6 +5,7 @@ export interface RaUserCertScopeProfile {
   id: string | number;
   name: string;
   type?: string;
+  conf?: string;
   authorized?: boolean;
 }
 

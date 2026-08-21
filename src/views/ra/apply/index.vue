@@ -99,11 +99,21 @@
             <el-radio-button label="dual" :disabled="!supportsDualRoot">双证书</el-radio-button>
           </el-radio-group>
         </el-form-item>
-        <el-form-item v-if="form.certMode !== 'dual'" label="证书模板" prop="profileId">
-          <el-select v-model="form.profileId" filterable clearable placeholder="请选择证书模板" style="width: 100%" @change="handleProfileChange">
-            <el-option v-for="profile in profileOptions" :key="String(profile.id)" :label="profile.name" :value="String(profile.id)" />
-          </el-select>
-        </el-form-item>
+        <template v-if="form.certMode !== 'dual'">
+          <el-form-item label="证书模板" prop="profileId">
+            <el-select v-model="form.profileId" filterable clearable placeholder="请选择证书模板" style="width: 100%" @change="handleProfileChange">
+              <el-option v-for="profile in profileOptions" :key="String(profile.id)" :label="profileApplyLabel(profile)" :value="String(profile.id)" />
+            </el-select>
+          </el-form-item>
+          <el-alert
+            v-if="isRsaKmcEncryption"
+            class="rsa-kmc-alert"
+            type="info"
+            :closable="false"
+            show-icon
+            title="该模板为 RSA 加密单证：密钥由 KMC 生成，签发时无需提交 CSR。"
+          />
+        </template>
         <el-form-item v-else label="证书模板" prop="dualProfileIndex">
           <el-select v-model="form.dualProfileIndex" filterable clearable placeholder="请选择双证书模板" style="width: 100%" @change="handleDualProfileChange">
             <el-option v-for="(pair, index) in dualProfileOptions" :key="index" :label="dualPairLabel(pair)" :value="index" />
@@ -216,6 +226,7 @@ import { listUser } from '@/api/ra/user';
 import { listDeptSelectTree } from '@/api/ra/dept';
 import { RaDeptTreeOption } from '@/api/ra/dept/types';
 import { listMyUserCertScopeOptions, RaUserCertScopeDualPair, RaUserCertScopeProfile, RaUserCertScopeRoot } from '@/api/ra/userCertScope';
+import { parseJson } from '@/utils/json';
 import { FormInstance, FormRules } from 'element-plus';
 
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
@@ -321,6 +332,19 @@ const supportsDualRoot = computed(() => {
 const profileOptions = computed<RaUserCertScopeProfile[]>(() => {
   const rootId = form.rootId === undefined ? undefined : String(form.rootId);
   return rootOptions.value.find((root) => String(root.id) === rootId)?.profiles || [];
+});
+
+const selectedProfile = computed<RaUserCertScopeProfile | undefined>(() => {
+  const profileId = form.profileId === undefined ? undefined : String(form.profileId);
+  return profileOptions.value.find((profile) => String(profile.id) === profileId);
+});
+
+const isRsaKmcEncryption = computed(() => {
+  if (form.certMode === 'dual') {
+    return false;
+  }
+  const algorithm = (selectedRoot.value?.algorithm || form.rootAlgorithm || '').toUpperCase();
+  return algorithm.includes('RSA') && isEncryptionProfile(selectedProfile.value);
 });
 
 const dualProfileOptions = computed<RaUserCertScopeDualPair[]>(() => {
@@ -548,6 +572,69 @@ function handleProfileChange(profileId?: string | number) {
   form.profileName = profile?.name;
 }
 
+function profileApplyLabel(profile: RaUserCertScopeProfile) {
+  return isEncryptionProfile(profile) && String(selectedRoot.value?.algorithm || form.rootAlgorithm || '').toUpperCase().includes('RSA')
+    ? `${profile.name}（KMC加密）`
+    : profile.name;
+}
+
+function isEncryptionProfile(profile?: RaUserCertScopeProfile) {
+  if (!profile) {
+    return false;
+  }
+  const name = String(profile.name || '');
+  const upperName = name.toUpperCase();
+  if (name.includes('加密') || upperName.includes('ENCRYPTION') || upperName.includes('TLS_ENC') || upperName.includes('TLS-ENC')) {
+    return true;
+  }
+  const type = String(profile.type || '').toUpperCase();
+  if (type === 'TLS_ENC' || type.includes('ENCRYPTION')) {
+    return true;
+  }
+  let conf: any = {};
+  try {
+    conf = parseJson(profile.conf || '{}') || {};
+  } catch {
+    conf = {};
+  }
+  const category = String(conf.profileCategory || conf.certLevel || conf.metadata?.category || '').toUpperCase();
+  if (category === 'DUAL_ENC' || category === 'TLS_ENC' || category.includes('ENCRYPTION')) {
+    return true;
+  }
+  if (String(conf.dualCert?.role || '').toUpperCase() === 'ENCRYPTION') {
+    return true;
+  }
+  const usages: string[] = [];
+  const push = (value: any) => {
+    if (value == null) {
+      return;
+    }
+    if (typeof value === 'string') {
+      usages.push(value.toLowerCase());
+      return;
+    }
+    if (typeof value === 'object') {
+      const token = String(value.value || value.description || value.oid || '').toLowerCase();
+      if (token) {
+        usages.push(token);
+      }
+    }
+  };
+  if (Array.isArray(conf.certUsages)) {
+    conf.certUsages.forEach(push);
+  }
+  const extensions = Array.isArray(conf.extensions) ? conf.extensions : [];
+  extensions.forEach((ext: any) => {
+    const items = ext?.keyUsage?.usages || ext?.usages;
+    if (Array.isArray(items)) {
+      items.forEach(push);
+    }
+  });
+  const hasSign = usages.some((usage) => usage.includes('digitalsignature') || usage.includes('nonrepudiation') || usage.includes('contentcommitment'));
+  const hasEnc = usages.some((usage) => usage.includes('encipher') || usage.includes('encrypt'));
+  return hasEnc && !hasSign;
+}
+
 function handleDualProfileChange(index?: number) {
   if (index === undefined || index === null) {
     clearProfiles();
@@ -692,6 +779,10 @@ watch(
 .dialog-footer {
   display: flex;
   justify-content: flex-end;
+}
+
+.rsa-kmc-alert {
+  margin: 0 0 12px;
 }
 
 @media (max-width: 768px) {

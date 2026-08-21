@@ -4,7 +4,7 @@ import NProgress from 'nprogress';
 import 'nprogress/nprogress.css';
 import { getToken } from '@/utils/auth';
 import { isHttp, isPathMatch } from '@/utils/validate';
-import { isRelogin } from '@/utils/request';
+import { isRelogin, resetSessionGuard } from '@/utils/request';
 import { useUserStore } from '@/store/modules/user';
 import { useSettingsStore } from '@/store/modules/settings';
 import { usePermissionStore } from '@/store/modules/permission';
@@ -28,7 +28,7 @@ const getCurrentTenantId = () => useUserStore().tenantId || localStorage.getItem
 
 const getCurrentInitPath = () => {
   const tenantId = String(getCurrentTenantId());
-  if (tenantId === '2') {
+  if (tenantId === '100') {
     return licenseInitPath;
   }
   if (tenantId === '3') {
@@ -52,7 +52,7 @@ const getTenantAppTitle = (tenantName: string, tenantId: string, longName = fals
   if (tenantId === '1') {
     return `${tenantName} (${longName ? '平台运维中心' : 'OPS'})`;
   }
-  if (tenantId === '2') {
+  if (tenantId === '100') {
     return `${tenantName} (${longName ? 'License授权系统' : 'License'})`;
   }
   if (tenantId === '3') {
@@ -120,9 +120,16 @@ router.beforeEach(async (to, from, next) => {
         // 判断当前用户是否已拉取完user_info信息
         const [err] = await tos(useUserStore().getInfo());
         if (err) {
-          await useUserStore().logout();
-          ElMessage.error(err);
-          next({ path: '/' });
+          try {
+            await useUserStore().logout();
+          } catch {
+            // 会话已失效时注销接口也可能失败，不能挡住回登录页
+          }
+          const errMessage = err instanceof Error ? err.message : String(err);
+          if (errMessage && errMessage !== '登录状态已过期，请重新登录') {
+            ElMessage.error(errMessage);
+          }
+          next(`/login?redirect=${encodeURIComponent(to.fullPath || '/')}`);
         } else {
           isRelogin.show = false;
           const res = await syncTenantContext();
@@ -160,6 +167,7 @@ router.beforeEach(async (to, from, next) => {
   } else {
     // 没有token
     if (isWhiteList(to.path)) {
+      resetSessionGuard();
       // 在免登录白名单，直接进入, 并且获取租户信息, 如果有租户id
       const tenantId = localStorage.getItem('tenantId');
       if (tenantId) {

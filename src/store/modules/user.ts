@@ -63,13 +63,18 @@ export const useUserStore = defineStore('user', () => {
 
   // 注销
   const logout = async (): Promise<void> => {
-    await logoutApi();
-    token.value = '';
-    roles.value = [];
-    permissions.value = [];
-    tenantInitStatus.value = undefined;
-    removeToken();
-    removeRefreshToken();
+    try {
+      await logoutApi();
+    } catch {
+      // 令牌已失效时服务端注销会失败，本地会话仍须清掉
+    } finally {
+      token.value = '';
+      roles.value = [];
+      permissions.value = [];
+      tenantInitStatus.value = undefined;
+      removeToken();
+      removeRefreshToken();
+    }
   };
 
   const setAvatar = (value: string) => {

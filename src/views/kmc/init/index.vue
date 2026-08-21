@@ -11,6 +11,7 @@
       <el-steps :active="activeStep" finish-status="success" simple class="init-steps">
         <el-step title="协议" />
         <el-step title="环境检查" />
+        <el-step title="服务身份" />
         <el-step title="账号初始化" />
         <el-step title="完成" />
       </el-steps>
@@ -67,6 +68,13 @@
                 </div>
                 <div class="help-card-body">检查默认管理员和审计员账号是否存在，后续步骤会更新账号密码和证书信息。</div>
               </div>
+              <div class="help-card">
+                <div class="help-card-header">
+                  <el-tag type="info" effect="plain" round size="small">下一步</el-tag>
+                  <span class="help-card-title">KMP服务身份</span>
+                </div>
+                <div class="help-card-body">用于签署 KMP 响应的 KMC 自身身份证书。环境检查不阻断；未配置时请在下一步生成或导入 PKCS12。</div>
+              </div>
             </div>
           </el-drawer>
 
@@ -114,6 +122,86 @@
 
         <div v-if="activeStep === 2" class="step-content">
           <div class="step-title">
+            <h2>KMC 服务身份</h2>
+            <p>配置用于签署 KMP 响应的软件身份证书。这不是对端 CA 通信证书。</p>
+          </div>
+          <el-alert
+            class="step-alert"
+            type="info"
+            :closable="false"
+            show-icon
+            title="KMC 使用该身份签署 KSRespond。若部署时已挂载 PKCS12，将直接显示当前证书；否则请生成自签名 SM2 身份或导入已有密钥库。"
+          />
+
+          <div v-if="identityConfigured" class="identity-preview">
+            <div class="form-section-title">当前身份</div>
+            <el-descriptions :column="1" border>
+              <el-descriptions-item label="来源">{{ identitySourceLabel }}</el-descriptions-item>
+              <el-descriptions-item label="主题">{{ identity.subject || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="算法">{{ identity.algorithm || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="别名">{{ identity.alias || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="有效期至">{{ identity.notAfter || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="指纹">{{ identity.fingerprintSha256 || '-' }}</el-descriptions-item>
+            </el-descriptions>
+          </div>
+
+          <el-form
+            v-if="identity.source !== 'FILE'"
+            ref="identityFormRef"
+            :model="identityForm"
+            :rules="identityRules"
+            label-width="120px"
+            class="init-form"
+          >
+            <el-form-item label="配置方式">
+              <el-radio-group v-model="identityForm.mode">
+                <el-radio-button value="GENERATE">生成自签名</el-radio-button>
+                <el-radio-button value="IMPORT">导入 PKCS12</el-radio-button>
+              </el-radio-group>
+            </el-form-item>
+            <template v-if="identityForm.mode === 'GENERATE'">
+              <el-form-item label="通用名称" prop="commonName">
+                <el-input v-model="identityForm.commonName" placeholder="例如：KMC KMP Signer" />
+              </el-form-item>
+              <el-form-item label="组织名称" prop="organization">
+                <el-input v-model="identityForm.organization" placeholder="例如：LiuZX" />
+              </el-form-item>
+              <el-form-item label="国家代码" prop="country">
+                <el-input v-model="identityForm.country" maxlength="2" placeholder="CN" />
+              </el-form-item>
+              <el-form-item label="有效年数" prop="validityYears">
+                <el-input-number v-model="identityForm.validityYears" :min="1" :max="30" />
+              </el-form-item>
+              <el-form-item label="密钥别名" prop="alias">
+                <el-input v-model="identityForm.alias" placeholder="main" />
+              </el-form-item>
+              <el-form-item label="密钥库口令" prop="password">
+                <el-input v-model="identityForm.password" type="password" show-password placeholder="可留空，由服务端生成" />
+              </el-form-item>
+            </template>
+            <template v-else>
+              <el-form-item label="PKCS12 文件" prop="keystoreBase64">
+                <el-upload :auto-upload="false" :limit="1" accept=".p12,.pfx,.pkcs12" :on-change="onKeystoreChange" :on-remove="onKeystoreRemove">
+                  <el-button>选择文件</el-button>
+                </el-upload>
+              </el-form-item>
+              <el-form-item label="密钥别名" prop="alias">
+                <el-input v-model="identityForm.alias" placeholder="main" />
+              </el-form-item>
+              <el-form-item label="密钥库口令" prop="password">
+                <el-input v-model="identityForm.password" type="password" show-password />
+              </el-form-item>
+            </template>
+            <el-form-item>
+              <el-button type="primary" :loading="identityLoading" @click="submitIdentity">
+                {{ identityConfigured ? '重新配置并保存' : '保存服务身份' }}
+              </el-button>
+            </el-form-item>
+          </el-form>
+        </div>
+
+        <div v-if="activeStep === 3" class="step-content">
+          <div class="step-title">
             <h2>账号初始化</h2>
             <p>设置管理员和审计员的初始登录凭据。</p>
           </div>
@@ -146,15 +234,15 @@
           </el-form>
         </div>
 
-        <div v-if="activeStep === 3" class="step-content">
+        <div v-if="activeStep === 4" class="step-content">
           <el-result icon="success" title="初始化流程已完成" sub-title="请重新登录后进入 KMC 管理功能。" />
         </div>
       </div>
 
       <div class="wizard-actions">
-        <el-button :disabled="activeStep === 0 || activeStep === 3 || loading" @click="prev">上一步</el-button>
-        <el-button v-if="activeStep < 2" type="primary" :disabled="!canGoNext" @click="next">下一步</el-button>
-        <el-button v-else-if="activeStep === 2" type="primary" :loading="loading" @click="submitInit">提交初始化</el-button>
+        <el-button :disabled="activeStep === 0 || activeStep === 4 || loading" @click="prev">上一步</el-button>
+        <el-button v-if="activeStep < 3" type="primary" :disabled="!canGoNext" @click="next">下一步</el-button>
+        <el-button v-else-if="activeStep === 3" type="primary" :loading="loading" @click="submitInit">提交初始化</el-button>
         <el-button v-else type="primary" :loading="loading" @click="enterSystem">进入系统</el-button>
       </div>
     </el-card>
@@ -163,13 +251,13 @@
 
 <script setup name="KmcInit" lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue';
-import type { FormInstance, FormRules } from 'element-plus';
+import type { FormInstance, FormRules, UploadFile } from 'element-plus';
 import { ElMessage } from 'element-plus';
 import { useRouter } from 'vue-router';
 import { QuestionFilled, Refresh, CircleCheckFilled, CircleCloseFilled, WarningFilled } from '@element-plus/icons-vue';
-import { getEnvInfo, getInitStatus, initAdmin } from '@/api/kmc/init';
+import { getEnvInfo, getIdentity, getInitStatus, initAdmin, initIdentity } from '@/api/kmc/init';
 import { unwrapKmcData } from '@/api/kmc/common';
-import { getTenant, updateTenant } from '@/api/system/tenant';
+import { getTenant } from '@/api/system/tenant';
 import { useUserStore } from '@/store/modules/user';
 import Agreement from '@/components/Agreement/index.vue';
 
@@ -183,16 +271,42 @@ interface EnvRow {
 const router = useRouter();
 const userStore = useUserStore();
 const formRef = ref<FormInstance>();
+const identityFormRef = ref<FormInstance>();
 const activeStep = ref(0);
 const agree = ref(false);
 const loading = ref(true);
 const envLoading = ref(false);
+const identityLoading = ref(false);
 const initialized = ref(false);
 const showEnvHelp = ref(false);
 const envRows = ref<EnvRow[]>([]);
 const tenantCode = ref('');
 const tenantName = ref('');
 const companyName = ref('');
+const identity = reactive({
+  configured: false,
+  source: 'NONE',
+  subject: '',
+  issuer: '',
+  serialNumber: '',
+  notBefore: '',
+  notAfter: '',
+  fingerprintSha256: '',
+  algorithm: '',
+  alias: '',
+  certPem: ''
+});
+
+const identityForm = reactive({
+  mode: 'GENERATE',
+  commonName: 'KMC KMP Signer',
+  organization: 'LiuZX',
+  country: 'CN',
+  validityYears: 10,
+  alias: 'main',
+  password: '',
+  keystoreBase64: ''
+});
 
 const form = reactive({
   adminUsername: 'admin',
@@ -208,6 +322,36 @@ const rules = reactive<FormRules>({
   adminPassword: [{ required: true, message: '请输入管理员密码', trigger: 'blur' }],
   auditorUsername: [{ required: true, message: '请输入审计员用户名', trigger: 'blur' }],
   auditorPassword: [{ required: true, message: '请输入审计员密码', trigger: 'blur' }]
+});
+
+const identityRules = reactive<FormRules>({
+  commonName: [{ required: true, message: '请输入通用名称', trigger: 'blur' }],
+  country: [{ required: true, message: '请输入国家代码', trigger: 'blur' }],
+  alias: [{ required: true, message: '请输入密钥别名', trigger: 'blur' }],
+  password: [
+    {
+      validator: (_rule, value, callback) => {
+        if (identityForm.mode === 'IMPORT' && !String(value || '').trim()) {
+          callback(new Error('导入 PKCS12 时必须填写密钥库口令'));
+          return;
+        }
+        callback();
+      },
+      trigger: 'blur'
+    }
+  ],
+  keystoreBase64: [
+    {
+      validator: (_rule, value, callback) => {
+        if (identityForm.mode === 'IMPORT' && !String(value || '').trim()) {
+          callback(new Error('请选择 PKCS12 文件'));
+          return;
+        }
+        callback();
+      },
+      trigger: 'change'
+    }
+  ]
 });
 
 const normalizeEnvRows = (data: any): EnvRow[] => {
@@ -230,29 +374,56 @@ const normalizeEnvRows = (data: any): EnvRow[] => {
 const allEnvOk = computed(() => envRows.value.length > 0 && envRows.value.every((item) => item.ok));
 const okCount = computed(() => envRows.value.filter((item) => item.ok).length);
 const failCount = computed(() => envRows.value.filter((item) => !item.ok).length);
-const canGoNext = computed(() => (activeStep.value === 0 ? agree.value : allEnvOk.value));
-
-const saveTenantStatus = async (statusValue: number) => {
-  const tenantId = userStore.tenantId || localStorage.getItem('tenantId') || '';
-  if (!tenantId) {
-    return;
+const identityConfigured = computed(() => Boolean(identity.configured));
+const identitySourceLabel = computed(() => {
+  if (identity.source === 'FILE') {
+    return '部署密钥库';
   }
-  const tenantRes = await getTenant(tenantId);
-  if (tenantRes.data) {
-    const tenantInfo: any = tenantRes.data;
-    await updateTenant({
-      co: {
-        id: tenantInfo.id,
-        tenantId: tenantInfo.tenantId,
-        name: tenantInfo.name,
-        code: tenantInfo.code,
-        status: statusValue as any,
-        sourceId: tenantInfo.sourceId,
-        packageId: tenantInfo.packageId,
-        companyName: tenantInfo.companyName
-      }
-    } as any);
-    userStore.setTenantInitStatus(statusValue);
+  if (identity.source === 'INIT') {
+    return '初始化向导';
+  }
+  return '未配置';
+});
+const canGoNext = computed(() => {
+  if (activeStep.value === 0) {
+    return agree.value;
+  }
+  if (activeStep.value === 1) {
+    return allEnvOk.value;
+  }
+  if (activeStep.value === 2) {
+    return identityConfigured.value;
+  }
+  return false;
+});
+
+// 向导步骤状态仅同步前端内存。完成初始化时由 KMC InitController.initAdmin
+// 把 sys_tenant.status 写成 -1。不要调用 admin 的 PUT /v1/tenants
+// （该接口要求 write + sys:tenant:modify，引导账号不具备，会返回 Access Denied）。
+const syncTenantInitStatus = (statusValue: number) => {
+  userStore.setTenantInitStatus(statusValue);
+};
+
+const applyIdentity = (data: any) => {
+  identity.configured = Boolean(data?.configured);
+  identity.source = data?.source || 'NONE';
+  identity.subject = data?.subject || '';
+  identity.issuer = data?.issuer || '';
+  identity.serialNumber = data?.serialNumber || '';
+  identity.notBefore = data?.notBefore || '';
+  identity.notAfter = data?.notAfter || '';
+  identity.fingerprintSha256 = data?.fingerprintSha256 || '';
+  identity.algorithm = data?.algorithm || '';
+  identity.alias = data?.alias || '';
+  identity.certPem = data?.certPem || '';
+};
+
+const loadIdentityInfo = async () => {
+  try {
+    const res = await getIdentity();
+    applyIdentity(unwrapKmcData(res));
+  } catch (error) {
+    applyIdentity({ configured: false, source: 'NONE' });
   }
 };
 
@@ -261,8 +432,14 @@ const loadInitInfo = async () => {
     const res = await getInitStatus();
     const data: any = unwrapKmcData(res);
     initialized.value = Boolean(data?.initialized ?? data?.init ?? data);
+    if (data?.identity) {
+      applyIdentity(data.identity);
+    } else {
+      await loadIdentityInfo();
+    }
   } catch (error) {
     initialized.value = false;
+    await loadIdentityInfo();
   }
   await loadEnvInfo();
 };
@@ -293,9 +470,12 @@ const next = async () => {
   loading.value = true;
   try {
     activeStep.value++;
-    await saveTenantStatus(activeStep.value);
+    syncTenantInitStatus(activeStep.value);
     if (activeStep.value === 1) {
       await loadEnvInfo();
+    }
+    if (activeStep.value === 2) {
+      await loadIdentityInfo();
     }
   } finally {
     loading.value = false;
@@ -307,10 +487,65 @@ const prev = async () => {
     loading.value = true;
     try {
       activeStep.value--;
-      await saveTenantStatus(activeStep.value);
+      syncTenantInitStatus(activeStep.value);
     } finally {
       loading.value = false;
     }
+  }
+};
+
+const readFileAsBase64 = (file: File) =>
+  new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result || '');
+      const comma = result.indexOf(',');
+      resolve(comma >= 0 ? result.slice(comma + 1) : result);
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+
+const onKeystoreChange = async (file: UploadFile) => {
+  if (!file.raw) {
+    return;
+  }
+  identityForm.keystoreBase64 = await readFileAsBase64(file.raw);
+};
+
+const onKeystoreRemove = () => {
+  identityForm.keystoreBase64 = '';
+};
+
+const submitIdentity = async () => {
+  if (identity.source === 'FILE') {
+    return;
+  }
+  const valid = await identityFormRef.value?.validate().catch(() => false);
+  if (!valid) {
+    return;
+  }
+  identityLoading.value = true;
+  try {
+    const payload: Record<string, unknown> = {
+      mode: identityForm.mode,
+      alias: identityForm.alias,
+      password: identityForm.password
+    };
+    if (identityForm.mode === 'GENERATE') {
+      payload.commonName = identityForm.commonName;
+      payload.organization = identityForm.organization;
+      payload.country = identityForm.country;
+      payload.validityYears = identityForm.validityYears;
+    } else {
+      payload.keystoreBase64 = identityForm.keystoreBase64;
+      payload.storeType = 'PKCS12';
+    }
+    const res = await initIdentity(payload);
+    applyIdentity(unwrapKmcData(res));
+    ElMessage.success('服务身份已保存');
+  } finally {
+    identityLoading.value = false;
   }
 };
 
@@ -337,7 +572,7 @@ const submitInit = async () => {
       }
     });
     ElMessage.success('初始化提交成功');
-    activeStep.value = 3;
+    activeStep.value = 4;
     userStore.setTenantInitStatus(-1);
   } finally {
     loading.value = false;
@@ -387,7 +622,7 @@ onMounted(async () => {
         }
 
         const parsedStatus = Number(tenantInfo.status);
-        if (!Number.isNaN(parsedStatus) && parsedStatus >= 0 && parsedStatus <= 3) {
+        if (!Number.isNaN(parsedStatus) && parsedStatus >= 0 && parsedStatus <= 4) {
           activeStep.value = parsedStatus;
         }
       }
@@ -686,6 +921,15 @@ onMounted(async () => {
 
 .empty-state {
   padding: 40px 0;
+}
+
+.step-alert {
+  margin-bottom: 18px;
+}
+
+.identity-preview {
+  max-width: 720px;
+  margin: 0 auto 18px;
 }
 
 .wizard-actions {

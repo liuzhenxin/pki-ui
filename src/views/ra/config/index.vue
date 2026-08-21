@@ -14,12 +14,6 @@
             <el-form-item label="系统名称">
               <el-input v-model="basicForm.systemName" maxlength="80" placeholder="LiuZX RA" />
             </el-form-item>
-            <el-form-item label="申请审批">
-              <el-radio-group v-model="basicForm.approvalMode">
-                <el-radio-button value="required">需要审批</el-radio-button>
-                <el-radio-button value="optional">无需审批</el-radio-button>
-              </el-radio-group>
-            </el-form-item>
             <el-form-item label="默认证书有效期">
               <el-input-number v-model="basicForm.defaultValidityDays" :min="1" :max="36500" controls-position="right" />
               <span class="unit-text">天</span>
@@ -34,7 +28,7 @@
         <el-tab-pane label="CA接入" name="CA_ACCESS">
           <el-form :model="caAccessForm" label-width="140px" class="config-form">
             <el-form-item label="CA服务地址">
-              <el-input v-model="caAccessForm.caAddress" placeholder="http://liuzx-ca:4443/api">
+              <el-input v-model="caAccessForm.caAddress" placeholder="http://pki-gateway:5555/api-gateway/ca">
                 <template #append>
                   <el-button v-hasPermi="['ra:config:get']" icon="Connection" :loading="testing" @click="testActiveConfig">连通性测试</el-button>
                 </template>
@@ -136,13 +130,12 @@ const testResult = ref<RaConfigTestCO>();
 
 const basicForm = reactive({
   systemName: 'LiuZX RA',
-  approvalMode: 'required',
   defaultValidityDays: 365,
   renewalBeforeDays: 30
 });
 
 const caAccessForm = reactive({
-  caAddress: 'http://liuzx-ca:4443/api'
+  caAddress: 'http://pki-gateway:5555/api-gateway/ca'
 });
 
 const identityForm = reactive({
