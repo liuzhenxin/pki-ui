@@ -38,7 +38,7 @@ export default defineConfig(({ mode, command }) => {
           // Nginx单体代理地址
           // target: 'http://nginx:99',
           // Nginx微服务代理地址
-          target: 'http://127.0.0.1:5555/api-gateway',
+          target: env.VITE_APP_PROXY_TARGET || 'http://127.0.0.1:5555/api-gateway',
           changeOrigin: true,
           ws: true,
           rewrite: (path) => path.replace(new RegExp('^' + env.VITE_APP_BASE_API), '')

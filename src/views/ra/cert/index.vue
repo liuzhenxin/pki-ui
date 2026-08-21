@@ -45,10 +45,13 @@
           <el-tag :type="statusTagType(row.status)" effect="light">{{ row.statusName || statusName(row.status) }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="120" align="center" fixed="right">
+      <el-table-column label="操作" width="150" align="center" fixed="right">
         <template #default="{ row }">
           <el-tooltip content="查看详情" placement="top">
             <el-button link type="primary" icon="View" @click="handleDetail(row)" />
+          </el-tooltip>
+          <el-tooltip content="录入证书管理系统" placement="top">
+            <el-button link type="warning" icon="DocumentAdd" @click="openIntranetCertLedger(row)" />
           </el-tooltip>
           <el-dropdown trigger="click" @command="(format: string) => handleDownload(format, row)">
             <el-button link type="primary" icon="Download" />
@@ -126,6 +129,7 @@ import { ElMessage, FormInstance, FormRules } from 'element-plus';
 import { downloadRaCert, downloadRaPkcs12, getRaCert, pageRaCert, RaCertStatus, RaCertSummary } from '@/api/ra/cert';
 
 const rows = ref<RaCertSummary[]>([]);
+const router = useRouter();
 const loading = ref(false);
 const showSearch = ref(true);
 const total = ref(0);
@@ -213,6 +217,16 @@ async function handleDetail(row: RaCertSummary) {
   const data = unwrapData<any>(await getRaCert(row.id));
   detail.value = { ...(data?.summary || row), ...data };
   detailOpen.value = true;
+}
+
+function openIntranetCertLedger(row: RaCertSummary) {
+  router.push({
+    path: '/ra-certificate/ra-intranet-cert',
+    query: {
+      sourceCertId: String(row.id),
+      serialNumber: row.serialNumber
+    }
+  });
 }
 
 function statusTagType(status?: RaCertStatus) {

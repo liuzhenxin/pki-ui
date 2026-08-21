@@ -414,6 +414,7 @@
       <div class="result-actions">
         <el-button icon="CopyDocument" @click="copyCert(issueResult.cert)">复制证书</el-button>
         <el-button type="primary" icon="Download" @click="downloadCert(issueResult)">下载证书</el-button>
+        <el-button type="warning" plain icon="DocumentAdd" @click="openIntranetCertLedger(issueResult)">录入证书管理系统</el-button>
         <el-button v-if="issueResult.certificateChain" icon="Download" @click="downloadCertPem(issueResult.certificateChain, 'certificate-chain')">
           下载证书链
         </el-button>
@@ -479,6 +480,7 @@ import { parseJson } from '@/utils/json';
 import SKFClient from '@/api/skf/skf_api';
 
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
+const router = useRouter();
 
 const businessTypeOptions = [
   { label: '证书申请', value: 'cert_apply' },
@@ -1628,6 +1630,20 @@ function downloadCert(result: Partial<RaCertIssueResult>) {
     return;
   }
   downloadCertPem(result.cert, result.serialNumber || 'ra-cert');
+}
+
+function openIntranetCertLedger(result: Partial<RaCertIssueResult>) {
+  if (!result.certId && !result.serialNumber) {
+    proxy?.$modal.msgWarning('缺少证书信息，无法录入台账');
+    return;
+  }
+  router.push({
+    path: '/ra-certificate/ra-intranet-cert',
+    query: {
+      sourceCertId: result.certId ? String(result.certId) : undefined,
+      serialNumber: result.serialNumber || undefined
+    }
+  });
 }
 
 function downloadCertPem(certPem?: string, fileName?: string) {
