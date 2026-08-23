@@ -3,7 +3,7 @@
     <header class="page-header">
       <div>
         <h2>安全配置</h2>
-        <p>统一管理 RADIUS 二次认证与平台 Syslog 安全日志转发。</p>
+        <p>统一管理 RADIUS 二次认证、平台 Syslog 安全日志转发，以及管理界面 IP 白名单。</p>
       </div>
       <div v-if="activeTab === 'radius'" class="header-actions">
         <el-button icon="Connection" :loading="testing" @click="openTestDialog">测试认证</el-button>
@@ -15,6 +15,7 @@
       <el-tab-pane label="RADIUS 登录认证" name="radius" />
       <el-tab-pane label="Syslog 日志转发" name="syslog" />
       <el-tab-pane label="菜单显示配置" name="menu" />
+      <el-tab-pane v-hasPermi="['ops:security:access:view']" label="访问控制" name="access" />
     </el-tabs>
 
     <el-form v-show="activeTab === 'radius'" ref="formRef" v-loading="loading" :model="form" :rules="rules" label-position="top">
@@ -123,6 +124,8 @@
 
     <MenuDisplayConfigPane v-if="activeTab === 'menu'" class="syslog-pane" />
 
+    <AccessControlPane v-if="activeTab === 'access'" class="syslog-pane" />
+
     <el-dialog v-if="activeTab === 'radius'" v-model="testVisible" title="测试 RADIUS 认证" width="460px" destroy-on-close>
       <el-alert type="info" :closable="false" show-icon> 测试账号和动态口令仅用于本次请求，不会保存。 </el-alert>
       <el-form ref="testFormRef" :model="testForm" :rules="testRules" label-position="top" class="test-form">
@@ -147,6 +150,7 @@ import { getRadiusConfig, saveRadiusConfig, testRadiusAuthentication } from '@/a
 import type { RadiusConfig } from '@/api/ops/types';
 import SyslogConfigPane from './SyslogConfigPane.vue';
 import MenuDisplayConfigPane from './MenuDisplayConfigPane.vue';
+import AccessControlPane from './AccessControlPane.vue';
 
 const defaultConfig = (): RadiusConfig => ({
   enabled: false,
@@ -161,7 +165,7 @@ const defaultConfig = (): RadiusConfig => ({
 });
 
 const loading = ref(false);
-const activeTab = ref<'radius' | 'syslog' | 'menu'>('radius');
+const activeTab = ref<'radius' | 'syslog' | 'menu' | 'access'>('radius');
 const saving = ref(false);
 const testing = ref(false);
 const testVisible = ref(false);

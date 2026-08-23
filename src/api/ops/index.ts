@@ -11,7 +11,9 @@ import type {
   RadiusStatus,
   RadiusTestRequest,
   SyslogConfig,
-  SyslogStatus
+  SyslogStatus,
+  AccessControlConfig,
+  AccessControlCurrentIp
 } from './types';
 import type { Result } from '@/api/types';
 
@@ -40,6 +42,18 @@ export function testSyslogConfig(data: SyslogConfig): Promise<Result<void>> {
 
 export function getSyslogStatus(): Promise<Result<SyslogStatus>> {
   return request({ baseURL, url: '/v1/security/syslog/status', method: 'get' }) as any;
+}
+
+export function getAccessControlConfig(): Promise<Result<AccessControlConfig>> {
+  return request({ baseURL, url: '/v1/security/access-control/config', method: 'get' }) as any;
+}
+
+export function saveAccessControlConfig(data: AccessControlConfig): Promise<Result<void>> {
+  return request({ baseURL, url: '/v1/security/access-control/config', method: 'put', data }) as any;
+}
+
+export function getAccessControlCurrentIp(): Promise<Result<AccessControlCurrentIp>> {
+  return request({ baseURL, url: '/v1/security/access-control/current-ip', method: 'get' }) as any;
 }
 
 export function getOpsServers(): Promise<OpsServer[]> {

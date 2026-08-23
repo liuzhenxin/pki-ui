@@ -61,6 +61,19 @@
             :closable="false"
             title="换密钥更新：签发时采集新 CSR，生成新序列号，旧证书将按 superseded 吊销。若所选为双证书任一侧，将同时更新签名与加密证书。"
           />
+          <el-alert
+            v-if="action === 'revoke' || action === 'freeze' || action === 'unfreeze'"
+            class="mb-3"
+            type="info"
+            show-icon
+            :closable="false"
+            title="双证一对只提交一次；审核通过后两侧一并在 CA 生效。RSA-KMC 加密证按单证处理。"
+          />
+          <el-form-item v-if="action === 'revoke'" label="吊销原因" required>
+            <el-select v-model="form.revocationReason" placeholder="请选择吊销原因" style="width: 100%">
+              <el-option v-for="item in revokeReasonOptions" :key="item.value" :label="item.label" :value="item.value" />
+            </el-select>
+          </el-form-item>
           <el-form-item :label="action === 'renewal' ? '申请原因（选填）' : '申请原因'">
             <el-input
               v-model="form.reason"
@@ -106,7 +119,7 @@
 import { computed, reactive, ref } from 'vue';
 import { pageRaOperationCert, submitRaOperation, RaOperationCert } from '@/api/ra/workflowTask';
 
-type OperationAction = 'reissue' | 'freeze' | 'unfreeze' | 'renewal' | 'update';
+type OperationAction = 'reissue' | 'freeze' | 'unfreeze' | 'renewal' | 'update' | 'revoke';
 
 const props = defineProps<{
   action: OperationAction;
@@ -142,7 +155,7 @@ const actionMeta = {
   },
   freeze: {
     title: '证书冻结',
-    subtitle: '对异常、争议或临时停用的证书提交冻结申请。',
+    subtitle: '对异常、争议或临时停用的证书提交冻结申请。SM2/抗量子双证一对只交一次，审核通过后两侧一并在 CA 生效。',
     icon: 'Lock',
     statusOptions: [
       { label: '有效', value: 'valid' },
@@ -151,11 +164,33 @@ const actionMeta = {
   },
   unfreeze: {
     title: '证书解冻',
-    subtitle: '对已冻结证书提交恢复使用申请。',
+    subtitle: '对已冻结证书提交恢复使用申请。SM2/抗量子双证一对只交一次，审核通过后两侧一并在 CA 生效。',
     icon: 'Unlock',
     statusOptions: [{ label: '已冻结', value: 'frozen' }]
+  },
+  revoke: {
+    title: '证书吊销',
+    subtitle: '对有效、已冻结或已过期证书提交吊销申请。SM2/抗量子双证一对只交一次，审核通过后两侧一并在 CA 生效。',
+    icon: 'Delete',
+    statusOptions: [
+      { label: '有效', value: 'valid' },
+      { label: '即将到期', value: 'expiring' },
+      { label: '已过期', value: 'expired' },
+      { label: '已冻结', value: 'frozen' }
+    ]
   }
 };
+
+const revokeReasonOptions = [
+  { value: 0, label: '未指定 (0)' },
+  { value: 1, label: '密钥泄露 (1)' },
+  { value: 2, label: 'CA 泄露 (2)' },
+  { value: 3, label: '从属关系变更 (3)' },
+  { value: 4, label: '被替代 (4)' },
+  { value: 5, label: '停止运营 (5)' },
+  { value: 9, label: '权限撤销 (9)' },
+  { value: 10, label: 'AA 泄露 (10)' }
+];
 
 const queryParams = reactive({
   pageNum: 1,
@@ -169,7 +204,8 @@ const form = reactive({
   reason: '',
   csr: '',
   notBefore: '',
-  notAfter: ''
+  notAfter: '',
+  revocationReason: undefined as number | undefined
 });
 
 const drawerOpen = ref(false);
@@ -204,13 +240,21 @@ async function getList() {
       pageSize: queryParams.pageSize,
       operationType: operationType.value,
       serialNumber: queryParams.serialNumber || undefined,
-      subject: queryParams.subject || undefined
+      subject: queryParams.subject || undefined,
+      status: queryParams.status || undefined
     });
     const page = parsePage(res);
     rows.value = page.rows.map((item: RaOperationCert) => ({
       ...item,
       status: item.statusName,
-      statusType: item.statusName === '已吊销' ? 'danger' : item.statusName === '已冻结' ? 'info' : 'success'
+      statusType:
+        item.statusName === '已吊销'
+          ? 'danger'
+          : item.statusName === '已冻结'
+            ? 'warning'
+            : item.statusName === '已过期'
+              ? 'warning'
+              : 'success'
     }));
     total.value = page.total;
   } finally {
@@ -245,6 +289,7 @@ function handleSubmit() {
   form.csr = '';
   form.notBefore = '';
   form.notAfter = '';
+  form.revocationReason = undefined;
   drawerOpen.value = true;
 }
 
@@ -255,12 +300,17 @@ function handleSingleRenewal(row: RaOperationCert & { status?: string; statusTyp
   form.csr = '';
   form.notBefore = '';
   form.notAfter = '';
+  form.revocationReason = undefined;
   drawerOpen.value = true;
 }
 
 async function confirmSubmit() {
   if (action.value !== 'renewal' && !form.reason.trim()) {
     ElMessage.warning(`请输入${actionName.value}原因`);
+    return;
+  }
+  if (action.value === 'revoke' && (form.revocationReason === undefined || form.revocationReason === null)) {
+    ElMessage.warning('请选择吊销原因');
     return;
   }
   if (action.value === 'renewal' && !form.notAfter) {
@@ -276,7 +326,7 @@ async function confirmSubmit() {
   }
   submitLoading.value = true;
   try {
-    await Promise.all(
+    const results = await Promise.all(
       selectedRows.value.map((row) =>
         submitRaOperation({
           operationType: operationType.value,
@@ -284,13 +334,15 @@ async function confirmSubmit() {
           reason: form.reason,
           csr: form.csr,
           notBefore: form.notBefore || undefined,
-          notAfter: form.notAfter || undefined
+          notAfter: form.notAfter || undefined,
+          revocationReason: action.value === 'revoke' ? form.revocationReason : undefined
         })
       )
     );
     drawerOpen.value = false;
     selectedRows.value = [];
-    ElMessage.success(`${title.value}申请已提交`);
+    const payload = (results[0] as any)?.data || (results[0] as any);
+    ElMessage.success(payload?.message || `${title.value}申请已提交`);
     await getList();
   } finally {
     submitLoading.value = false;

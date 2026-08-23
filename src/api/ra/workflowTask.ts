@@ -49,6 +49,7 @@ export interface RaOperationCertQuery {
   operationType?: string;
   serialNumber?: string;
   subject?: string;
+  status?: string;
 }
 
 export interface RaOperationCert {
@@ -71,6 +72,7 @@ export interface RaOperationSubmitForm {
   csr?: string;
   notBefore?: string;
   notAfter?: string;
+  revocationReason?: number;
 }
 
 export function pageRaWorkflowTodo(query: RaWorkflowTaskQuery): Promise<Result<any>> {

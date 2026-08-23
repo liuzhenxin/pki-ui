@@ -82,8 +82,10 @@
         <el-descriptions-item label="生效时间">{{ parseTime(detail.notBefore) || '-' }}</el-descriptions-item>
         <el-descriptions-item label="失效时间">{{ parseTime(detail.notAfter) || '-' }}</el-descriptions-item>
         <el-descriptions-item label="SHA-1指纹" :span="2">{{ detail.sha1 || '-' }}</el-descriptions-item>
-        <el-descriptions-item v-if="detail.revoked" label="注销时间">{{ parseTime(detail.revocationTime) || '-' }}</el-descriptions-item>
-        <el-descriptions-item v-if="detail.revoked" label="注销原因">{{ revocationReasonName(detail.revocationReason) }}</el-descriptions-item>
+        <el-descriptions-item v-if="detail.status === 'HOLD'" label="冻结时间">{{ parseTime(detail.revocationTime) || '-' }}</el-descriptions-item>
+        <el-descriptions-item v-if="detail.status === 'HOLD'" label="冻结原因">证书挂起</el-descriptions-item>
+        <el-descriptions-item v-if="detail.revoked && detail.status !== 'HOLD'" label="注销时间">{{ parseTime(detail.revocationTime) || '-' }}</el-descriptions-item>
+        <el-descriptions-item v-if="detail.revoked && detail.status !== 'HOLD'" label="注销原因">{{ revocationReasonName(detail.revocationReason) }}</el-descriptions-item>
       </el-descriptions>
 
       <div class="pem-header">
@@ -161,6 +163,7 @@ const statusOptions = [
   { label: '有效', value: 'VALID' },
   { label: '尚未生效', value: 'NOT_YET_VALID' },
   { label: '已过期', value: 'EXPIRED' },
+  { label: '已冻结', value: 'HOLD' },
   { label: '已注销', value: 'REVOKED' }
 ];
 
@@ -220,6 +223,7 @@ function statusTagType(status?: RaCertStatus) {
     VALID: 'success',
     NOT_YET_VALID: 'warning',
     EXPIRED: 'info',
+    HOLD: 'warning',
     REVOKED: 'danger'
   };
   return types[status || ''] || 'info';

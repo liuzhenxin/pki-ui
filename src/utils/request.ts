@@ -318,8 +318,11 @@ service.interceptors.response.use(
 
     console.log(error);
     let { message } = error;
+    const responseMsg = error.response?.data?.msg;
     if (error.response != null && error.response.data != null && error.response.data.error_description != null) {
       message = error.response.data.error_description;
+    } else if (responseMsg) {
+      message = responseMsg;
     } else if (message == 'Network Error') {
       message = '后端接口连接异常';
     } else if (message.includes('timeout')) {

@@ -96,6 +96,13 @@ export function issueRaCert(businessType: string, businessId: string | number, d
   }) as any;
 }
 
+export function executeRaCert(businessType: string, businessId: string | number): Promise<Result<RaCertIssueResult>> {
+  return request({
+    url: `/ra/v1/cert-issues/${businessType}/${businessId}/execute`,
+    method: 'post'
+  }) as any;
+}
+
 export function confirmRaRenewalDistribution(businessId: string | number, success: boolean, message?: string): Promise<Result<void>> {
   return request({
     url: `/ra/v1/cert-issues/cert_renewal/${businessId}/distribution`,

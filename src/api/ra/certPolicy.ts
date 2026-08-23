@@ -9,7 +9,6 @@ export interface RaCertPolicyRules {
     defaultDays: number;
     maxDays: number;
   };
-  approvalRequired: boolean;
 }
 
 export interface RaProfileOption {
@@ -25,7 +24,6 @@ export interface RaCertPolicy {
   policyDescription?: string;
   policyRules?: string;
   rules: RaCertPolicyRules;
-  approvalRequired?: number;
   policyStatus: number;
   profileIds: Array<number | string>;
   profiles?: RaProfileOption[];
