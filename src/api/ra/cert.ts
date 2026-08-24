@@ -1,7 +1,7 @@
 import request from '@/utils/request';
 import { Result } from '@/api/types';
 
-export type RaCertStatus = 'VALID' | 'EXPIRED' | 'NOT_YET_VALID' | 'REVOKED';
+export type RaCertStatus = 'VALID' | 'EXPIRED' | 'NOT_YET_VALID' | 'REVOKED' | 'HOLD';
 
 export interface RaCertQuery {
   pageNum: number;

@@ -62,15 +62,6 @@
             <span>{{ row.rules?.validity?.minDays }}-{{ row.rules?.validity?.maxDays }}天</span>
           </template>
         </el-table-column>
-        <el-table-column label="审批（不生效）" width="140" align="center">
-          <template #default="{ row }">
-            <el-tooltip content="不生效，以证书模板为准" placement="top">
-              <el-tag :type="row.rules?.approvalRequired ? 'warning' : 'info'" effect="light">
-                {{ row.rules?.approvalRequired ? '需要' : '无需' }}
-              </el-tag>
-            </el-tooltip>
-          </template>
-        </el-table-column>
         <el-table-column label="状态" width="90" align="center">
           <template #default="{ row }">
             <el-tag :type="row.policyStatus === 1 ? 'success' : 'info'" effect="light">
@@ -166,12 +157,6 @@
             </el-form-item>
           </el-col>
         </el-row>
-        <el-form-item label="需要审批">
-          <div>
-            <el-switch v-model="form.rules.approvalRequired" />
-            <div class="form-tip">不生效，以证书模板为准</div>
-          </div>
-        </el-form-item>
         <el-form-item label="策略状态">
           <el-radio-group v-model="form.policyStatus">
             <el-radio-button :value="1">启用</el-radio-button>
@@ -194,9 +179,6 @@
         <el-descriptions-item label="策略名称">{{ detail.data?.policyName }}</el-descriptions-item>
         <el-descriptions-item label="策略OID">{{ detail.data?.policyOid }}</el-descriptions-item>
         <el-descriptions-item label="状态">{{ detail.data?.policyStatus === 1 ? '启用' : '禁用' }}</el-descriptions-item>
-        <el-descriptions-item label="审批">
-          {{ detail.data?.rules?.approvalRequired ? '需要审批' : '无需审批' }}（不生效，以证书模板为准）
-        </el-descriptions-item>
         <el-descriptions-item label="绑定模板" :span="2">
           <el-tag v-for="profile in detail.data?.profiles || []" :key="profile.id" class="mr-1" effect="light">{{ profile.name }}</el-tag>
         </el-descriptions-item>
@@ -271,8 +253,7 @@ const defaultRules = (): RaCertPolicyRules => ({
     minDays: 1,
     defaultDays: 365,
     maxDays: 3650
-  },
-  approvalRequired: true
+  }
 });
 
 const defaultForm = (): RaCertPolicy => ({
@@ -453,7 +434,8 @@ function usageText(values?: string[]) {
 }
 
 function formatRules(value?: RaCertPolicyRules) {
-  return JSON.stringify(value || {}, null, 2);
+  const { approvalRequired: _ignored, ...rest } = (value || {}) as RaCertPolicyRules & { approvalRequired?: boolean };
+  return JSON.stringify(rest, null, 2);
 }
 
 onMounted(async () => {
@@ -485,15 +467,8 @@ onMounted(async () => {
 }
 
 .muted,
-.option-extra,
-.form-tip {
+.option-extra {
   color: #909399;
-}
-
-.form-tip {
-  margin-top: 4px;
-  font-size: 12px;
-  line-height: 1.4;
 }
 
 .option-extra {

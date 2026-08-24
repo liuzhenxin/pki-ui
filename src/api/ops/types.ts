@@ -186,3 +186,20 @@ export interface PlatformServiceMenuConfigItem {
 export interface PlatformServiceMenuConfig {
   items: PlatformServiceMenuConfigItem[];
 }
+
+export interface AccessControlEntry {
+  cidr: string;
+  remark: string;
+}
+
+export interface AccessControlConfig {
+  enabled: boolean;
+  entries: AccessControlEntry[];
+  updateTime?: string;
+}
+
+export interface AccessControlCurrentIp {
+  clientIp: string;
+  inAllowList: boolean;
+  source: 'X-PKI-Client-IP' | 'X-Real-IP' | 'REMOTE' | string;
+}

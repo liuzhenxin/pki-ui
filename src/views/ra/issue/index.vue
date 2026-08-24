@@ -51,13 +51,13 @@
       </el-table-column>
       <el-table-column label="状态" width="100" align="center">
         <template #default="{ row }">
-          <el-tag type="warning">{{ row.issueStatusName || '待签发' }}</el-tag>
+          <el-tag type="warning">{{ row.issueStatusName || (isExecuteType(row.businessType) ? '待执行' : '待签发') }}</el-tag>
         </template>
       </el-table-column>
       <el-table-column label="操作" align="center" width="130" fixed="right">
         <template #default="{ row }">
-          <el-tooltip content="签发" placement="top">
-            <el-button link type="primary" icon="Stamp" @click="handleIssue(row)" />
+          <el-tooltip :content="isExecuteType(row.businessType) ? '执行' : '签发'" placement="top">
+            <el-button link type="primary" :icon="isExecuteType(row.businessType) ? 'VideoPlay' : 'Stamp'" @click="handleIssue(row)" />
           </el-tooltip>
           <el-tooltip content="详情" placement="top">
             <el-button link type="primary" icon="View" @click="handleDetail(row)" />
@@ -467,6 +467,7 @@
 import { ElMessage, FormInstance, FormRules } from 'element-plus';
 import {
   confirmRaRenewalDistribution,
+  executeRaCert,
   getRaCertIssue,
   issueRaCert,
   pageRaCertIssue,
@@ -773,7 +774,31 @@ function resetQuery() {
   handleQuery();
 }
 
+function isExecuteType(_type?: string) {
+  return false;
+}
+
+async function handleExecute(row: RaCertIssue) {
+  try {
+    await proxy?.$modal.confirm(`确认对证书 ${row.serialNumber || '-'} 执行${row.businessTypeName || '该操作'}？执行后将立即调用 CA。`);
+  } catch {
+    return;
+  }
+  loading.value = true;
+  try {
+    const res = await executeRaCert(row.businessType, row.businessId);
+    proxy?.$modal.msgSuccess(`执行成功，证书序列号：${res.data?.serialNumber || row.serialNumber || '-'}`);
+    await getList();
+  } finally {
+    loading.value = false;
+  }
+}
+
 async function handleIssue(row: RaCertIssue) {
+  if (isExecuteType(row.businessType)) {
+    await handleExecute(row);
+    return;
+  }
   const res = await getRaCertIssue(row.businessType, row.businessId);
   current.value = res.data || row;
   if (current.value.businessType === 'cert_renewal') {
