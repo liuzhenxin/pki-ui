@@ -222,6 +222,13 @@ export const constantRoutes: RouteRecordRaw[] = [
     meta: { title: '证书模板表单' }
   },
   {
+    path: '/ra-public-cert',
+    component: () => import('@/views/ra/public-cert/self.vue'),
+    name: 'RaPublicCertSelf',
+    hidden: true,
+    meta: { title: '公网证书录入' }
+  },
+  {
     path: '/license/admin',
     component: Layout,
     hidden: true,
