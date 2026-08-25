@@ -68,7 +68,13 @@
               <el-button v-hasPermi="['ra:alert:rule']" link type="primary" icon="Edit" @click="handleEdit(row)" />
             </el-tooltip>
             <el-tooltip :content="row.ruleStatus === 1 ? '禁用' : '启用'" placement="top">
-              <el-button v-hasPermi="['ra:alert:rule']" link type="primary" :icon="row.ruleStatus === 1 ? 'VideoPause' : 'VideoPlay'" @click="handleStatus(row)" />
+              <el-button
+                v-hasPermi="['ra:alert:rule']"
+                link
+                type="primary"
+                :icon="row.ruleStatus === 1 ? 'VideoPause' : 'VideoPlay'"
+                @click="handleStatus(row)"
+              />
             </el-tooltip>
             <el-tooltip content="删除" placement="top">
               <el-button v-hasPermi="['ra:alert:rule']" link type="danger" icon="Delete" @click="handleDelete(row)" />
@@ -122,9 +128,24 @@
           </el-col>
         </el-row>
 
-        <el-form-item v-if="form.alertType === 'cert_expire'" label="预警天数">
-          <el-input-number v-model="form.triggerCondition.days" :min="1" :max="3650" controls-position="right" />
-        </el-form-item>
+        <template v-if="form.alertType === 'cert_expire'">
+          <el-row :gutter="16">
+            <el-col :span="12">
+              <el-form-item label="预警天数">
+                <el-input-number v-model="form.triggerCondition.days" :min="1" :max="3650" controls-position="right" />
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item label="证书范围">
+                <el-select v-model="form.triggerCondition.certificateScope" style="width: 100%">
+                  <el-option label="业务证书" value="business" />
+                  <el-option label="根证书及中间证书" value="ca" />
+                  <el-option label="全部证书" value="all" />
+                </el-select>
+              </el-form-item>
+            </el-col>
+          </el-row>
+        </template>
         <template v-if="form.alertType === 'pending_approval'">
           <el-form-item label="待审批阈值">
             <el-input-number v-model="form.triggerCondition.maxPendingCount" :min="1" :max="100000" controls-position="right" />
@@ -134,7 +155,7 @@
           </el-form-item>
         </template>
 
-        <el-alert title="通知方式第一版仅记录配置，不发送邮件、短信或Webhook。" type="info" :closable="false" show-icon class="form-alert" />
+        <el-alert title="站内通知会直接发送；邮件、短信和Webhook需配置对应发送服务。" type="info" :closable="false" show-icon class="form-alert" />
         <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item label="通知方式" prop="notificationType">
@@ -208,7 +229,8 @@ const ruleFormRef = ref<FormInstance>();
 const queryParams = reactive({ pageNum: 1, pageSize: 10, ruleName: '', alertType: '', alertLevel: '', ruleStatus: '' as number | string });
 const dialog = reactive({ visible: false, title: '' });
 
-const defaultCondition = (type = 'cert_expire') => (type === 'pending_approval' ? { maxPendingCount: 10, olderThanHours: 0 } : { days: 30, includeRevoked: false });
+const defaultCondition = (type = 'cert_expire') =>
+  type === 'pending_approval' ? { maxPendingCount: 10, olderThanHours: 0 } : { days: 30, includeRevoked: false, certificateScope: 'business' };
 const defaultForm = (): RaAlertRule => ({
   ruleName: '',
   alertType: 'cert_expire',
@@ -275,6 +297,9 @@ async function handleEdit(row: RaAlertRule) {
   const response = await getRaAlertRule(row.id!);
   Object.assign(form, unwrap(response));
   form.triggerCondition = form.triggerCondition || defaultCondition(form.alertType);
+  if (form.alertType === 'cert_expire' && !form.triggerCondition.certificateScope) {
+    form.triggerCondition.certificateScope = 'business';
+  }
   dialog.title = '修改告警规则';
   dialog.visible = true;
 }
@@ -349,7 +374,8 @@ function normalizeSubmitForm(): RaAlertRule {
     ...form,
     ruleName: form.ruleName.trim(),
     description: form.description?.trim(),
-    thresholdValue: form.alertType === 'pending_approval' ? String(form.triggerCondition.maxPendingCount || 10) : String(form.triggerCondition.days || 30)
+    thresholdValue:
+      form.alertType === 'pending_approval' ? String(form.triggerCondition.maxPendingCount || 10) : String(form.triggerCondition.days || 30)
   };
 }
 
