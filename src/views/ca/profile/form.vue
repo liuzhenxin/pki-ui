@@ -753,6 +753,58 @@ function normalizeUsageValue(usage: any) {
   return '';
 }
 
+/**
+ * 将后端返回的 keyUsage / extendedKeyUsage 统一展开为 [{ value, required }] 数组，
+ * 与编辑器内部表单结构一致。兼容后端 conf 的多种形态：
+ *  - 旧格式：{ usages: [{ value, oid, required }] }
+ *  - 新格式（KeyUsage）：{ usages: [{ required: ['digitalSignature'], optional: ['contentCommitment'] }] }
+ *  - 新格式（ExtendedKeyUsage）：{ required: ['clientAuth'] }（无 usages 包裹）
+ * @param group  扩展对象（keyUsage / extendedKeyUsage）
+ * @param oidMap 对应 OID 映射表，用于把 OID / value 归一为标准 key
+ */
+function expandUsageGroup(group: any, oidMap: Record<string, { oid: string; description: string }>) {
+  const result: Array<{ value: string; required: boolean }> = [];
+  if (!group) {
+    return result;
+  }
+  let rawItems: any[];
+  if (Array.isArray(group.usages)) {
+    rawItems = group.usages;
+  } else if (Array.isArray(group.required) || Array.isArray(group.optional)) {
+    rawItems = [group];
+  } else {
+    rawItems = [];
+  }
+
+  const pushUsage = (raw: string, required: boolean) => {
+    if (!raw) {
+      return;
+    }
+    // 从 oid 或 value 反推标准化 key
+    const entry = Object.entries(oidMap).find(([key, info]) => info.oid === raw || key === raw);
+    const value = entry ? entry[0] : raw;
+    if (!result.some((x) => x.value === value)) {
+      result.push({ value, required });
+    }
+  };
+
+  rawItems.forEach((item) => {
+    if (!item) {
+      return;
+    }
+    if (Array.isArray(item.required) || Array.isArray(item.optional)) {
+      // 新格式：{ required: ['keyCertSign'], optional: [...] }
+      (item.required || []).forEach((v: string) => pushUsage(v, true));
+      (item.optional || []).forEach((v: string) => pushUsage(v, false));
+      return;
+    }
+    // 旧格式：{ value, oid, required }
+    pushUsage(item.value || item.oid || '', !!item.required);
+  });
+
+  return result;
+}
+
 function findExtension(type: string) {
   return (form.extensions || []).find((ext: any) => ext.type === type);
 }
@@ -1292,9 +1344,9 @@ async function submitForm() {
           ? baseSubmitData
           : {
               ...baseSubmitData,
-          maxSize: form.maxSize,
-          validity: form.validity,
-          notBeforeTime: form.notBeforeTime,
+              maxSize: form.maxSize,
+              validity: form.validity,
+              notBeforeTime: form.notBeforeTime,
               keyAlgorithms: form.keyAlgorithms
             };
 
@@ -1424,35 +1476,14 @@ async function getProfileDetail(id: string | number) {
               extData.config = typeof ext.config === 'object' ? JSON.stringify(ext.config) : ext.config;
             }
 
-            // 处理KeyUsage：标准化 usages 格式
+            // 处理KeyUsage：标准化 usages 格式（兼容 {value} 旧格式与 {required/optional} 新格式）
             if (extData.type === 'KeyUsage' && ext.keyUsage) {
-              if (ext.keyUsage.usages && Array.isArray(ext.keyUsage.usages)) {
-                const usages = ext.keyUsage.usages.map((u: any) => {
-                  const val = u.value || u.oid || '';
-                  // 从oid或value反推key
-                  const entry = Object.entries(keyUsageOIDMap).find(([key, info]) => info.oid === val || key === val);
-                  return {
-                    required: !!u.required,
-                    value: entry ? entry[0] : val
-                  };
-                });
-                extData.keyUsage = { usages };
-              }
+              extData.keyUsage = { usages: expandUsageGroup(ext.keyUsage, keyUsageOIDMap) };
             }
 
-            // 处理ExtendedKeyUsage：标准化 usages 格式
+            // 处理ExtendedKeyUsage：标准化 usages 格式（兼容两种格式）
             if (extData.type === 'ExtendedKeyUsage' && ext.extendedKeyUsage) {
-              if (ext.extendedKeyUsage.usages && Array.isArray(ext.extendedKeyUsage.usages)) {
-                const usages = ext.extendedKeyUsage.usages.map((u: any) => {
-                  const val = u.oid || u.value || '';
-                  const entry = Object.entries(extendedKeyUsageOIDMap).find(([key, info]) => info.oid === val || key === val);
-                  return {
-                    required: !!u.required,
-                    value: entry ? entry[0] : val
-                  };
-                });
-                extData.extendedKeyUsage = { usages };
-              }
+              extData.extendedKeyUsage = { usages: expandUsageGroup(ext.extendedKeyUsage, extendedKeyUsageOIDMap) };
             }
 
             return extData;
@@ -1557,7 +1588,13 @@ onMounted(() => {
                         <span>证书级别</span>
                       </div>
                     </template>
-                    <el-select v-model="form.certLevel" placeholder="请选择证书级别" style="width: 100%" :disabled="isEdit" @change="handleCertLevelChange">
+                    <el-select
+                      v-model="form.certLevel"
+                      placeholder="请选择证书级别"
+                      style="width: 100%"
+                      :disabled="isEdit"
+                      @change="handleCertLevelChange"
+                    >
                       <el-option v-for="level in certLevelOptions" :key="level.value" :label="level.label" :value="level.value" />
                     </el-select>
                   </el-form-item>

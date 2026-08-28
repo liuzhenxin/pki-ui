@@ -91,7 +91,7 @@
         <div v-if="activeStep === 2" class="step-content responder-step">
           <div class="step-title">
             <h2>响应者与验证数据源</h2>
-            <p>初始化租户 6 的默认 OCSP 响应者，并选择数据库或 LDAP 作为证书状态验证数据源。</p>
+            <p>默认使用软件密钥：在 OCSP 内生成 CSR，交由 CA 离线签发后导入证书。私钥不会出现在表单中。HSM 请改为粘贴证书 PEM。</p>
           </div>
           <el-form ref="formRef" :model="form" :rules="rules" label-width="150px" class="init-form">
             <div class="form-grid">
@@ -114,15 +114,24 @@
                   <el-checkbox v-model="form.nonceEnabled">启用 Nonce</el-checkbox>
                 </el-form-item>
                 <el-form-item label="签名配置" prop="signerConf">
-                  <el-input v-model="form.signerConf" type="textarea" :rows="5" placeholder='例如 {"keyId":"ocsp-responder-key","algorithm":"SM3withSM2"}' />
+                  <el-input
+                    v-model="form.signerConf"
+                    type="textarea"
+                    :rows="5"
+                    placeholder='SOFTWARE CSR 示例 {"keyAlias":"ocsp-responder-key","algorithm":"SM3withSM2","keyStoreRef":"ocsp-db"}'
+                  />
                 </el-form-item>
               </div>
 
               <div class="form-section">
                 <div class="form-section-title">签名证书</div>
-                <el-form-item label="证书 PEM" prop="signerCert">
-                  <el-input v-model="form.signerCert" type="textarea" :rows="14" placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----" />
-                </el-form-item>
+                <ResponderCsrPanel
+                  :name="form.name"
+                  :signer-type="form.signerType"
+                  v-model:signer-cert="form.signerCert"
+                  v-model:signer-conf="form.signerConf"
+                  v-model:cert-source="certSource"
+                />
               </div>
             </div>
 
@@ -203,7 +212,7 @@
         </div>
 
         <div v-if="activeStep === 3" class="step-content">
-          <el-result icon="success" title="初始化流程已完成" sub-title="请重新登录后进入 OCSP 管理功能。" />
+          <el-result icon="success" title="初始化流程已完成" sub-title="请重新登录后进入 OCSP 服务看板。" />
         </div>
       </div>
 
@@ -218,16 +227,17 @@
 </template>
 
 <script setup name="OcspInit" lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import type { FormInstance, FormRules } from 'element-plus';
 import { ElMessage } from 'element-plus';
 import { useRouter } from 'vue-router';
 import { QuestionFilled, Refresh } from '@element-plus/icons-vue';
 import { getOcspEnvInfo, getOcspInitStatus, initOcspResponder } from '@/api/ocsp/init';
-import { unwrapOcspData } from '@/api/ocsp/common';
-import { getTenant, updateTenant } from '@/api/system/tenant';
+import { assertSafeSignerCert, assertSafeSignerConf, unwrapOcspData } from '@/api/ocsp/common';
+import { getTenant } from '@/api/system/tenant';
 import { useUserStore } from '@/store/modules/user';
 import Agreement from '@/components/Agreement/index.vue';
+import ResponderCsrPanel from '@/views/ocsp/components/ResponderCsrPanel.vue';
 
 interface EnvRow {
   name: string;
@@ -249,14 +259,17 @@ const tenantCode = ref('');
 const tenantName = ref('');
 const companyName = ref('');
 
-const signerTypeOptions = ['HSM', 'SOFTWARE'];
+const signerTypeOptions = ['SOFTWARE', 'HSM'];
 const statusSourceOptions = ['DB', 'LDAP'];
+const certSource = ref<'CSR' | 'PEM'>('CSR');
+const softwareSignerConf =
+  '{\n  "keyAlias": "ocsp-responder-key",\n  "algorithm": "SM3withSM2",\n  "keyStoreRef": "ocsp-db"\n}';
 
 const form = reactive({
   name: 'default-ocsp-responder',
   caId: 1,
-  signerType: 'HSM' as 'HSM' | 'SOFTWARE',
-  signerConf: '{\n  "keyId": "ocsp-responder-key",\n  "certAlias": "ocsp-responder-cert",\n  "algorithm": "SM3withSM2"\n}',
+  signerType: 'SOFTWARE' as 'HSM' | 'SOFTWARE',
+  signerConf: softwareSignerConf,
   signerCert: '',
   responseValidity: 3600,
   includeCerts: true,
@@ -287,8 +300,37 @@ const rules = reactive<FormRules>({
   name: [{ required: true, message: '请输入响应者名称', trigger: 'blur' }],
   caId: [{ required: true, message: '请输入CA ID', trigger: 'change' }],
   signerType: [{ required: true, message: '请选择签名者类型', trigger: 'change' }],
-  signerCert: [{ required: true, message: '请粘贴OCSP签名证书PEM', trigger: 'blur' }],
-  signerConf: [{ required: true, message: '请输入签名配置', trigger: 'blur' }],
+  signerCert: [
+    {
+      validator: (_rule, value, callback) => {
+        if (certSource.value === 'CSR' && !String(value || '').trim()) {
+          callback();
+          return;
+        }
+        try {
+          assertSafeSignerCert(value);
+          callback();
+        } catch (error: any) {
+          callback(new Error(error.message || '请粘贴OCSP签名证书PEM'));
+        }
+      },
+      trigger: 'blur'
+    }
+  ],
+  signerConf: [
+    { required: true, message: '请输入签名配置', trigger: 'blur' },
+    {
+      validator: (_rule, value, callback) => {
+        try {
+          assertSafeSignerConf(value);
+          callback();
+        } catch (error: any) {
+          callback(new Error(error.message || '签名配置不合法'));
+        }
+      },
+      trigger: 'blur'
+    }
+  ],
   responseValidity: [{ required: true, message: '请输入响应有效期', trigger: 'change' }],
   statusSourceType: [{ required: true, message: '请选择验证数据源', trigger: 'change' }],
   dbUrl: [{ required: true, message: '请输入数据库地址', trigger: 'blur' }],
@@ -324,26 +366,11 @@ const allEnvOk = computed(() => {
 });
 const canGoNext = computed(() => (activeStep.value === 0 ? agree.value : allEnvOk.value));
 
-const saveTenantStatus = async (statusValue: number) => {
-  const tenantId = userStore.tenantId || localStorage.getItem('tenantId') || '';
-  if (!tenantId) return;
-  const tenantRes = await getTenant(tenantId);
-  if (tenantRes.data) {
-    const tenantInfo: any = tenantRes.data;
-    await updateTenant({
-      co: {
-        id: tenantInfo.id,
-        tenantId: tenantInfo.tenantId,
-        name: tenantInfo.name,
-        code: tenantInfo.code,
-        status: statusValue as any,
-        sourceId: tenantInfo.sourceId,
-        packageId: tenantInfo.packageId,
-        companyName: tenantInfo.companyName
-      }
-    } as any);
-    userStore.setTenantInitStatus(statusValue);
-  }
+// 向导步骤状态仅同步前端内存。完成初始化时由 OCSP InitController.initResponder
+// 把 sys_tenant.status 写成 -1。不要调用 admin 的 PUT /v1/tenants
+// （该接口要求 write + sys:tenant:modify，引导账号不具备，会返回 Access Denied）。
+const syncTenantInitStatus = (statusValue: number) => {
+  userStore.setTenantInitStatus(statusValue);
 };
 
 const loadInitInfo = async () => {
@@ -381,7 +408,7 @@ const next = async () => {
   loading.value = true;
   try {
     activeStep.value++;
-    await saveTenantStatus(activeStep.value);
+    syncTenantInitStatus(activeStep.value);
     if (activeStep.value === 1) {
       await loadEnvInfo();
     }
@@ -395,17 +422,44 @@ const prev = async () => {
     loading.value = true;
     try {
       activeStep.value--;
-      await saveTenantStatus(activeStep.value);
+      syncTenantInitStatus(activeStep.value);
     } finally {
       loading.value = false;
     }
   }
 };
 
+watch(
+  () => form.signerType,
+  (type) => {
+    if (type === 'HSM') {
+      certSource.value = 'PEM';
+      return;
+    }
+    if (!form.signerCert) {
+      certSource.value = 'CSR';
+      if (!String(form.signerConf || '').includes('ocsp-db')) {
+        form.signerConf = softwareSignerConf;
+      }
+    }
+  }
+);
+
 const submitInit = async () => {
   if (!formRef.value) return;
+  if (certSource.value === 'CSR' && !form.signerCert.trim()) {
+    ElMessage.error('请先导入 CA 签发的响应者证书');
+    return;
+  }
   const valid = await formRef.value.validate().catch(() => false);
   if (!valid) return;
+  try {
+    assertSafeSignerCert(form.signerCert);
+    assertSafeSignerConf(form.signerConf);
+  } catch (error: any) {
+    ElMessage.error(error.message || '签名配置不合法');
+    return;
+  }
   loading.value = true;
   try {
     await initOcspResponder({
@@ -461,9 +515,9 @@ const submitInit = async () => {
 const enterSystem = async () => {
   loading.value = true;
   try {
-    ElMessage.success('初始化完成，请重新登录');
+    ElMessage.success('初始化完成，请重新登录后进入看板');
     await userStore.logout();
-    await router.replace({ path: '/login', query: { redirect: encodeURIComponent('/index') } });
+    await router.replace({ path: '/login', query: { redirect: encodeURIComponent('/ocsp-dashboard') } });
   } finally {
     loading.value = false;
   }

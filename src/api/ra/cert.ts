@@ -72,3 +72,33 @@ export function downloadRaPkcs12(id: string | number, password: string): Promise
     responseType: 'blob'
   }) as any;
 }
+
+export interface RaKmcKeyStatus {
+  keyId?: string;
+  algorithm?: string;
+  keySize?: number;
+  status: number;
+  statusText?: string;
+}
+
+export interface RaCertRecoverPayload {
+  wrappingCsrBase64?: string;
+  issueType?: 'usb_key' | 'file';
+  filePassword?: string;
+  fileFormat?: string;
+}
+
+export function queryRaKmcKeyStatus(id: string | number): Promise<Result<RaKmcKeyStatus>> {
+  return request({
+    url: `/ra/v1/certs/${id}/kmc-key-status`,
+    method: 'get'
+  }) as any;
+}
+
+export function recoverRaKey(id: string | number, data: RaCertRecoverPayload): Promise<Result<any>> {
+  return request({
+    url: `/ra/v1/certs/${id}/recover-key`,
+    method: 'post',
+    data
+  }) as any;
+}

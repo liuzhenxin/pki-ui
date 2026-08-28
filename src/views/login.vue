@@ -1,5 +1,5 @@
 <template>
-  <div class="login">
+  <div class="login" :style="loginBackgroundStyle">
     <div class="cyber-field" aria-hidden="true">
       <div class="pki-backdrop">
         <span class="cert-visual cert-primary">
@@ -227,6 +227,14 @@ import { HttpStatus } from '@/enums/RespEnum';
 import { useI18n } from 'vue-i18n';
 import { v4 as uuidv4 } from 'uuid';
 import { getRadiusStatus } from '@/api/ops';
+import defaultLoginBackground from '@/assets/images/login-background.jpg';
+import opsLoginBackground from '@/assets/images/login/tenant-ops.webp';
+import caLoginBackground from '@/assets/images/login/tenant-ca.webp';
+import kmcLoginBackground from '@/assets/images/login/tenant-kmc.webp';
+import raLoginBackground from '@/assets/images/login/tenant-ra.webp';
+import ocspLoginBackground from '@/assets/images/login/tenant-ocsp.webp';
+import nasLoginBackground from '@/assets/images/login/tenant-nas.webp';
+import licenseLoginBackground from '@/assets/images/login/tenant-license.webp';
 
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
 
@@ -236,8 +244,15 @@ const settingsStore = useSettingsStore();
 const router = useRouter();
 const { t } = useI18n();
 
+const configuredTenantIds = (import.meta.env.VITE_APP_TENANT_IDS || '')
+  .split(',')
+  .map((tenantId) => tenantId.trim())
+  .filter(Boolean);
+const cachedTenantId = localStorage.getItem('tenantId') || '';
+const initialTenantId = configuredTenantIds.length && !configuredTenantIds.includes(cachedTenantId) ? configuredTenantIds[0] : cachedTenantId;
+
 const loginForm = ref<LoginData>({
-  tenantId: localStorage.getItem('tenantId') || '',
+  tenantId: initialTenantId,
   tenantCode: localStorage.getItem('tenantCode') || '',
   username: localStorage.getItem('username') || 'admin',
   password: '',
@@ -286,6 +301,19 @@ const loginTitle = ref(proxy.$t('login.title'));
 const authMode = ref<'password' | 'certificate'>('password');
 const radiusRequired = ref(false);
 const radiusAuthMethod = ref<'PAP' | 'CHAP'>('PAP');
+
+const tenantLoginBackgrounds: Record<string, string> = {
+  '1': opsLoginBackground,
+  '3': kmcLoginBackground,
+  '4': caLoginBackground,
+  '5': raLoginBackground,
+  '6': ocspLoginBackground,
+  '10': nasLoginBackground,
+  '100': licenseLoginBackground
+};
+const loginBackgroundStyle = computed(() => ({
+  '--login-background-image': `url("${tenantLoginBackgrounds[String(loginForm.value.tenantId || '')] || defaultLoginBackground}")`
+}));
 
 watch(
   () => router.currentRoute.value,
@@ -419,11 +447,7 @@ const initTenantList = async () => {
     // data is TenantCO[] from backend (id, name, code fields)
     const list: any[] = (Array.isArray(data) ? data : []).filter(isPkiTenant);
     // 按本 UI 部署的系统过滤租户（VITE_APP_TENANT_IDS 逗号分隔；空 = 全部 PKI 租户）
-    const tenantIds: string[] = (import.meta.env.VITE_APP_TENANT_IDS || '')
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean);
-    const filtered: any[] = tenantIds.length ? list.filter((t) => tenantIds.includes(String(t.id))) : list;
+    const filtered: any[] = configuredTenantIds.length ? list.filter((t) => configuredTenantIds.includes(String(t.id))) : list;
     tenantEnabled.value = filtered.length > 0;
     if (tenantEnabled.value) {
       tenantList.value = filtered.map((item: any) => ({
@@ -524,7 +548,7 @@ onMounted(() => {
   overflow: hidden;
   background:
     linear-gradient(135deg, #0b2f4a 0%, #1b6a86 42%, #e7f7ff 100%),
-    url('../assets/images/login-background.jpg') center / cover;
+    var(--login-background-image, url('../assets/images/login-background.jpg')) center / cover no-repeat;
   color: #14213d;
 }
 
