@@ -120,8 +120,9 @@ test.describe('证书更新页面 - 编译产物验证', () => {
 
   test('14. 双证书更新将 KMC 加密私钥和两张证书完整写入 USBKey', async () => {
     expect(compiledSource).toContain("keyGenStrategy: useUsbOutput && !lifecycleForm.encCsr ? 'KMC' : undefined");
-    expect(compiledSource).toContain('await importLifecycleEncryptionKeyPair(data.encryptionPrivateKey)');
-    expect(compiledSource).toContain("skf.importKeyPair(provider, device, appName, containerName, 'SM2', encryptedPrivateKey, '')");
+    expect(compiledSource).toContain('await importLifecycleEncryptionKeyPair(');
+    expect(compiledSource).toContain('data.encryptionPrivateKey');
+    expect(compiledSource).toContain("skf.importKeyPair(provider, device, appName, containerName, alg, encryptedPrivateKey, wrapKey || ''");
     expect(compiledSource).toContain('await verifyLifecycleDualUsbKeyInstall(data.cert, data.encryptionCert)');
     expect(compiledSource).toContain('CA 操作已成功，但 USBKey 安装未完整完成');
   });

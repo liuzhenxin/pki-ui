@@ -4,6 +4,9 @@ import type {
   CryptoMonitorInstance,
   OpsContainer,
   OpsContainerLogs,
+  OpsContainerActionRequest,
+  OpsContainerVersion,
+  OpsOperation,
   OpsOverview,
   OpsServer,
   PlatformServiceMenuConfig,
@@ -113,6 +116,35 @@ export function getOpsContainerLogs(serverCode: string, containerName: string, t
     method: 'get',
     params: { tail }
   }) as any;
+}
+
+export function checkOpsContainerUpdates(): Promise<OpsContainerVersion[]> {
+  return request({ baseURL, url: '/v1/containers/check-updates', method: 'post' }) as any;
+}
+
+export function getOpsContainerVersions(serverCode: string, containerName: string): Promise<OpsContainerVersion> {
+  return request({
+    baseURL,
+    url: `/v1/containers/${encodeURIComponent(serverCode)}/${encodeURIComponent(containerName)}/versions`,
+    method: 'get'
+  }) as any;
+}
+
+export function submitOpsContainerAction(serverCode: string, containerName: string, data: OpsContainerActionRequest): Promise<OpsOperation> {
+  return request({
+    baseURL,
+    url: `/v1/containers/${encodeURIComponent(serverCode)}/${encodeURIComponent(containerName)}/actions`,
+    method: 'post',
+    data
+  }) as any;
+}
+
+export function getOpsOperation(operationNo: string): Promise<OpsOperation> {
+  return request({ baseURL, url: `/v1/operations/${encodeURIComponent(operationNo)}`, method: 'get' }) as any;
+}
+
+export function getOpsOperations(): Promise<OpsOperation[]> {
+  return request({ baseURL, url: '/v1/operations', method: 'get' }) as any;
 }
 
 export function getCryptoMonitorInstances(): Promise<CryptoMonitorInstance[]> {

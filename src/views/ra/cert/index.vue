@@ -45,10 +45,13 @@
           <el-tag :type="statusTagType(row.status)" effect="light">{{ row.statusName || statusName(row.status) }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="120" align="center" fixed="right">
+      <el-table-column label="操作" width="168" align="center" fixed="right">
         <template #default="{ row }">
           <el-tooltip content="查看详情" placement="top">
             <el-button link type="primary" icon="View" @click="handleDetail(row)" />
+          </el-tooltip>
+          <el-tooltip v-if="row.keySource === 'KMC'" content="RSA密钥恢复" placement="top">
+            <el-button link type="primary" icon="Key" @click="openRecover(row)" />
           </el-tooltip>
           <el-dropdown trigger="click" @command="(format: string) => handleDownload(format, row)">
             <el-button link type="primary" icon="Download" />
@@ -84,8 +87,16 @@
         <el-descriptions-item label="SHA-1指纹" :span="2">{{ detail.sha1 || '-' }}</el-descriptions-item>
         <el-descriptions-item v-if="detail.status === 'HOLD'" label="冻结时间">{{ parseTime(detail.revocationTime) || '-' }}</el-descriptions-item>
         <el-descriptions-item v-if="detail.status === 'HOLD'" label="冻结原因">证书挂起</el-descriptions-item>
-        <el-descriptions-item v-if="detail.revoked && detail.status !== 'HOLD'" label="注销时间">{{ parseTime(detail.revocationTime) || '-' }}</el-descriptions-item>
-        <el-descriptions-item v-if="detail.revoked && detail.status !== 'HOLD'" label="注销原因">{{ revocationReasonName(detail.revocationReason) }}</el-descriptions-item>
+        <el-descriptions-item v-if="detail.revoked && detail.status !== 'HOLD'" label="注销时间">{{
+          parseTime(detail.revocationTime) || '-'
+        }}</el-descriptions-item>
+        <el-descriptions-item v-if="detail.revoked && detail.status !== 'HOLD'" label="注销原因">{{
+          revocationReasonName(detail.revocationReason)
+        }}</el-descriptions-item>
+        <el-descriptions-item v-if="kmcKeyStatus" label="KMC密钥标识">{{ kmcKeyStatus.keyId || '-' }}</el-descriptions-item>
+        <el-descriptions-item v-if="kmcKeyStatus" label="KMC密钥状态"
+          >{{ kmcKeyStatus.statusText || '-' }}（{{ kmcKeyStatus.algorithm || 'RSA' }} {{ kmcKeyStatus.keySize || '' }}）</el-descriptions-item
+        >
       </el-descriptions>
 
       <div class="pem-header">
@@ -120,12 +131,78 @@
         <el-button type="primary" icon="Download" :loading="pkcs12Loading" @click="submitPkcs12Export">确认导出</el-button>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="recoverOpen" title="RSA密钥恢复" width="560px" append-to-body @closed="resetRecoverForm">
+      <el-alert
+        type="info"
+        :closable="false"
+        show-icon
+        title="恢复会从KMC取出原RSA加密私钥。USBKey写入SKF导入信封；签发到文件则下载PKCS#12，序列号与有效期不变。"
+      />
+      <el-form ref="recoverFormRef" :model="recoverForm" :rules="recoverRules" label-width="110px" class="pkcs12-form">
+        <el-form-item label="证书序列号">
+          <el-input :model-value="recoveringCert?.serialNumber || '-'" disabled />
+        </el-form-item>
+        <el-form-item label="输出方式" prop="issueType">
+          <el-radio-group v-model="recoverForm.issueType" @change="onRecoverIssueTypeChange">
+            <el-radio-button value="usb_key">USB Key</el-radio-button>
+            <el-radio-button value="file">签发到文件</el-radio-button>
+          </el-radio-group>
+        </el-form-item>
+        <template v-if="recoverForm.issueType === 'usb_key'">
+          <el-form-item label="厂商" prop="provider">
+            <el-select v-model="recoverForm.provider" placeholder="请选择厂商" @change="onRecoverProviderChange">
+              <el-option v-for="item in recoverProviders" :key="item" :label="item" :value="item" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="设备" prop="device">
+            <el-select v-model="recoverForm.device" placeholder="请选择设备" @change="onRecoverDeviceChange">
+              <el-option v-for="item in recoverDevices" :key="item" :label="item" :value="item" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="应用" prop="appName">
+            <el-select v-model="recoverForm.appName" placeholder="请选择应用">
+              <el-option v-for="item in recoverApps" :key="item" :label="item" :value="item" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="新容器" prop="containerName">
+            <el-input v-model="recoverForm.containerName" placeholder="恢复将写入新容器" />
+          </el-form-item>
+          <el-form-item label="PIN码" prop="pin">
+            <el-input v-model="recoverForm.pin" type="password" show-password />
+          </el-form-item>
+        </template>
+        <template v-else>
+          <el-form-item label="文件口令" prop="filePassword">
+            <el-input v-model="recoverForm.filePassword" type="password" show-password autocomplete="new-password" />
+          </el-form-item>
+          <el-form-item label="确认口令" prop="confirmPassword">
+            <el-input v-model="recoverForm.confirmPassword" type="password" show-password autocomplete="new-password" />
+          </el-form-item>
+        </template>
+      </el-form>
+      <template #footer>
+        <el-button @click="recoverOpen = false">取消</el-button>
+        <el-button type="primary" :loading="recoverLoading" @click="submitRecover">确认恢复</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup name="RaCert" lang="ts">
 import { ElMessage, FormInstance, FormRules } from 'element-plus';
-import { downloadRaCert, downloadRaPkcs12, getRaCert, pageRaCert, RaCertStatus, RaCertSummary } from '@/api/ra/cert';
+import {
+  downloadRaCert,
+  downloadRaPkcs12,
+  getRaCert,
+  pageRaCert,
+  queryRaKmcKeyStatus,
+  recoverRaKey,
+  RaCertStatus,
+  RaCertSummary,
+  RaKmcKeyStatus
+} from '@/api/ra/cert';
+import SKFClient from '@/api/skf/skf_api';
 
 const rows = ref<RaCertSummary[]>([]);
 const loading = ref(false);
@@ -139,6 +216,55 @@ const pkcs12Loading = ref(false);
 const selectedCert = ref<RaCertSummary>();
 const pkcs12FormRef = ref<FormInstance>();
 const pkcs12Form = reactive({ password: '', confirmPassword: '' });
+const kmcKeyStatus = ref<RaKmcKeyStatus | null>(null);
+const recoverOpen = ref(false);
+const recoverLoading = ref(false);
+const recoveringCert = ref<RaCertSummary>();
+const recoverFormRef = ref<FormInstance>();
+const recoverProviders = ref<string[]>([]);
+const recoverDevices = ref<string[]>([]);
+const recoverApps = ref<string[]>([]);
+const recoverForm = reactive({
+  issueType: 'usb_key' as 'usb_key' | 'file',
+  provider: '',
+  device: '',
+  appName: '',
+  containerName: '',
+  pin: '123456',
+  filePassword: '',
+  confirmPassword: ''
+});
+const recoverRules = computed<FormRules>(() => {
+  const usb = recoverForm.issueType === 'usb_key';
+  return {
+    provider: usb ? [{ required: true, message: '请选择厂商', trigger: 'change' }] : [],
+    device: usb ? [{ required: true, message: '请选择设备', trigger: 'change' }] : [],
+    appName: usb ? [{ required: true, message: '请选择应用', trigger: 'change' }] : [],
+    containerName: usb ? [{ required: true, message: '请输入容器名称', trigger: 'blur' }] : [],
+    pin: usb ? [{ required: true, message: '请输入PIN码', trigger: 'blur' }] : [],
+    filePassword: usb
+      ? []
+      : [
+          { required: true, message: '请输入文件口令', trigger: 'blur' },
+          { min: 8, message: '文件口令至少8个字符', trigger: 'blur' }
+        ],
+    confirmPassword: usb
+      ? []
+      : [
+          { required: true, message: '请再次输入文件口令', trigger: 'blur' },
+          {
+            validator: (_rule, value, callback) => {
+              if (value !== recoverForm.filePassword) {
+                callback(new Error('两次输入的口令不一致'));
+                return;
+              }
+              callback();
+            },
+            trigger: 'blur'
+          }
+        ]
+  };
+});
 const pkcs12Rules: FormRules = {
   password: [
     { required: true, message: '请输入导出口令', trigger: 'blur' },
@@ -215,7 +341,15 @@ function resetQuery() {
 async function handleDetail(row: RaCertSummary) {
   const data = unwrapData<any>(await getRaCert(row.id));
   detail.value = { ...(data?.summary || row), ...data };
+  kmcKeyStatus.value = null;
   detailOpen.value = true;
+  if (String(detail.value.keySource || row.keySource || '').toUpperCase() === 'KMC') {
+    try {
+      kmcKeyStatus.value = unwrapData<RaKmcKeyStatus>(await queryRaKmcKeyStatus(row.id));
+    } catch {
+      kmcKeyStatus.value = null;
+    }
+  }
 }
 
 function statusTagType(status?: RaCertStatus) {
@@ -318,6 +452,173 @@ function resetPkcs12Form() {
   pkcs12Form.password = '';
   pkcs12Form.confirmPassword = '';
   pkcs12FormRef.value?.clearValidate();
+}
+
+let skfClientPromise: Promise<any> | null = null;
+const getSkfClient = async () => {
+  if (skfClientPromise) return skfClientPromise;
+  const skf = new SKFClient('ws://127.0.0.1:9001');
+  skfClientPromise = skf.connect().then(async (client: any) => {
+    try {
+      await client.setLanguage('CN');
+    } catch {
+      // ignore
+    }
+    return client;
+  });
+  return skfClientPromise;
+};
+
+function pemToBase64(pem: string) {
+  return String(pem || '')
+    .replace(/-----BEGIN[^-]+-----/g, '')
+    .replace(/-----END[^-]+-----/g, '')
+    .replace(/\s+/g, '');
+}
+
+async function openRecover(row: RaCertSummary) {
+  // 非 RSA（SM2 等）KMC 加密证书：RSA 密钥协议无法恢复，引导走 KMP
+  if (String(row.keySource || '').toUpperCase() === 'KMC') {
+    try {
+      const status = unwrapData<RaKmcKeyStatus>(await queryRaKmcKeyStatus(row.id));
+      if (status?.algorithm && status.algorithm.toUpperCase() !== 'RSA') {
+        ElMessage.warning(`该证书为 ${status.algorithm} 加密证书，密钥恢复请到 KMC/CA 侧执行 KMP 密钥恢复`);
+        return;
+      }
+    } catch {
+      // 状态查询失败时放行，交由后端校验兜底
+    }
+  }
+  recoveringCert.value = row;
+  recoverForm.issueType = 'usb_key';
+  recoverForm.containerName = `enc-${Date.now()}`;
+  recoverOpen.value = true;
+  await refreshRecoverProviders();
+}
+
+function resetRecoverForm() {
+  recoveringCert.value = undefined;
+  recoverForm.provider = '';
+  recoverForm.device = '';
+  recoverForm.appName = '';
+  recoverForm.containerName = '';
+  recoverForm.pin = '123456';
+  recoverForm.filePassword = '';
+  recoverForm.confirmPassword = '';
+  recoverFormRef.value?.clearValidate();
+}
+
+async function onRecoverIssueTypeChange() {
+  recoverFormRef.value?.clearValidate();
+  if (recoverForm.issueType === 'usb_key') {
+    await refreshRecoverProviders();
+  }
+}
+
+async function refreshRecoverProviders() {
+  recoverProviders.value = [];
+  recoverDevices.value = [];
+  recoverApps.value = [];
+  try {
+    skfClientPromise = null;
+    const skf = await getSkfClient();
+    recoverProviders.value = await skf.enumProvider();
+    if (recoverProviders.value.length > 0) {
+      recoverForm.provider = recoverProviders.value[0];
+      await onRecoverProviderChange();
+    }
+  } catch (error: any) {
+    ElMessage.error(`无法连接 SKF 服务: ${error?.message || error || '未知错误'}`);
+  }
+}
+
+async function onRecoverProviderChange() {
+  recoverDevices.value = [];
+  recoverApps.value = [];
+  recoverForm.device = '';
+  recoverForm.appName = '';
+  if (!recoverForm.provider) return;
+  const skf = await getSkfClient();
+  recoverDevices.value = await skf.enumDevice(recoverForm.provider);
+  if (recoverDevices.value.length > 0) {
+    recoverForm.device = recoverDevices.value[0];
+    await onRecoverDeviceChange();
+  }
+}
+
+async function onRecoverDeviceChange() {
+  recoverApps.value = [];
+  recoverForm.appName = '';
+  if (!recoverForm.provider || !recoverForm.device) return;
+  const skf = await getSkfClient();
+  recoverApps.value = await skf.enumApplication(recoverForm.provider, recoverForm.device);
+  if (recoverApps.value.length > 0) {
+    recoverForm.appName = recoverApps.value[0];
+  }
+}
+
+async function submitRecover() {
+  if (!recoveringCert.value || !(await recoverFormRef.value?.validate().catch(() => false))) return;
+  recoverLoading.value = true;
+  try {
+    if (recoverForm.issueType === 'file') {
+      const res = unwrapData<any>(
+        await recoverRaKey(recoveringCert.value.id, {
+          issueType: 'file',
+          filePassword: recoverForm.filePassword,
+          fileFormat: 'PKCS12'
+        })
+      );
+      if (!res?.fileBase64) {
+        throw new Error('CA未返回PKCS#12文件');
+      }
+      const bytes = Uint8Array.from(atob(res.fileBase64), (char) => char.charCodeAt(0));
+      saveBlob(new Blob([bytes], { type: 'application/x-pkcs12' }), res.fileName || `${recoveringCert.value.serialNumber}.p12`);
+      ElMessage.success('RSA密钥已恢复并开始下载PKCS#12');
+    } else {
+      const skf = await getSkfClient();
+      const appPath = `${recoverForm.provider}/${recoverForm.device}/${recoverForm.appName}`;
+      await skf.checkPIN(appPath, recoverForm.pin);
+      const wrapP10Res = await skf.createPKCS10(
+        recoverForm.provider,
+        recoverForm.device,
+        recoverForm.appName,
+        recoveringCert.value.subject,
+        'RSA',
+        2048,
+        recoverForm.containerName
+      );
+      const wrappingCsrBase64 = pemToBase64(wrapP10Res?.pem || wrapP10Res?.csr || wrapP10Res);
+      const res = unwrapData<any>(
+        await recoverRaKey(recoveringCert.value.id, {
+          issueType: 'usb_key',
+          wrappingCsrBase64
+        })
+      );
+      if (!res?.encryptionPrivateKey || !res?.wrapKey) {
+        throw new Error('CA未返回可写入 USBKey 的 RSA 加密私钥材料');
+      }
+      await skf.importKeyPair(
+        recoverForm.provider,
+        recoverForm.device,
+        recoverForm.appName,
+        recoverForm.containerName,
+        'RSA',
+        res.encryptionPrivateKey,
+        res.wrapKey,
+        res.symmetricMode || 'ECB'
+      );
+      if (res.cert) {
+        await skf.importCertificate(recoverForm.provider, recoverForm.device, recoverForm.appName, recoverForm.containerName, false, res.cert);
+      }
+      ElMessage.success('RSA密钥已恢复并写入 USB Key');
+    }
+    recoverOpen.value = false;
+  } catch (error: any) {
+    ElMessage.error('RSA密钥恢复失败: ' + (error?.message || error?.msg || '未知错误'));
+  } finally {
+    recoverLoading.value = false;
+  }
 }
 
 onMounted(getList);

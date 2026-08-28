@@ -68,8 +68,23 @@
 
     <pagination v-show="total > 0" :total="total" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" @pagination="getList" />
 
-    <el-dialog v-model="issueOpen" :title="isCertUpdate ? '执行证书更新（换密钥）' : '证书签发'" width="1180px" append-to-body top="3vh" class="cert-issue-dialog" @close="closeIssueDialog">
-      <el-alert v-if="isCertUpdate" class="issue-step-alert" title="换密钥：使用新 CSR/公钥签发新序列号证书，旧证书将按 superseded 吊销。" type="warning" show-icon :closable="false" />
+    <el-dialog
+      v-model="issueOpen"
+      :title="isCertUpdate ? '执行证书更新（换密钥）' : '证书签发'"
+      width="1180px"
+      append-to-body
+      top="3vh"
+      class="cert-issue-dialog"
+      @close="closeIssueDialog"
+    >
+      <el-alert
+        v-if="isCertUpdate"
+        class="issue-step-alert"
+        title="换密钥：使用新 CSR/公钥签发新序列号证书，旧证书将按 superseded 吊销。"
+        type="warning"
+        show-icon
+        :closable="false"
+      />
       <el-alert v-if="issueStep" class="issue-step-alert" :title="issueStep" type="info" show-icon :closable="false" />
       <el-form ref="issueFormRef" :model="issueForm" :rules="rules" label-width="108px" class="issue-form">
         <div class="issue-top-grid">
@@ -107,19 +122,38 @@
               <div class="section-title">签发参数</div>
               <el-alert v-if="dualCertInfo?.certMode === 'dual' && isPostQuantumDual" class="dual-cert-alert" type="info" :closable="false" show-icon>
                 <template #title>
-                  抗量子双证书{{ isCertUpdate ? '更新' : '签发' }}：ML-DSA 签名密钥由客户端生成并提交 CSR；ML-KEM 加密私钥由 KMC 永久托管，不支持 USBKey
+                  抗量子双证书{{ isCertUpdate ? '更新' : '签发' }}：ML-DSA 签名密钥由客户端生成并提交 CSR；ML-KEM 加密私钥由 KMC 永久托管，不支持
+                  USBKey
                 </template>
               </el-alert>
-              <el-alert v-else-if="dualCertInfo?.certMode === 'dual' && supportsDualRoot" class="dual-cert-alert" type="success" :closable="false" show-icon>
+              <el-alert
+                v-else-if="dualCertInfo?.certMode === 'dual' && supportsDualRoot"
+                class="dual-cert-alert"
+                type="success"
+                :closable="false"
+                show-icon
+              >
                 <template #title>
-                  双证书{{ isCertUpdate ? '更新（换密钥）' : '签发' }}：签名模板「{{ dualCertInfo.signProfileName }}」+ 加密模板「{{ dualCertInfo.encryptProfileName }}」 — 签名侧提交新 CSR，加密侧默认 KMC 换钥
+                  双证书{{ isCertUpdate ? '更新（换密钥）' : '签发' }}：签名模板「{{ dualCertInfo.signProfileName }}」+ 加密模板「{{
+                    dualCertInfo.encryptProfileName
+                  }}」 — 签名侧提交新 CSR，加密侧默认 KMC 换钥
                 </template>
               </el-alert>
-              <el-alert v-if="dualCertInfo?.certMode === 'dual' && !supportsDualRoot" class="dual-cert-alert" type="error" :closable="false" show-icon>
+              <el-alert
+                v-if="dualCertInfo?.certMode === 'dual' && !supportsDualRoot"
+                class="dual-cert-alert"
+                type="error"
+                :closable="false"
+                show-icon
+              >
                 <template #title>双证书{{ isCertUpdate ? '更新' : '签发' }}异常：当前根证书算法不支持双证书。</template>
               </el-alert>
               <el-alert v-else-if="isRsaKmcEncryption" class="dual-cert-alert" type="success" :closable="false" show-icon>
-                <template #title>{{ isCertUpdate ? 'RSA 加密证书由 KMC 换钥，无需提交 CSR。新证书可写入 USB Key 或导出到文件。' : 'RSA 加密单证：密钥由 KMC 生成，无需提交 CSR。证书可写入 USB Key 或导出到文件。' }}</template>
+                <template #title>{{
+                  isCertUpdate
+                    ? 'RSA 加密证书由 KMC 换钥，无需提交 CSR。新证书可写入 USB Key 或导出到文件。'
+                    : 'RSA 加密单证：密钥由 KMC 生成，无需提交 CSR。证书可写入 USB Key 或导出到文件。'
+                }}</template>
               </el-alert>
               <el-form-item v-if="issueForm.issueType === 'csr'" label="CSR" prop="csr" class="csr-form-item">
                 <el-input v-model="issueForm.csr" type="textarea" :rows="8" placeholder="请输入证书请求CSR" />
@@ -146,7 +180,10 @@
                     </el-select>
                   </el-form-item>
                   <el-form-item label="容器名" prop="containerName">
-                    <el-input v-model="issueForm.containerName" :placeholder="isCertUpdate ? '请输入新容器名，禁止使用原容器' : '请输入或使用自动生成的容器名'" />
+                    <el-input
+                      v-model="issueForm.containerName"
+                      :placeholder="isCertUpdate ? '请输入新容器名，禁止使用原容器' : '请输入或使用自动生成的容器名'"
+                    />
                   </el-form-item>
                   <el-form-item label="User PIN" prop="pin">
                     <el-input v-model="issueForm.pin" type="password" show-password placeholder="请输入 USBKey User PIN" />
@@ -228,7 +265,9 @@
       <template #footer>
         <div class="dialog-footer">
           <el-button @click="issueOpen = false">取消</el-button>
-          <el-button type="primary" icon="Stamp" :loading="submitLoading" @click="submitIssue">{{ isCertUpdate ? '确认更新' : '确认签发' }}</el-button>
+          <el-button type="primary" icon="Stamp" :loading="submitLoading" @click="submitIssue">{{
+            isCertUpdate ? '确认更新' : '确认签发'
+          }}</el-button>
         </div>
       </template>
     </el-dialog>
@@ -1114,7 +1153,21 @@ function submitIssue() {
           );
           csr = p10Res?.pem || p10Res?.csr || p10Res;
         } else {
-          issueStep.value = '正在向 CA 申请 KMC 生成的 RSA 加密证书...';
+          issueStep.value = '正在 USB Key 中生成 RSA 封装密钥并创建 CSR...';
+          const wrapP10Res = await withTimeout(
+            skf.createPKCS10(
+              issueForm.provider,
+              issueForm.device,
+              issueForm.appName,
+              subject,
+              'RSA',
+              resolveKeySize() || 2048,
+              issueForm.containerName
+            ),
+            30000,
+            '生成封装 CSR 超时'
+          );
+          csr = wrapP10Res?.pem || wrapP10Res?.csr || wrapP10Res;
         }
       }
       const res = await issueRaCert(current.value.businessType, current.value.businessId, {
@@ -1144,7 +1197,8 @@ function submitIssue() {
               issueForm.containerName,
               'RSA',
               res.data.encryptionPrivateKey,
-              ''
+              res.data.wrapKey || '',
+              res.data.symmetricMode || 'ECB'
             ),
             30000,
             '写入 KMC RSA 加密密钥对超时'
@@ -1543,7 +1597,9 @@ function isEncryptionProfileConf(profileConf?: string, profileName?: string) {
     return true;
   }
   const usages = collectProfileKeyUsages(conf);
-  const hasSign = usages.some((usage) => usage.includes('digitalsignature') || usage.includes('nonrepudiation') || usage.includes('contentcommitment'));
+  const hasSign = usages.some(
+    (usage) => usage.includes('digitalsignature') || usage.includes('nonrepudiation') || usage.includes('contentcommitment')
+  );
   const hasEnc = usages.some((usage) => usage.includes('encipher') || usage.includes('encrypt'));
   return hasEnc && !hasSign;
 }

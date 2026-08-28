@@ -73,7 +73,7 @@
                   <el-tag type="info" effect="plain" round size="small">下一步</el-tag>
                   <span class="help-card-title">KMP服务身份</span>
                 </div>
-                <div class="help-card-body">用于签署 KMP 响应的 KMC 自身身份证书。环境检查不阻断；未配置时请在下一步生成或导入 PKCS12。</div>
+                <div class="help-card-body">用于签署 KMP 响应的 KMC 自身身份证书。可在 KMC 内生成 CSR，交由 CA 签发后导入，也可直接导入 PKCS12。</div>
               </div>
             </div>
           </el-drawer>
@@ -108,9 +108,7 @@
                   <span class="env-card-name">{{ row.name }}</span>
                   <el-tag :type="row.ok ? 'success' : 'danger'" effect="light" size="small">{{ row.ok ? '正常' : '异常' }}</el-tag>
                 </div>
-                <div class="env-card-value" v-if="row.value && row.value !== '-'">
-                  <span class="env-card-label">当前值：</span>{{ row.value }}
-                </div>
+                <div class="env-card-value" v-if="row.value && row.value !== '-'"><span class="env-card-label">当前值：</span>{{ row.value }}</div>
                 <div class="env-card-message" v-if="row.message">{{ row.message }}</div>
               </div>
             </div>
@@ -130,7 +128,7 @@
             type="info"
             :closable="false"
             show-icon
-            title="KMC 使用该身份签署 KSRespond。若部署时已挂载 PKCS12，将直接显示当前证书；否则请生成自签名 SM2 身份或导入已有密钥库。"
+            title="KMC 使用该身份签署 KSRespond。推荐在 KMC 内生成 SM2 私钥和 CSR，交由 CA 签发后导入证书；也可直接导入已有 PKCS12。私钥不会通过 CSR 或页面导出。"
           />
 
           <div v-if="identityConfigured" class="identity-preview">
@@ -155,11 +153,11 @@
           >
             <el-form-item label="配置方式">
               <el-radio-group v-model="identityForm.mode">
-                <el-radio-button value="GENERATE">生成自签名</el-radio-button>
+                <el-radio-button value="CSR">CSR 申请</el-radio-button>
                 <el-radio-button value="IMPORT">导入 PKCS12</el-radio-button>
               </el-radio-group>
             </el-form-item>
-            <template v-if="identityForm.mode === 'GENERATE'">
+            <template v-if="identityForm.mode === 'CSR'">
               <el-form-item label="通用名称" prop="commonName">
                 <el-input v-model="identityForm.commonName" placeholder="例如：KMC KMP Signer" />
               </el-form-item>
@@ -169,15 +167,58 @@
               <el-form-item label="国家代码" prop="country">
                 <el-input v-model="identityForm.country" maxlength="2" placeholder="CN" />
               </el-form-item>
-              <el-form-item label="有效年数" prop="validityYears">
-                <el-input-number v-model="identityForm.validityYears" :min="1" :max="30" />
-              </el-form-item>
               <el-form-item label="密钥别名" prop="alias">
                 <el-input v-model="identityForm.alias" placeholder="main" />
               </el-form-item>
-              <el-form-item label="密钥库口令" prop="password">
-                <el-input v-model="identityForm.password" type="password" show-password placeholder="可留空，由服务端生成" />
+              <el-form-item>
+                <el-button type="primary" :loading="identityLoading" @click="submitIdentity">
+                  {{ identity.csrPending ? '重新生成 CSR' : '生成 CSR' }}
+                </el-button>
               </el-form-item>
+
+              <div v-if="identity.csrPending && identity.csrPem" class="csr-panel">
+                <div class="form-section-title">待 CA 签发</div>
+                <el-alert
+                  type="warning"
+                  :closable="false"
+                  show-icon
+                  title="重新生成 CSR 会使之前下载的 CSR 及其签发证书失效。请将下方 CSR 交给 CA，签发用途须包含数字签名。"
+                />
+                <el-form-item label="CSR 主题">
+                  <el-input :model-value="identity.pendingSubject" readonly />
+                </el-form-item>
+                <el-form-item label="CSR PEM">
+                  <el-input :model-value="identity.csrPem" type="textarea" :rows="9" readonly />
+                  <div class="csr-actions">
+                    <el-button @click="copyCsr">复制 CSR</el-button>
+                    <el-button @click="downloadCsr">下载 CSR</el-button>
+                  </div>
+                </el-form-item>
+                <el-form-item label="签发证书" prop="certificatePem">
+                  <el-upload
+                    :auto-upload="false"
+                    :limit="1"
+                    accept=".cer,.crt,.pem"
+                    :on-change="onCertificateChange"
+                    :on-remove="onCertificateRemove"
+                  >
+                    <el-button>选择证书文件</el-button>
+                  </el-upload>
+                  <el-input
+                    v-model="identityForm.certificatePem"
+                    class="certificate-input"
+                    type="textarea"
+                    :rows="6"
+                    placeholder="也可直接粘贴 CA 签发的 PEM 证书"
+                  />
+                </el-form-item>
+                <el-form-item label="证书链">
+                  <el-input v-model="identityForm.certificateChainPem" type="textarea" :rows="4" placeholder="可选：粘贴中间 CA 和根 CA PEM 证书链" />
+                </el-form-item>
+                <el-form-item>
+                  <el-button type="primary" :loading="identityLoading" @click="submitIssuedCertificate">校验并启用证书</el-button>
+                </el-form-item>
+              </div>
             </template>
             <template v-else>
               <el-form-item label="PKCS12 文件" prop="keystoreBase64">
@@ -191,12 +232,12 @@
               <el-form-item label="密钥库口令" prop="password">
                 <el-input v-model="identityForm.password" type="password" show-password />
               </el-form-item>
+              <el-form-item>
+                <el-button type="primary" :loading="identityLoading" @click="submitIdentity">
+                  {{ identityConfigured ? '重新配置并保存' : '导入并启用 PKCS12' }}
+                </el-button>
+              </el-form-item>
             </template>
-            <el-form-item>
-              <el-button type="primary" :loading="identityLoading" @click="submitIdentity">
-                {{ identityConfigured ? '重新配置并保存' : '保存服务身份' }}
-              </el-button>
-            </el-form-item>
           </el-form>
         </div>
 
@@ -252,10 +293,10 @@
 <script setup name="KmcInit" lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue';
 import type { FormInstance, FormRules, UploadFile } from 'element-plus';
-import { ElMessage } from 'element-plus';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import { useRouter } from 'vue-router';
 import { QuestionFilled, Refresh, CircleCheckFilled, CircleCloseFilled, WarningFilled } from '@element-plus/icons-vue';
-import { getEnvInfo, getIdentity, getInitStatus, initAdmin, initIdentity } from '@/api/kmc/init';
+import { generateIdentityCsr, getEnvInfo, getIdentity, getInitStatus, importIdentityCertificate, initAdmin, initIdentity } from '@/api/kmc/init';
 import { unwrapKmcData } from '@/api/kmc/common';
 import { getTenant } from '@/api/system/tenant';
 import { useUserStore } from '@/store/modules/user';
@@ -294,18 +335,23 @@ const identity = reactive({
   fingerprintSha256: '',
   algorithm: '',
   alias: '',
-  certPem: ''
+  certPem: '',
+  csrPending: false,
+  csrPem: '',
+  pendingSubject: ''
 });
 
 const identityForm = reactive({
-  mode: 'GENERATE',
+  mode: 'CSR',
   commonName: 'KMC KMP Signer',
   organization: 'LiuZX',
   country: 'CN',
   validityYears: 10,
   alias: 'main',
   password: '',
-  keystoreBase64: ''
+  keystoreBase64: '',
+  certificatePem: '',
+  certificateChainPem: ''
 });
 
 const form = reactive({
@@ -351,6 +397,18 @@ const identityRules = reactive<FormRules>({
       },
       trigger: 'change'
     }
+  ],
+  certificatePem: [
+    {
+      validator: (_rule, value, callback) => {
+        if (identityForm.mode === 'CSR' && identity.csrPending && !String(value || '').trim()) {
+          callback(new Error('请选择或粘贴 CA 签发的证书'));
+          return;
+        }
+        callback();
+      },
+      trigger: 'change'
+    }
   ]
 });
 
@@ -381,6 +439,9 @@ const identitySourceLabel = computed(() => {
   }
   if (identity.source === 'INIT') {
     return '初始化向导';
+  }
+  if (identity.source === 'CA_ISSUED') {
+    return 'CA 签发证书';
   }
   return '未配置';
 });
@@ -416,6 +477,9 @@ const applyIdentity = (data: any) => {
   identity.algorithm = data?.algorithm || '';
   identity.alias = data?.alias || '';
   identity.certPem = data?.certPem || '';
+  identity.csrPending = Boolean(data?.csrPending);
+  identity.csrPem = data?.csrPem || '';
+  identity.pendingSubject = data?.pendingSubject || '';
 };
 
 const loadIdentityInfo = async () => {
@@ -517,33 +581,98 @@ const onKeystoreRemove = () => {
   identityForm.keystoreBase64 = '';
 };
 
+const onCertificateChange = async (file: UploadFile) => {
+  if (!file.raw) {
+    return;
+  }
+  identityForm.certificatePem = await file.raw.text();
+};
+
+const onCertificateRemove = () => {
+  identityForm.certificatePem = '';
+};
+
+const copyCsr = async () => {
+  try {
+    await navigator.clipboard.writeText(identity.csrPem);
+    ElMessage.success('CSR 已复制');
+  } catch (error) {
+    ElMessage.error('浏览器未允许复制，请手动选择 CSR 文本');
+  }
+};
+
+const downloadCsr = () => {
+  const blob = new Blob([identity.csrPem], { type: 'application/pkcs10' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'kmc-kmp-identity.csr.pem';
+  link.click();
+  URL.revokeObjectURL(url);
+};
+
 const submitIdentity = async () => {
   if (identity.source === 'FILE') {
     return;
   }
-  const valid = await identityFormRef.value?.validate().catch(() => false);
+  const fields = identityForm.mode === 'CSR' ? ['commonName', 'country', 'alias'] : ['alias', 'password', 'keystoreBase64'];
+  const valid = await identityFormRef.value
+    ?.validateField(fields)
+    .then(() => true)
+    .catch(() => false);
   if (!valid) {
     return;
   }
   identityLoading.value = true;
   try {
-    const payload: Record<string, unknown> = {
-      mode: identityForm.mode,
-      alias: identityForm.alias,
-      password: identityForm.password
-    };
-    if (identityForm.mode === 'GENERATE') {
-      payload.commonName = identityForm.commonName;
-      payload.organization = identityForm.organization;
-      payload.country = identityForm.country;
-      payload.validityYears = identityForm.validityYears;
+    if (identityForm.mode === 'CSR') {
+      if (identity.csrPending) {
+        await ElMessageBox.confirm('重新生成后，当前 CSR 对应的已签发证书将无法导入。确认继续吗？', '重新生成 CSR', {
+          type: 'warning',
+          confirmButtonText: '确认重新生成',
+          cancelButtonText: '取消'
+        });
+      }
+      await generateIdentityCsr({
+        commonName: identityForm.commonName,
+        organization: identityForm.organization,
+        country: identityForm.country,
+        alias: identityForm.alias
+      });
+      await loadIdentityInfo();
+      ElMessage.success('CSR 已生成，请交由 CA 签发');
     } else {
+      const payload: Record<string, unknown> = {
+        mode: 'IMPORT',
+        alias: identityForm.alias,
+        password: identityForm.password
+      };
       payload.keystoreBase64 = identityForm.keystoreBase64;
       payload.storeType = 'PKCS12';
+      const res = await initIdentity(payload);
+      applyIdentity(unwrapKmcData(res));
+      ElMessage.success('PKCS12 服务身份已保存并启用');
     }
-    const res = await initIdentity(payload);
+  } finally {
+    identityLoading.value = false;
+  }
+};
+
+const submitIssuedCertificate = async () => {
+  const valid = await identityFormRef.value?.validateField('certificatePem').catch(() => false);
+  if (valid === false || !identityForm.certificatePem.trim()) {
+    return;
+  }
+  identityLoading.value = true;
+  try {
+    const res = await importIdentityCertificate({
+      certificatePem: identityForm.certificatePem,
+      certificateChainPem: identityForm.certificateChainPem || undefined
+    });
     applyIdentity(unwrapKmcData(res));
-    ElMessage.success('服务身份已保存');
+    identityForm.certificatePem = '';
+    identityForm.certificateChainPem = '';
+    ElMessage.success('CA 签发证书已校验并启用');
   } finally {
     identityLoading.value = false;
   }
@@ -932,6 +1061,28 @@ onMounted(async () => {
   margin: 0 auto 18px;
 }
 
+.csr-panel {
+  margin-top: 8px;
+  padding: 20px 20px 4px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+  background: var(--el-fill-color-light);
+}
+
+.csr-panel :deep(.el-alert) {
+  margin-bottom: 18px;
+}
+
+.csr-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.certificate-input {
+  margin-top: 10px;
+}
+
 .wizard-actions {
   display: flex;
   align-items: center;
@@ -996,6 +1147,10 @@ onMounted(async () => {
     :deep(.el-form-item__content) {
       margin-left: 0 !important;
     }
+  }
+
+  .csr-actions {
+    flex-wrap: wrap;
   }
 }
 </style>

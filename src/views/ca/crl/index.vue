@@ -110,14 +110,15 @@ function getFreshness(row: any) {
 
 async function loadOptions() {
   try {
-    const [rootRes, publisherRes] = await Promise.all([
-      listRootCa({ pageNum: 1, pageSize: 200 }),
-      pagePublisher({ pageNum: 1, pageSize: 200, status: '0' })
-    ]);
+    const rootRes = await listRootCa({ pageNum: 1, pageSize: 200 });
     rootList.value = rootRes.data?.rows || rootRes.data?.records || [];
-    publisherList.value = publisherRes.data?.rows || publisherRes.data?.records || [];
-  } catch (error) {
+  } catch (_error) {
     rootList.value = [];
+  }
+  try {
+    const publisherRes = await pagePublisher({ pageNum: 1, pageSize: 200, status: '0' });
+    publisherList.value = publisherRes.data?.rows || publisherRes.data?.records || [];
+  } catch (_error) {
     publisherList.value = [];
   }
 }

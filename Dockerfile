@@ -5,6 +5,10 @@ FROM node:18-alpine AS builder
 
 WORKDIR /app
 
+# A UI image must select the tenant/client it serves. Leaving this unset would
+# silently consume a developer's .env.production.local override (for example OPS).
+ARG BUILD_TARGET
+
 # 安装 yarn
 RUN corepack enable && corepack prepare yarn@1.22.19 --activate
 
@@ -17,8 +21,11 @@ RUN yarn install --frozen-lockfile --registry=https://registry.npmmirror.com
 # 复制源码和构建配置
 COPY . .
 
-# 生产构建
-RUN yarn build:prod
+# 生产构建：target is intentionally mandatory to prevent cross-tenant artifacts.
+RUN case "$BUILD_TARGET" in \
+      ops|ca|kmc|ra) yarn "build:$BUILD_TARGET" ;; \
+      *) echo >&2 "BUILD_TARGET must be one of: ops, ca, kmc, ra"; exit 64 ;; \
+    esac
 
 # ============================================
 # Stage 2: 运行阶段

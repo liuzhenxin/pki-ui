@@ -7,6 +7,54 @@ export interface OpsContainer {
   ports: string;
   running: boolean;
   present: boolean;
+  imageId: string;
+  imageDigest: string;
+  health: 'healthy' | 'unhealthy' | 'starting' | 'none' | 'unknown' | string;
+  composeProject: string;
+  composeService: string;
+  composeConfigFiles: string;
+  manageable: boolean;
+  managementReason: string;
+  latestTag: string;
+  latestDigest: string;
+  updateAvailable: boolean;
+}
+
+export interface OpsContainerVersion {
+  repository: string;
+  currentTag: string;
+  currentDigest: string;
+  latestTag: string;
+  latestDigest: string;
+  scannedAt?: string;
+  updateAvailable: boolean;
+}
+
+export type OpsContainerAction = 'START' | 'STOP' | 'RESTART' | 'UPGRADE';
+
+export interface OpsContainerActionRequest {
+  action: OpsContainerAction;
+  targetImage?: string;
+  targetDigest?: string;
+  idempotencyKey: string;
+  confirmed: boolean;
+}
+
+export interface OpsOperation {
+  operationNo: string;
+  operationType: OpsContainerAction;
+  serverCode: string;
+  containerName: string;
+  sourceImage: string;
+  targetImage?: string;
+  status: 'PENDING' | 'RUNNING' | 'SUCCESS' | 'FAILED';
+  currentStep: string;
+  rollbackAttempted: boolean;
+  rollbackSucceeded: boolean;
+  errorMessage?: string;
+  createdAt: string;
+  finishedAt?: string;
+  steps: string[];
 }
 
 export interface OpsContainerLogs {

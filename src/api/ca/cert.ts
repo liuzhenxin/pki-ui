@@ -1,4 +1,5 @@
 import request from '@/utils/request';
+import { withUtcCertificateValidity } from '@/utils/certificateTime';
 import { Result } from '@/api/types';
 
 // 分页查询证书列表
@@ -72,7 +73,7 @@ export function issueCert(data: any): Promise<Result<any>> {
   return request({
     url: '/ca/v1/certs/issue',
     method: 'post',
-    data: data
+    data: withUtcCertificateValidity(data)
   }) as any;
 }
 
@@ -81,7 +82,7 @@ export function issueDualCert(data: any): Promise<Result<any>> {
   return request({
     url: '/ca/v1/certs/issue-dual',
     method: 'post',
-    data: data
+    data: withUtcCertificateValidity(data)
   }) as any;
 }
 
@@ -118,6 +119,13 @@ export function recoverKey(data: any): Promise<Result<any>> {
     url: '/ca/v1/certs/recover-key',
     method: 'post',
     data: data
+  }) as any;
+}
+
+export function queryKmcKeyStatus(id: string | number): Promise<Result<any>> {
+  return request({
+    url: `/ca/v1/certs/${id}/kmc-key-status`,
+    method: 'get'
   }) as any;
 }
 

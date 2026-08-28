@@ -540,8 +540,8 @@
 
       <el-form ref="lifecycleFormRef" :model="lifecycleForm" :rules="lifecycleRules" label-width="110px" class="lifecycle-form">
         <!-- 证书存储方式（续期/更新/补办支持） -->
-        <template v-if="lifecycleAction !== 'recover'">
-          <el-form-item label="证书存储方式">
+        <template v-if="lifecycleAction !== 'recover' || rsaProtocolRecover">
+          <el-form-item v-if="lifecycleAction !== 'recover'" label="证书存储方式">
             <el-select v-model="lifecycleOutputMode" placeholder="请选择证书存储方式" @change="onLifecycleOutputModeChange">
               <el-option label="USBKey" value="usbkey" :disabled="isPostQuantumLifecycle" />
               <el-option label="PEM" value="pem" />
@@ -778,7 +778,7 @@
             <el-input v-model="lifecycleForm.reason" type="textarea" :rows="3" placeholder="请输入补办原因" />
           </el-form-item>
         </template>
-        <template v-if="lifecycleAction === 'recover'">
+        <template v-if="lifecycleAction === 'recover' && !rsaProtocolRecover">
           <el-form-item label="授权码">
             <el-input v-model="lifecycleForm.authCode" placeholder="可选，按系统配置填写" show-password />
           </el-form-item>
@@ -866,12 +866,7 @@
         <el-button v-if="issueResult.encryptionPrivateKey" type="warning" plain icon="Download" @click="downloadEncPrivateKey">
           下载加密私钥 (BASE64)
         </el-button>
-        <el-button
-          v-if="issueResult.cert && issueResult.encryptionCert"
-          type="warning"
-          icon="Folder"
-          @click="downloadDualCertZip"
-        >
+        <el-button v-if="issueResult.cert && issueResult.encryptionCert" type="warning" icon="Folder" @click="downloadDualCertZip">
           ZIP 打包下载
         </el-button>
       </div>
@@ -902,6 +897,7 @@ import {
   updateCert,
   reissueCert,
   recoverKey,
+  queryKmcKeyStatus,
   suspendCert,
   resumeCert,
   renewDualCert,
@@ -921,6 +917,7 @@ import SKFClient from '@/api/skf/skf_api';
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
 const keyRecoveryDialogRef = ref<InstanceType<typeof KeyRecoveryDialog>>();
 const recoveringCertId = ref<string | number>();
+const rsaProtocolRecover = ref(false);
 
 const securityConfirm = reactive({
   visible: false,
@@ -988,7 +985,11 @@ const lifecycleRenewalTargets = ref<{ signing?: UsbKeyCertTarget; encryption?: U
 const lifecycleRenewalTargetLoading = ref(false);
 const isLifecycleRenewal = computed(() => lifecycleAction.value === 'renew' || lifecycleAction.value === 'renew-dual');
 const usesLifecycleNewContainer = computed(
-  () => lifecycleAction.value === 'update' || lifecycleAction.value === 'update-dual' || lifecycleAction.value === 'reissue-dual'
+  () =>
+    lifecycleAction.value === 'update' ||
+    lifecycleAction.value === 'update-dual' ||
+    lifecycleAction.value === 'reissue-dual' ||
+    (lifecycleAction.value === 'recover' && rsaProtocolRecover.value)
 );
 const lifecycleFormRef = ref<FormInstance>();
 const issueResultOpen = ref(false);
@@ -1047,10 +1048,7 @@ const isPostQuantumDualSelected = computed(() => {
 });
 const isPostQuantumLifecycle = computed(() => {
   const profile = findProfileById(lifecycleRow.value?.profileId);
-  return (
-    profileUsesAlgorithm(profile, 'MLDSA', '2.16.840.1.101.3.4.3.') ||
-    profileUsesAlgorithm(profile, 'MLKEM', '2.16.840.1.101.3.4.4.')
-  );
+  return profileUsesAlgorithm(profile, 'MLDSA', '2.16.840.1.101.3.4.3.') || profileUsesAlgorithm(profile, 'MLKEM', '2.16.840.1.101.3.4.4.');
 });
 
 function normalizeAlgorithmText(value: any) {
@@ -1178,13 +1176,13 @@ const lifecycleRules = computed(() => {
   const isUpdate = lifecycleAction.value === 'update' || lifecycleAction.value === 'update-dual';
   const isUsbOutput = lifecycleOutputMode.value === 'usbkey';
 
+  const requireUsb = (lifecycleAction.value !== 'recover' || rsaProtocolRecover.value) && isUsbOutput && !isRenew;
   return {
-    provider: lifecycleAction.value !== 'recover' && isUsbOutput && !isRenew ? [{ required: true, message: '请选择厂商', trigger: 'change' }] : [],
-    device: lifecycleAction.value !== 'recover' && isUsbOutput && !isRenew ? [{ required: true, message: '请选择设备', trigger: 'change' }] : [],
-    appName: lifecycleAction.value !== 'recover' && isUsbOutput && !isRenew ? [{ required: true, message: '请选择应用', trigger: 'change' }] : [],
-    containerName:
-      lifecycleAction.value !== 'recover' && isUsbOutput && !isRenew ? [{ required: true, message: '请输入容器名称', trigger: 'blur' }] : [],
-    pin: lifecycleAction.value !== 'recover' && isUsbOutput ? [{ required: true, message: '请输入PIN码', trigger: 'blur' }] : [],
+    provider: requireUsb ? [{ required: true, message: '请选择厂商', trigger: 'change' }] : [],
+    device: requireUsb ? [{ required: true, message: '请选择设备', trigger: 'change' }] : [],
+    appName: requireUsb ? [{ required: true, message: '请选择应用', trigger: 'change' }] : [],
+    containerName: requireUsb ? [{ required: true, message: '请输入容器名称', trigger: 'blur' }] : [],
+    pin: requireUsb || (rsaProtocolRecover.value && isUsbOutput) ? [{ required: true, message: '请输入PIN码', trigger: 'blur' }] : [],
     csr:
       (isUpdate || lifecycleAction.value === 'reissue-dual') && !isUsbOutput
         ? [{ required: true, message: '请输入由新签名密钥生成的CSR', trigger: 'blur' }]
@@ -1227,8 +1225,10 @@ function getLifecycleModeMeta(action: string) {
       alertType: 'info' as const
     },
     recover: {
-      title: '密钥恢复',
-      description: '恢复流程按系统策略回写密钥材料，并同步更新证书状态。',
+      title: rsaProtocolRecover.value ? 'RSA密钥恢复' : '密钥恢复',
+      description: rsaProtocolRecover.value
+        ? '使用UKey生成封装CSR，从KMC REST恢复RSA加密私钥并写回原证书（序列号和有效期不变）。'
+        : '恢复流程按系统策略回写密钥材料，并同步更新证书状态。',
       alertType: 'info' as const
     },
     'renew-dual': {
@@ -2093,8 +2093,8 @@ async function submitIssue() {
                 issueForm.value.device,
                 issueForm.value.appName,
                 subject,
-                'SM2',
-                256,
+                kmcKey.algorithm === 'RSA' ? 'RSA' : 'SM2',
+                kmcKey.algorithm === 'RSA' ? kmcKey.keySize : 256,
                 issueForm.value.containerName
               ),
               30000,
@@ -2151,9 +2151,10 @@ async function submitIssue() {
                   issueForm.value.device,
                   issueForm.value.appName,
                   issueForm.value.containerName,
-                  'SM2',
+                  kmcKey.algorithm === 'RSA' ? 'RSA' : 'SM2',
                   res.data.encryptionPrivateKey,
-                  res.data.wrapKey || ''
+                  res.data.wrapKey || '',
+                  kmcKey.algorithm === 'RSA' ? res.data.symmetricMode || 'ECB' : 'ECB'
                 ),
                 30000,
                 '写入 KMC 加密密钥对超时'
@@ -2835,6 +2836,28 @@ async function openKeyRecovery(row: any) {
     return;
   }
   try {
+    const statusResult: any = await queryKmcKeyStatus(row.id);
+    const status = statusResult?.data || statusResult;
+    if (String(status?.algorithm || '').toUpperCase() === 'RSA') {
+      rsaProtocolRecover.value = true;
+      lifecycleAction.value = 'recover';
+      lifecycleRow.value = row;
+      resetLifecycleForm();
+      lifecycleOutputMode.value = 'usbkey';
+      lifecycleTitle.value = 'RSA密钥恢复';
+      lifecycleOpen.value = true;
+      refreshLifecycleCertProviders();
+      return;
+    }
+  } catch (error: any) {
+    const message = String(error?.message || error?.msg || error || '');
+    if (!/RSA|KMP|不是RSA/i.test(message)) {
+      ElMessage.error('无法启动密钥恢复: ' + (message || '未知错误'));
+      return;
+    }
+  }
+  rsaProtocolRecover.value = false;
+  try {
     const detailResult: any = row?.cert || row?.pem ? null : await getCert(row.id);
     const certificate = row?.cert || row?.pem || detailResult?.data?.cert || detailResult?.data?.pem;
     if (!certificate) throw new Error('无法读取原加密证书');
@@ -2895,6 +2918,7 @@ function handleLifecycleCommand(command: string, row: any) {
     void openKeyRecovery(row);
     return;
   }
+  rsaProtocolRecover.value = false;
   lifecycleAction.value = command;
   lifecycleRow.value = row;
 
@@ -3213,9 +3237,22 @@ async function generateLifecycleUsbKeyCsr(subject: string, timeoutMessage: strin
       lifecycleForm.containerName = generateUniqueLifecycleContainerName(existingNames);
     }
   }
+  const useRsa =
+    rsaProtocolRecover.value ||
+    String(lifecycleKeyType.value || '')
+      .toUpperCase()
+      .includes('RSA');
   await skf.checkPIN(`${lifecycleForm.provider}/${lifecycleForm.device}/${lifecycleForm.appName}`, lifecycleForm.pin);
   const p10Res = await withTimeout(
-    skf.createPKCS10(lifecycleForm.provider, lifecycleForm.device, lifecycleForm.appName, subject, 'SM2', 256, lifecycleForm.containerName),
+    skf.createPKCS10(
+      lifecycleForm.provider,
+      lifecycleForm.device,
+      lifecycleForm.appName,
+      subject,
+      useRsa ? 'RSA' : 'SM2',
+      useRsa ? 2048 : 256,
+      lifecycleForm.containerName
+    ),
     30000,
     timeoutMessage
   );
@@ -3253,7 +3290,7 @@ async function writeLifecycleCertToUsbKey(certPem: string, isSigning: boolean, t
   await skf.importCertificate(provider, device, appName, containerName, isSigning, certPem);
 }
 
-async function importLifecycleEncryptionKeyPair(encryptedPrivateKey: string, target?: UsbKeyCertTarget) {
+async function importLifecycleEncryptionKeyPair(encryptedPrivateKey: string, target?: UsbKeyCertTarget, wrapKey = '', symmetricMode = 'ECB') {
   if (!encryptedPrivateKey) {
     throw new Error('KMC未返回可写入 USBKey 的加密私钥材料');
   }
@@ -3261,7 +3298,12 @@ async function importLifecycleEncryptionKeyPair(encryptedPrivateKey: string, tar
   const { pin } = lifecycleForm;
   const { provider, device, appName, containerName } = target || lifecycleForm;
   await skf.checkPIN(`${provider}/${device}/${appName}`, pin);
-  await withTimeout(skf.importKeyPair(provider, device, appName, containerName, 'SM2', encryptedPrivateKey, ''), 30000, '写入 KMC 加密密钥对超时');
+  const alg = wrapKey ? 'RSA' : 'SM2';
+  await withTimeout(
+    skf.importKeyPair(provider, device, appName, containerName, alg, encryptedPrivateKey, wrapKey || '', wrapKey ? symmetricMode : 'ECB'),
+    30000,
+    '写入 KMC 加密密钥对超时'
+  );
 }
 
 async function verifyLifecycleDualUsbKeyInstall(signCert: string, encryptionCert: string, target?: UsbKeyCertTarget) {
@@ -3455,7 +3497,18 @@ function submitLifecycle() {
             })
           );
         } else {
-          res = await recoverKey(compactLifecyclePayload({ certId, authCode: lifecycleForm.authCode }));
+          let wrappingCsrBase64: string | undefined;
+          if (rsaProtocolRecover.value) {
+            wrappingCsrBase64 = await generateLifecycleUsbKeyCsr(lifecycleRow.value.subject || subject, '生成封装 CSR 超时');
+            lifecycleContainerCreated = usesLifecycleNewContainer.value;
+          }
+          res = await recoverKey(
+            compactLifecyclePayload({
+              certId,
+              authCode: rsaProtocolRecover.value ? undefined : lifecycleForm.authCode,
+              wrappingCsrBase64
+            })
+          );
         }
         caOperationCompleted = true;
         // 根据证书存储方式处理结果
@@ -3464,7 +3517,7 @@ function submitLifecycle() {
           throw new Error('后端未返回证书数据');
         }
         if (data?.cert) {
-          if (lifecycleOutputMode.value === 'usbkey' && lifecycleAction.value !== 'recover') {
+          if (lifecycleOutputMode.value === 'usbkey' && (lifecycleAction.value !== 'recover' || rsaProtocolRecover.value)) {
             // USB Key 写入
             if (!isRenew) {
               await refreshLifecycleCertProviders();
@@ -3472,8 +3525,13 @@ function submitLifecycle() {
                 throw new Error('未检测到 USB Key 设备，无法写入证书');
               }
             }
-            if (lifecycleAction.value === 'update-dual' || lifecycleAction.value === 'reissue-dual') {
-              await importLifecycleEncryptionKeyPair(data.encryptionPrivateKey);
+            if (data?.encryptionPrivateKey) {
+              await importLifecycleEncryptionKeyPair(
+                data.encryptionPrivateKey,
+                isRenew ? renewalTargets.encryption : undefined,
+                data.wrapKey || '',
+                data.symmetricMode || 'ECB'
+              );
             }
             const primaryIsSigning = !isEncryptionCertificate(lifecycleRow.value);
             await writeLifecycleCertToUsbKey(data.cert, primaryIsSigning, isRenew ? renewalTargets.signing : undefined);

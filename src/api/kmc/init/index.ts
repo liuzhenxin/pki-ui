@@ -53,3 +53,39 @@ export function initIdentity(data: any): Promise<Result<any>> {
     data
   });
 }
+
+export interface KmpIdentityCsrRequest {
+  commonName: string;
+  organization: string;
+  country: string;
+  alias: string;
+}
+
+export interface KmpIdentityCsrResult {
+  csrPem: string;
+  subject: string;
+  algorithm: string;
+  alias: string;
+}
+
+/**
+ * 在 KMC 内生成 SM2 私钥和 PKCS#10 请求；响应不包含私钥
+ */
+export function generateIdentityCsr(data: KmpIdentityCsrRequest): Promise<Result<KmpIdentityCsrResult>> {
+  return request({
+    url: '/kmc/v1/init/identity/csr',
+    method: 'post',
+    data
+  });
+}
+
+/**
+ * 导入 CA 签发的身份证书和可选证书链
+ */
+export function importIdentityCertificate(data: { certificatePem: string; certificateChainPem?: string }): Promise<Result<any>> {
+  return request({
+    url: '/kmc/v1/init/identity/cert',
+    method: 'post',
+    data
+  });
+}

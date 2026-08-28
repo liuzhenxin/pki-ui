@@ -8,7 +8,6 @@
       <el-button v-hasPermi="['ca:config:get']" icon="Refresh" @click="loadActiveConfig">刷新</el-button>
     </div>
     <el-card shadow="never" class="config-card">
-
       <el-tabs v-model="activeType" @tab-change="handleTabChange">
         <el-tab-pane label="CA身份配置" name="CA_IDENTITY">
           <section v-if="showIdentityCertView" class="config-section result-section identity-cert-view">
@@ -86,7 +85,9 @@
 
             <section class="config-section">
               <div class="section-title">
-                <span class="section-icon"><el-icon><Document /></el-icon></span>
+                <span class="section-icon"
+                  ><el-icon><Document /></el-icon
+                ></span>
                 证书主题
               </div>
               <div class="form-grid subject-grid">
@@ -103,7 +104,9 @@
 
             <section class="config-section">
               <div class="section-title">
-                <span class="section-icon"><el-icon><Key /></el-icon></span>
+                <span class="section-icon"
+                  ><el-icon><Key /></el-icon
+                ></span>
                 密钥生成
               </div>
               <div class="form-grid">
@@ -147,12 +150,12 @@
               <el-switch v-model="kmcForm.enabled" />
             </el-form-item>
             <el-form-item label="服务地址">
-              <el-input v-model="kmcForm.kmcBaseUrl" placeholder="http://kmc:3443/api">
+              <el-input v-model="kmcForm.kmcBaseUrl" placeholder="http://pki-gateway:5555/api-gateway/kmc">
                 <template #append>
                   <el-button icon="Connection" :loading="testingKmc" @click="testKmcCommunication">KMP通信测试</el-button>
                 </template>
               </el-input>
-              <div class="form-tip">Docker 部署默认使用容器网络地址：http://kmc:3443/api</div>
+              <div class="form-tip">Docker 部署默认通过网关访问：http://pki-gateway:5555/api-gateway/kmc</div>
             </el-form-item>
             <el-form-item v-if="kmcTestResult" label="测试结果">
               <el-alert
@@ -176,7 +179,9 @@
           <!-- 归档统计 -->
           <section class="config-section">
             <div class="section-title">
-              <span class="section-icon"><el-icon><DataAnalysis /></el-icon></span>
+              <span class="section-icon"
+                ><el-icon><DataAnalysis /></el-icon
+              ></span>
               归档统计
             </div>
             <div class="archive-stats-cards">
@@ -198,7 +203,9 @@
           <!-- 归档设置 -->
           <section class="config-section">
             <div class="section-title">
-              <span class="section-icon"><el-icon><Setting /></el-icon></span>
+              <span class="section-icon"
+                ><el-icon><Setting /></el-icon
+              ></span>
               归档设置
             </div>
             <el-form ref="archiveFormRef" :model="archiveForm" label-width="130px">
@@ -222,13 +229,13 @@
           <!-- 手动执行 -->
           <section class="config-section">
             <div class="section-title">
-              <span class="section-icon"><el-icon><VideoPlay /></el-icon></span>
+              <span class="section-icon"
+                ><el-icon><VideoPlay /></el-icon
+              ></span>
               手动执行
             </div>
             <div class="archive-operation">
-              <el-button type="primary" icon="VideoPlay" :loading="triggeringArchive" @click="handleTriggerArchive">
-                立即执行归档
-              </el-button>
+              <el-button type="primary" icon="VideoPlay" :loading="triggeringArchive" @click="handleTriggerArchive"> 立即执行归档 </el-button>
               <span class="form-tip">手动触发一次归档任务，处理当前符合条件的所有证书</span>
             </div>
           </section>
@@ -236,7 +243,9 @@
           <!-- 最近执行记录 -->
           <section v-if="archiveForm.lastRunTime" class="config-section result-section">
             <div class="section-title">
-              <span class="section-icon"><el-icon><Clock /></el-icon></span>
+              <span class="section-icon"
+                ><el-icon><Clock /></el-icon
+              ></span>
               最近执行记录
             </div>
             <div class="last-run-info">
@@ -307,10 +316,12 @@ const identityForm = reactive<any>({
   notAfter: ''
 });
 
+const DEFAULT_KMC_BASE_URL = 'http://pki-gateway:5555/api-gateway/kmc';
+
 const kmcForm = reactive<any>({
   id: undefined,
   enabled: false,
-  kmcBaseUrl: 'http://kmc:3443/api'
+  kmcBaseUrl: DEFAULT_KMC_BASE_URL
 });
 
 const archiveForm = reactive<any>({
@@ -359,9 +370,9 @@ function assignForm(target: any, source: any, id?: string | number) {
 }
 
 function normalizeKmcForm(source: any = {}) {
-  kmcForm.kmcBaseUrl = source.kmcBaseUrl || source.baseUrl || kmcForm.kmcBaseUrl || 'http://kmc:3443/api';
+  kmcForm.kmcBaseUrl = source.kmcBaseUrl || source.baseUrl || kmcForm.kmcBaseUrl || DEFAULT_KMC_BASE_URL;
   if (!kmcForm.kmcBaseUrl) {
-    kmcForm.kmcBaseUrl = 'http://kmc:3443/api';
+    kmcForm.kmcBaseUrl = DEFAULT_KMC_BASE_URL;
   }
 }
 
@@ -372,9 +383,11 @@ function normalizeArchiveMode() {
 }
 
 function loadArchiveStats() {
-  getArchiveStats().then((response) => {
-    Object.assign(archiveStats, response.data || {});
-  }).catch(() => {});
+  getArchiveStats()
+    .then((response) => {
+      Object.assign(archiveStats, response.data || {});
+    })
+    .catch(() => {});
 }
 
 function handleTriggerArchive() {
@@ -1028,7 +1041,9 @@ watch(
   border: 1px solid var(--el-border-color-light);
   border-radius: 8px;
   text-align: center;
-  transition: border-color 0.2s, background 0.2s;
+  transition:
+    border-color 0.2s,
+    background 0.2s;
 
   &:hover {
     border-color: var(--el-color-primary-light-5);
