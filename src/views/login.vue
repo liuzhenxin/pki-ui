@@ -1,6 +1,6 @@
 <template>
-  <div class="login" :style="loginBackgroundStyle">
-    <div class="cyber-field" aria-hidden="true">
+  <div class="login" :class="{ 'login--tenant-background': hasTenantLoginBackground }" :style="loginBackgroundStyle">
+    <div v-if="!hasTenantLoginBackground" class="cyber-field" aria-hidden="true">
       <div class="pki-backdrop">
         <span class="cert-visual cert-primary">
           <i></i>
@@ -127,7 +127,7 @@
               >
                 <template #prefix><svg-icon icon-class="validCode" class="el-input__icon input-icon" /></template>
               </el-input>
-              <button class="login-code" type="button" title="刷新验证码" @click="getCode">
+              <button class="login-code" type="button" title="刷新验证码" :disabled="captchaLoading" @click="getCode()">
                 <img :src="codeUrl" class="login-code-img" alt="验证码" />
               </button>
             </el-form-item>
@@ -213,7 +213,7 @@
 </template>
 
 <script setup lang="ts">
-import { getCodeImg, getSecrets } from '@/api/login';
+import { getCodeImg, getLoginHints, getSecrets } from '@/api/login';
 
 import { getTenant } from '@/api/system/tenant';
 import { getTenantList } from '@/api/login';
@@ -285,6 +285,9 @@ const codeUrl = ref('');
 const loading = ref(false);
 // 验证码开关
 const captchaEnabled = ref(true);
+const captchaLoading = ref(false);
+const CAPTCHA_REQUEST_INTERVAL_MS = 1200;
+let lastCaptchaRequestAt = 0;
 // 租户开关
 const tenantEnabled = ref(false);
 // 租户列表
@@ -311,9 +314,24 @@ const tenantLoginBackgrounds: Record<string, string> = {
   '10': nasLoginBackground,
   '100': licenseLoginBackground
 };
-const loginBackgroundStyle = computed(() => ({
-  '--login-background-image': `url("${tenantLoginBackgrounds[String(loginForm.value.tenantId || '')] || defaultLoginBackground}")`
-}));
+const tenantLoginPanelThemes: Record<string, { panel: string; input: string; border: string }> = {
+  '4': {
+    panel: 'rgba(244, 241, 233, 0.9)',
+    input: 'rgba(255, 252, 246, 0.72)',
+    border: 'rgba(255, 255, 255, 0.5)'
+  }
+};
+const hasTenantLoginBackground = computed(() => Boolean(tenantLoginBackgrounds[String(loginForm.value.tenantId || '')]));
+const loginBackgroundStyle = computed(() => {
+  const tenantId = String(loginForm.value.tenantId || '');
+  const panelTheme = tenantLoginPanelThemes[tenantId];
+  return {
+    '--login-background-image': `url("${tenantLoginBackgrounds[tenantId] || defaultLoginBackground}")`,
+    '--login-panel-background': panelTheme?.panel || 'rgba(229, 238, 242, 0.9)',
+    '--login-panel-input-background': panelTheme?.input || 'rgba(248, 251, 252, 0.72)',
+    '--login-panel-border': panelTheme?.border || 'rgba(255, 255, 255, 0.46)'
+  };
+});
 
 watch(
   () => router.currentRoute.value,
@@ -354,8 +372,11 @@ const handleLogin = () => {
         loading.value = false;
       } else {
         loading.value = false;
-        // 重新获取验证码
-        if (captchaEnabled.value) {
+        const msg = String((err as any)?.message || (err as any)?.msg || '');
+        if (msg.includes('请输入验证码')) {
+          captchaEnabled.value = true;
+          await getCode();
+        } else if (captchaEnabled.value) {
           await getCode();
         }
       }
@@ -368,18 +389,53 @@ const handleLogin = () => {
 /**
  * 获取验证码
  */
-const getCode = async () => {
+const getCode = async (tenantCode = String(loginForm.value.tenantCode || '')) => {
+  const now = Date.now();
+  if (captchaLoading.value || now - lastCaptchaRequestAt < CAPTCHA_REQUEST_INTERVAL_MS) {
+    return;
+  }
+
+  captchaLoading.value = true;
+  lastCaptchaRequestAt = now;
   try {
-    // 刷新验证码时清空输入框
     loginForm.value.code = '';
     const uuid = uuidv4();
-    const res = await getCodeImg(uuid);
+    const res = await getCodeImg(uuid, tenantCode);
+    if (tenantCode !== String(loginForm.value.tenantCode || '')) {
+      return;
+    }
     loginForm.value.uuid = uuid;
     const { data } = res;
     codeUrl.value = data;
   } catch (err) {
     console.error('获取验证码请求异常', err);
-    // 例如弹出提示框或设置全局错误状态
+  } finally {
+    captchaLoading.value = false;
+  }
+};
+
+const loadLoginHints = async () => {
+  const tenantCode = String(loginForm.value.tenantCode || '');
+  if (!tenantCode) {
+    return;
+  }
+  try {
+    const res = await getLoginHints(tenantCode);
+    const hints = (res as any)?.data ?? res;
+    if (tenantCode !== String(loginForm.value.tenantCode || '')) {
+      return;
+    }
+    captchaEnabled.value = hints?.captchaEnabled !== false;
+    sessionStorage.setItem('idleTimeoutMinutes', String(hints?.idleTimeoutMinutes || 240));
+    if (captchaEnabled.value) {
+      await getCode(tenantCode);
+    }
+  } catch (_err) {
+    if (tenantCode !== String(loginForm.value.tenantCode || '')) {
+      return;
+    }
+    captchaEnabled.value = true;
+    await getCode(tenantCode);
   }
 };
 
@@ -486,6 +542,7 @@ const handleTenantChange = (val: string) => {
     localStorage.setItem('tenantCode', String(tenant.tenantCode));
     getTenantInfo(val);
     refreshRadiusStatus(tenant.tenantCode);
+    loadLoginHints();
   }
 };
 
@@ -530,10 +587,9 @@ const doSocialLogin = (type: string) => {
 };
 
 onMounted(() => {
-  getCode();
   getSecretKey();
   getLoginData();
-  initTenantList();
+  initTenantList().then(() => loadLoginHints());
 });
 </script>
 
@@ -576,6 +632,18 @@ onMounted(() => {
     56px 56px,
     180px 180px;
   mask-image: linear-gradient(90deg, rgba(0, 0, 0, 0.72), transparent 88%);
+}
+
+.login--tenant-background {
+  background: var(--login-background-image) center / cover no-repeat;
+}
+
+.login--tenant-background::before {
+  background: linear-gradient(90deg, rgba(3, 20, 36, 0.16) 0%, rgba(3, 20, 36, 0.04) 58%, rgba(232, 249, 255, 0.18) 100%);
+}
+
+.login--tenant-background::after {
+  opacity: 0.18;
 }
 
 .cyber-field {
@@ -953,7 +1021,7 @@ onMounted(() => {
   margin-bottom: 20px;
   border: 1px solid rgba(148, 163, 184, 0.34);
   border-radius: 8px;
-  background: rgba(241, 250, 255, 0.78);
+  background: rgba(241, 247, 249, 0.54);
 }
 
 .auth-mode-button {
@@ -991,7 +1059,7 @@ onMounted(() => {
 
 .auth-mode-button.active {
   color: #0f766e;
-  background: #ffffff;
+  background: rgba(255, 255, 255, 0.76);
   box-shadow:
     0 8px 22px rgba(15, 23, 42, 0.08),
     0 0 0 1px rgba(15, 118, 110, 0.16) inset;
@@ -1006,19 +1074,13 @@ onMounted(() => {
   width: 100%;
   padding: 34px;
   overflow: hidden;
-  border: 1px solid rgba(103, 232, 249, 0.32);
+  border: 1px solid var(--login-panel-border, rgba(255, 255, 255, 0.46));
   border-radius: 8px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(239, 252, 255, 0.9)),
-    linear-gradient(90deg, rgba(14, 165, 233, 0.08) 1px, transparent 1px);
-  background-size:
-    auto,
-    24px 24px;
+  background: var(--login-panel-background, rgba(229, 238, 242, 0.9));
   box-shadow:
-    0 28px 80px rgba(15, 23, 42, 0.3),
-    0 0 0 1px rgba(45, 212, 191, 0.08),
-    0 0 46px rgba(14, 165, 233, 0.18);
-  backdrop-filter: blur(20px);
+    0 22px 58px rgba(15, 23, 42, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.42);
+  backdrop-filter: blur(22px) saturate(110%);
 
   &::before {
     position: absolute;
@@ -1028,7 +1090,7 @@ onMounted(() => {
     height: 2px;
     content: '';
     background: linear-gradient(90deg, transparent, #22d3ee, #14b8a6, transparent);
-    box-shadow: 0 0 20px rgba(34, 211, 238, 0.72);
+    box-shadow: 0 0 12px rgba(34, 211, 238, 0.32);
   }
 
   &::after {
@@ -1043,7 +1105,7 @@ onMounted(() => {
     border-bottom: 1px solid rgba(14, 116, 144, 0.2);
     background: linear-gradient(90deg, rgba(14, 116, 144, 0.18) 1px, transparent 1px), linear-gradient(rgba(14, 116, 144, 0.18) 1px, transparent 1px);
     background-size: 12px 12px;
-    opacity: 0.55;
+    display: none;
   }
 
   :deep(.el-form-item) {
@@ -1063,7 +1125,7 @@ onMounted(() => {
   :deep(.el-select__wrapper) {
     min-height: 46px;
     border-radius: 8px;
-    background: rgba(255, 255, 255, 0.78);
+    background: var(--login-panel-input-background, rgba(248, 251, 252, 0.72));
     box-shadow: 0 0 0 1px #c5d7e7 inset;
     transition:
       box-shadow 0.18s ease,

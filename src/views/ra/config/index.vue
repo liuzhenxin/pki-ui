@@ -25,18 +25,6 @@
           </el-form>
         </el-tab-pane>
 
-        <el-tab-pane label="CA接入" name="CA_ACCESS">
-          <el-form :model="caAccessForm" label-width="140px" class="config-form">
-            <el-form-item label="CA服务地址">
-              <el-input v-model="caAccessForm.caAddress" placeholder="http://pki-gateway:5555/api-gateway/ca">
-                <template #append>
-                  <el-button v-hasPermi="['ra:config:get']" icon="Connection" :loading="testing" @click="testActiveConfig">连通性测试</el-button>
-                </template>
-              </el-input>
-            </el-form-item>
-          </el-form>
-        </el-tab-pane>
-
         <el-tab-pane label="RA身份" name="RA_IDENTITY">
           <el-alert
             class="identity-alert"
@@ -134,10 +122,6 @@ const basicForm = reactive({
   renewalBeforeDays: 30
 });
 
-const caAccessForm = reactive({
-  caAddress: 'http://pki-gateway:5555/api-gateway/ca'
-});
-
 const identityForm = reactive({
   certPem: '',
   subject: 'C=CN,O=LiuZX PKI,CN=RA Identity',
@@ -176,9 +160,6 @@ const currentPayload = () => {
   if (activeGroup.value === 'BASIC') {
     return { ...basicForm };
   }
-  if (activeGroup.value === 'CA_ACCESS') {
-    return { ...caAccessForm };
-  }
   if (activeGroup.value === 'RA_IDENTITY') {
     const payload: Record<string, any> = {
       certPem: identityForm.certPem,
@@ -196,8 +177,6 @@ const currentPayload = () => {
 const applyConfig = (group: RaConfigGroup, config: Record<string, any>) => {
   if (group === 'BASIC') {
     assignKnown(basicForm, config);
-  } else if (group === 'CA_ACCESS') {
-    assignKnown(caAccessForm, config);
   } else if (group === 'RA_IDENTITY') {
     assignKnown(identityForm, { ...config, privateKey: '' });
   } else if (group === 'NOTICE_AUDIT') {

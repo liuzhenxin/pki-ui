@@ -11,11 +11,6 @@
     </el-form>
 
     <el-row :gutter="10" class="mb8">
-      <el-col :span="1.5">
-        <el-button type="primary" plain icon="Refresh" :loading="syncLoading" @click="openSyncDialog" v-hasPermi="['ra:root']">
-          同步CA授权
-        </el-button>
-      </el-col>
       <right-toolbar v-model:showSearch="showSearch" @queryTable="getList"></right-toolbar>
     </el-row>
 
@@ -168,55 +163,12 @@
                 </el-form-item>
               </el-tab-pane>
 
-              <el-tab-pane label="CRL配置">
-                <el-form-item label="更新间隔(小时)" prop="crlIntervalHours">
-                  <el-input-number v-model="selfForm.crlIntervalHours" :min="1" style="width: 100%" />
-                </el-form-item>
-                <el-form-item label="全量CRL间隔" prop="crlFullIntervals">
-                  <el-input-number v-model="selfForm.crlFullIntervals" :min="1" style="width: 100%" />
-                </el-form-item>
-                <el-form-item label="增量CRL间隔" prop="deltaCrlIntervals">
-                  <el-input-number v-model="selfForm.deltaCrlIntervals" :min="0" style="width: 100%" />
-                </el-form-item>
-                <el-form-item label="全量CRL签发线程" prop="fullCrlThreads">
-                  <el-input-number v-model="selfForm.fullCrlThreads" :min="1" :max="100" style="width: 100%" />
-                </el-form-item>
-                <el-form-item label="增量CRL签发线程" prop="deltaCrlThreads">
-                  <el-input-number v-model="selfForm.deltaCrlThreads" :min="1" :max="100" style="width: 100%" />
-                </el-form-item>
-                <el-form-item label="重叠时间" prop="crlOverlap">
-                  <el-input v-model="selfForm.crlOverlap" placeholder="例如: 90d" />
-                </el-form-item>
-                <el-form-item label="更新时间点" prop="crlIntervalTime">
-                  <el-input v-model="selfForm.crlIntervalTime" placeholder="例如: 01:00" />
-                </el-form-item>
-                <el-form-item label="下一CRL编号" prop="nextCrlNo">
-                  <el-input-number v-model="selfForm.nextCrlNo" :min="1" style="width: 100%" />
-                </el-form-item>
-              </el-tab-pane>
-
               <el-tab-pane label="URI配置">
                 <el-form-item v-for="(item, index) in selfForm.cacertUris" :key="'cacert-' + index" :label="index === 0 ? 'CA证书URI' : ' '">
                   <div style="display: flex; width: 100%">
                     <el-input v-model="item.value" style="flex: 1; margin-right: 10px" />
                     <el-button v-if="index === 0" @click="addUri('cacertUris')" type="primary" :icon="Plus" circle size="small" />
                     <el-button v-if="index !== 0" @click="removeUri('cacertUris', index)" type="danger" :icon="Minus" circle size="small" />
-                  </div>
-                </el-form-item>
-
-                <el-form-item v-for="(item, index) in selfForm.crlUris" :key="'crl-' + index" :label="index === 0 ? 'CRL URI' : ' '">
-                  <div style="display: flex; width: 100%">
-                    <el-input v-model="item.value" style="flex: 1; margin-right: 10px" />
-                    <el-button v-if="index === 0" @click="addUri('crlUris')" type="primary" :icon="Plus" circle size="small" />
-                    <el-button v-if="index !== 0" @click="removeUri('crlUris', index)" type="danger" :icon="Minus" circle size="small" />
-                  </div>
-                </el-form-item>
-
-                <el-form-item v-for="(item, index) in selfForm.deltaCrlUris" :key="'delta-crl-' + index" :label="index === 0 ? 'Delta CRL URI' : ' '">
-                  <div style="display: flex; width: 100%">
-                    <el-input v-model="item.value" style="flex: 1; margin-right: 10px" />
-                    <el-button v-if="index === 0" @click="addUri('deltaCrlUris')" type="primary" :icon="Plus" circle size="small" />
-                    <el-button v-if="index !== 0" @click="removeUri('deltaCrlUris', index)" type="danger" :icon="Minus" circle size="small" />
                   </div>
                 </el-form-item>
 
@@ -338,181 +290,6 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="syncDialog.visible" title="同步CA授权" width="760px" append-to-body class="sync-ca-dialog">
-      <el-form :model="syncForm" label-width="96px">
-        <el-form-item label="CA地址">
-          <el-input v-model="syncForm.caAddress" placeholder="请先在RA初始化或系统配置中设置CA地址" :disabled="syncAddressLoading" clearable />
-        </el-form-item>
-      </el-form>
-      <el-alert
-        class="sync-tip"
-        type="info"
-        :closable="false"
-        title="同步会使用 RA 身份证书从 CA 拉取已授权给 RA 请求者的根证书和证书模板。"
-        show-icon
-      />
-      <div v-if="syncResult" class="sync-result">
-        <div class="sync-summary">
-          <div class="sync-summary-item">
-            <span>根证书</span>
-            <strong>{{ syncResult.rootCount || 0 }}</strong>
-          </div>
-          <div class="sync-summary-item">
-            <span>授权模板</span>
-            <strong>{{ syncResult.profileCount || 0 }}</strong>
-          </div>
-          <div class="sync-summary-item">
-            <span>授权关系</span>
-            <strong>{{ syncResult.relationCount || 0 }}</strong>
-          </div>
-        </div>
-        <div v-if="syncResult.roots?.length" class="sync-root-list">
-          <div v-for="root in syncResult.roots" :key="String(root.id)" class="sync-root-card">
-            <div class="sync-root-header">
-              <span class="sync-root-name">{{ root.name }}</span>
-              <el-tag type="primary" effect="plain">{{ root.profileCount || 0 }} 个模板</el-tag>
-            </div>
-            <ul v-if="root.profileNames?.length" class="sync-profile-list">
-              <li v-for="name in root.profileNames" :key="name" class="sync-profile-item">{{ name }}</li>
-            </ul>
-            <el-empty v-else description="未同步到授权模板" :image-size="64" />
-          </div>
-        </div>
-      </div>
-      <template #footer>
-        <div class="dialog-footer">
-          <el-button @click="syncDialog.visible = false">取 消</el-button>
-          <el-button type="primary" :loading="syncLoading" :disabled="!syncForm.caAddress.trim()" @click="handleSyncAuthorizedCa">
-            开始同步
-          </el-button>
-        </div>
-      </template>
-    </el-dialog>
-
-    <el-card v-if="crlConfigDialog.visible" ref="crlConfigPanelRef" class="crl-config-panel" shadow="never">
-      <template #header>
-        <div class="crl-config-header">
-          <div>
-            <div class="crl-config-title">{{ crlConfigDialog.title }}</div>
-            <div class="crl-config-subtitle">直接在根证书列表下方维护签发策略、发布地址和手动签发操作。</div>
-          </div>
-          <div class="crl-config-actions">
-            <el-tag :type="crlConfigForm.schedulerRunning ? 'success' : 'info'" effect="light">
-              {{ crlConfigForm.schedulerRunning ? '线程运行中' : '线程已停止' }}
-            </el-tag>
-            <el-button link type="primary" @click="refreshCrlConfig">刷新状态</el-button>
-            <el-button link type="info" @click="closeCrlConfig">收起</el-button>
-          </div>
-        </div>
-      </template>
-
-      <el-form ref="crlConfigFormRef" :model="crlConfigForm" label-width="150px">
-        <el-tabs type="border-card">
-          <el-tab-pane label="签发配置">
-            <el-row :gutter="16">
-              <el-col :xs="24" :sm="12" :lg="8">
-                <el-form-item label="更新间隔(小时)" prop="intervalHours">
-                  <el-select v-model="crlConfigForm.intervalHours" style="width: 100%">
-                    <el-option v-for="item in [1, 2, 3, 4, 6, 8, 12, 24]" :key="item" :label="item + '小时'" :value="item" />
-                  </el-select>
-                </el-form-item>
-              </el-col>
-              <el-col :xs="24" :sm="12" :lg="8">
-                <el-form-item label="全量CRL间隔" prop="fullCrlIntervals">
-                  <el-input-number v-model="crlConfigForm.fullCrlIntervals" :min="1" style="width: 100%" />
-                </el-form-item>
-              </el-col>
-              <el-col :xs="24" :sm="12" :lg="8">
-                <el-form-item label="增量CRL间隔" prop="deltaCrlIntervals">
-                  <el-input-number v-model="crlConfigForm.deltaCrlIntervals" :min="0" style="width: 100%" />
-                </el-form-item>
-              </el-col>
-              <el-col :xs="24" :sm="12" :lg="8">
-                <el-form-item label="全量CRL签发线程" prop="fullCrlThreads">
-                  <el-input-number v-model="crlConfigForm.fullCrlThreads" :min="1" :max="100" style="width: 100%" />
-                </el-form-item>
-              </el-col>
-              <el-col :xs="24" :sm="12" :lg="8">
-                <el-form-item label="增量CRL签发线程" prop="deltaCrlThreads">
-                  <el-input-number v-model="crlConfigForm.deltaCrlThreads" :min="1" :max="100" style="width: 100%" />
-                </el-form-item>
-              </el-col>
-              <el-col :xs="24" :sm="12" :lg="8">
-                <el-form-item label="下一CRL编号" prop="nextCrlNumber">
-                  <el-input-number v-model="crlConfigForm.nextCrlNumber" :min="1" style="width: 100%" />
-                </el-form-item>
-              </el-col>
-              <el-col :xs="24" :sm="12" :lg="8">
-                <el-form-item label="重叠时间" prop="overlap">
-                  <el-input v-model="crlConfigForm.overlap" placeholder="例如: 90d" />
-                </el-form-item>
-              </el-col>
-              <el-col :xs="24" :sm="12" :lg="8">
-                <el-form-item label="更新时间点" prop="intervalTime">
-                  <el-input v-model="crlConfigForm.intervalTime" placeholder="例如: 01:00" />
-                </el-form-item>
-              </el-col>
-            </el-row>
-          </el-tab-pane>
-          <el-tab-pane label="发布地址">
-            <el-form-item v-for="(item, index) in crlConfigForm.crlUris" :key="'cfg-crl-' + index" :label="index === 0 ? '全量CRL URI' : ' '">
-              <div class="uri-row">
-                <el-input v-model="item.value" />
-                <el-button v-if="index === 0" @click="addCrlConfigUri('crlUris')" type="primary" :icon="Plus" circle size="small" />
-                <el-button v-if="index !== 0" @click="removeCrlConfigUri('crlUris', index)" type="danger" :icon="Minus" circle size="small" />
-              </div>
-            </el-form-item>
-            <el-form-item
-              v-for="(item, index) in crlConfigForm.deltaCrlUris"
-              :key="'cfg-delta-crl-' + index"
-              :label="index === 0 ? '增量CRL URI' : ' '"
-            >
-              <div class="uri-row">
-                <el-input v-model="item.value" />
-                <el-button v-if="index === 0" @click="addCrlConfigUri('deltaCrlUris')" type="primary" :icon="Plus" circle size="small" />
-                <el-button v-if="index !== 0" @click="removeCrlConfigUri('deltaCrlUris', index)" type="danger" :icon="Minus" circle size="small" />
-              </div>
-            </el-form-item>
-          </el-tab-pane>
-          <el-tab-pane label="发布操作">
-            <el-form-item label="目标发布者">
-              <el-select v-model="crlConfigForm.publisherId" placeholder="不选择则发布到CA关联发布者" clearable filterable style="width: 100%">
-                <el-option v-for="item in publisherList" :key="item.id" :label="item.name" :value="item.id" />
-              </el-select>
-            </el-form-item>
-            <el-form-item label="发布记录">
-              <el-table :data="crlOperationRecords" size="small" max-height="220" empty-text="暂无本次操作记录">
-                <el-table-column label="时间" prop="time" width="110" />
-                <el-table-column label="操作" prop="action" width="130" />
-                <el-table-column label="CRL编号" prop="crlNo" width="120" />
-                <el-table-column label="目标" prop="publisherName" min-width="150" show-overflow-tooltip />
-                <el-table-column label="结果" prop="status" width="90">
-                  <template #default="scope">
-                    <el-tag :type="scope.row.status === '成功' ? 'success' : 'danger'">{{ scope.row.status }}</el-tag>
-                  </template>
-                </el-table-column>
-                <el-table-column label="说明" prop="message" min-width="180" show-overflow-tooltip />
-              </el-table>
-            </el-form-item>
-          </el-tab-pane>
-        </el-tabs>
-      </el-form>
-
-      <div class="crl-config-footer">
-        <el-button type="primary" @click="submitCrlConfig" v-hasPermi="['ra:root']">保 存</el-button>
-        <el-button type="success" @click="issueCrl(false)" v-hasPermi="['ra:root']">签发全量CRL</el-button>
-        <el-button type="warning" @click="issueCrl(true)" v-hasPermi="['ra:root']">签发增量CRL</el-button>
-        <el-button type="success" plain @click="issueAndPublishCrl(false)" v-if="proxy?.$auth.hasPermiAnd(['ra:root', 'ra:crl'])"
-          >签发并发布全量</el-button
-        >
-        <el-button type="warning" plain @click="issueAndPublishCrl(true)" v-if="proxy?.$auth.hasPermiAnd(['ra:root', 'ra:crl'])"
-          >签发并发布增量</el-button
-        >
-        <el-button v-if="!crlConfigForm.schedulerRunning" type="primary" @click="startCrlScheduler" v-hasPermi="['ra:root']">启动线程</el-button>
-        <el-button v-else type="danger" @click="stopCrlScheduler" v-hasPermi="['ra:root']">停止线程</el-button>
-      </div>
-    </el-card>
-
     <!-- 安全确认对话框 -->
     <SecurityConfirm
       v-model="securityConfirm.visible"
@@ -524,7 +301,7 @@
 </template>
 
 <script setup name="RootCert" lang="ts">
-import { ref, reactive, toRefs, getCurrentInstance, ComponentInternalInstance, watch, nextTick } from 'vue';
+import { ref, reactive, toRefs, getCurrentInstance, ComponentInternalInstance, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage, FormInstance, UploadInstance, UploadProps } from 'element-plus';
 import {
@@ -547,24 +324,11 @@ import SecurityConfirm from '@/components/SecurityConfirm/index.vue';
 import CertProfile from '@/components/CertProfile/index.vue';
 import CertSubject, { typeMapping, sortSubjectItems } from '@/components/CertSubject/index.vue';
 import { listProfile, getProfile } from '@/api/ca/profile';
-import { getConfiguredCaAddress, listRaRootCa, syncAuthorizedCa, type RaAuthorizedCaSyncResult } from '@/api/ra/root';
+import { listRaRootCa } from '@/api/ra/root';
 import { saveRaProfileApprovalMode } from '@/api/ra/profile';
 import { checkPermi } from '@/utils/permission';
 import { listSigner } from '@/api/ca/signer';
-import {
-  genRootCa,
-  enableRootCa,
-  disableRootCa,
-  revokeRootCa,
-  genSubCaOnline,
-  getRootCrlConfig,
-  saveRootCrlConfig,
-  issueRootCrl,
-  startRootCrlScheduler,
-  stopRootCrlScheduler
-} from '@/api/ca/root';
-import { pagePublisher } from '@/api/ca/publisher';
-import { publishCrl } from '@/api/crl';
+import { genRootCa, enableRootCa, disableRootCa, revokeRootCa, genSubCaOnline } from '@/api/ca/root';
 import { X509 } from 'jsrsasign';
 import { parseJson, parseKeyAlgorithms } from '@/utils/json';
 import { parseTime } from '@/utils/ruoyi';
@@ -581,30 +345,7 @@ const securityConfirm = reactive({
   onConfirm: () => {}
 });
 
-const crlConfigDialog = reactive({
-  visible: false,
-  title: 'CRL配置',
-  rootId: undefined as string | number | undefined
-});
-
-const crlConfigForm = reactive({
-  intervalHours: 24,
-  fullCrlIntervals: 10,
-  deltaCrlIntervals: 0,
-  fullCrlThreads: 1,
-  deltaCrlThreads: 1,
-  overlap: '90d',
-  intervalTime: '01:00',
-  nextCrlNumber: 2,
-  crlUris: [{ value: '' }],
-  deltaCrlUris: [{ value: '' }],
-  schedulerRunning: false,
-  publisherId: undefined as string | number | undefined
-});
-
 const loading = ref(false);
-const syncLoading = ref(false);
-const syncAddressLoading = ref(false);
 const showSearch = ref(true);
 const total = ref(0);
 const certList = ref([]);
@@ -616,8 +357,6 @@ const currentCertPem = ref('');
 const dialogType = ref('root'); // 'root' or 'sub'
 const rootCaProfiles = ref([]);
 const signerList = ref([]);
-const publisherList = ref<any[]>([]);
-const crlOperationRecords = ref<any[]>([]);
 const availableAlgos = ref(['RSA2048', 'RSA4096', 'SM2']);
 const profileDetailDialog = reactive({
   visible: false,
@@ -627,13 +366,6 @@ const profileDetailDialog = reactive({
 
 const queryForm = ref<FormInstance>();
 const expandedRootIds = ref<Array<string | number>>([]);
-const syncDialog = reactive({
-  visible: false
-});
-const syncForm = reactive({
-  caAddress: ''
-});
-const syncResult = ref<RaAuthorizedCaSyncResult | null>(null);
 
 const data = reactive({
   queryParams: {
@@ -658,19 +390,8 @@ const data = reactive({
     expirationPeriod: 365,
     keepExpiredCertDays: -1,
     validityMode: 'cutoff',
-    // CRL配置
-    crlIntervalHours: 24,
-    crlFullIntervals: 10,
-    deltaCrlIntervals: 0,
-    fullCrlThreads: 1,
-    deltaCrlThreads: 1,
-    crlOverlap: '90d',
-    crlIntervalTime: '01:00',
-    nextCrlNo: 2,
     // URI配置
     cacertUris: [{ value: 'https://myorg.org/rootca1.der' }],
-    crlUris: [{ value: 'https://localhost:8081/dummy/crl/?type=crl&name=rootca1' }],
-    deltaCrlUris: [{ value: '' }],
     ocspUris: [{ value: 'https://localhost:8080/ocsp/responder1' }],
     // 高级配置
     snSize: 20,
@@ -748,8 +469,6 @@ const importRules = {
 const selfFormRef = ref<FormInstance>();
 const importFormRef = ref<FormInstance>();
 const onlineSubFormRef = ref<FormInstance>();
-const crlConfigFormRef = ref<FormInstance>();
-const crlConfigPanelRef = ref<any>();
 const uploadRef = ref<UploadInstance>();
 
 /** 解析 X509 日期格式 */
@@ -894,43 +613,6 @@ function handleQuery() {
 function resetQuery() {
   queryForm.value?.resetFields();
   handleQuery();
-}
-
-async function openSyncDialog() {
-  syncResult.value = null;
-  syncDialog.visible = true;
-  syncAddressLoading.value = true;
-  try {
-    const res = await getConfiguredCaAddress();
-    syncForm.caAddress = res.data?.caAddress?.trim() || '';
-    if (!syncForm.caAddress) {
-      ElMessage.warning('未找到初始化时配置的CA地址，请先完成CA接入配置');
-    }
-  } catch (error: any) {
-    syncForm.caAddress = '';
-    ElMessage.error(error.response?.data?.msg || error.message || '读取CA地址失败');
-  } finally {
-    syncAddressLoading.value = false;
-  }
-}
-
-async function handleSyncAuthorizedCa() {
-  if (!syncForm.caAddress.trim()) {
-    ElMessage.warning('请输入CA地址');
-    return;
-  }
-  syncLoading.value = true;
-  try {
-    const res = await syncAuthorizedCa({ caAddress: syncForm.caAddress.trim() });
-    syncResult.value = (res.data || null) as RaAuthorizedCaSyncResult | null;
-    await getList();
-    ElMessage.success('CA授权同步完成');
-  } catch (error: any) {
-    const errMsg = error.response?.data?.msg || error.message || 'CA授权同步失败';
-    ElMessage.error(errMsg);
-  } finally {
-    syncLoading.value = false;
-  }
 }
 
 function handleRootRowClick(row: any) {
@@ -1225,43 +907,9 @@ async function onProfileChange(profileId: any) {
         ]);
       }
 
-      // 5. 设置CRL配置
-      if (conf.crlControl) {
-        if (conf.crlControl.intervalHours) {
-          selfForm.value.crlIntervalHours = conf.crlControl.intervalHours;
-        }
-        if (conf.crlControl.fullIntervals) {
-          selfForm.value.crlFullIntervals = conf.crlControl.fullIntervals;
-        }
-        if (conf.crlControl.deltaCrlIntervals) {
-          selfForm.value.deltaCrlIntervals = conf.crlControl.deltaCrlIntervals;
-        }
-        if (conf.crlControl.fullCrlThreads) {
-          selfForm.value.fullCrlThreads = conf.crlControl.fullCrlThreads;
-        }
-        if (conf.crlControl.deltaCrlThreads) {
-          selfForm.value.deltaCrlThreads = conf.crlControl.deltaCrlThreads;
-        }
-        if (conf.crlControl.overlap) {
-          selfForm.value.crlOverlap = conf.crlControl.overlap;
-        }
-        if (conf.crlControl.intervalTime) {
-          selfForm.value.crlIntervalTime = conf.crlControl.intervalTime;
-        }
-        if (conf.crlControl.nextCrlNumber) {
-          selfForm.value.nextCrlNo = conf.crlControl.nextCrlNumber;
-        }
-      }
-
-      // 6. 设置URI配置
+      // 5. 设置URI配置
       if (conf.caCertUris && Array.isArray(conf.caCertUris) && conf.caCertUris.length > 0) {
         selfForm.value.cacertUris = conf.caCertUris.map((uri: string) => ({ value: uri }));
-      }
-      if (conf.crlUris && Array.isArray(conf.crlUris) && conf.crlUris.length > 0) {
-        selfForm.value.crlUris = conf.crlUris.map((uri: string) => ({ value: uri }));
-      }
-      if (conf.deltaCrlUris && Array.isArray(conf.deltaCrlUris) && conf.deltaCrlUris.length > 0) {
-        selfForm.value.deltaCrlUris = conf.deltaCrlUris.map((uri: string) => ({ value: uri }));
       }
       if (conf.ocspUris && Array.isArray(conf.ocspUris) && conf.ocspUris.length > 0) {
         selfForm.value.ocspUris = conf.ocspUris.map((uri: string) => ({ value: uri }));
@@ -1298,17 +946,7 @@ function reset() {
     expirationPeriod: 365,
     keepExpiredCertDays: -1,
     validityMode: 'cutoff',
-    crlIntervalHours: 24,
-    crlFullIntervals: 10,
-    deltaCrlIntervals: 0,
-    fullCrlThreads: 1,
-    deltaCrlThreads: 1,
-    crlOverlap: '90d',
-    crlIntervalTime: '01:00',
-    nextCrlNo: 2,
     cacertUris: [{ value: 'https://myorg.org/rootca1.der' }],
-    crlUris: [{ value: 'https://localhost:8081/dummy/crl/?type=crl&name=rootca1' }],
-    deltaCrlUris: [{ value: '' }],
     ocspUris: [{ value: 'https://localhost:8080/ocsp/responder1' }],
     snSize: 20,
     status: 'active'
@@ -1363,16 +1001,6 @@ function submitForm() {
       if (valid) {
         loading.value = true;
         try {
-          const crlControlArr = [
-            `interval.hours=${selfForm.value.crlIntervalHours}`,
-            `fullcrl.intervals=${selfForm.value.crlFullIntervals}`,
-            `deltacrl.intervals=${selfForm.value.deltaCrlIntervals}`,
-            `fullcrl.threads=${selfForm.value.fullCrlThreads}`,
-            `deltacrl.threads=${selfForm.value.deltaCrlThreads}`,
-            `overlap=${selfForm.value.crlOverlap}`,
-            `interval.time=${selfForm.value.crlIntervalTime}`
-          ];
-
           const reqData = {
             name: selfForm.value.name,
             signerId: selfForm.value.signerId,
@@ -1394,11 +1022,7 @@ function submitForm() {
             validityModeS: selfForm.value.validityMode === 'cutoff' ? 'CUTOFF' : selfForm.value.validityMode === 'strict' ? 'STRICT' : 'LAX',
             caStatus: selfForm.value.status,
             snLen: selfForm.value.snSize,
-            nextCrlNumber: selfForm.value.nextCrlNo,
-            crlControl: crlControlArr.join(','),
             caCertUris: selfForm.value.cacertUris.map((u: any) => u.value).filter((v: any) => v),
-            crlUris: selfForm.value.crlUris.map((u: any) => u.value).filter((v: any) => v),
-            deltaCrlUris: selfForm.value.deltaCrlUris.map((u: any) => u.value).filter((v: any) => v),
             ocspUris: selfForm.value.ocspUris.map((u: any) => u.value).filter((v: any) => v)
           };
 
@@ -1462,205 +1086,12 @@ function submitForm() {
   }
 }
 
-const addUri = (field: 'cacertUris' | 'crlUris' | 'deltaCrlUris' | 'ocspUris') => {
+const addUri = (field: 'cacertUris' | 'ocspUris') => {
   selfForm.value[field].push({ value: '' });
 };
 
-const removeUri = (field: 'cacertUris' | 'crlUris' | 'deltaCrlUris' | 'ocspUris', index: number) => {
+const removeUri = (field: 'cacertUris' | 'ocspUris', index: number) => {
   selfForm.value[field].splice(index, 1);
-};
-
-function getResultData(res: any) {
-  return res?.data ?? res ?? {};
-}
-
-function toNumberValue(value: any, defaultValue: number) {
-  const numberValue = Number(value);
-  return Number.isFinite(numberValue) ? numberValue : defaultValue;
-}
-
-function applyCrlConfig(data: any) {
-  const config = getResultData(data);
-  crlConfigForm.intervalHours = toNumberValue(config?.intervalHours, 24);
-  crlConfigForm.fullCrlIntervals = toNumberValue(config?.fullCrlIntervals, 10);
-  crlConfigForm.deltaCrlIntervals = toNumberValue(config?.deltaCrlIntervals, 0);
-  crlConfigForm.fullCrlThreads = toNumberValue(config?.fullCrlThreads, 1);
-  crlConfigForm.deltaCrlThreads = toNumberValue(config?.deltaCrlThreads, 1);
-  crlConfigForm.overlap = config?.overlap || '90d';
-  crlConfigForm.intervalTime = config?.intervalTime || '01:00';
-  crlConfigForm.nextCrlNumber = toNumberValue(config?.nextCrlNumber, 2);
-  crlConfigForm.crlUris = (config?.crlUris && config.crlUris.length > 0 ? config.crlUris : ['']).map((value: string) => ({ value }));
-  crlConfigForm.deltaCrlUris = (config?.deltaCrlUris && config.deltaCrlUris.length > 0 ? config.deltaCrlUris : ['']).map((value: string) => ({
-    value
-  }));
-  crlConfigForm.schedulerRunning = !!config?.schedulerRunning;
-}
-
-async function loadPublisherList() {
-  try {
-    const res = await pagePublisher({ pageNum: 1, pageSize: 200, status: '0' });
-    publisherList.value = res.data?.rows || res.data?.records || [];
-  } catch (error) {
-    publisherList.value = [];
-  }
-}
-
-function getSelectedPublisherName() {
-  if (!crlConfigForm.publisherId) {
-    return 'CA关联发布者';
-  }
-  const publisher = publisherList.value.find((item: any) => item.id === crlConfigForm.publisherId);
-  return publisher?.name || String(crlConfigForm.publisherId);
-}
-
-function addCrlOperationRecord(record: any) {
-  crlOperationRecords.value.unshift({
-    time: parseTime(new Date(), '{h}:{i}:{s}'),
-    publisherName: getSelectedPublisherName(),
-    ...record
-  });
-  crlOperationRecords.value = crlOperationRecords.value.slice(0, 10);
-}
-
-async function handleCrlConfig(row: any) {
-  crlConfigDialog.rootId = row.id;
-  crlConfigDialog.title = `CRL配置 - ${row.name}`;
-  crlConfigForm.publisherId = undefined;
-  crlOperationRecords.value = [];
-  try {
-    await loadPublisherList();
-    const res = await getRootCrlConfig(row.id);
-    applyCrlConfig(res);
-    crlConfigDialog.visible = true;
-    await nextTick();
-    crlConfigPanelRef.value?.$el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  } catch (error: any) {
-    ElMessage.error(error.response?.data?.msg || error.message || '加载CRL配置失败');
-  }
-}
-
-function closeCrlConfig() {
-  crlConfigDialog.visible = false;
-  crlConfigDialog.rootId = undefined;
-}
-
-async function refreshCrlConfig() {
-  if (!crlConfigDialog.rootId) return;
-  try {
-    const res = await getRootCrlConfig(crlConfigDialog.rootId);
-    applyCrlConfig(res);
-    ElMessage.success('CRL线程状态已刷新');
-  } catch (error: any) {
-    ElMessage.error(error.response?.data?.msg || error.message || '刷新CRL配置失败');
-  }
-}
-
-function buildCrlConfigPayload() {
-  return {
-    intervalHours: crlConfigForm.intervalHours,
-    fullCrlIntervals: crlConfigForm.fullCrlIntervals,
-    deltaCrlIntervals: crlConfigForm.deltaCrlIntervals,
-    fullCrlThreads: crlConfigForm.fullCrlThreads,
-    deltaCrlThreads: crlConfigForm.deltaCrlThreads,
-    overlap: crlConfigForm.overlap,
-    intervalTime: crlConfigForm.intervalTime,
-    nextCrlNumber: crlConfigForm.nextCrlNumber,
-    crlUris: crlConfigForm.crlUris.map((u: any) => u.value).filter((v: any) => v),
-    deltaCrlUris: crlConfigForm.deltaCrlUris.map((u: any) => u.value).filter((v: any) => v)
-  };
-}
-
-async function submitCrlConfig() {
-  if (!crlConfigDialog.rootId) return;
-  try {
-    const res = await saveRootCrlConfig(crlConfigDialog.rootId, buildCrlConfigPayload());
-    applyCrlConfig(res);
-    ElMessage.success('CRL配置已保存');
-    getList();
-  } catch (error: any) {
-    ElMessage.error(error.response?.data?.msg || error.message || '保存CRL配置失败');
-  }
-}
-
-async function issueCrl(deltaCrl: boolean) {
-  if (!crlConfigDialog.rootId) return;
-  try {
-    const issueRes = await issueRootCrl(crlConfigDialog.rootId, { deltaCrl, crlScope: 0 });
-    addCrlOperationRecord({
-      action: deltaCrl ? '签发增量' : '签发全量',
-      crlNo: issueRes.data?.crlNo || issueRes.data?.id || '-',
-      status: '成功',
-      message: 'CRL已生成'
-    });
-    ElMessage.success(deltaCrl ? '增量CRL签发成功' : '全量CRL签发成功');
-    const res = await getRootCrlConfig(crlConfigDialog.rootId);
-    applyCrlConfig(res);
-    getList();
-  } catch (error: any) {
-    addCrlOperationRecord({
-      action: deltaCrl ? '签发增量' : '签发全量',
-      crlNo: '-',
-      status: '失败',
-      message: error.response?.data?.msg || error.message || 'CRL签发失败'
-    });
-    ElMessage.error(error.response?.data?.msg || error.message || 'CRL签发失败');
-  }
-}
-
-async function issueAndPublishCrl(deltaCrl: boolean) {
-  if (!crlConfigDialog.rootId) return;
-  try {
-    const issueRes = await issueRootCrl(crlConfigDialog.rootId, { deltaCrl, crlScope: 0 });
-    const crl = issueRes.data || {};
-    await publishCrl({ crlId: crl.id, publisherId: crlConfigForm.publisherId });
-    addCrlOperationRecord({
-      action: deltaCrl ? '签发发布增量' : '签发发布全量',
-      crlNo: crl.crlNo || crl.id || '-',
-      status: '成功',
-      message: 'CRL已生成并提交发布'
-    });
-    ElMessage.success(deltaCrl ? '增量CRL已签发并发布' : '全量CRL已签发并发布');
-    await refreshCrlConfig();
-    getList();
-  } catch (error: any) {
-    addCrlOperationRecord({
-      action: deltaCrl ? '签发发布增量' : '签发发布全量',
-      crlNo: '-',
-      status: '失败',
-      message: error.response?.data?.msg || error.message || 'CRL签发发布失败'
-    });
-    ElMessage.error(error.response?.data?.msg || error.message || 'CRL签发发布失败');
-  }
-}
-
-async function startCrlScheduler() {
-  if (!crlConfigDialog.rootId) return;
-  try {
-    const res = await startRootCrlScheduler(crlConfigDialog.rootId);
-    applyCrlConfig(res);
-    ElMessage.success('CRL签发线程已启动');
-  } catch (error: any) {
-    ElMessage.error(error.response?.data?.msg || error.message || '启动CRL签发线程失败');
-  }
-}
-
-async function stopCrlScheduler() {
-  if (!crlConfigDialog.rootId) return;
-  try {
-    const res = await stopRootCrlScheduler(crlConfigDialog.rootId);
-    applyCrlConfig(res);
-    ElMessage.success('CRL签发线程已停止');
-  } catch (error: any) {
-    ElMessage.error(error.response?.data?.msg || error.message || '停止CRL签发线程失败');
-  }
-}
-
-const addCrlConfigUri = (field: 'crlUris' | 'deltaCrlUris') => {
-  crlConfigForm[field].push({ value: '' });
-};
-
-const removeCrlConfigUri = (field: 'crlUris' | 'deltaCrlUris', index: number) => {
-  crlConfigForm[field].splice(index, 1);
 };
 
 /** 查看详情 */
@@ -1942,57 +1373,5 @@ getList();
   background: #f7f9fc;
   border: 1px solid var(--el-border-color-lighter);
   border-radius: 4px;
-}
-
-.crl-config-panel {
-  margin-top: 16px;
-  border: 1px solid #dcdfe6;
-}
-
-.crl-config-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.crl-config-title {
-  color: #303133;
-  font-size: 16px;
-  font-weight: 600;
-  line-height: 24px;
-}
-
-.crl-config-subtitle {
-  margin-top: 4px;
-  color: #909399;
-  font-size: 12px;
-  line-height: 18px;
-}
-
-.crl-config-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
-.uri-row {
-  display: flex;
-  width: 100%;
-  gap: 10px;
-}
-
-.uri-row .el-input {
-  flex: 1;
-}
-
-.crl-config-footer {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 16px;
 }
 </style>

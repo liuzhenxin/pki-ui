@@ -26,6 +26,7 @@ import SideBar from './components/Sidebar/index.vue';
 import { AppMain, Navbar, Settings, TagsView } from './components';
 import { useAppStore } from '@/store/modules/app';
 import { useSettingsStore } from '@/store/modules/settings';
+import { useUserStore } from '@/store/modules/user';
 import { initWebSocket } from '@/utils/websocket';
 import { initSSE } from '@/utils/sse';
 
@@ -65,6 +66,28 @@ onMounted(() => {
   nextTick(() => {
     //navbarRef.value?.initTenantList();
   });
+});
+
+const idleEvents = ['click', 'keydown', 'mousemove', 'scroll'] as const;
+let idleTimer: number | undefined;
+
+const resetIdleTimer = () => {
+  const minutes = Number(sessionStorage.getItem('idleTimeoutMinutes') || 240);
+  window.clearTimeout(idleTimer);
+  idleTimer = window.setTimeout(async () => {
+    await useUserStore().logout();
+    window.location.href = '/login';
+  }, Math.max(5, minutes) * 60 * 1000);
+};
+
+onMounted(() => {
+  idleEvents.forEach((eventName) => window.addEventListener(eventName, resetIdleTimer, { passive: true }));
+  resetIdleTimer();
+});
+
+onUnmounted(() => {
+  idleEvents.forEach((eventName) => window.removeEventListener(eventName, resetIdleTimer));
+  window.clearTimeout(idleTimer);
 });
 
 onMounted(() => {

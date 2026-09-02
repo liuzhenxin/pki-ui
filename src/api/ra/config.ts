@@ -1,7 +1,7 @@
 import request from '@/utils/request';
 import { Result } from '@/api/types';
 
-export type RaConfigGroup = 'BASIC' | 'CA_ACCESS' | 'RA_IDENTITY' | 'NOTICE_AUDIT';
+export type RaConfigGroup = 'BASIC' | 'RA_IDENTITY' | 'NOTICE_AUDIT';
 
 export interface RaConfigCO {
   group: RaConfigGroup;
