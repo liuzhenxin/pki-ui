@@ -8,8 +8,7 @@ import setting from '@/settings';
 
 // pc端固定客户端授权id
 const clientId = import.meta.env.VITE_APP_CLIENT_ID;
-const oauthBasicAuthorization =
-  import.meta.env.VITE_APP_OAUTH_BASIC_AUTH || 'Basic OTVUeFNzVFBGQTN0RjEyVEJTTW1VVkswZGE6RnBId0lmdzR3WTkyZE8=';
+const oauthBasicAuthorization = import.meta.env.VITE_APP_OAUTH_BASIC_AUTH || 'Basic OTVUeFNzVFBGQTN0RjEyVEJTTW1VVkswZGE6RnBId0lmdzR3WTkyZE8=';
 export const certificateLoginClientId = import.meta.env.VITE_APP_CERTIFICATE_CLIENT_ID || '95TxSsTPFA3tF12TBSMmUVK0da';
 export const certificateSignatureGrantType = 'urn:liuzx:params:oauth:grant-type:certificate-signature';
 /**

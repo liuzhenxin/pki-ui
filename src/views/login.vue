@@ -173,33 +173,64 @@
                 </span>
                 <div>
                   <p class="cert-reader-title">选择本机身份证书</p>
-                  <p class="cert-reader-desc">请插入 UKey 等硬件证书介质，后端接口接入后启用。</p>
+                  <p class="cert-reader-desc">请插入 USB Key，并确认本机 SKF 服务已启动。</p>
                 </div>
               </div>
-              <button class="cert-select-button" type="button" disabled>
+              <button class="cert-select-button" type="button" :disabled="certificateReading || certificateLoading" @click="readCertificateList">
                 <svg-icon icon-class="search" />
-                读取证书列表
+                {{ certificateReading ? '正在读取证书…' : '读取证书列表' }}
               </button>
+              <el-select
+                v-if="certificateOptions.length"
+                v-model="certificateForm.certKey"
+                size="large"
+                filterable
+                placeholder="请选择签名证书"
+                style="width: 100%"
+              >
+                <el-option v-for="item in certificateOptions" :key="item.key" :label="item.label" :value="item.key" />
+              </el-select>
               <div class="cert-placeholder">
                 <div class="cert-placeholder-line">
                   <span>证书主体</span>
-                  <strong>等待选择</strong>
+                  <strong>{{ selectedCertificate?.subject || '等待选择' }}</strong>
                 </div>
                 <div class="cert-placeholder-line">
                   <span>证书序列号</span>
-                  <strong>未读取</strong>
+                  <strong>{{ selectedCertificate?.serialNumber || '未读取' }}</strong>
                 </div>
                 <div class="cert-placeholder-line">
                   <span>有效期</span>
-                  <strong>未校验</strong>
+                  <strong>{{ selectedCertificate?.validity || '未校验' }}</strong>
                 </div>
               </div>
+              <el-input
+                v-model="certificateForm.pin"
+                size="large"
+                type="password"
+                show-password
+                autocomplete="off"
+                placeholder="请输入 USB Key User PIN"
+                :disabled="!selectedCertificate || certificateLoading"
+                @keyup.enter="handleCertificateLogin"
+              >
+                <template #prefix><svg-icon icon-class="key" class="el-input__icon input-icon" /></template>
+              </el-input>
               <div class="cert-flow">
                 <span><svg-icon icon-class="cert" /> 选择证书</span>
                 <span><svg-icon icon-class="key" /> PIN 签名</span>
                 <span><svg-icon icon-class="lock" /> 身份验证</span>
               </div>
-              <el-button size="large" type="primary" class="login-button cert-login-button" disabled>证书登录暂未接入</el-button>
+              <el-button
+                size="large"
+                type="primary"
+                class="login-button cert-login-button"
+                :loading="certificateLoading"
+                :disabled="!selectedCertificate || !certificateForm.pin"
+                @click="handleCertificateLogin"
+              >
+                {{ certificateLoading ? certificateLoginStep : '使用证书登录' }}
+              </el-button>
             </div>
           </template>
         </el-form>
@@ -213,7 +244,10 @@
 </template>
 
 <script setup lang="ts">
-import { getCodeImg, getLoginHints, getSecrets } from '@/api/login';
+import { createCertificateLoginChallenge, getCodeImg, getLoginHints, getSecrets, verifyCertificateLoginSignature } from '@/api/login';
+import SKFClient from '@/api/skf/skf_api';
+import { calculateSm2SignatureDigest } from '@/utils/sm2SignatureDigest';
+import { X509 } from 'jsrsasign';
 
 import { getTenant } from '@/api/system/tenant';
 import { getTenantList } from '@/api/login';
@@ -304,6 +338,21 @@ const loginTitle = ref(proxy.$t('login.title'));
 const authMode = ref<'password' | 'certificate'>('password');
 const radiusRequired = ref(false);
 const radiusAuthMethod = ref<'PAP' | 'CHAP'>('PAP');
+type CertificateOption = {
+  key: string;
+  cert: string;
+  label: string;
+  subject: string;
+  serialNumber: string;
+  validity: string;
+};
+const certificateOptions = ref<CertificateOption[]>([]);
+const certificateForm = reactive({ certKey: '', pin: '' });
+const certificateReading = ref(false);
+const certificateLoading = ref(false);
+const certificateLoginStep = ref('正在验证证书…');
+let skfClient: SKFClient | null = null;
+const selectedCertificate = computed(() => certificateOptions.value.find((item) => item.key === certificateForm.certKey));
 
 const tenantLoginBackgrounds: Record<string, string> = {
   '1': opsLoginBackground,
@@ -385,6 +434,119 @@ const handleLogin = () => {
     }
   });
 };
+
+function parseCertificateOption(item: any): CertificateOption | null {
+  try {
+    const cert = String(item?.cert || '').replace(/\s+/g, '');
+    if (!cert || item?.type !== 'Sign') return null;
+    const x509 = new X509();
+    x509.readCertPEM(`-----BEGIN CERTIFICATE-----\n${cert.match(/.{1,64}/g)?.join('\n')}\n-----END CERTIFICATE-----`);
+    const subject = x509.getSubjectString();
+    const serialNumber = x509.getSerialNumberHex().toUpperCase();
+    const validity = `${formatCertificateTime(x509.getNotBefore())} 至 ${formatCertificateTime(x509.getNotAfter())}`;
+    return {
+      key: String(item.key),
+      cert,
+      label: `${subject} · ${serialNumber}`,
+      subject,
+      serialNumber,
+      validity
+    };
+  } catch {
+    return null;
+  }
+}
+
+function formatCertificateTime(value: string) {
+  const normalized = String(value || '').replace(/Z$/, '');
+  if (!/^\d{12}$|^\d{14}$/.test(normalized)) return value || '-';
+  const offset = normalized.length === 12 ? 2 : 4;
+  const shortYear = normalized.slice(0, offset);
+  const year = offset === 4 ? shortYear : Number(shortYear) >= 50 ? `19${shortYear}` : `20${shortYear}`;
+  return `${year}-${normalized.slice(offset, offset + 2)}-${normalized.slice(offset + 2, offset + 4)} ${normalized.slice(offset + 4, offset + 6)}:${normalized.slice(offset + 6, offset + 8)}:${normalized.slice(offset + 8, offset + 10)} UTC`;
+}
+
+async function getCertificateSkfClient() {
+  if (skfClient?.isConnected()) return skfClient;
+  skfClient = new SKFClient('ws://127.0.0.1:9001');
+  await skfClient.connect();
+  return skfClient;
+}
+
+async function readCertificateList() {
+  certificateReading.value = true;
+  try {
+    const skf = await getCertificateSkfClient();
+    certificateOptions.value = (await skf.findCertificates('Sign'))
+      .map(parseCertificateOption)
+      .filter((item): item is CertificateOption => item !== null);
+    if (!certificateOptions.value.length) {
+      certificateForm.certKey = '';
+      ElMessage.warning('USB Key 中未找到可用的签名证书');
+      return;
+    }
+    if (!certificateOptions.value.some((item) => item.key === certificateForm.certKey)) {
+      certificateForm.certKey = certificateOptions.value[0].key;
+    }
+    ElMessage.success(`已读取 ${certificateOptions.value.length} 张签名证书`);
+  } catch (error: any) {
+    certificateOptions.value = [];
+    certificateForm.certKey = '';
+    ElMessage.error(`读取 USB Key 失败：${error?.message || '请检查本机 SKF 服务'}`);
+  } finally {
+    certificateReading.value = false;
+  }
+}
+
+async function handleCertificateLogin() {
+  const certificate = selectedCertificate.value;
+  const tenantCode = String(loginForm.value.tenantCode || '');
+  if (!tenantCode) {
+    ElMessage.warning('请先选择租户');
+    return;
+  }
+  if (!certificate || !certificateForm.pin) {
+    ElMessage.warning('请选择签名证书并输入 USB Key PIN');
+    return;
+  }
+
+  certificateLoading.value = true;
+  try {
+    certificateLoginStep.value = '正在申请挑战…';
+    const challengeResponse: any = await createCertificateLoginChallenge({ tenantCode, certificate: certificate.cert });
+    const challenge = challengeResponse?.data;
+    if (!challenge?.challengeId || !challenge?.signData) throw new Error('认证服务未返回有效挑战');
+
+    const skf = await getCertificateSkfClient();
+    certificateLoginStep.value = '正在验证 PIN…';
+    await skf.checkPIN(certificate.key, certificateForm.pin);
+    certificateLoginStep.value = '请在 USB Key 上确认签名…';
+    const digest = calculateSm2SignatureDigest(certificate.cert, challenge.signData, challenge.sm2UserId);
+    const signature = await skf.signData(certificate.key, digest);
+
+    certificateLoginStep.value = '正在验证身份…';
+    const verificationResponse: any = await verifyCertificateLoginSignature({
+      challengeId: challenge.challengeId,
+      certificate: certificate.cert,
+      signature
+    });
+    const certificateCode = verificationResponse?.data?.certificateCode;
+    if (!certificateCode) throw new Error('认证服务未返回一次性认证码');
+
+    certificateLoginStep.value = '正在签发令牌…';
+    await userStore.certificateLogin(certificateCode, String(loginForm.value.tenantId || ''));
+    localStorage.setItem('tenantId', String(loginForm.value.tenantId || ''));
+    localStorage.setItem('tenantCode', tenantCode);
+    certificateForm.pin = '';
+    await router.push(redirect.value || '/');
+  } catch (error: any) {
+    certificateForm.pin = '';
+    ElMessage.error(error?.message || error?.msg || '证书登录失败，请重新读取证书后重试');
+  } finally {
+    certificateLoading.value = false;
+    certificateLoginStep.value = '正在验证证书…';
+  }
+}
 
 /**
  * 获取验证码
@@ -590,6 +752,10 @@ onMounted(() => {
   getSecretKey();
   getLoginData();
   initTenantList().then(() => loadLoginHints());
+});
+
+onBeforeUnmount(() => {
+  skfClient?.disconnect();
 });
 </script>
 
