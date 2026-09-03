@@ -60,10 +60,12 @@
           ></el-table-column
         >
         <el-table-column label="当前镜像版本" prop="image" min-width="220" show-overflow-tooltip />
-        <el-table-column label="最新稳定版本" width="130"
+        <el-table-column label="最新正式版本" width="150"
           ><template #default="{ row }"
-            ><el-tag v-if="versionOf(row).updateAvailable" type="warning">{{ versionOf(row).latestTag }}</el-tag
-            ><span v-else>{{ versionOf(row).latestTag || '-' }}</span></template
+            ><el-tag v-if="versionOf(row).status === 'ERROR'" type="danger">扫描失败</el-tag
+            ><el-tag v-else-if="versionOf(row).status === 'NOT_FOUND'" type="info">仓库无版本</el-tag
+            ><el-tag v-else-if="versionOf(row).updateAvailable" type="warning">{{ versionOf(row).latestReleaseTag }}</el-tag
+            ><span v-else>{{ versionOf(row).latestReleaseTag || '-' }}</span></template
           ></el-table-column
         >
         <el-table-column label="镜像摘要" width="145"
@@ -156,7 +158,11 @@
         ><el-descriptions-item label="容器">{{ selected.name }}</el-descriptions-item
         ><el-descriptions-item label="当前版本">{{ selected.image }}</el-descriptions-item
         ><el-descriptions-item label="目标版本">{{ targetImage }}</el-descriptions-item
-        ><el-descriptions-item label="目标 Digest">{{ versionOf(selected).latestDigest }}</el-descriptions-item></el-descriptions
+        ><el-descriptions-item label="目标 Digest">{{ versionOf(selected).latestReleaseDigest || '-' }}</el-descriptions-item
+        ><el-descriptions-item label="仓库扫描状态">{{ registryStatusText(versionOf(selected).status) }}</el-descriptions-item
+        ><el-descriptions-item v-if="versionOf(selected).lastError" label="扫描错误">{{
+          versionOf(selected).lastError
+        }}</el-descriptions-item></el-descriptions
       >
       <p>
         请输入容器名称 <b>{{ selected?.name }}</b> 确认：
@@ -186,6 +192,7 @@
 
 <script setup name="OpsContainer" lang="ts">
 import { ElMessage, ElMessageBox } from 'element-plus';
+import { v4 as uuidv4 } from 'uuid';
 import {
   checkOpsContainerUpdates,
   getOpsContainerLogs,
@@ -225,15 +232,13 @@ const versionOf = (row?: Row) => (row ? versions.value[keyOf(row)] : undefined) 
 const manageable = (row: Row) => row.manageable === true;
 const canUpgrade = (row: Row) => manageable(row) && row.health !== 'none' && row.health !== 'unknown' && versionOf(row).updateAvailable;
 const disabledReason = (row: Row) =>
-  ['none', 'unknown'].includes(row.health)
-    ? '缺少有效 Docker healthcheck'
-    : !versionOf(row).updateAvailable
-      ? '没有更高的稳定版本'
-      : '';
+  ['none', 'unknown'].includes(row.health) ? '缺少有效 Docker healthcheck' : !versionOf(row).updateAvailable ? '没有更高的正式版本' : '';
 const healthText = (health: string) =>
   ({ healthy: '健康', unhealthy: '异常', starting: '启动中', none: '无检查', unknown: '未知' })[health] || health || '未知';
 const healthType = (health: string) => (health === 'healthy' ? 'success' : health === 'starting' ? 'warning' : health === 'none' ? 'info' : 'danger');
 const shortDigest = (digest?: string) => (digest ? `${digest.slice(0, 18)}…` : '-');
+const registryStatusText = (status?: string) =>
+  ({ AVAILABLE: '可用', NOT_FOUND: '仓库或正式版本不存在', ERROR: '扫描失败' })[status || ''] || '尚未扫描';
 const filteredContainers = computed(() =>
   containers.value.filter(
     (row) =>
@@ -265,8 +270,8 @@ const operationStep = computed(() =>
 const targetImage = computed(() => {
   const row = selected.value;
   const v = versionOf(row);
-  if (!row || !v.latestTag) return '';
-  return `${row.image.slice(0, row.image.lastIndexOf(':'))}:${v.latestTag}`;
+  if (!row || !v.latestReleaseTag) return '';
+  return `${row.image.slice(0, row.image.lastIndexOf(':'))}:${v.latestReleaseTag}`;
 });
 const handleQuery = () => {
   page.value.pageNum = 1;
@@ -326,8 +331,8 @@ const submitAction = async (row: Row, action: OpsContainerAction) => {
   operation.value = await submitOpsContainerAction(row.serverCode, row.name, {
     action,
     targetImage: action === 'UPGRADE' ? targetImage.value : undefined,
-    targetDigest: action === 'UPGRADE' ? version.latestDigest : undefined,
-    idempotencyKey: crypto.randomUUID(),
+    targetDigest: action === 'UPGRADE' ? version.latestReleaseDigest : undefined,
+    idempotencyKey: uuidv4(),
     confirmed: true
   });
   upgradeVisible.value = false;

@@ -238,7 +238,7 @@
     </div>
     <!--  底部  -->
     <div class="el-login-footer">
-      <span>Copyright © 2018-2026 立志报国 All Rights Reserved.</span>
+      <span>版本信息：v{{ systemVersion }}</span>
     </div>
   </div>
 </template>
@@ -273,6 +273,7 @@ import licenseLoginBackground from '@/assets/images/login/tenant-license.webp';
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
 
 const title = import.meta.env.VITE_APP_TITLE;
+const systemVersion = import.meta.env.VITE_APP_VERSION || '4.2.1';
 const userStore = useUserStore();
 const settingsStore = useSettingsStore();
 const router = useRouter();
