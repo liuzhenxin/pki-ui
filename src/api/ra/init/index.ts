@@ -16,6 +16,7 @@ export interface RaProfileItem {
 
 export interface RaCaSyncRequest {
   caAddress: string;
+  requestorName: string;
 }
 
 export interface RaCaSyncRoot {
@@ -59,7 +60,6 @@ export interface RaInitStatus {
   profileCount?: number;
   rootCount?: number;
   relationCount?: number;
-  policyCount?: number;
   workflowCount?: number;
   userCount?: number;
   accountCertCount?: number;
@@ -165,9 +165,9 @@ export function getAdminCertOptions(): Promise<Result<RaAdminCertOptions>> {
   });
 }
 
-export function initPolicies(): Promise<Result<any>> {
+export function initWorkflow(): Promise<Result<any>> {
   return request({
-    url: '/ra/v1/init/policies',
+    url: '/ra/v1/init/workflow',
     method: 'post'
   });
 }

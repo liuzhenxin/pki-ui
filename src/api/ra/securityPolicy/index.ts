@@ -3,6 +3,7 @@ import { Result } from '@/api/types';
 
 export interface SecurityPolicy {
   id?: number | string;
+  tenantId?: number;
   policyName: string;
   policyType: string;
   policyContent: string;
@@ -46,10 +47,11 @@ export function getSecurityPolicy(id: number | string): Promise<Result<SecurityP
   }) as any;
 }
 
-export function getCurrentSecurityPolicy(): Promise<Result<SecurityPolicy>> {
+export function getCurrentSecurityPolicy(tenantId?: number): Promise<Result<SecurityPolicy>> {
   return request({
     url: '/admin/v1/security-policies/current',
-    method: 'get'
+    method: 'get',
+    params: tenantId != null ? { tenantId } : undefined
   }) as any;
 }
 

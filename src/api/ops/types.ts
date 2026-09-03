@@ -15,8 +15,8 @@ export interface OpsContainer {
   composeConfigFiles: string;
   manageable: boolean;
   managementReason: string;
-  latestTag: string;
-  latestDigest: string;
+  latestReleaseTag: string;
+  latestReleaseDigest: string;
   updateAvailable: boolean;
 }
 
@@ -24,9 +24,12 @@ export interface OpsContainerVersion {
   repository: string;
   currentTag: string;
   currentDigest: string;
-  latestTag: string;
-  latestDigest: string;
-  scannedAt?: string;
+  latestReleaseTag: string;
+  latestReleaseDigest: string;
+  status: 'AVAILABLE' | 'NOT_FOUND' | 'ERROR' | string;
+  lastSuccessAt?: string;
+  lastAttemptAt?: string;
+  lastError?: string;
   updateAvailable: boolean;
 }
 

@@ -15,7 +15,7 @@
         <el-step title="协议" />
         <el-step title="RA身份证书" />
         <el-step title="同步CA" />
-        <el-step title="策略" />
+        <el-step title="审批流程" />
         <el-step title="管理员设置" />
         <el-step title="审计员设置" />
         <el-step title="完成" />
@@ -104,6 +104,9 @@
               <el-form-item label="CA地址">
                 <el-input v-model="caSyncForm.caAddress" placeholder="例如：http://pki-gateway:5555/api-gateway/ca" clearable />
               </el-form-item>
+              <el-form-item label="请求者名称">
+                <el-input v-model="caSyncForm.requestorName" placeholder="CA中配置的RA请求者名称" clearable />
+              </el-form-item>
             </el-form>
             <div class="sync-action">
               <el-button
@@ -111,7 +114,7 @@
                 size="large"
                 :icon="Refresh"
                 :loading="caSyncLoading"
-                :disabled="!caSyncForm.caAddress.trim()"
+                :disabled="!caSyncForm.caAddress.trim() || !caSyncForm.requestorName.trim()"
                 @click="syncCaFromRemote"
               >
                 同步CA
@@ -155,10 +158,10 @@
 
         <section v-if="activeStep === 3" class="step-content">
           <div class="step-title">
-            <h2>策略与流程初始化</h2>
-            <p>写入 RA 默认注册策略、安全策略和证书申请审批流程。</p>
+            <h2>审批流程初始化</h2>
+            <p>写入 RA 默认配置和证书申请审批流程。</p>
           </div>
-          <el-descriptions border :column="1" class="policy-summary">
+          <el-descriptions border :column="1" class="init-summary">
             <el-descriptions-item label="CA模式">接入已有 CA，不在 RA 保存 CA 私钥</el-descriptions-item>
             <el-descriptions-item label="证书申请">启用注册申请、资料审核、证书签发的默认流程</el-descriptions-item>
             <el-descriptions-item label="审批规则">默认一审，由 RA 审核员处理</el-descriptions-item>
@@ -197,18 +200,8 @@
                 </el-select>
               </el-form-item>
               <el-form-item label="证书模板" prop="certProfileId">
-                <el-select
-                  v-model="adminForm.certProfileId"
-                  placeholder="请选择授权模板"
-                  :disabled="adminProfileOptions.length === 0"
-                  filterable
-                >
-                  <el-option
-                    v-for="profile in adminProfileOptions"
-                    :key="String(profile.id)"
-                    :label="profile.name"
-                    :value="String(profile.id)"
-                  >
+                <el-select v-model="adminForm.certProfileId" placeholder="请选择授权模板" :disabled="adminProfileOptions.length === 0" filterable>
+                  <el-option v-for="profile in adminProfileOptions" :key="String(profile.id)" :label="profile.name" :value="String(profile.id)">
                     <span>{{ profile.name }}</span>
                     <span class="option-type">{{ profile.type }}</span>
                   </el-option>
@@ -264,9 +257,7 @@
                 <el-input v-model="adminForm.adminPin" type="password" show-password placeholder="请输入 USBKey User PIN" />
               </el-form-item>
               <el-form-item label="证书操作">
-                <el-button type="primary" :loading="adminGeneratingCert" @click="generateAndWriteAdminCert">
-                  生成 CSR 并签发写入 USBKey
-                </el-button>
+                <el-button type="primary" :loading="adminGeneratingCert" @click="generateAndWriteAdminCert"> 生成 CSR 并签发写入 USBKey </el-button>
                 <el-tag v-if="adminForm.adminCertPem" class="cert-written-tag" type="success" effect="plain">管理员证书已写入</el-tag>
               </el-form-item>
             </div>
@@ -292,7 +283,7 @@
                 <el-icon><Refresh /></el-icon>
                 <span>证书签发配置</span>
               </div>
-              <el-descriptions border :column="1" class="policy-summary">
+              <el-descriptions border :column="1" class="init-summary">
                 <el-descriptions-item label="根证书">{{ selectedAdminRoot?.name || '未选择' }}</el-descriptions-item>
                 <el-descriptions-item label="证书模板">{{ selectedAdminProfile?.name || '未选择' }}</el-descriptions-item>
               </el-descriptions>
@@ -390,7 +381,7 @@ import {
   importIdentityCert,
   issueAdminAccountCert,
   initAdmin,
-  initPolicies,
+  initWorkflow,
   syncCa,
   unwrapRaData
 } from '@/api/ra/init';
@@ -439,7 +430,8 @@ const identityForm = reactive({
 });
 
 const caSyncForm = reactive({
-  caAddress: 'http://pki-gateway:5555/api-gateway/ca'
+  caAddress: 'http://pki-gateway:5555/api-gateway/ca',
+  requestorName: 'ra'
 });
 
 const randomContainerName = (prefix: string) => {
@@ -524,7 +516,6 @@ const statusCards = computed(() => [
   { label: '模板', value: statusInfo.value.profileCount ?? 0 },
   { label: 'CA根', value: statusInfo.value.rootCount ?? 0 },
   { label: '授权关系', value: statusInfo.value.relationCount ?? 0 },
-  { label: '策略', value: statusInfo.value.policyCount ?? 0 },
   { label: '流程', value: statusInfo.value.workflowCount ?? 0 },
   { label: '账号', value: statusInfo.value.userCount ?? 0 }
 ]);
@@ -587,7 +578,6 @@ const normalizeStatus = (data: any): RaInitStatus => {
     profileCount: Number(data.profileCount ?? 0),
     rootCount: Number(data.rootCount ?? 0),
     relationCount: Number(data.relationCount ?? 0),
-    policyCount: Number(data.policyCount ?? 0),
     workflowCount: Number(data.workflowCount ?? 0),
     userCount: Number(data.userCount ?? 0),
     accountCertCount: Number(data.accountCertCount ?? 0)
@@ -606,7 +596,7 @@ const resolveActiveStep = (tenantStatus: number | undefined, status: RaInitStatu
   if ((status.accountCertCount ?? 0) >= 2) {
     return 5;
   }
-  if ((status.policyCount ?? 0) > 0 || (status.workflowCount ?? 0) > 0 || tenantStatus === 3 || tenantStatus === 4) {
+  if ((status.workflowCount ?? 0) > 0 || tenantStatus === 3 || tenantStatus === 4) {
     return 4;
   }
   if ((status.rootCount ?? 0) > 0 || (status.relationCount ?? 0) > 0 || tenantStatus === 2) {
@@ -802,7 +792,10 @@ const onAuditorDeviceChange = async () => {
 
 const generateAndWriteAdminCert = async () => {
   const fields = ['certRootId', 'certProfileId', 'adminProvider', 'adminDevice', 'adminAppName', 'adminContainerName', 'adminPin'];
-  const valid = await adminFormRef.value?.validateField(fields).then(() => true).catch(() => false);
+  const valid = await adminFormRef.value
+    ?.validateField(fields)
+    .then(() => true)
+    .catch(() => false);
   if (!valid || adminGeneratingCert.value) {
     return;
   }
@@ -844,7 +837,10 @@ const generateAndWriteAdminCert = async () => {
 
 const generateAndWriteAuditorCert = async () => {
   const fields = ['auditorProvider', 'auditorDevice', 'auditorAppName', 'auditorContainerName', 'auditorPin'];
-  const valid = await auditorFormRef.value?.validateField(fields).then(() => true).catch(() => false);
+  const valid = await auditorFormRef.value
+    ?.validateField(fields)
+    .then(() => true)
+    .catch(() => false);
   if (!valid || auditorGeneratingCert.value) {
     return;
   }
@@ -874,14 +870,7 @@ const generateAndWriteAuditorCert = async () => {
     if (!certPem) {
       throw new Error('CA未返回签发证书');
     }
-    await skf.importCertificate(
-      adminForm.auditorProvider,
-      adminForm.auditorDevice,
-      adminForm.auditorAppName,
-      csrRes.container,
-      true,
-      certPem
-    );
+    await skf.importCertificate(adminForm.auditorProvider, adminForm.auditorDevice, adminForm.auditorAppName, csrRes.container, true, certPem);
     adminForm.auditorCertPem = certPem;
     ElMessage.success('审计员证书生成并写入 USBKey 成功');
   } catch (e: any) {
@@ -892,14 +881,15 @@ const generateAndWriteAuditorCert = async () => {
 };
 
 const syncCaFromRemote = async () => {
-  if (!caSyncForm.caAddress.trim()) {
-    ElMessage.warning('请输入CA地址');
+  if (!caSyncForm.caAddress.trim() || !caSyncForm.requestorName.trim()) {
+    ElMessage.warning('请输入CA地址和请求者名称');
     return;
   }
   caSyncLoading.value = true;
   try {
     const res = await syncCa({
-      caAddress: caSyncForm.caAddress.trim()
+      caAddress: caSyncForm.caAddress.trim(),
+      requestorName: caSyncForm.requestorName.trim()
     });
     const data = unwrapRaData<RaCaSyncResult>(res) || ({} as RaCaSyncResult);
     caSyncResult.value = data;
@@ -984,9 +974,9 @@ const next = async () => {
       ElMessage.warning('请先同步 CA，获取已授权的根证书和模板');
       return;
     } else if (activeStep.value === 3) {
-      await initPolicies();
+      await initWorkflow();
       await loadInitInfo();
-      ElMessage.success('策略与流程已初始化');
+      ElMessage.success('审批流程已初始化');
     } else if (activeStep.value === 4) {
       const valid = await adminFormRef.value?.validate().catch(() => false);
       if (!valid) {
@@ -1269,7 +1259,7 @@ onMounted(async () => {
   font-size: 12px;
 }
 
-.policy-summary {
+.init-summary {
   margin-top: 18px;
 }
 

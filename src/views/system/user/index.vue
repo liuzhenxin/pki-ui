@@ -114,7 +114,7 @@
               </template>
             </el-table-column>
 
-            <el-table-column label="操作" fixed="right" width="180" class-name="small-padding fixed-width">
+            <el-table-column label="操作" fixed="right" width="220" class-name="small-padding fixed-width">
               <template #default="scope">
                 <el-tooltip v-if="scope.row.userId !== 1" content="修改" placement="top">
                   <el-button v-hasPermi="['system:user:edit']" link type="primary" icon="Edit" @click="handleUpdate(scope.row)"></el-button>
@@ -125,6 +125,16 @@
 
                 <el-tooltip v-if="scope.row.userId !== 1" content="重置密码" placement="top">
                   <el-button v-hasPermi="['system:user:resetPwd']" link type="primary" icon="Key" @click="handleResetPwd(scope.row)"></el-button>
+                </el-tooltip>
+
+                <el-tooltip content="清除登录锁定" placement="top">
+                  <el-button
+                    v-hasPermi="['sys:user:modify', 'system:user:edit']"
+                    link
+                    type="primary"
+                    icon="Unlock"
+                    @click="handleUnlockLogin(scope.row)"
+                  ></el-button>
                 </el-tooltip>
 
                 <el-tooltip v-if="scope.row.userId !== 1" content="分配角色" placement="top">
@@ -535,6 +545,12 @@ const handleResetPwd = async (row: UserVO) => {
     await api.resetUserPwd(row.userId, res.value);
     proxy?.$modal.msgSuccess('修改成功，新密码是：' + res.value);
   }
+};
+
+const handleUnlockLogin = async (row: UserVO) => {
+  const userId = row.userId || (row as any).id;
+  await api.unlockLogin(userId);
+  proxy?.$modal.msgSuccess('已清除登录锁定');
 };
 
 /** 选择条数  */

@@ -60,6 +60,9 @@
             <el-tab-pane label="修改密码" name="resetPwd">
               <resetPwd />
             </el-tab-pane>
+            <el-tab-pane label="管理员证书" name="adminCertificate">
+              <adminCertificate />
+            </el-tab-pane>
           </el-tabs>
         </el-card>
       </el-col>
@@ -71,6 +74,7 @@
 import UserAvatar from './userAvatar.vue';
 import UserInfo from './userInfo.vue';
 import ResetPwd from './resetPwd.vue';
+import AdminCertificate from './adminCertificate.vue';
 import { getUserProfile } from '@/api/system/user';
 import { UserVO } from '@/api/system/user/types';
 

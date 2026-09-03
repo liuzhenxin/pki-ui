@@ -1,6 +1,6 @@
 <template>
-  <div class="login" :style="loginBackgroundStyle">
-    <div class="cyber-field" aria-hidden="true">
+  <div class="login" :class="{ 'login--tenant-background': hasTenantLoginBackground }" :style="loginBackgroundStyle">
+    <div v-if="!hasTenantLoginBackground" class="cyber-field" aria-hidden="true">
       <div class="pki-backdrop">
         <span class="cert-visual cert-primary">
           <i></i>
@@ -127,7 +127,7 @@
               >
                 <template #prefix><svg-icon icon-class="validCode" class="el-input__icon input-icon" /></template>
               </el-input>
-              <button class="login-code" type="button" title="刷新验证码" @click="getCode">
+              <button class="login-code" type="button" title="刷新验证码" :disabled="captchaLoading" @click="getCode()">
                 <img :src="codeUrl" class="login-code-img" alt="验证码" />
               </button>
             </el-form-item>
@@ -173,33 +173,64 @@
                 </span>
                 <div>
                   <p class="cert-reader-title">选择本机身份证书</p>
-                  <p class="cert-reader-desc">请插入 UKey 等硬件证书介质，后端接口接入后启用。</p>
+                  <p class="cert-reader-desc">请插入 USB Key，并确认本机 SKF 服务已启动。</p>
                 </div>
               </div>
-              <button class="cert-select-button" type="button" disabled>
+              <button class="cert-select-button" type="button" :disabled="certificateReading || certificateLoading" @click="readCertificateList">
                 <svg-icon icon-class="search" />
-                读取证书列表
+                {{ certificateReading ? '正在读取证书…' : '读取证书列表' }}
               </button>
+              <el-select
+                v-if="certificateOptions.length"
+                v-model="certificateForm.certKey"
+                size="large"
+                filterable
+                placeholder="请选择签名证书"
+                style="width: 100%"
+              >
+                <el-option v-for="item in certificateOptions" :key="item.key" :label="item.label" :value="item.key" />
+              </el-select>
               <div class="cert-placeholder">
                 <div class="cert-placeholder-line">
                   <span>证书主体</span>
-                  <strong>等待选择</strong>
+                  <strong>{{ selectedCertificate?.subject || '等待选择' }}</strong>
                 </div>
                 <div class="cert-placeholder-line">
                   <span>证书序列号</span>
-                  <strong>未读取</strong>
+                  <strong>{{ selectedCertificate?.serialNumber || '未读取' }}</strong>
                 </div>
                 <div class="cert-placeholder-line">
                   <span>有效期</span>
-                  <strong>未校验</strong>
+                  <strong>{{ selectedCertificate?.validity || '未校验' }}</strong>
                 </div>
               </div>
+              <el-input
+                v-model="certificateForm.pin"
+                size="large"
+                type="password"
+                show-password
+                autocomplete="off"
+                placeholder="请输入 USB Key User PIN"
+                :disabled="!selectedCertificate || certificateLoading"
+                @keyup.enter="handleCertificateLogin"
+              >
+                <template #prefix><svg-icon icon-class="key" class="el-input__icon input-icon" /></template>
+              </el-input>
               <div class="cert-flow">
                 <span><svg-icon icon-class="cert" /> 选择证书</span>
                 <span><svg-icon icon-class="key" /> PIN 签名</span>
                 <span><svg-icon icon-class="lock" /> 身份验证</span>
               </div>
-              <el-button size="large" type="primary" class="login-button cert-login-button" disabled>证书登录暂未接入</el-button>
+              <el-button
+                size="large"
+                type="primary"
+                class="login-button cert-login-button"
+                :loading="certificateLoading"
+                :disabled="!selectedCertificate || !certificateForm.pin"
+                @click="handleCertificateLogin"
+              >
+                {{ certificateLoading ? certificateLoginStep : '使用证书登录' }}
+              </el-button>
             </div>
           </template>
         </el-form>
@@ -207,13 +238,16 @@
     </div>
     <!--  底部  -->
     <div class="el-login-footer">
-      <span>Copyright © 2018-2026 立志报国 All Rights Reserved.</span>
+      <span>版本信息：v{{ systemVersion }}</span>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { getCodeImg, getSecrets } from '@/api/login';
+import { createCertificateLoginChallenge, getCodeImg, getLoginHints, getSecrets, verifyCertificateLoginSignature } from '@/api/login';
+import SKFClient from '@/api/skf/skf_api';
+import { calculateSm2SignatureDigest, normalizeSm2SignatureForApi } from '@/utils/sm2SignatureDigest';
+import { X509 } from 'jsrsasign';
 
 import { getTenant } from '@/api/system/tenant';
 import { getTenantList } from '@/api/login';
@@ -239,6 +273,7 @@ import licenseLoginBackground from '@/assets/images/login/tenant-license.webp';
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
 
 const title = import.meta.env.VITE_APP_TITLE;
+const systemVersion = import.meta.env.VITE_APP_VERSION || '4.2.1';
 const userStore = useUserStore();
 const settingsStore = useSettingsStore();
 const router = useRouter();
@@ -285,6 +320,9 @@ const codeUrl = ref('');
 const loading = ref(false);
 // 验证码开关
 const captchaEnabled = ref(true);
+const captchaLoading = ref(false);
+const CAPTCHA_REQUEST_INTERVAL_MS = 1200;
+let lastCaptchaRequestAt = 0;
 // 租户开关
 const tenantEnabled = ref(false);
 // 租户列表
@@ -301,6 +339,22 @@ const loginTitle = ref(proxy.$t('login.title'));
 const authMode = ref<'password' | 'certificate'>('password');
 const radiusRequired = ref(false);
 const radiusAuthMethod = ref<'PAP' | 'CHAP'>('PAP');
+type CertificateOption = {
+  key: string;
+  cert: string;
+  label: string;
+  subject: string;
+  serialNumber: string;
+  validity: string;
+};
+const certificateOptions = ref<CertificateOption[]>([]);
+const certificateForm = reactive({ certKey: '', pin: '' });
+const certificateReading = ref(false);
+const certificateLoading = ref(false);
+const certificateLoginStep = ref('正在验证证书…');
+const skfServiceUrl = import.meta.env.VITE_APP_SKF_WS_URL || 'ws://127.0.0.1:9001';
+let skfClient: SKFClient | null = null;
+const selectedCertificate = computed(() => certificateOptions.value.find((item) => item.key === certificateForm.certKey));
 
 const tenantLoginBackgrounds: Record<string, string> = {
   '1': opsLoginBackground,
@@ -311,9 +365,24 @@ const tenantLoginBackgrounds: Record<string, string> = {
   '10': nasLoginBackground,
   '100': licenseLoginBackground
 };
-const loginBackgroundStyle = computed(() => ({
-  '--login-background-image': `url("${tenantLoginBackgrounds[String(loginForm.value.tenantId || '')] || defaultLoginBackground}")`
-}));
+const tenantLoginPanelThemes: Record<string, { panel: string; input: string; border: string }> = {
+  '4': {
+    panel: 'rgba(244, 241, 233, 0.9)',
+    input: 'rgba(255, 252, 246, 0.72)',
+    border: 'rgba(255, 255, 255, 0.5)'
+  }
+};
+const hasTenantLoginBackground = computed(() => Boolean(tenantLoginBackgrounds[String(loginForm.value.tenantId || '')]));
+const loginBackgroundStyle = computed(() => {
+  const tenantId = String(loginForm.value.tenantId || '');
+  const panelTheme = tenantLoginPanelThemes[tenantId];
+  return {
+    '--login-background-image': `url("${tenantLoginBackgrounds[tenantId] || defaultLoginBackground}")`,
+    '--login-panel-background': panelTheme?.panel || 'rgba(229, 238, 242, 0.9)',
+    '--login-panel-input-background': panelTheme?.input || 'rgba(248, 251, 252, 0.72)',
+    '--login-panel-border': panelTheme?.border || 'rgba(255, 255, 255, 0.46)'
+  };
+});
 
 watch(
   () => router.currentRoute.value,
@@ -354,8 +423,11 @@ const handleLogin = () => {
         loading.value = false;
       } else {
         loading.value = false;
-        // 重新获取验证码
-        if (captchaEnabled.value) {
+        const msg = String((err as any)?.message || (err as any)?.msg || '');
+        if (msg.includes('请输入验证码')) {
+          captchaEnabled.value = true;
+          await getCode();
+        } else if (captchaEnabled.value) {
           await getCode();
         }
       }
@@ -365,21 +437,170 @@ const handleLogin = () => {
   });
 };
 
+function parseCertificateOption(item: any): CertificateOption | null {
+  try {
+    const cert = String(item?.cert || '').replace(/\s+/g, '');
+    if (!cert || item?.type !== 'Sign') return null;
+    const x509 = new X509();
+    x509.readCertPEM(`-----BEGIN CERTIFICATE-----\n${cert.match(/.{1,64}/g)?.join('\n')}\n-----END CERTIFICATE-----`);
+    const subject = x509.getSubjectString();
+    const serialNumber = x509.getSerialNumberHex().toUpperCase();
+    const validity = `${formatCertificateTime(x509.getNotBefore())} 至 ${formatCertificateTime(x509.getNotAfter())}`;
+    return {
+      key: String(item.key),
+      cert,
+      label: `${subject} · ${serialNumber}`,
+      subject,
+      serialNumber,
+      validity
+    };
+  } catch {
+    return null;
+  }
+}
+
+function formatCertificateTime(value: string) {
+  const normalized = String(value || '').replace(/Z$/, '');
+  if (!/^\d{12}$|^\d{14}$/.test(normalized)) return value || '-';
+  const offset = normalized.length === 12 ? 2 : 4;
+  const shortYear = normalized.slice(0, offset);
+  const year = offset === 4 ? shortYear : Number(shortYear) >= 50 ? `19${shortYear}` : `20${shortYear}`;
+  return `${year}-${normalized.slice(offset, offset + 2)}-${normalized.slice(offset + 2, offset + 4)} ${normalized.slice(offset + 4, offset + 6)}:${normalized.slice(offset + 6, offset + 8)}:${normalized.slice(offset + 8, offset + 10)} UTC`;
+}
+
+async function getCertificateSkfClient() {
+  if (skfClient?.isConnected()) return skfClient;
+  skfClient = new SKFClient(skfServiceUrl);
+  await skfClient.connect();
+  return skfClient;
+}
+
+async function readCertificateList() {
+  certificateReading.value = true;
+  try {
+    const skf = await getCertificateSkfClient();
+    certificateOptions.value = (await skf.findCertificates('Sign'))
+      .map(parseCertificateOption)
+      .filter((item): item is CertificateOption => item !== null);
+    if (!certificateOptions.value.length) {
+      certificateForm.certKey = '';
+      ElMessage.warning('USB Key 中未找到可用的签名证书');
+      return;
+    }
+    if (!certificateOptions.value.some((item) => item.key === certificateForm.certKey)) {
+      certificateForm.certKey = certificateOptions.value[0].key;
+    }
+    ElMessage.success(`已读取 ${certificateOptions.value.length} 张签名证书`);
+  } catch (error: any) {
+    certificateOptions.value = [];
+    certificateForm.certKey = '';
+    ElMessage.error(`读取 USB Key 失败：${error?.message || '请检查本机 SKF 服务'}`);
+  } finally {
+    certificateReading.value = false;
+  }
+}
+
+async function handleCertificateLogin() {
+  const certificate = selectedCertificate.value;
+  const tenantCode = String(loginForm.value.tenantCode || '');
+  if (!tenantCode) {
+    ElMessage.warning('请先选择租户');
+    return;
+  }
+  if (!certificate || !certificateForm.pin) {
+    ElMessage.warning('请选择签名证书并输入 USB Key PIN');
+    return;
+  }
+
+  certificateLoading.value = true;
+  try {
+    certificateLoginStep.value = '正在申请挑战…';
+    const challengeResponse: any = await createCertificateLoginChallenge({ tenantCode, certificate: certificate.cert });
+    const challenge = challengeResponse?.data;
+    if (!challenge?.challengeId || !challenge?.signData) throw new Error('认证服务未返回有效挑战');
+
+    const skf = await getCertificateSkfClient();
+    certificateLoginStep.value = '正在验证 PIN…';
+    const pinValid = await skf.checkPIN(certificate.key, certificateForm.pin);
+    if (!pinValid) throw new Error('USB Key PIN 验证失败');
+    certificateLoginStep.value = '请在 USB Key 上确认签名…';
+    const digest = calculateSm2SignatureDigest(certificate.cert, challenge.signData, challenge.sm2UserId);
+    const signature = normalizeSm2SignatureForApi(await skf.signData(certificate.key, digest));
+
+    certificateLoginStep.value = '正在验证身份…';
+    const verificationResponse: any = await verifyCertificateLoginSignature({
+      challengeId: challenge.challengeId,
+      certificate: certificate.cert,
+      signature
+    });
+    const certificateCode = verificationResponse?.data?.certificateCode;
+    if (!certificateCode) throw new Error('认证服务未返回一次性认证码');
+
+    certificateLoginStep.value = '正在签发令牌…';
+    await userStore.certificateLogin(certificateCode, String(loginForm.value.tenantId || ''));
+    localStorage.setItem('tenantId', String(loginForm.value.tenantId || ''));
+    localStorage.setItem('tenantCode', tenantCode);
+    certificateForm.pin = '';
+    await router.push(redirect.value || '/');
+  } catch (error: any) {
+    certificateForm.pin = '';
+    ElMessage.error(error?.message || error?.msg || '证书登录失败，请重新读取证书后重试');
+  } finally {
+    certificateLoading.value = false;
+    certificateLoginStep.value = '正在验证证书…';
+  }
+}
+
 /**
  * 获取验证码
  */
-const getCode = async () => {
+const getCode = async (tenantCode = String(loginForm.value.tenantCode || '')) => {
+  const now = Date.now();
+  if (captchaLoading.value || now - lastCaptchaRequestAt < CAPTCHA_REQUEST_INTERVAL_MS) {
+    return;
+  }
+
+  captchaLoading.value = true;
+  lastCaptchaRequestAt = now;
   try {
-    // 刷新验证码时清空输入框
     loginForm.value.code = '';
     const uuid = uuidv4();
-    const res = await getCodeImg(uuid);
+    const res = await getCodeImg(uuid, tenantCode);
+    if (tenantCode !== String(loginForm.value.tenantCode || '')) {
+      return;
+    }
     loginForm.value.uuid = uuid;
     const { data } = res;
     codeUrl.value = data;
   } catch (err) {
     console.error('获取验证码请求异常', err);
-    // 例如弹出提示框或设置全局错误状态
+  } finally {
+    captchaLoading.value = false;
+  }
+};
+
+const loadLoginHints = async () => {
+  const tenantCode = String(loginForm.value.tenantCode || '');
+  if (!tenantCode) {
+    return;
+  }
+  try {
+    const res = await getLoginHints(tenantCode);
+    const hints = (res as any)?.data ?? res;
+    if (tenantCode !== String(loginForm.value.tenantCode || '')) {
+      return;
+    }
+    captchaEnabled.value = hints?.captchaEnabled !== false;
+    sessionStorage.setItem('idleTimeoutMinutes', String(hints?.idleTimeoutMinutes || 240));
+    if (captchaEnabled.value) {
+      await getCode(tenantCode);
+    }
+  } catch (_err) {
+    if (tenantCode !== String(loginForm.value.tenantCode || '')) {
+      return;
+    }
+    captchaEnabled.value = true;
+    await getCode(tenantCode);
   }
 };
 
@@ -486,6 +707,7 @@ const handleTenantChange = (val: string) => {
     localStorage.setItem('tenantCode', String(tenant.tenantCode));
     getTenantInfo(val);
     refreshRadiusStatus(tenant.tenantCode);
+    loadLoginHints();
   }
 };
 
@@ -530,10 +752,13 @@ const doSocialLogin = (type: string) => {
 };
 
 onMounted(() => {
-  getCode();
   getSecretKey();
   getLoginData();
-  initTenantList();
+  initTenantList().then(() => loadLoginHints());
+});
+
+onBeforeUnmount(() => {
+  skfClient?.disconnect();
 });
 </script>
 
@@ -576,6 +801,18 @@ onMounted(() => {
     56px 56px,
     180px 180px;
   mask-image: linear-gradient(90deg, rgba(0, 0, 0, 0.72), transparent 88%);
+}
+
+.login--tenant-background {
+  background: var(--login-background-image) center / cover no-repeat;
+}
+
+.login--tenant-background::before {
+  background: linear-gradient(90deg, rgba(3, 20, 36, 0.16) 0%, rgba(3, 20, 36, 0.04) 58%, rgba(232, 249, 255, 0.18) 100%);
+}
+
+.login--tenant-background::after {
+  opacity: 0.18;
 }
 
 .cyber-field {
@@ -953,7 +1190,7 @@ onMounted(() => {
   margin-bottom: 20px;
   border: 1px solid rgba(148, 163, 184, 0.34);
   border-radius: 8px;
-  background: rgba(241, 250, 255, 0.78);
+  background: rgba(241, 247, 249, 0.54);
 }
 
 .auth-mode-button {
@@ -991,7 +1228,7 @@ onMounted(() => {
 
 .auth-mode-button.active {
   color: #0f766e;
-  background: #ffffff;
+  background: rgba(255, 255, 255, 0.76);
   box-shadow:
     0 8px 22px rgba(15, 23, 42, 0.08),
     0 0 0 1px rgba(15, 118, 110, 0.16) inset;
@@ -1006,19 +1243,13 @@ onMounted(() => {
   width: 100%;
   padding: 34px;
   overflow: hidden;
-  border: 1px solid rgba(103, 232, 249, 0.32);
+  border: 1px solid var(--login-panel-border, rgba(255, 255, 255, 0.46));
   border-radius: 8px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(239, 252, 255, 0.9)),
-    linear-gradient(90deg, rgba(14, 165, 233, 0.08) 1px, transparent 1px);
-  background-size:
-    auto,
-    24px 24px;
+  background: var(--login-panel-background, rgba(229, 238, 242, 0.9));
   box-shadow:
-    0 28px 80px rgba(15, 23, 42, 0.3),
-    0 0 0 1px rgba(45, 212, 191, 0.08),
-    0 0 46px rgba(14, 165, 233, 0.18);
-  backdrop-filter: blur(20px);
+    0 22px 58px rgba(15, 23, 42, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.42);
+  backdrop-filter: blur(22px) saturate(110%);
 
   &::before {
     position: absolute;
@@ -1028,7 +1259,7 @@ onMounted(() => {
     height: 2px;
     content: '';
     background: linear-gradient(90deg, transparent, #22d3ee, #14b8a6, transparent);
-    box-shadow: 0 0 20px rgba(34, 211, 238, 0.72);
+    box-shadow: 0 0 12px rgba(34, 211, 238, 0.32);
   }
 
   &::after {
@@ -1043,7 +1274,7 @@ onMounted(() => {
     border-bottom: 1px solid rgba(14, 116, 144, 0.2);
     background: linear-gradient(90deg, rgba(14, 116, 144, 0.18) 1px, transparent 1px), linear-gradient(rgba(14, 116, 144, 0.18) 1px, transparent 1px);
     background-size: 12px 12px;
-    opacity: 0.55;
+    display: none;
   }
 
   :deep(.el-form-item) {
@@ -1063,7 +1294,7 @@ onMounted(() => {
   :deep(.el-select__wrapper) {
     min-height: 46px;
     border-radius: 8px;
-    background: rgba(255, 255, 255, 0.78);
+    background: var(--login-panel-input-background, rgba(248, 251, 252, 0.72));
     box-shadow: 0 0 0 1px #c5d7e7 inset;
     transition:
       box-shadow 0.18s ease,

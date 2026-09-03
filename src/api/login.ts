@@ -8,6 +8,9 @@ import setting from '@/settings';
 
 // pc端固定客户端授权id
 const clientId = import.meta.env.VITE_APP_CLIENT_ID;
+const oauthBasicAuthorization = import.meta.env.VITE_APP_OAUTH_BASIC_AUTH || 'Basic OTVUeFNzVFBGQTN0RjEyVEJTTW1VVkswZGE6RnBId0lmdzR3WTkyZE8=';
+export const certificateLoginClientId = import.meta.env.VITE_APP_CERTIFICATE_CLIENT_ID || '95TxSsTPFA3tF12TBSMmUVK0da';
+export const certificateSignatureGrantType = 'urn:liuzx:params:oauth:grant-type:certificate-signature';
 /**
  * @param data {LoginData}
  * @returns
@@ -35,7 +38,7 @@ export function login(data: LoginData): Promise<LoginResult> {
       isToken: false,
       isEncrypt: false,
       repeatSubmit: false,
-      'Authorization': 'Basic OTVUeFNzVFBGQTN0RjEyVEJTTW1VVkswZGE6RnBId0lmdzR3WTkyZE8=',
+      Authorization: oauthBasicAuthorization,
       'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
     },
     // 设置序列化请求函数
@@ -75,7 +78,7 @@ export function doRefreshToken(token: string): Promise<LoginResult> {
     url: '/auth/v1/oauth2/token',
     headers: {
       isToken: false,
-      Authorization: 'Basic OTVUeFNzVFBGQTN0RjEyVEJTTW1VVkswZGE6RnBId0lmdzR3WTkyZE8=',
+      Authorization: oauthBasicAuthorization,
       'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
     },
     transformRequest: (params = {}) =>
@@ -84,6 +87,53 @@ export function doRefreshToken(token: string): Promise<LoginResult> {
         .join('&'),
     method: 'post',
     data: { grant_type: 'refresh_token', refresh_token: encodeURIComponent(token) }
+  }) as any;
+}
+
+export interface CertificateLoginChallenge {
+  challengeId: string;
+  signData: string;
+  signatureAlgorithm: string;
+  signatureFormat: string;
+  sm2UserId: string;
+  expiresIn: number;
+}
+
+export function createCertificateLoginChallenge(data: { tenantCode: string; certificate: string }) {
+  return request<Result<CertificateLoginChallenge>>({
+    url: '/auth/v1/certificate-auth/challenges',
+    headers: { isToken: false, repeatSubmit: false },
+    method: 'post',
+    data: { ...data, clientId: certificateLoginClientId }
+  });
+}
+
+export function verifyCertificateLoginSignature(data: { challengeId: string; certificate: string; signature: string }) {
+  return request<Result<{ certificateCode: string; expiresIn: number }>>({
+    url: '/auth/v1/certificate-auth/verifications',
+    headers: { isToken: false, repeatSubmit: false },
+    method: 'post',
+    data
+  });
+}
+
+export function exchangeCertificateCode(certificateCode: string): Promise<LoginResult> {
+  const params = {
+    grant_type: certificateSignatureGrantType,
+    certificate_code: certificateCode
+  };
+  return request({
+    url: '/auth/v1/oauth2/token',
+    headers: {
+      isToken: false,
+      isEncrypt: false,
+      repeatSubmit: false,
+      Authorization: oauthBasicAuthorization,
+      'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
+    },
+    transformRequest: (data) => new URLSearchParams(data).toString(),
+    method: 'post',
+    data: params
   }) as any;
 }
 
@@ -112,13 +162,26 @@ export function logout() {
 /**
  * 根据UUID获取验证码
  */
-export function getCodeImg(uuid: string | number): Promise<string> {
+export function getCodeImg(uuid: string | number, tenantCode?: string): Promise<string> {
   return request({
     url: '/auth/v1/username-password/captchas' + '/' + uuid,
     headers: {
       isToken: false
     },
     method: 'get',
+    params: tenantCode ? { tenantCode } : undefined,
+    timeout: 20000
+  }) as any;
+}
+
+export function getLoginHints(tenantCode?: string): Promise<Result<{ captchaEnabled: boolean; idleTimeoutMinutes: number }>> {
+  return request({
+    url: '/auth/v1/iam-policy/login-hints',
+    headers: {
+      isToken: false
+    },
+    method: 'get',
+    params: { tenantCode: tenantCode || '' },
     timeout: 20000
   }) as any;
 }

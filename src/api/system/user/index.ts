@@ -361,6 +361,14 @@ export const saveUserWithCert = (data: FormData) => {
   });
 };
 
+export const unlockLogin = (userId: number | string) => {
+  return request({
+    url: `/admin/v1/users/${userId}/login-lock`,
+    method: 'put',
+    data: { locked: false }
+  });
+};
+
 export default {
   listUser,
   getUser,
@@ -382,5 +390,6 @@ export default {
   listUserByDeptId,
   modifyUserPwd,
   uploadUserCert,
-  saveUserWithCert
+  saveUserWithCert,
+  unlockLogin
 };
