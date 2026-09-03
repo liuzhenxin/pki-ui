@@ -24,6 +24,20 @@ function bytesToBase64(value: number[]) {
   return btoa(String.fromCharCode(...value));
 }
 
+function base64ToBytes(value: string) {
+  const normalized = value.replace(/-/g, '+').replace(/_/g, '/');
+  const binary = atob(normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '='));
+  return Array.from(binary, (character) => character.charCodeAt(0));
+}
+
+function derInteger(value: number[]) {
+  let offset = 0;
+  while (offset < value.length - 1 && value[offset] === 0) offset += 1;
+  const normalized = value.slice(offset);
+  if ((normalized[0] & 0x80) !== 0) normalized.unshift(0);
+  return [0x02, normalized.length, ...normalized];
+}
+
 function certificatePem(value: string) {
   const normalized = value
     .replace(/-----BEGIN[^-]+-----/g, '')
@@ -66,4 +80,19 @@ export function calculateSm2SignatureDigestFromPublicKey(publicKey: string, mess
   ];
   const za = hexToBytes(sm3(zaInput));
   return bytesToBase64(hexToBytes(sm3([...za, ...message])));
+}
+
+/**
+ * SKF SignData 返回 ECCSIGNATUREBLOB 的 r || s（各 32 字节），JCA SM3withSM2
+ * 验签接口接收 ASN.1 DER SEQUENCE。若 SKF 实现已经返回 DER，则保持原值。
+ */
+export function normalizeSm2SignatureForApi(signatureBase64: string) {
+  const signature = base64ToBytes(signatureBase64);
+  if (signature[0] === 0x30 && signature.length >= 8) return bytesToBase64(signature);
+  if (signature.length !== 64) throw new Error('USB Key 返回的 SM2 签名格式无效');
+
+  const r = derInteger(signature.slice(0, 32));
+  const s = derInteger(signature.slice(32));
+  const body = [...r, ...s];
+  return bytesToBase64([0x30, body.length, ...body]);
 }

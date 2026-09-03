@@ -246,7 +246,7 @@
 <script setup lang="ts">
 import { createCertificateLoginChallenge, getCodeImg, getLoginHints, getSecrets, verifyCertificateLoginSignature } from '@/api/login';
 import SKFClient from '@/api/skf/skf_api';
-import { calculateSm2SignatureDigest } from '@/utils/sm2SignatureDigest';
+import { calculateSm2SignatureDigest, normalizeSm2SignatureForApi } from '@/utils/sm2SignatureDigest';
 import { X509 } from 'jsrsasign';
 
 import { getTenant } from '@/api/system/tenant';
@@ -351,6 +351,7 @@ const certificateForm = reactive({ certKey: '', pin: '' });
 const certificateReading = ref(false);
 const certificateLoading = ref(false);
 const certificateLoginStep = ref('正在验证证书…');
+const skfServiceUrl = import.meta.env.VITE_APP_SKF_WS_URL || 'ws://127.0.0.1:9001';
 let skfClient: SKFClient | null = null;
 const selectedCertificate = computed(() => certificateOptions.value.find((item) => item.key === certificateForm.certKey));
 
@@ -468,7 +469,7 @@ function formatCertificateTime(value: string) {
 
 async function getCertificateSkfClient() {
   if (skfClient?.isConnected()) return skfClient;
-  skfClient = new SKFClient('ws://127.0.0.1:9001');
+  skfClient = new SKFClient(skfServiceUrl);
   await skfClient.connect();
   return skfClient;
 }
@@ -519,10 +520,11 @@ async function handleCertificateLogin() {
 
     const skf = await getCertificateSkfClient();
     certificateLoginStep.value = '正在验证 PIN…';
-    await skf.checkPIN(certificate.key, certificateForm.pin);
+    const pinValid = await skf.checkPIN(certificate.key, certificateForm.pin);
+    if (!pinValid) throw new Error('USB Key PIN 验证失败');
     certificateLoginStep.value = '请在 USB Key 上确认签名…';
     const digest = calculateSm2SignatureDigest(certificate.cert, challenge.signData, challenge.sm2UserId);
-    const signature = await skf.signData(certificate.key, digest);
+    const signature = normalizeSm2SignatureForApi(await skf.signData(certificate.key, digest));
 
     certificateLoginStep.value = '正在验证身份…';
     const verificationResponse: any = await verifyCertificateLoginSignature({

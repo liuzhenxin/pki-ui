@@ -118,6 +118,10 @@ export function verifyCertificateLoginSignature(data: { challengeId: string; cer
 }
 
 export function exchangeCertificateCode(certificateCode: string): Promise<LoginResult> {
+  const params = {
+    grant_type: certificateSignatureGrantType,
+    certificate_code: certificateCode
+  };
   return request({
     url: '/auth/v1/oauth2/token',
     headers: {
@@ -127,13 +131,9 @@ export function exchangeCertificateCode(certificateCode: string): Promise<LoginR
       Authorization: oauthBasicAuthorization,
       'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
     },
-    transformRequest: () =>
-      new URLSearchParams({
-        grant_type: certificateSignatureGrantType,
-        certificate_code: certificateCode
-      }).toString(),
+    transformRequest: (data) => new URLSearchParams(data).toString(),
     method: 'post',
-    data: {}
+    data: params
   }) as any;
 }
 

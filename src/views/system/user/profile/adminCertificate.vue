@@ -67,7 +67,7 @@
 
 <script setup lang="ts">
 import SKFClient from '@/api/skf/skf_api';
-import { calculateSm2SignatureDigest } from '@/utils/sm2SignatureDigest';
+import { calculateSm2SignatureDigest, normalizeSm2SignatureForApi } from '@/utils/sm2SignatureDigest';
 import {
   createCertificateBindingCandidate,
   getCurrentCertificateBinding,
@@ -157,9 +157,10 @@ async function proveAndBind() {
     const expected = normalizeCertificate(selectedCertificate.value);
     const certificate = certificates.find((item: any) => normalizeCertificate(item?.cert) === expected);
     if (!certificate) throw new Error('USB Key 中未找到与上传文件一致的签名证书');
-    await skf.checkPIN(certificate.key, form.pin);
+    const pinValid = await skf.checkPIN(certificate.key, form.pin);
+    if (!pinValid) throw new Error('USB Key PIN 验证失败');
     const signatureDigest = calculateSm2SignatureDigest(selectedCertificate.value, candidate.value.signData, candidate.value.sm2UserId);
-    const signature = await skf.signData(certificate.key, signatureDigest);
+    const signature = normalizeSm2SignatureForApi(await skf.signData(certificate.key, signatureDigest));
     const response: any = await verifyCertificateBindingCandidate({
       candidateId: candidate.value.candidateId,
       challengeId: candidate.value.challengeId,
