@@ -35,6 +35,14 @@
           ><el-button type="primary" icon="Search" @click="handleQuery">搜索</el-button><el-button @click="resetQuery">重置</el-button></el-form-item
         >
       </el-form>
+      <div class="quick-chips">
+        <el-radio-group v-model="quickFilter" size="small">
+          <el-radio-button label="all">全部 {{ quickCounts.all }}</el-radio-button>
+          <el-radio-button label="abnormal">只看异常 {{ quickCounts.abnormal }}</el-radio-button>
+          <el-radio-button label="upgradeable">只看可升级 {{ quickCounts.upgradeable }}</el-radio-button>
+          <el-radio-button label="manageable">只看可操作 {{ quickCounts.manageable }}</el-radio-button>
+        </el-radio-group>
+      </div>
     </el-card>
 
     <el-card shadow="never" class="ops-panel">
@@ -46,6 +54,8 @@
               <el-radio-button label="layer">分层</el-radio-button>
               <el-radio-button label="list">列表</el-radio-button>
             </el-radio-group>
+            <el-button v-if="viewMode === 'layer'" link type="primary" @click="setAllLayers(false)">全部展开</el-button>
+            <el-button v-if="viewMode === 'layer'" link type="primary" @click="setAllLayers(true)">全部折叠</el-button>
             <el-button v-hasPermi="['ops:container:check-update']" icon="Download" :loading="checking" @click="checkUpdates">检查新版本</el-button>
             <el-button type="primary" icon="Refresh" :loading="loading" @click="loadData">刷新</el-button>
           </div>
@@ -332,7 +342,15 @@ const filteredContainers = computed(() =>
       (!query.value.health || row.health === query.value.health) &&
       (!query.value.updateOnly || versionOf(row).updateAvailable) &&
       (!query.value.keyword ||
-        [row.name, row.image, row.composeService, row.serverName].some((value) => value?.toLowerCase().includes(query.value.keyword.toLowerCase())))
+        [row.name, row.image, row.composeService, row.serverName].some((value) =>
+          value?.toLowerCase().includes(query.value.keyword.toLowerCase())
+        )) &&
+      (quickFilter.value === 'all' ||
+        (quickFilter.value === 'abnormal'
+          ? !row.running || ['unhealthy', 'starting'].includes(row.health)
+          : quickFilter.value === 'upgradeable'
+            ? versionOf(row).updateAvailable
+            : manageable(row)))
   )
 );
 const pagedContainers = computed(() =>
@@ -340,7 +358,9 @@ const pagedContainers = computed(() =>
 );
 
 // --- 分层视图（里程碑 1） ---
-const viewMode = ref<'layer' | 'list'>('layer');
+const viewMode = ref<'layer' | 'list'>(localStorage.getItem('ops-container-viewmode') === 'list' ? 'list' : 'layer');
+watch(viewMode, (mode) => localStorage.setItem('ops-container-viewmode', mode));
+const quickFilter = ref<'all' | 'abnormal' | 'upgradeable' | 'manageable'>('all');
 const LAYER_NAMES = ['基础资源', '服务发现', '网关', '平台服务', '业务领域', 'Web 前端', '其他'] as const;
 const STACK_LAYER: Record<string, (typeof LAYER_NAMES)[number]> = {
   infra: '基础资源',
@@ -394,6 +414,27 @@ const toggleLayer = (name: string) => {
   else collapsedLayers.value.push(name);
   localStorage.setItem('ops-container-collapsed-layers', JSON.stringify(collapsedLayers.value));
 };
+const setAllLayers = (collapse: boolean) => {
+  collapsedLayers.value = collapse ? layerGroups.value.map((group) => group.name) : [];
+  localStorage.setItem('ops-container-collapsed-layers', JSON.stringify(collapsedLayers.value));
+};
+const quickCounts = computed(() => {
+  const rows = containers.value.filter(
+    (row) =>
+      (!query.value.serverCode || row.serverCode === query.value.serverCode) &&
+      (!query.value.running || String(row.running) === query.value.running) &&
+      (!query.value.health || row.health === query.value.health) &&
+      (!query.value.updateOnly || versionOf(row).updateAvailable) &&
+      (!query.value.keyword ||
+        [row.name, row.image, row.composeService, row.serverName].some((value) => value?.toLowerCase().includes(query.value.keyword.toLowerCase())))
+  );
+  return {
+    all: rows.length,
+    abnormal: rows.filter((row) => !row.running || ['unhealthy', 'starting'].includes(row.health)).length,
+    upgradeable: rows.filter((row) => versionOf(row).updateAvailable).length,
+    manageable: rows.filter((row) => manageable(row)).length
+  };
+});
 const layerGroups = computed(() => {
   const map = new Map<(typeof LAYER_NAMES)[number], Row[]>();
   LAYER_NAMES.forEach((name) => map.set(name, []));
@@ -430,6 +471,7 @@ const handleQuery = () => {
 };
 const resetQuery = () => {
   query.value = { serverCode: '', running: '', health: '', updateOnly: false, keyword: '' };
+  quickFilter.value = 'all';
   handleQuery();
 };
 const loadData = async () => {
@@ -535,6 +577,11 @@ onBeforeUnmount(() => pollTimer && clearTimeout(pollTimer));
 }
 .ops-query :deep(.el-card__body) {
   padding-bottom: 0;
+}
+.quick-chips {
+  display: flex;
+  align-items: center;
+  padding: 8px 0 4px;
 }
 .panel-header {
   display: flex;
