@@ -1,4 +1,5 @@
 import { to } from 'await-to-js';
+import { markCertLogin } from '@/utils/certSessionWatcher';
 import { getToken, removeToken, setToken, setRefreshToken, removeRefreshToken } from '@/utils/auth';
 import { exchangeCertificateCode, login as loginApi, logout as logoutApi, getInfo as getUserInfo } from '@/api/login';
 import { LoginData, LoginResult, Result } from '@/api/types';
@@ -43,6 +44,7 @@ export const useUserStore = defineStore('user', () => {
       else removeRefreshToken();
       token.value = res.access_token;
       tenantId.value = currentTenantId;
+      markCertLogin(true);
       return Promise.resolve(res);
     }
     return Promise.reject(err);
@@ -87,6 +89,7 @@ export const useUserStore = defineStore('user', () => {
       tenantInitStatus.value = undefined;
       removeToken();
       removeRefreshToken();
+      markCertLogin(false);
     }
   };
 
