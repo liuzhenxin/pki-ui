@@ -95,7 +95,9 @@
             </el-table-column>
             <el-table-column label="健康" width="82" align="center">
               <template #default="{ row }">
-                <el-tag :type="healthType(row.health)" size="small">{{ healthText(row.health) }}</el-tag>
+                <el-tooltip :content="row.status || healthText(row.health)" :disabled="!row.status">
+                  <el-tag :type="healthType(row.health)" size="small">{{ healthText(row.health) }}</el-tag>
+                </el-tooltip>
               </template>
             </el-table-column>
             <el-table-column label="操作" min-width="230" fixed="right">
@@ -174,7 +176,9 @@
           >
           <el-table-column label="健康" width="90" align="center"
             ><template #default="{ row }"
-              ><el-tag :type="healthType(row.health)">{{ healthText(row.health) }}</el-tag></template
+              ><el-tooltip :content="row.status || healthText(row.health)" :disabled="!row.status"
+                ><el-tag :type="healthType(row.health)">{{ healthText(row.health) }}</el-tag></el-tooltip
+              ></template
             ></el-table-column
           >
           <el-table-column label="操作" width="300" fixed="right">
@@ -226,6 +230,11 @@
         <el-descriptions-item label="容器 ID">{{ selected.containerId }}</el-descriptions-item
         ><el-descriptions-item label="镜像">{{ selected.image }}</el-descriptions-item>
         <el-descriptions-item label="镜像 ID / Digest">{{ selected.imageId || '-' }}<br />{{ selected.imageDigest || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="状态"
+          >运行：{{ selected.running ? '是' : '否' }} · 健康：{{ healthText(selected.health) }}<br /><small>{{
+            selected.status || '-'
+          }}</small></el-descriptions-item
+        >
         <el-descriptions-item label="Compose">{{ selected.composeProject || '-' }} / {{ selected.composeService || '-' }}</el-descriptions-item>
         <el-descriptions-item label="配置文件">{{ selected.composeConfigFiles || '-' }}</el-descriptions-item
         ><el-descriptions-item label="端口">{{ selected.ports || '-' }}</el-descriptions-item>
@@ -251,6 +260,8 @@
       <el-alert title="升级只重建目标 Compose 服务；健康检查失败将自动回滚。" type="warning" :closable="false" show-icon />
       <el-descriptions v-if="selected" :column="1" border class="upgrade-info"
         ><el-descriptions-item label="容器">{{ selected.name }}</el-descriptions-item
+        ><el-descriptions-item label="服务器">{{ selected.serverName }}（{{ selected.serverHost }}）</el-descriptions-item
+        ><el-descriptions-item label="Compose 服务">{{ selected.composeService || '-' }}</el-descriptions-item
         ><el-descriptions-item label="当前版本">{{ selected.image }}</el-descriptions-item
         ><el-descriptions-item label="目标版本">{{ targetImage }}</el-descriptions-item
         ><el-descriptions-item label="目标 Digest">{{ versionOf(selected).latestReleaseDigest || '-' }}</el-descriptions-item
