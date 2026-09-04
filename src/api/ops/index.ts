@@ -1,5 +1,13 @@
 import request from '@/utils/request';
 import type {
+  AccessControlConfig,
+  AccessControlCurrentIp,
+  AlertChannel,
+  AlertChannelSave,
+  AlertDispatchResult,
+  AlertEventLog,
+  AlertRule,
+  AlertRuleSave,
   AppServiceConfig,
   CryptoMonitorInstance,
   OpsContainer,
@@ -193,4 +201,44 @@ export function getRadiusStatus(tenantCode?: string): Promise<Result<RadiusStatu
     params: { tenantCode },
     headers: { isToken: false }
   }) as any;
+}
+
+export function getAlertChannels(): Promise<AlertChannel[]> {
+  return request({ baseURL, url: '/v1/alert/channels', method: 'get' }) as any;
+}
+
+export function createAlertChannel(data: AlertChannelSave): Promise<AlertChannel> {
+  return request({ baseURL, url: '/v1/alert/channels', method: 'post', data }) as any;
+}
+
+export function updateAlertChannel(id: number, data: AlertChannelSave): Promise<AlertChannel> {
+  return request({ baseURL, url: `/v1/alert/channels/${id}`, method: 'put', data }) as any;
+}
+
+export function deleteAlertChannel(id: number): Promise<void> {
+  return request({ baseURL, url: `/v1/alert/channels/${id}`, method: 'delete' }) as any;
+}
+
+export function testAlertChannel(id: number): Promise<AlertDispatchResult> {
+  return request({ baseURL, url: `/v1/alert/channels/${id}/test`, method: 'post' }) as any;
+}
+
+export function getAlertRules(serviceCode?: string, eventCode?: string): Promise<AlertRule[]> {
+  return request({ baseURL, url: '/v1/alert/rules', method: 'get', params: { serviceCode, eventCode } }) as any;
+}
+
+export function createAlertRule(data: AlertRuleSave): Promise<AlertRule> {
+  return request({ baseURL, url: '/v1/alert/rules', method: 'post', data }) as any;
+}
+
+export function updateAlertRule(id: number, params: { enabled?: boolean; level?: string; cooldownSeconds?: number }): Promise<AlertRule> {
+  return request({ baseURL, url: `/v1/alert/rules/${id}`, method: 'put', params }) as any;
+}
+
+export function deleteAlertRule(id: number): Promise<void> {
+  return request({ baseURL, url: `/v1/alert/rules/${id}`, method: 'delete' }) as any;
+}
+
+export function getAlertEventLogs(limit = 100): Promise<AlertEventLog[]> {
+  return request({ baseURL, url: '/v1/alert/logs', method: 'get', params: { limit } }) as any;
 }

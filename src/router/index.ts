@@ -103,6 +103,19 @@ export const constantRoutes: RouteRecordRaw[] = [
     ]
   },
   {
+    path: '/ops/alert',
+    component: Layout,
+    hidden: true,
+    children: [
+      {
+        path: '',
+        component: () => import('@/views/ops/alert/index.vue'),
+        name: 'OpsAlertCenter',
+        meta: { title: '告警中心', activeMenu: '/ops/alert' }
+      }
+    ]
+  },
+  {
     path: '/system/user-auth',
     component: Layout,
     hidden: true,
