@@ -173,10 +173,10 @@
                 </span>
                 <div>
                   <p class="cert-reader-title">选择本机身份证书</p>
-                  <p class="cert-reader-desc">请插入 USB Key，并确认本机 SKF 服务已启动。</p>
+                  <p class="cert-reader-desc">请插入 USB Key，并确认本机 SKF 服务已启动。{{ certUsbMonitoring ? '正在监听设备插拔…' : '' }}</p>
                 </div>
               </div>
-              <button class="cert-select-button" type="button" :disabled="certificateReading || certificateLoading" @click="readCertificateList">
+              <button class="cert-select-button" type="button" :disabled="certificateReading || certificateLoading" @click="handleReadCertificates">
                 <svg-icon icon-class="search" />
                 {{ certificateReading ? '正在读取证书…' : '读取证书列表' }}
               </button>
@@ -356,6 +356,88 @@ const skfServiceUrl = import.meta.env.VITE_APP_SKF_WS_URL || 'ws://127.0.0.1:900
 let skfClient: SKFClient | null = null;
 const selectedCertificate = computed(() => certificateOptions.value.find((item) => item.key === certificateForm.certKey));
 
+// --- USB Key 插拔监控（证书登录场景） ---
+let certUsbMonitoringActive = false;
+const monitoredCertProviders = new Set<string>();
+const certUsbMonitoring = ref(false);
+const sleepMs = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function stopCertUsbMonitoring() {
+  certUsbMonitoringActive = false;
+  monitoredCertProviders.clear();
+  certUsbMonitoring.value = false;
+}
+
+async function monitorCertProvider(provider: string) {
+  while (certUsbMonitoringActive) {
+    try {
+      const skf = await getCertificateSkfClient();
+      const event = await skf.waitForDevEvent(provider);
+      if (!certUsbMonitoringActive) break;
+      if (event.event === 1) {
+        // 插入：静默重读证书列表并提示
+        const before = certificateOptions.value.length;
+        await loadCertificateList(true);
+        const added = certificateOptions.value.length - before;
+        ElMessage.info(
+          added > 0
+            ? `检测到 USB Key ${event.deviceName || ''} 插入，已读取 ${certificateOptions.value.length} 张签名证书`
+            : `检测到 USB Key ${event.deviceName || ''} 插入，但未找到可用签名证书`
+        );
+      } else {
+        // 拔出：清空证书与 PIN
+        certificateOptions.value = [];
+        certificateForm.certKey = '';
+        certificateForm.pin = '';
+        ElMessage.info(`USB Key ${event.deviceName || ''} 已拔出，证书列表已清空`);
+      }
+    } catch {
+      if (!certUsbMonitoringActive) break;
+      await sleepMs(1500);
+    }
+  }
+}
+
+async function monitorCertLoop() {
+  while (certUsbMonitoringActive) {
+    try {
+      const skf = await getCertificateSkfClient();
+      const providers = await skf.enumProvider();
+      if (!providers.length) {
+        certUsbMonitoring.value = false;
+        await sleepMs(3000);
+        continue;
+      }
+      certUsbMonitoring.value = true;
+      providers.forEach((provider: string) => {
+        if (!monitoredCertProviders.has(provider)) {
+          monitoredCertProviders.add(provider);
+          void monitorCertProvider(provider);
+        }
+      });
+      await sleepMs(5000);
+    } catch {
+      if (!certUsbMonitoringActive) break;
+      certUsbMonitoring.value = false;
+      await sleepMs(3000);
+    }
+  }
+}
+
+async function startCertUsbMonitoring() {
+  if (certUsbMonitoringActive) return;
+  certUsbMonitoringActive = true;
+  await monitorCertLoop();
+}
+
+watch(authMode, (mode) => {
+  if (mode === 'certificate') {
+    void startCertUsbMonitoring();
+  } else {
+    void stopCertUsbMonitoring();
+  }
+});
+
 const tenantLoginBackgrounds: Record<string, string> = {
   '1': opsLoginBackground,
   '3': kmcLoginBackground,
@@ -475,7 +557,7 @@ async function getCertificateSkfClient() {
   return skfClient;
 }
 
-async function readCertificateList() {
+async function loadCertificateList(silent = false) {
   certificateReading.value = true;
   try {
     const skf = await getCertificateSkfClient();
@@ -484,20 +566,24 @@ async function readCertificateList() {
       .filter((item): item is CertificateOption => item !== null);
     if (!certificateOptions.value.length) {
       certificateForm.certKey = '';
-      ElMessage.warning('USB Key 中未找到可用的签名证书');
+      if (!silent) ElMessage.warning('USB Key 中未找到可用的签名证书');
       return;
     }
     if (!certificateOptions.value.some((item) => item.key === certificateForm.certKey)) {
       certificateForm.certKey = certificateOptions.value[0].key;
     }
-    ElMessage.success(`已读取 ${certificateOptions.value.length} 张签名证书`);
+    if (!silent) ElMessage.success(`已读取 ${certificateOptions.value.length} 张签名证书`);
   } catch (error: any) {
     certificateOptions.value = [];
     certificateForm.certKey = '';
-    ElMessage.error(`读取 USB Key 失败：${error?.message || '请检查本机 SKF 服务'}`);
+    if (!silent) ElMessage.error(`读取 USB Key 失败：${error?.message || '请检查本机 SKF 服务'}`);
   } finally {
     certificateReading.value = false;
   }
+}
+
+async function handleReadCertificates() {
+  await loadCertificateList(false);
 }
 
 async function handleCertificateLogin() {
@@ -758,6 +844,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  void stopCertUsbMonitoring();
   skfClient?.disconnect();
 });
 </script>
