@@ -187,9 +187,6 @@
           <el-select v-model="form.type" placeholder="请选择发布者类型" style="width: 100%" :disabled="readonly" @change="handleTypeChange">
             <el-option label="LDAP / AD" value="LDAP" />
             <el-option label="数据库" value="DATABASE" />
-            <el-option label="文件系统" value="FILE" />
-            <el-option label="OCSP" value="OCSP" />
-            <el-option label="HTTP" value="HTTP" />
           </el-select>
         </el-form-item>
 
