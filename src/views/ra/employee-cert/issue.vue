@@ -10,8 +10,19 @@
             </div>
           </template>
           <el-form label-width="96px">
-            <el-form-item label="证书类型">
-              <el-segmented v-model="form.certTypeCode" :options="certTypeOptions" />
+            <el-form-item label="证书用途">
+              <el-input model-value="员工邮件证书" disabled />
+            </el-form-item>
+            <el-form-item label="签发模板">
+              <el-select v-model="form.profileKey" filterable placeholder="请选择已准入的CA模板" style="width: 100%">
+                <el-option
+                  v-for="item in eligibleProfiles"
+                  :key="profileKey(item)"
+                  :label="`${item.rootName} / ${item.profileName}`"
+                  :value="profileKey(item)"
+                />
+              </el-select>
+              <div class="field-hint">模板来自当前CA同步结果；签发前会再次校验授权和模板是否变更。</div>
             </el-form-item>
             <el-form-item label="有效期">
               <el-date-picker
@@ -24,12 +35,7 @@
               />
             </el-form-item>
             <el-form-item label="域账号">
-              <el-input
-                v-model="form.accounts"
-                type="textarea"
-                :rows="7"
-                placeholder="多个域账号用分号分隔，例如：vw00001;vw00002"
-              />
+              <el-input v-model="form.accounts" type="textarea" :rows="7" placeholder="多个域账号用分号分隔，例如：vw00001;vw00002" />
             </el-form-item>
             <el-form-item label="备注">
               <el-input v-model="form.remark" clearable placeholder="制作说明" />
@@ -38,8 +44,15 @@
               <input ref="fileInputRef" class="hidden-file" type="file" accept=".xlsx,.csv,.txt" @change="handleFileChange" />
               <el-button icon="Upload" @click="fileInputRef?.click()">上传名单</el-button>
               <el-button icon="Download" @click="downloadTemplate">模板</el-button>
+              <el-button v-hasPermi="['ra:employee-cert:template']" icon="Setting" @click="openProfilePolicy">模板准入</el-button>
               <el-button type="primary" icon="Search" :loading="resolving" @click="resolveAccounts">查询确认</el-button>
-              <el-button type="success" icon="Finished" :disabled="selectedEmployees.length === 0 || missingAccounts.length > 0" :loading="creating" @click="createTask">
+              <el-button
+                type="success"
+                icon="Finished"
+                :disabled="selectedEmployees.length === 0 || missingAccounts.length > 0"
+                :loading="creating"
+                @click="createTask"
+              >
                 生成制作任务
               </el-button>
             </el-form-item>
@@ -61,7 +74,9 @@
             <el-table-column label="岗位" prop="jobName" min-width="120" show-overflow-tooltip />
             <el-table-column label="状态" width="82" align="center">
               <template #default="{ row }">
-                <el-tag :type="row.sourceStatus === 'A' ? 'success' : 'danger'" effect="plain">{{ row.sourceStatus === 'A' ? '在职' : '非在职' }}</el-tag>
+                <el-tag :type="row.sourceStatus === 'A' ? 'success' : 'danger'" effect="plain">{{
+                  row.sourceStatus === 'A' ? '在职' : '非在职'
+                }}</el-tag>
               </template>
             </el-table-column>
             <el-table-column label="公钥" width="84" align="center" fixed="right">
@@ -85,11 +100,6 @@
             <el-form-item label="任务号">
               <el-input v-model="taskQuery.taskNo" clearable placeholder="任务号" style="width: 180px" @keyup.enter="loadTasks" />
             </el-form-item>
-            <el-form-item label="证书类型">
-              <el-select v-model="taskQuery.certTypeCode" clearable placeholder="全部" style="width: 150px">
-                <el-option v-for="item in certTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
-              </el-select>
-            </el-form-item>
             <el-form-item>
               <el-button type="primary" icon="Search" @click="loadTasks">搜索</el-button>
             </el-form-item>
@@ -102,7 +112,9 @@
             </el-table-column>
             <el-table-column label="状态" width="96" align="center">
               <template #default="{ row }">
-                <el-tag :type="row.taskStatus === 'DISTRIBUTED' ? 'success' : 'warning'" effect="plain">{{ row.taskStatusName || row.taskStatus }}</el-tag>
+                <el-tag :type="row.taskStatus === 'DISTRIBUTED' ? 'success' : 'warning'" effect="plain">{{
+                  row.taskStatusName || row.taskStatus
+                }}</el-tag>
               </template>
             </el-table-column>
             <el-table-column label="创建时间" width="166" align="center">
@@ -111,11 +123,24 @@
             <el-table-column label="操作" width="150" align="center" fixed="right">
               <template #default="{ row }">
                 <el-button link type="primary" icon="View" @click="openTask(row)" />
-                <el-button v-hasPermi="['ra:employee-cert:distribute']" link type="success" icon="Promotion" @click="distributeTask(row)" />
+                <el-button
+                  v-if="row.taskStatus === 'ISSUED' || row.taskStatus === 'PARTIAL_FAILED'"
+                  v-hasPermi="['ra:employee-cert:distribute']"
+                  link
+                  type="success"
+                  icon="Promotion"
+                  @click="distributeTask(row)"
+                />
               </template>
             </el-table-column>
           </el-table>
-          <pagination v-show="taskTotal > 0" v-model:page="taskQuery.pageNum" v-model:limit="taskQuery.pageSize" :total="taskTotal" @pagination="loadTasks" />
+          <pagination
+            v-show="taskTotal > 0"
+            v-model:page="taskQuery.pageNum"
+            v-model:limit="taskQuery.pageSize"
+            :total="taskTotal"
+            @pagination="loadTasks"
+          />
         </el-card>
       </el-col>
     </el-row>
@@ -124,6 +149,7 @@
       <el-descriptions :column="2" border class="mb12">
         <el-descriptions-item label="任务号">{{ taskDetail.task?.taskNo || '-' }}</el-descriptions-item>
         <el-descriptions-item label="证书类型">{{ taskDetail.task?.certTypeName || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="签发模板">{{ taskDetail.task?.profileNameSnapshot || '-' }}</el-descriptions-item>
         <el-descriptions-item label="任务状态">{{ taskDetail.task?.taskStatusName || '-' }}</el-descriptions-item>
         <el-descriptions-item label="人数">{{ taskDetail.task?.successCount || 0 }}/{{ taskDetail.task?.totalCount || 0 }}</el-descriptions-item>
       </el-descriptions>
@@ -131,7 +157,7 @@
         <el-table-column label="姓名" prop="employeeName" width="110" />
         <el-table-column label="域账号" prop="domainAccount" width="120" />
         <el-table-column label="序列号" prop="serialNumber" min-width="170" show-overflow-tooltip />
-        <el-table-column label="证书类型" prop="certTypeName" width="130" />
+        <el-table-column label="签发状态" prop="issueStatus" width="110" />
         <el-table-column label="分发状态" width="100" align="center">
           <template #default="{ row }">
             <el-tag :type="row.distributionStatus === 'SENT' ? 'success' : 'warning'" effect="plain">{{ row.distributionStatusName }}</el-tag>
@@ -139,6 +165,28 @@
         </el-table-column>
       </el-table>
     </el-drawer>
+
+    <el-dialog v-model="profilePolicyOpen" title="员工邮件证书模板准入" width="920px" append-to-body>
+      <el-alert
+        title="仅启用已核对用途的模板。CA同步后模板取消授权或变更时，创建任务和签发前都会重新校验。"
+        type="warning"
+        :closable="false"
+        class="mb12"
+      />
+      <el-table :data="emailProfiles" border stripe max-height="440">
+        <el-table-column label="根证书" prop="rootName" min-width="170" />
+        <el-table-column label="CA模板" prop="profileName" min-width="220" />
+        <el-table-column label="模板类型" prop="profileType" width="120" />
+        <el-table-column label="更新时间" min-width="160">
+          <template #default="{ row }">{{ formatDate(row.profileUpdatedTime) }}</template>
+        </el-table-column>
+        <el-table-column label="允许员工邮件证书" width="180" align="center">
+          <template #default="{ row }">
+            <el-switch :model-value="row.enabled" @change="(value) => saveProfilePolicy(row, Boolean(value))" />
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-dialog>
 
     <el-dialog v-model="keyOpen" title="员工公钥" width="860px" append-to-body>
       <el-descriptions :column="3" border class="mb12">
@@ -185,26 +233,23 @@ import {
   distributeEmployeeCertTask,
   downloadEmployeeCertAccountTemplate,
   EmployeeCertEmployee,
+  EmployeeEmailCertProfile,
   EmployeeCertKey,
   EmployeeCertTask,
   EmployeeCertTaskDetail,
   getEmployeeCertTask,
   importEmployeeCertAccounts,
+  listEmployeeEmailCertProfiles,
   listEmployeeCertKeys,
   pageEmployeeCertTasks,
   resolveEmployeeCertAccounts,
+  saveEmployeeEmailCertProfilePolicy,
   saveEmployeeCertKey
 } from '@/api/ra/employeeCert';
 
-const certTypeOptions = [
-  { label: '签名证书', value: 'SIGN' },
-  { label: '邮件加密证书', value: 'EMAIL_ENCRYPTION' },
-  { label: 'WiFi证书', value: 'WIFI' }
-];
-
 const form = reactive({
   accounts: '',
-  certTypeCode: 'SIGN',
+  profileKey: '',
   remark: ''
 });
 const dateRange = ref<string[]>([]);
@@ -213,11 +258,14 @@ const resolving = ref(false);
 const creating = ref(false);
 const selectedEmployees = ref<EmployeeCertEmployee[]>([]);
 const missingAccounts = ref<string[]>([]);
+const emailProfiles = ref<EmployeeEmailCertProfile[]>([]);
+const profilePolicyOpen = ref(false);
+const eligibleProfiles = computed(() => emailProfiles.value.filter((item) => item.enabled));
 
 const taskLoading = ref(false);
 const tasks = ref<EmployeeCertTask[]>([]);
 const taskTotal = ref(0);
-const taskQuery = reactive({ pageNum: 1, pageSize: 10, taskNo: '', certTypeCode: '' });
+const taskQuery = reactive({ pageNum: 1, pageSize: 10, taskNo: '', certTypeCode: 'EMAIL' });
 const taskOpen = ref(false);
 const taskDetail = ref<Partial<EmployeeCertTaskDetail>>({ certs: [] });
 
@@ -273,25 +321,53 @@ async function createTask() {
     ElMessage.error('存在未同步员工，不能制作证书');
     return;
   }
+  const profile = eligibleProfiles.value.find((item) => profileKey(item) === form.profileKey);
+  if (!profile) {
+    ElMessage.error('请选择已准入的签发模板');
+    return;
+  }
   creating.value = true;
   try {
     const detail = unwrapData<EmployeeCertTaskDetail>(
       await createEmployeeCertTask({
         accounts: selectedEmployees.value.map((item) => item.domainAccount).join(';'),
-        certTypeCode: form.certTypeCode,
+        rootId: profile.rootId,
+        profileId: profile.profileId,
         notBefore: dateRange.value?.[0],
         notAfter: dateRange.value?.[1],
         selectionMode: 'ACCOUNT',
         remark: form.remark
       })
     );
-    ElMessage.success('制作任务已生成，待管理员确认分发');
+    ElMessage.success('邮件证书任务已生成，待CA签发链路处理');
     taskDetail.value = detail;
     taskOpen.value = true;
     loadTasks();
   } finally {
     creating.value = false;
   }
+}
+
+function profileKey(item: EmployeeEmailCertProfile) {
+  return `${item.rootId}:${item.profileId}`;
+}
+
+async function loadEmailProfiles() {
+  emailProfiles.value = unwrapData<EmployeeEmailCertProfile[]>(await listEmployeeEmailCertProfiles()) || [];
+  if (!form.profileKey && eligibleProfiles.value.length === 1) {
+    form.profileKey = profileKey(eligibleProfiles.value[0]);
+  }
+}
+
+async function openProfilePolicy() {
+  await loadEmailProfiles();
+  profilePolicyOpen.value = true;
+}
+
+async function saveProfilePolicy(row: EmployeeEmailCertProfile, enabled: boolean) {
+  await saveEmployeeEmailCertProfilePolicy({ rootId: row.rootId, profileId: row.profileId, enabled });
+  row.enabled = enabled;
+  ElMessage.success(enabled ? '已纳入员工邮件证书模板池' : '已移出员工邮件证书模板池');
 }
 
 async function loadTasks() {
@@ -367,7 +443,9 @@ function formatDate(value?: string) {
   return value ? value.replace('T', ' ').slice(0, 19) : '-';
 }
 
-onMounted(loadTasks);
+onMounted(async () => {
+  await Promise.all([loadTasks(), loadEmailProfiles()]);
+});
 </script>
 
 <style scoped>
@@ -387,5 +465,11 @@ onMounted(loadTasks);
 
 .mb12 {
   margin-bottom: 12px;
+}
+
+.field-hint {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  line-height: 20px;
 }
 </style>

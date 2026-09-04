@@ -37,6 +37,7 @@ export interface FawvwEmployee {
   managerLevel?: string;
   sourceStatus?: string;
   sourceStatusName?: string;
+  identityStatus?: string;
   employeeStatus?: string;
   departmentId?: string;
   departmentCode?: string;
@@ -74,6 +75,10 @@ export interface FawvwSyncConfig {
   intervalHours: number;
   pageSize: number;
   sourceMode: string;
+  apiBaseUrl?: string;
+  apiAppKey?: string;
+  apiSecretKey?: string;
+  apiSecretConfigured?: boolean;
   nextRunTime?: string;
   lastRunTime?: string;
 }
@@ -88,6 +93,7 @@ export interface FawvwSyncLog {
   createdCount: number;
   updatedCount: number;
   disabledCount: number;
+  invalidCount: number;
   errorMessage?: string;
   startTime?: string;
   finishTime?: string;
@@ -168,6 +174,14 @@ export function pageFawvwSyncLogs(query: { pageNum: number; pageSize: number; st
       pageNum: Number(query.pageNum || 1),
       pageSize: Number(query.pageSize || 10)
     }
+  }) as any;
+}
+
+export function pageFawvwInvalidEmployees(taskNo: string, pageNum = 1, pageSize = 10): Promise<Result<any>> {
+  return request({
+    url: `/ra/v1/employees/sync-tasks/${taskNo}/invalid-records`,
+    method: 'get',
+    params: { pageNum, pageSize }
   }) as any;
 }
 

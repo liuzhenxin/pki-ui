@@ -1,25 +1,33 @@
-version: "3.8"
-
 services:
   pki-ui:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        BUILD_TARGET: ${BUILD_TARGET:-ra}
+        NGINX_CONF: ${NGINX_CONF:-deploy/pki-ui-ra/nginx.conf}
     image: pki-ui:latest
     container_name: pki-ui
     ports:
-      - "80:80"
+      - "${UI_PORT:-9083}:80"
     restart: unless-stopped
-    # 如果后端在宿主机上运行，需要使用 host 网络模式，
-    # 否则修改 nginx.conf 中的 proxy_pass 为实际服务地址
-    # network_mode: host
+    # 后端服务必须同处于 pki-cluster；上游地址由下方环境变量提供。
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
       - TZ=Asia/Shanghai
+      - GATEWAY_HOST=${GATEWAY_HOST:-pki-gateway}
+      - GATEWAY_PORT=${GATEWAY_PORT:-5555}
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/"]
       interval: 30s
       timeout: 3s
       retries: 3
       start_period: 5s
+    networks:
+      - pki-cluster
+
+networks:
+  pki-cluster:
+    external: true
+    name: ${DOCKER_NETWORK:-pki-cluster}

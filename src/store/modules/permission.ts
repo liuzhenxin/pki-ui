@@ -10,6 +10,7 @@ import InnerLink from '@/layout/components/InnerLink/index.vue';
 import { ref } from 'vue';
 import { createCustomNameComponent } from '@/utils/createCustomNameComponent';
 import { Result } from '@/api/types';
+import { useUserStore } from '@/store/modules/user';
 
 // 匹配views里面所有的.vue文件
 const modules = import.meta.glob('./../../views/**/*.vue');
@@ -49,9 +50,10 @@ export const usePermissionStore = defineStore('permission', () => {
   const generateRoutes = async (): Promise<RouteRecordRaw[]> => {
     const res = await getRouters({ types: ['M', 'C'] });
     const { data } = res;
-    const sdata = removeRetiredKmcRoutes(JSON.parse(JSON.stringify(data)));
-    const rdata = removeRetiredKmcRoutes(JSON.parse(JSON.stringify(data)));
-    const defaultData = removeRetiredKmcRoutes(JSON.parse(JSON.stringify(data)));
+    const sourceRoutes = filterFawvwAdminRoutes(removeRetiredKmcRoutes(JSON.parse(JSON.stringify(data))));
+    const sdata = JSON.parse(JSON.stringify(sourceRoutes));
+    const rdata = JSON.parse(JSON.stringify(sourceRoutes));
+    const defaultData = JSON.parse(JSON.stringify(sourceRoutes));
     const sidebarRoutes = filterAsyncRouter(sdata);
     const rewriteRoutes = filterAsyncRouter(rdata, undefined, true);
     const defaultRoutes = filterAsyncRouter(defaultData);
@@ -71,9 +73,10 @@ export const usePermissionStore = defineStore('permission', () => {
   const generateInitRoutes = async (): Promise<RouteRecordRaw[]> => {
     const res = await getInitRouters({ types: ['M', 'C'] });
     // const { data } = res.data;
-    const sdata = removeRetiredKmcRoutes(JSON.parse(JSON.stringify(res.data)));
-    const rdata = removeRetiredKmcRoutes(JSON.parse(JSON.stringify(res.data)));
-    const defaultData = removeRetiredKmcRoutes(JSON.parse(JSON.stringify(res.data)));
+    const sourceRoutes = filterFawvwAdminRoutes(removeRetiredKmcRoutes(JSON.parse(JSON.stringify(res.data))));
+    const sdata = JSON.parse(JSON.stringify(sourceRoutes));
+    const rdata = JSON.parse(JSON.stringify(sourceRoutes));
+    const defaultData = JSON.parse(JSON.stringify(sourceRoutes));
     const sidebarRoutes = filterAsyncRouter(sdata);
     const rewriteRoutes = filterAsyncRouter(rdata, undefined, true);
     const defaultRoutes = filterAsyncRouter(defaultData);
@@ -200,6 +203,33 @@ const removeRetiredKmcRoutes = (routes: RouteRecordRaw[]): RouteRecordRaw[] => {
     .map((route) => {
       if (route.children?.length) {
         route.children = removeRetiredKmcRoutes(route.children);
+      }
+      return route;
+    });
+};
+
+const FAWVW_ADMIN_HIDDEN_PATHS = new Set([
+  'ra-cert-management',
+  '/ra-cert-management',
+  'ra-employees',
+  '/ra-employees'
+]);
+
+const isFawvwAdminHiddenRoute = (route: RouteRecordRaw): boolean => {
+  const rawRoute = route as any;
+  return FAWVW_ADMIN_HIDDEN_PATHS.has(String(rawRoute.path ?? ''));
+};
+
+const filterFawvwAdminRoutes = (routes: RouteRecordRaw[]): RouteRecordRaw[] => {
+  const userStore = useUserStore();
+  if (userStore.name !== 'admin') {
+    return routes;
+  }
+  return routes
+    .filter((route) => !isFawvwAdminHiddenRoute(route))
+    .map((route) => {
+      if (route.children?.length) {
+        route.children = filterFawvwAdminRoutes(route.children);
       }
       return route;
     });

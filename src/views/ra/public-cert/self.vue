@@ -1,21 +1,31 @@
 <template>
   <div class="public-cert-self">
-    <div class="self-shell">
+    <div v-if="!portalReady" class="portal-login-shell">
+      <el-card class="portal-login-card" shadow="never">
+        <h1>公网证书申请</h1>
+        <p>请输入域账号完成身份认证后继续。</p>
+        <el-form @submit.prevent="handleLogin">
+          <el-form-item label="域账号">
+            <el-input v-model="loginAccount" clearable placeholder="例如 ext0085" @keyup.enter="handleLogin" />
+          </el-form-item>
+          <el-button type="primary" :loading="loginLoading" class="login-button" @click="handleLogin">前往身份认证</el-button>
+        </el-form>
+      </el-card>
+    </div>
+
+    <div v-else class="self-shell">
       <header class="self-header">
         <div>
-          <h1>公网证书录入</h1>
+          <h1>公网证书申请</h1>
           <span>{{ access.employeeName || access.domainAccount || '-' }}</span>
         </div>
-        <el-button type="primary" icon="Plus" :disabled="!access.granted" @click="openCreate">新增证书</el-button>
+        <div class="header-actions">
+          <el-button type="primary" icon="Plus" :disabled="!access.granted" @click="openCreate">新增证书</el-button>
+          <el-button @click="handleLogout">退出</el-button>
+        </div>
       </header>
 
-      <el-alert
-        v-if="!access.granted"
-        title="当前账号未开通公网证书录入权限，请联系证书管理员授权。"
-        type="warning"
-        show-icon
-        :closable="false"
-      />
+      <el-alert v-if="!access.granted" title="当前账号未开通公网证书录入权限，请联系证书管理员授权。" type="warning" show-icon :closable="false" />
 
       <el-card v-else shadow="never">
         <el-form :model="queryParams" inline>
@@ -57,12 +67,24 @@
             <template #default="{ row }">
               <el-button link type="primary" icon="View" @click="openDetail(row)" />
               <el-button v-if="row.approvalStatus !== 'PENDING'" link type="primary" icon="Edit" @click="openEdit(row)" />
-              <el-button v-if="['DRAFT', 'REJECTED'].includes(row.approvalStatus || '')" link type="success" icon="Promotion" @click="handleSubmit(row)" />
+              <el-button
+                v-if="['DRAFT', 'REJECTED'].includes(row.approvalStatus || '')"
+                link
+                type="success"
+                icon="Promotion"
+                @click="handleSubmit(row)"
+              />
             </template>
           </el-table-column>
         </el-table>
 
-        <pagination v-show="total > 0" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" :total="total" @pagination="loadList" />
+        <pagination
+          v-show="total > 0"
+          v-model:page="queryParams.pageNum"
+          v-model:limit="queryParams.pageSize"
+          :total="total"
+          @pagination="loadList"
+        />
       </el-card>
     </div>
 
@@ -183,20 +205,24 @@
 
 <script setup name="RaPublicCertSelf" lang="ts">
 import { ElMessage, FormInstance, FormRules, UploadRequestOptions } from 'element-plus';
+import { PublicCert, PublicCertDetail, PublicCertQuery, PublicCertType, SelfAccess } from '@/api/ra/publicCert';
 import {
-  getMyPublicCert,
-  getSelfPublicCertAccess,
-  listPublicCertTypes,
-  pageMyPublicCerts,
-  PublicCert,
-  PublicCertDetail,
-  PublicCertQuery,
-  PublicCertType,
-  saveMyPublicCert,
-  SelfAccess,
-  submitMyPublicCert,
-  uploadPublicCertAttachment
-} from '@/api/ra/publicCert';
+  getPublicCertPortal,
+  getPublicCertPortalAccess,
+  listPublicCertPortalTypes,
+  loginPublicCertPortal,
+  logoutPublicCertPortal,
+  pagePublicCertPortal,
+  savePublicCertPortal,
+  submitPublicCertPortal,
+  uploadPublicCertPortalAttachment
+} from '@/api/ra/publicCertPortal';
+
+const portalStorageKey = 'fawvw-public-cert-portal-token';
+const portalToken = ref(sessionStorage.getItem(portalStorageKey) || '');
+const portalReady = ref(false);
+const loginAccount = ref('');
+const loginLoading = ref(false);
 
 const access = ref<SelfAccess>({ granted: false });
 const rows = ref<PublicCert[]>([]);
@@ -240,24 +266,19 @@ const rules: FormRules = {
   notAfter: [{ required: true, message: '请选择到期时间', trigger: 'change' }]
 };
 
-function unwrap<T>(res: any): T {
-  const body = res?.data ?? res;
-  return (body?.data ?? body) as T;
-}
-
 async function loadAccess() {
-  access.value = unwrap<SelfAccess>(await getSelfPublicCertAccess());
+  access.value = await getPublicCertPortalAccess(portalToken.value);
 }
 
 async function loadTypes() {
-  types.value = unwrap<PublicCertType[]>(await listPublicCertTypes(true)) || [];
+  types.value = (await listPublicCertPortalTypes(portalToken.value)) || [];
 }
 
 async function loadList() {
   if (!access.value.granted) return;
   loading.value = true;
   try {
-    const page = unwrap<any>(await pageMyPublicCerts(queryParams));
+    const page = await pagePublicCertPortal(portalToken.value, queryParams);
     rows.value = page.records || page.rows || [];
     total.value = Number(page.total || 0);
   } finally {
@@ -289,14 +310,14 @@ async function openCreate() {
 
 async function openEdit(row: PublicCert) {
   await loadTypes();
-  const data = unwrap<PublicCertDetail>(await getMyPublicCert(row.id!));
+  const data = await getPublicCertPortal(portalToken.value, row.id!);
   resetForm();
   Object.assign(form, data.cert, { usages: data.usages || [] });
   formOpen.value = true;
 }
 
 async function openDetail(row: PublicCert) {
-  detail.value = unwrap<PublicCertDetail>(await getMyPublicCert(row.id!));
+  detail.value = await getPublicCertPortal(portalToken.value, row.id!);
   detailOpen.value = true;
 }
 
@@ -304,9 +325,9 @@ async function submitForm(thenSubmit: boolean) {
   if (!(await formRef.value?.validate().catch(() => false))) return;
   saving.value = true;
   try {
-    const saved = unwrap<PublicCertDetail>(await saveMyPublicCert(form));
+    const saved = await savePublicCertPortal(portalToken.value, form);
     if (thenSubmit) {
-      await submitMyPublicCert(saved.cert.id!);
+      await submitPublicCertPortal(portalToken.value, saved.cert.id!);
       ElMessage.success('已提交审核');
     } else {
       ElMessage.success('已保存草稿');
@@ -319,7 +340,7 @@ async function submitForm(thenSubmit: boolean) {
 }
 
 async function handleSubmit(row: PublicCert) {
-  await submitMyPublicCert(row.id!);
+  await submitPublicCertPortal(portalToken.value, row.id!);
   ElMessage.success('已提交审核');
   loadList();
 }
@@ -344,15 +365,15 @@ function beforeUpload(file: File) {
     ElMessage.warning('附件仅支持 zip 或 rar');
     return false;
   }
-  if (file.size > 50 * 1024 * 1024) {
-    ElMessage.warning('附件不能超过 50MB');
+  if (file.size > 10 * 1024 * 1024) {
+    ElMessage.warning('附件不能超过 10MB');
     return false;
   }
   return true;
 }
 
 async function uploadAttachment(option: UploadRequestOptions) {
-  await uploadPublicCertAttachment(detail.value.cert!.id!, option.file as File, true);
+  await uploadPublicCertPortalAttachment(portalToken.value, detail.value.cert!.id!, option.file as File);
   ElMessage.success('附件已上传');
   await openDetail(detail.value.cert as PublicCert);
 }
@@ -380,11 +401,55 @@ function fileSize(value?: number) {
   return `${(value / 1024 / 1024).toFixed(1)}MB`;
 }
 
-onMounted(async () => {
-  await loadAccess();
-  await loadTypes();
-  await loadList();
-});
+async function initialisePortal() {
+  if (!portalToken.value) return;
+  try {
+    await loadAccess();
+    portalReady.value = true;
+    await loadTypes();
+    await loadList();
+  } catch (error: any) {
+    portalToken.value = '';
+    sessionStorage.removeItem(portalStorageKey);
+    ElMessage.warning(error?.message || '登录已失效，请重新认证');
+  }
+}
+
+async function handleLogin() {
+  if (!loginAccount.value.trim()) {
+    ElMessage.warning('请输入域账号');
+    return;
+  }
+  loginLoading.value = true;
+  try {
+    const result = await loginPublicCertPortal(loginAccount.value.trim());
+    portalToken.value = result.token;
+    sessionStorage.setItem(portalStorageKey, result.token);
+    access.value = result.access;
+    portalReady.value = true;
+    await loadTypes();
+    await loadList();
+  } catch (error: any) {
+    ElMessage.error(error?.message || '身份认证失败');
+  } finally {
+    loginLoading.value = false;
+  }
+}
+
+async function handleLogout() {
+  try {
+    await logoutPublicCertPortal(portalToken.value);
+  } catch {
+    // The local session still needs to be cleared after a network failure.
+  }
+  portalToken.value = '';
+  portalReady.value = false;
+  rows.value = [];
+  access.value = { granted: false };
+  sessionStorage.removeItem(portalStorageKey);
+}
+
+onMounted(initialisePortal);
 </script>
 
 <style scoped lang="scss">
@@ -397,6 +462,32 @@ onMounted(async () => {
 .self-shell {
   max-width: 1280px;
   margin: 0 auto;
+}
+
+.portal-login-shell {
+  min-height: calc(100vh - 48px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.portal-login-card {
+  width: min(420px, 100%);
+
+  h1 {
+    margin: 0 0 10px;
+    font-size: 22px;
+    color: #1f2d3d;
+  }
+
+  p {
+    margin: 0 0 22px;
+    color: #606266;
+  }
+}
+
+.login-button {
+  width: 100%;
 }
 
 .self-header {
@@ -415,6 +506,11 @@ onMounted(async () => {
   span {
     color: #606266;
   }
+}
+
+.header-actions {
+  display: flex;
+  gap: 8px;
 }
 
 .usage-editor {

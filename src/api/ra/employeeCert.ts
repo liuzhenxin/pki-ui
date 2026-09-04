@@ -27,6 +27,9 @@ export interface EmployeeCertTask {
   certTypeCode: string;
   certTypeName: string;
   selectionMode: string;
+  rootId?: number | string;
+  profileId?: number | string;
+  profileNameSnapshot?: string;
   totalCount: number;
   successCount: number;
   failedCount: number;
@@ -58,6 +61,12 @@ export interface EmployeeCert {
   publicKeyId?: number | string;
   publicKeyName?: string;
   keySource?: string;
+  rootId?: number | string;
+  profileId?: number | string;
+  raApplyId?: number | string;
+  raCertId?: number | string;
+  issueStatus?: string;
+  issueMessage?: string;
   distributionStatus: string;
   distributionStatusName?: string;
   distributionTime?: string;
@@ -92,6 +101,16 @@ export interface EmployeeCertTemplate {
   channel: string;
   title: string;
   content: string;
+  enabled: boolean;
+}
+
+export interface EmployeeEmailCertProfile {
+  rootId: number | string;
+  rootName: string;
+  profileId: number | string;
+  profileName: string;
+  profileType?: string;
+  profileUpdatedTime?: string;
   enabled: boolean;
 }
 
@@ -140,7 +159,8 @@ export const importEmployeeCertAccounts = (file: File): Promise<Result<AccountRe
 
 export const createEmployeeCertTask = (data: {
   accounts: string;
-  certTypeCode: string;
+  rootId: number | string;
+  profileId: number | string;
   notBefore?: string;
   notAfter?: string;
   selectionMode?: string;
@@ -149,6 +169,23 @@ export const createEmployeeCertTask = (data: {
   request({
     url: '/ra/v1/employee-certs/tasks',
     method: 'post',
+    data
+  }) as any;
+
+export const listEmployeeEmailCertProfiles = (): Promise<Result<EmployeeEmailCertProfile[]>> =>
+  request({
+    url: '/ra/v1/employee-certs/email-profiles',
+    method: 'get'
+  }) as any;
+
+export const saveEmployeeEmailCertProfilePolicy = (data: {
+  rootId: number | string;
+  profileId: number | string;
+  enabled: boolean;
+}): Promise<Result<EmployeeEmailCertProfile>> =>
+  request({
+    url: '/ra/v1/employee-certs/email-profiles/policy',
+    method: 'put',
     data
   }) as any;
 

@@ -32,7 +32,7 @@
             <strong>{{ summary.totalEmployees || 0 }}</strong>
           </div>
           <div class="metric">
-            <span class="metric-label">在职员工</span>
+            <span class="metric-label">已确认在职</span>
             <strong>{{ summary.activeEmployees || 0 }}</strong>
           </div>
           <div class="metric">
@@ -43,7 +43,9 @@
             <span class="metric-label">最近同步</span>
             <strong>{{ syncText }}</strong>
           </div>
-          <el-tag type="warning" effect="plain">演示数据</el-tag>
+          <el-tag :type="syncConfig.sourceMode === 'API' ? 'success' : 'warning'" effect="plain">
+            {{ syncConfig.sourceMode === 'API' ? '接口数据' : '演示数据' }}
+          </el-tag>
         </div>
 
         <el-card shadow="never" class="employee-panel">
@@ -56,9 +58,11 @@
             </el-form-item>
             <el-form-item label="员工类型">
               <el-select v-model="queryParams.employeeTypeId" clearable placeholder="全部类型" style="width: 150px">
-                <el-option label="正式员工" value="REGULAR" />
-                <el-option label="合同制员工" value="CONTRACTOR" />
-                <el-option label="外方员工" value="EXPAT" />
+                <el-option label="类型 1" value="1" />
+                <el-option label="类型 3" value="3" />
+                <el-option label="类型 4" value="4" />
+                <el-option label="类型 5" value="5" />
+                <el-option label="外方" value="6" />
               </el-select>
             </el-form-item>
             <el-form-item label="外方">
@@ -69,8 +73,9 @@
             </el-form-item>
             <el-form-item label="状态">
               <el-select v-model="queryParams.status" clearable placeholder="全部状态" style="width: 120px">
-                <el-option label="在职" value="A" />
-                <el-option label="离职" value="I" />
+                <el-option label="在职（接口 A）" value="A" />
+                <el-option label="离职（接口 I）" value="I" />
+                <el-option label="接口状态 3" value="3" />
               </el-select>
             </el-form-item>
             <el-form-item>
@@ -88,9 +93,6 @@
             </el-col>
             <el-col :span="1.5">
               <el-button plain icon="Clock" @click="openLogs">同步记录</el-button>
-            </el-col>
-            <el-col :span="1.5">
-              <el-button v-hasPermi="['ra:employee:export']" type="success" plain icon="Download" @click="handleExport">导出</el-button>
             </el-col>
             <right-toolbar v-model:showSearch="showSearch" @queryTable="loadEmployees" />
           </el-row>
@@ -112,9 +114,16 @@
             </el-table-column>
             <el-table-column label="经理级别" prop="managerLevel" width="110" align="center" />
             <el-table-column label="员工类型" prop="employeeTypeName" width="118" show-overflow-tooltip />
-            <el-table-column label="状态" width="86" align="center">
+            <el-table-column label="同步状态" width="90" align="center">
               <template #default="{ row }">
-                <el-tag :type="row.sourceStatus === 'A' ? 'success' : 'danger'" effect="plain">{{ row.sourceStatusName || row.employeeStatus }}</el-tag>
+                <el-tag :type="row.sourceStatus === 'A' ? 'success' : row.sourceStatus === 'I' ? 'danger' : 'info'" effect="plain">{{ row.sourceStatusName || row.employeeStatus }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="本地状态" width="90" align="center">
+              <template #default="{ row }">
+                <el-tag :type="row.identityStatus === 'LEFT' ? 'danger' : 'success'" effect="plain">
+                  {{ row.identityStatus === 'LEFT' ? '已离职' : '在册' }}
+                </el-tag>
               </template>
             </el-table-column>
             <el-table-column label="操作" fixed="right" width="80" align="center">
@@ -144,7 +153,8 @@
         <el-descriptions-item label="工号">{{ detail.employeeNo || '-' }}</el-descriptions-item>
         <el-descriptions-item label="生日">{{ detail.birthday || '-' }}</el-descriptions-item>
         <el-descriptions-item label="邮箱">{{ detail.email || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="部门路径">{{ detail.departmentNamePath || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="部门编码">{{ detail.departmentCode || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="所属组织路径">{{ detail.departmentNamePath || detail.departmentName || '-' }}</el-descriptions-item>
         <el-descriptions-item label="岗位">{{ detail.jobName || '-' }}</el-descriptions-item>
         <el-descriptions-item label="职级/职别">{{ detail.jobGrade || '-' }}</el-descriptions-item>
         <el-descriptions-item label="员工类型">{{ detail.employeeTypeName || '-' }}</el-descriptions-item>
@@ -176,8 +186,23 @@
           <el-input-number v-model="syncConfig.pageSize" :min="100" :max="1000" :step="100" controls-position="right" />
         </el-form-item>
         <el-form-item label="数据源">
-          <el-tag type="warning" effect="plain">{{ syncConfig.sourceMode }}</el-tag>
+          <el-select v-model="syncConfig.sourceMode" style="width: 180px">
+            <el-option label="演示数据（Mock）" value="MOCK" />
+            <el-option label="大众员工接口（API）" value="API" />
+          </el-select>
         </el-form-item>
+        <template v-if="syncConfig.sourceMode === 'API'">
+          <el-divider content-position="left">大众员工接口</el-divider>
+          <el-form-item label="接口地址">
+            <el-input v-model="syncConfig.apiBaseUrl" placeholder="https://api.faw-vw.com" />
+          </el-form-item>
+          <el-form-item label="APP_KEY">
+            <el-input v-model="syncConfig.apiAppKey" autocomplete="off" />
+          </el-form-item>
+          <el-form-item label="SECRET_KEY">
+            <el-input v-model="syncConfig.apiSecretKey" type="password" show-password autocomplete="new-password" :placeholder="syncConfig.apiSecretConfigured ? '已配置，留空则不修改' : '请输入 SECRET_KEY'" />
+          </el-form-item>
+        </template>
       </el-form>
       <template #footer>
         <el-button @click="configOpen = false">取消</el-button>
@@ -198,6 +223,13 @@
         <el-table-column label="员工" prop="totalEmployees" width="90" align="right" />
         <el-table-column label="新增" prop="createdCount" width="80" align="right" />
         <el-table-column label="更新" prop="updatedCount" width="80" align="right" />
+        <el-table-column label="离职标记" prop="disabledCount" width="94" align="right" />
+        <el-table-column label="无效数据" width="100" align="center">
+          <template #default="{ row }">
+            <el-button v-if="row.invalidCount > 0" link type="danger" @click="openInvalidRecords(row)">{{ row.invalidCount }}</el-button>
+            <span v-else>0</span>
+          </template>
+        </el-table-column>
         <el-table-column label="完成时间" prop="finishTime" min-width="160">
           <template #default="{ row }">{{ parseTime(row.finishTime) || '-' }}</template>
         </el-table-column>
@@ -210,15 +242,29 @@
         @pagination="loadLogs"
       />
     </el-dialog>
+
+    <el-dialog v-model="invalidOpen" title="无效员工记录" width="720px" append-to-body>
+      <el-table v-loading="invalidLoading" :data="invalidRecords" border empty-text="当前同步任务没有无效记录">
+        <el-table-column label="员工号" prop="employeeNo" min-width="130" />
+        <el-table-column label="域账号" prop="domainAccount" min-width="150" />
+        <el-table-column label="姓名" prop="cnName" min-width="120" />
+        <el-table-column label="无效原因" prop="reason" min-width="220" />
+      </el-table>
+      <pagination
+        v-show="invalidTotal > 0"
+        v-model:page="invalidQuery.pageNum"
+        v-model:limit="invalidQuery.pageSize"
+        :total="invalidTotal"
+        @pagination="loadInvalidRecords"
+      />
+    </el-dialog>
   </div>
 </template>
 
 <script setup name="RaEmployee" lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { ElMessage } from 'element-plus';
-import FileSaver from 'file-saver';
 import {
-  exportFawvwEmployees,
   FawvwEmployee,
   FawvwEmployeeQuery,
   FawvwEmployeeSummary,
@@ -230,6 +276,7 @@ import {
   getFawvwOrgTree,
   getFawvwSyncConfig,
   pageFawvwEmployees,
+  pageFawvwInvalidEmployees,
   pageFawvwSyncLogs,
   saveFawvwSyncConfig,
   syncFawvwEmployees
@@ -248,8 +295,13 @@ const orgKeyword = ref('');
 const detailOpen = ref(false);
 const configOpen = ref(false);
 const logsOpen = ref(false);
+const invalidOpen = ref(false);
+const invalidLoading = ref(false);
 const employeeList = ref<FawvwEmployee[]>([]);
 const syncLogs = ref<FawvwSyncLog[]>([]);
+const invalidRecords = ref<any[]>([]);
+const invalidTotal = ref(0);
+const invalidTaskNo = ref('');
 const orgTree = ref<FawvwOrgNode[]>([]);
 const detail = ref<Partial<FawvwEmployee>>({});
 const orgTreeRef = ref<any>();
@@ -283,6 +335,7 @@ const logQuery = reactive({
   pageSize: 10,
   status: ''
 });
+const invalidQuery = reactive({ pageNum: 1, pageSize: 10 });
 
 const orgTreeProps = { label: 'label', children: 'children' };
 const orgTreeData = computed<FawvwOrgNode[]>(() => [
@@ -394,9 +447,13 @@ const handleSync = () => {
 };
 
 const openConfig = () => {
+  loadSyncConfig(true);
+};
+
+const loadSyncConfig = (open = false) => {
   getFawvwSyncConfig().then((response) => {
     Object.assign(syncConfig, unwrap(response) || syncConfig);
-    configOpen.value = true;
+    configOpen.value = open;
   });
 };
 
@@ -405,6 +462,7 @@ const saveConfig = () => {
   saveFawvwSyncConfig(syncConfig)
     .then((response) => {
       Object.assign(syncConfig, unwrap(response) || syncConfig);
+      syncConfig.apiSecretKey = '';
       ElMessage.success('同步配置已保存');
       configOpen.value = false;
       loadSummary();
@@ -432,15 +490,32 @@ const loadLogs = () => {
     });
 };
 
-const handleExport = () => {
-  exportFawvwEmployees(queryParams).then((response: any) => {
-    const blob = response?.data instanceof Blob ? response.data : response;
-    FileSaver.saveAs(blob, `fawvw_employees_${new Date().getTime()}.csv`);
-  });
+const openInvalidRecords = (row: FawvwSyncLog) => {
+  invalidTaskNo.value = row.taskNo;
+  invalidQuery.pageNum = 1;
+  invalidOpen.value = true;
+  loadInvalidRecords();
+};
+
+const loadInvalidRecords = () => {
+  if (!invalidTaskNo.value) {
+    return;
+  }
+  invalidLoading.value = true;
+  pageFawvwInvalidEmployees(invalidTaskNo.value, invalidQuery.pageNum, invalidQuery.pageSize)
+    .then((response) => {
+      const page = unwrap(response) || {};
+      invalidRecords.value = page.records || page.rows || [];
+      invalidTotal.value = Number(page.total || 0);
+    })
+    .finally(() => {
+      invalidLoading.value = false;
+    });
 };
 
 onMounted(() => {
   loadSummary();
+  loadSyncConfig();
   loadOrgTree();
   loadEmployees();
 });

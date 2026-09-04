@@ -11,6 +11,9 @@
     </el-form>
 
     <el-row :gutter="10" class="mb8">
+      <el-col :span="1.5">
+        <el-button v-hasPermi="['ra:root']" type="primary" plain icon="Refresh" :loading="syncing" @click="openSyncDialog">同步 CA</el-button>
+      </el-col>
       <right-toolbar v-model:showSearch="showSearch" @queryTable="getList"></right-toolbar>
     </el-row>
 
@@ -290,6 +293,31 @@
       </template>
     </el-dialog>
 
+    <el-dialog v-model="syncDialog.visible" title="同步 CA 根证书和模板" width="540px" append-to-body>
+      <el-alert
+        title="同步以 CA 当前授权结果为准。该 CA 本次未返回的根证书、模板及绑定关系将标记为不可用；历史证书和 CA 原始数据不会删除。"
+        type="warning"
+        :closable="false"
+        class="mb16"
+      />
+      <el-form label-width="80px">
+        <el-form-item label="CA 实例" required>
+          <el-select v-model="syncDialog.caInstanceId" placeholder="请选择 CA 实例" style="width: 100%">
+            <el-option v-for="item in syncCaInstances" :key="item.id" :label="item.name" :value="item.id!">
+              <span>{{ item.name }}</span>
+              <span class="ca-instance-url">{{ item.baseUrl }}</span>
+            </el-option>
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button :disabled="syncing" @click="syncDialog.visible = false">取 消</el-button>
+          <el-button type="primary" :loading="syncing" @click="syncFromCa">开始同步</el-button>
+        </div>
+      </template>
+    </el-dialog>
+
     <!-- 安全确认对话框 -->
     <SecurityConfirm
       v-model="securityConfirm.visible"
@@ -303,7 +331,7 @@
 <script setup name="RootCert" lang="ts">
 import { ref, reactive, toRefs, getCurrentInstance, ComponentInternalInstance, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { ElMessage, FormInstance, UploadInstance, UploadProps } from 'element-plus';
+import { ElMessage, ElMessageBox, FormInstance, UploadInstance, UploadProps } from 'element-plus';
 import {
   ArrowDown,
   Search,
@@ -325,6 +353,7 @@ import CertProfile from '@/components/CertProfile/index.vue';
 import CertSubject, { typeMapping, sortSubjectItems } from '@/components/CertSubject/index.vue';
 import { listProfile, getProfile } from '@/api/ca/profile';
 import { listRaRootCa } from '@/api/ra/root';
+import { pageRaCaInstance, RaCaInstance, syncRaCaInstance } from '@/api/ra/caInstance';
 import { saveRaProfileApprovalMode } from '@/api/ra/profile';
 import { checkPermi } from '@/utils/permission';
 import { listSigner } from '@/api/ca/signer';
@@ -346,6 +375,7 @@ const securityConfirm = reactive({
 });
 
 const loading = ref(false);
+const syncing = ref(false);
 const showSearch = ref(true);
 const total = ref(0);
 const certList = ref([]);
@@ -362,6 +392,11 @@ const profileDetailDialog = reactive({
   visible: false,
   data: null as any,
   confData: null as any
+});
+const syncCaInstances = ref<RaCaInstance[]>([]);
+const syncDialog = reactive({
+  visible: false,
+  caInstanceId: undefined as number | string | undefined
 });
 
 const queryForm = ref<FormInstance>();
@@ -600,6 +635,64 @@ async function getList() {
     total.value = 0;
   } finally {
     loading.value = false;
+  }
+}
+
+function unwrapResponse<T>(response: any): T {
+  const body = response?.data ?? response;
+  return (body?.data ?? body) as T;
+}
+
+async function openSyncDialog() {
+  syncing.value = true;
+  try {
+    const response = await pageRaCaInstance({ pageNum: 1, pageSize: 100, status: 'ACTIVE' });
+    const page = unwrapResponse<any>(response);
+    const records = page?.records ?? page?.rows ?? page?.list ?? (Array.isArray(page) ? page : []);
+    syncCaInstances.value = Array.isArray(records) ? records : [];
+    if (!syncCaInstances.value.length) {
+      ElMessage.warning('没有可同步的正常状态 CA 实例');
+      return;
+    }
+    const selected = syncCaInstances.value.find((item) => Number(item.defaultForApply) === 1) || syncCaInstances.value[0];
+    syncDialog.caInstanceId = selected.id;
+    syncDialog.visible = true;
+  } catch (error: any) {
+    ElMessage.error(error?.response?.data?.msg || error?.message || '获取 CA 实例失败');
+  } finally {
+    syncing.value = false;
+  }
+}
+
+async function syncFromCa() {
+  if (syncDialog.caInstanceId === undefined) {
+    ElMessage.warning('请选择 CA 实例');
+    return;
+  }
+  try {
+    await ElMessageBox.confirm('确认从所选 CA 同步根证书、模板及授权关系？', '同步确认', {
+      confirmButtonText: '确认同步',
+      cancelButtonText: '取消',
+      type: 'warning'
+    });
+  } catch {
+    return;
+  }
+
+  syncing.value = true;
+  try {
+    const response = await syncRaCaInstance(syncDialog.caInstanceId);
+    const result = unwrapResponse<any>(response);
+    ElMessage.success(
+      `同步完成：根证书 ${Number(result?.rootCount || 0)} 个，模板 ${Number(result?.profileCount || 0)} 个，授权关系 ${Number(result?.relationCount || 0)} 条`
+    );
+    syncDialog.visible = false;
+    expandedRootIds.value = [];
+    await getList();
+  } catch (error: any) {
+    ElMessage.error(error?.response?.data?.msg || error?.message || 'CA 同步失败');
+  } finally {
+    syncing.value = false;
   }
 }
 

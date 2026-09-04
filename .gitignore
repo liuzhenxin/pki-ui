@@ -27,3 +27,10 @@ pnpm-lock.yaml
 # 编译生成的文件
 auto-imports.d.ts
 components.d.ts
+
+# 部署时从 deploy/pki-ui-ra/.env.example 复制生成。
+.env
+
+# 本地生成的部署归档；部署定义保留在 deploy/ 目录中纳管。
+pki-ui-ra-deploy-*.tar.gz
+fawvw-ca-cert-ui-patch-*.tar.gz

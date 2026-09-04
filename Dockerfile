@@ -8,6 +8,7 @@ WORKDIR /app
 # A UI image must select the tenant/client it serves. Leaving this unset would
 # silently consume a developer's .env.production.local override (for example OPS).
 ARG BUILD_TARGET
+ARG NGINX_CONF=deploy/pki-ui-ra/nginx.conf
 
 # 安装 yarn
 RUN corepack enable && corepack prepare yarn@1.22.19 --activate
@@ -41,8 +42,9 @@ RUN apk add --no-cache tzdata && \
 # 复制构建产物
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-# 复制 Nginx 配置
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# 复制面向部署目标的 server 配置。默认使用 RA 配置；其他项目须在构建时
+# 显式传入 NGINX_CONF，避免把完整 nginx.conf 错复制为 conf.d 片段。
+COPY ${NGINX_CONF} /etc/nginx/conf.d/default.conf
 
 # 健康检查
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
