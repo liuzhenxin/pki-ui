@@ -431,9 +431,7 @@ async function startCertUsbMonitoring() {
 }
 
 watch(authMode, (mode) => {
-  if (mode === 'certificate') {
-    void startCertUsbMonitoring();
-  } else {
+  if (mode !== 'certificate') {
     void stopCertUsbMonitoring();
   }
 });
