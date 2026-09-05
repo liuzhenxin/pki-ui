@@ -86,6 +86,7 @@
                 <el-tag v-else-if="versionOf(row).status === 'NOT_FOUND'" type="info">仓库无版本</el-tag>
                 <el-tag v-else-if="versionOf(row).updateAvailable" type="warning">{{ versionOf(row).latestReleaseTag }}</el-tag>
                 <span v-else>{{ versionOf(row).latestReleaseTag || '-' }}</span>
+                <div v-if="versionOf(row).latestReleaseDigest" class="ver-digest" :title="versionOf(row).latestReleaseDigest">digest: {{ shortDigest(versionOf(row).latestReleaseDigest) }}</div>
               </template>
             </el-table-column>
             <el-table-column label="运行" width="82" align="center">
@@ -161,7 +162,8 @@
               ><el-tag v-if="versionOf(row).status === 'ERROR'" type="danger">扫描失败</el-tag
               ><el-tag v-else-if="versionOf(row).status === 'NOT_FOUND'" type="info">仓库无版本</el-tag
               ><el-tag v-else-if="versionOf(row).updateAvailable" type="warning">{{ versionOf(row).latestReleaseTag }}</el-tag
-              ><span v-else>{{ versionOf(row).latestReleaseTag || '-' }}</span></template
+              ><span v-else>{{ versionOf(row).latestReleaseTag || '-' }}</span>
+              ><div v-if="versionOf(row).latestReleaseDigest" class="ver-digest" :title="versionOf(row).latestReleaseDigest">digest: {{ shortDigest(versionOf(row).latestReleaseDigest) }}</div></template
             ></el-table-column
           >
           <el-table-column label="镜像摘要" width="145"
@@ -667,5 +669,14 @@ code {
 .layer-name {
   min-width: 96px;
   font-size: 14px;
+}
+.ver-digest {
+  font-size: 12px;
+  color: #909399;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 180px;
 }
 </style>
