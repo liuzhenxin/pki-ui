@@ -32,10 +32,12 @@ async function getSkf(): Promise<SKFClient> {
   const client = new SKFClient(WS_URL);
   await client.connect();
   skf = client;
+  console.log('[certSession] SKF connected', WS_URL);
   return skf;
 }
 
 async function onRemoved() {
+  console.log('[certSession] USB Key removed -> auto logout');
   stopCertSession();
   sessionStorage.removeItem(FLAG_KEY);
   ElMessage.warning('USB Key 已拔出，已自动退出登录');
@@ -56,12 +58,15 @@ async function watchProvider(provider: string) {
     try {
       const client = await getSkf();
       const event = await client.waitForDevEvent(provider);
+      console.log('[certSession] devEvent', provider, event);
       if (!started) break;
       if (event.event !== 1) {
         void onRemoved();
         break;
       }
-    } catch {
+    }
+    catch {
+      console.warn('[certSession] waitForDevEvent error, retry');
       if (!started) break;
       await sleep(2000);
     }
@@ -76,10 +81,13 @@ async function providerLoop() {
       providers.forEach((provider: string) => {
         if (!monitoredProviders.has(provider)) {
           monitoredProviders.add(provider);
+          console.log('[certSession] watching provider', provider);
           void watchProvider(provider);
         }
       });
-    } catch {
+    }
+    catch {
+      console.warn('[certSession] SKF 不可用(未启动?)，3s 后重试');
       /* SKF 未启动时静默，拔插检测不可用但不打扰用户 */
     }
     await sleep(3000);
@@ -87,12 +95,14 @@ async function providerLoop() {
 }
 
 export function startCertSession() {
+  console.log('[certSession] startCertSession, flag=', isCertLogin());
   if (started || !isCertLogin()) return;
   started = true;
   void providerLoop();
 }
 
 export function stopCertSession() {
+  console.log('[certSession] stopCertSession');
   started = false;
   monitoredProviders.clear();
   try {
