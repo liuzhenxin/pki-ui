@@ -39,34 +39,57 @@ export default class SKFClient {
 
   connect() {
     return new Promise((resolve, reject) => {
+      let settled = false;
+      let timer = null;
+      const fail = (err) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        try {
+          if (this.ws) {
+            this.ws.onclose = null;
+            this.ws.close();
+          }
+        } catch (e) {
+          /* ignore */
+        }
+        this.ws = null;
+        reject(err instanceof Error ? err : new Error(String(err)));
+      };
       try {
         this.ws = new WebSocket(this.url);
+        timer = setTimeout(() => {
+          fail(new Error(`连接本机 SKF 服务超时（${this.url}），请确认 SKF 服务已启动`));
+        }, 4000);
 
         this.ws.onopen = () => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
           this.emit('connect');
           resolve();
         };
 
         this.ws.onclose = () => {
-          this.ws = null;
           this.emit('disconnect');
+          fail(new Error(`SKF 服务连接已断开（${this.url}）`));
         };
 
-        this.ws.onerror = (err) => {
-          this.emit('error', err);
-          if (!this.isConnected()) reject(err);
+        this.ws.onerror = () => {
+          this.emit('error');
+          fail(new Error(`无法连接本机 SKF 服务（${this.url}），请确认 SKF 服务已启动`));
         };
 
         this.ws.onmessage = (event) => {
           try {
             const data = JSON.parse(event.data);
             if (data.id && this.callbacks.has(data.id)) {
-              const { resolve, reject } = this.callbacks.get(data.id);
+              const { resolve: ok, reject: no } = this.callbacks.get(data.id);
               this.callbacks.delete(data.id);
               if (data.error) {
-                reject({ code: data.error, message: data.message || 'Unknown Error' });
+                no({ code: data.error, message: data.message || 'Unknown Error' });
               } else {
-                resolve(data.result);
+                ok(data.result);
               }
             }
           } catch (e) {
@@ -74,7 +97,7 @@ export default class SKFClient {
           }
         };
       } catch (e) {
-        reject(e);
+        fail(e);
       }
     });
   }

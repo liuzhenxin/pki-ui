@@ -35,93 +35,194 @@
           ><el-button type="primary" icon="Search" @click="handleQuery">搜索</el-button><el-button @click="resetQuery">重置</el-button></el-form-item
         >
       </el-form>
+      <div class="quick-chips">
+        <el-radio-group v-model="quickFilter" size="small">
+          <el-radio-button label="all">全部 {{ quickCounts.all }}</el-radio-button>
+          <el-radio-button label="abnormal">只看异常 {{ quickCounts.abnormal }}</el-radio-button>
+          <el-radio-button label="upgradeable">只看可升级 {{ quickCounts.upgradeable }}</el-radio-button>
+          <el-radio-button label="manageable">只看可操作 {{ quickCounts.manageable }}</el-radio-button>
+        </el-radio-group>
+      </div>
     </el-card>
 
     <el-card shadow="never" class="ops-panel">
       <template #header>
         <div class="panel-header">
           <span>容器管理</span>
-          <div>
+          <div class="panel-tools">
+            <el-radio-group v-model="viewMode" size="small">
+              <el-radio-button label="layer">分层</el-radio-button>
+              <el-radio-button label="list">列表</el-radio-button>
+            </el-radio-group>
+            <el-button v-if="viewMode === 'layer'" link type="primary" @click="setAllLayers(false)">全部展开</el-button>
+            <el-button v-if="viewMode === 'layer'" link type="primary" @click="setAllLayers(true)">全部折叠</el-button>
             <el-button v-hasPermi="['ops:container:check-update']" icon="Download" :loading="checking" @click="checkUpdates">检查新版本</el-button>
             <el-button type="primary" icon="Refresh" :loading="loading" @click="loadData">刷新</el-button>
           </div>
         </div>
       </template>
-      <el-table v-loading="loading" :data="pagedContainers" border>
-        <el-table-column label="容器" min-width="175" fixed="left"
-          ><template #default="{ row }"
-            ><b>{{ row.name }}</b
-            ><small>{{ row.composeService || '未映射Compose服务' }}</small></template
-          ></el-table-column
-        >
-        <el-table-column label="服务器" min-width="150"
-          ><template #default="{ row }"
-            >{{ row.serverName }}<small>{{ row.serverHost }}</small></template
-          ></el-table-column
-        >
-        <el-table-column label="当前镜像版本" prop="image" min-width="220" show-overflow-tooltip />
-        <el-table-column label="最新正式版本" width="150"
-          ><template #default="{ row }"
-            ><el-tag v-if="versionOf(row).status === 'ERROR'" type="danger">扫描失败</el-tag
-            ><el-tag v-else-if="versionOf(row).status === 'NOT_FOUND'" type="info">仓库无版本</el-tag
-            ><el-tag v-else-if="versionOf(row).updateAvailable" type="warning">{{ versionOf(row).latestReleaseTag }}</el-tag
-            ><span v-else>{{ versionOf(row).latestReleaseTag || '-' }}</span></template
-          ></el-table-column
-        >
-        <el-table-column label="镜像摘要" width="145"
-          ><template #default="{ row }"
-            ><code>{{ shortDigest(row.imageDigest) }}</code></template
-          ></el-table-column
-        >
-        <el-table-column label="运行" width="90" align="center"
-          ><template #default="{ row }"
-            ><el-tag :type="row.running ? 'success' : 'info'">{{ row.running ? '运行中' : '已停止' }}</el-tag></template
-          ></el-table-column
-        >
-        <el-table-column label="健康" width="90" align="center"
-          ><template #default="{ row }"
-            ><el-tag :type="healthType(row.health)">{{ healthText(row.health) }}</el-tag></template
-          ></el-table-column
-        >
-        <el-table-column label="操作" width="300" fixed="right">
-          <template #default="{ row }">
-            <el-button link type="primary" @click="openDetail(row)">详情</el-button>
-            <el-button v-hasPermi="['ops:container:logs']" link @click="openLogs(row)">日志</el-button>
-            <el-button
-              v-if="!row.running && manageable(row)"
-              v-hasPermi="['ops:container:start']"
-              link
-              type="success"
-              @click="confirmAction(row, 'START')"
-              >启动</el-button
-            >
-            <el-button
-              v-if="row.running && manageable(row)"
-              v-hasPermi="['ops:container:stop']"
-              link
-              type="danger"
-              @click="confirmAction(row, 'STOP')"
-              >停止</el-button
-            >
-            <el-button
-              v-if="row.running && manageable(row)"
-              v-hasPermi="['ops:container:restart']"
-              link
-              type="warning"
-              @click="confirmAction(row, 'RESTART')"
-              >重启</el-button
-            >
-            <el-tooltip v-if="manageable(row)" :content="disabledReason(row)" :disabled="canUpgrade(row)"
-              ><span
-                ><el-button v-hasPermi="['ops:container:upgrade']" link type="primary" :disabled="!canUpgrade(row)" @click="openUpgrade(row)"
-                  >升级</el-button
-                ></span
-              ></el-tooltip
-            >
-          </template>
-        </el-table-column>
-      </el-table>
-      <pagination v-show="filteredContainers.length" v-model:page="page.pageNum" v-model:limit="page.pageSize" :total="filteredContainers.length" />
+      <!-- 分层视图（里程碑 1） -->
+      <div v-if="viewMode === 'layer'" v-loading="loading" class="layer-list">
+        <div v-for="group in layerGroups" :key="group.name" class="layer-group">
+          <div class="layer-head" @click="toggleLayer(group.name)">
+            <span class="layer-arrow" :class="{ closed: isLayerCollapsed(group.name) }">▾</span>
+            <b class="layer-name">{{ group.name }}</b>
+            <el-tag size="small">{{ layerBadge(group).count }} 个</el-tag>
+            <el-tag v-if="layerBadge(group).abnormal" size="small" type="warning">{{ layerBadge(group).abnormal }} 异常</el-tag>
+            <el-tag v-if="layerBadge(group).upgradeable" size="small" type="danger">{{ layerBadge(group).upgradeable }} 可升级</el-tag>
+            <span class="layer-empty"></span>
+          </div>
+          <el-table v-if="!isLayerCollapsed(group.name)" :data="group.rows" border size="small">
+            <el-table-column label="容器" min-width="180">
+              <template #default="{ row }">
+                <b>{{ row.name }}</b>
+                <small>{{ row.serverName }} · {{ row.composeService || '未映射Compose服务' }}</small>
+              </template>
+            </el-table-column>
+            <el-table-column label="当前镜像版本" prop="image" min-width="230" show-overflow-tooltip />
+            <el-table-column label="最新正式版本" width="140">
+              <template #default="{ row }">
+                <el-tag v-if="versionOf(row).status === 'ERROR'" type="danger">扫描失败</el-tag>
+                <el-tag v-else-if="versionOf(row).status === 'NOT_FOUND'" type="info">仓库无版本</el-tag>
+                <el-tag v-else-if="versionOf(row).updateAvailable" type="warning">{{ versionOf(row).latestReleaseTag }}</el-tag>
+                <span v-else>{{ versionOf(row).latestReleaseTag || '-' }}</span>
+                <div v-if="versionOf(row).latestReleaseDigest" class="ver-digest" :title="versionOf(row).latestReleaseDigest">digest: {{ shortDigest(versionOf(row).latestReleaseDigest) }}</div>
+              </template>
+            </el-table-column>
+            <el-table-column label="运行" width="82" align="center">
+              <template #default="{ row }">
+                <el-tag :type="row.running ? 'success' : 'info'" size="small">{{ row.running ? '运行中' : '已停止' }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="健康" width="82" align="center">
+              <template #default="{ row }">
+                <el-tooltip :content="row.status || healthText(row.health)" :disabled="!row.status">
+                  <el-tag :type="healthType(row.health)" size="small">{{ healthText(row.health) }}</el-tag>
+                </el-tooltip>
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" min-width="230" fixed="right">
+              <template #default="{ row }">
+                <el-button link type="primary" @click="openDetail(row)">详情</el-button>
+                <el-button v-hasPermi="['ops:container:logs']" link @click="openLogs(row)">日志</el-button>
+                <el-button
+                  v-if="!row.running && manageable(row)"
+                  v-hasPermi="['ops:container:start']"
+                  link
+                  type="success"
+                  @click="confirmAction(row, 'START')"
+                  >启动</el-button
+                >
+                <el-button
+                  v-if="row.running && manageable(row)"
+                  v-hasPermi="['ops:container:stop']"
+                  link
+                  type="danger"
+                  @click="confirmAction(row, 'STOP')"
+                  >停止</el-button
+                >
+                <el-button
+                  v-if="row.running && manageable(row)"
+                  v-hasPermi="['ops:container:restart']"
+                  link
+                  type="warning"
+                  @click="confirmAction(row, 'RESTART')"
+                  >重启</el-button
+                >
+                <el-tooltip v-if="manageable(row)" :content="disabledReason(row)" :disabled="canUpgrade(row)">
+                  <span
+                    ><el-button v-hasPermi="['ops:container:upgrade']" link type="primary" :disabled="!canUpgrade(row)" @click="openUpgrade(row)"
+                      >升级</el-button
+                    ></span
+                  >
+                </el-tooltip>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+        <el-empty v-if="!layerGroups.length" description="没有符合条件的容器" :image-size="80" />
+      </div>
+      <!-- 列表视图（原实现保留） -->
+      <template v-if="viewMode === 'list'">
+        <el-table v-loading="loading" :data="pagedContainers" border>
+          <el-table-column label="容器" min-width="175" fixed="left"
+            ><template #default="{ row }"
+              ><b>{{ row.name }}</b
+              ><small>{{ row.composeService || '未映射Compose服务' }}</small></template
+            ></el-table-column
+          >
+          <el-table-column label="服务器" min-width="150"
+            ><template #default="{ row }"
+              >{{ row.serverName }}<small>{{ row.serverHost }}</small></template
+            ></el-table-column
+          >
+          <el-table-column label="当前镜像版本" prop="image" min-width="220" show-overflow-tooltip />
+          <el-table-column label="最新正式版本" width="150"
+            ><template #default="{ row }"
+              ><el-tag v-if="versionOf(row).status === 'ERROR'" type="danger">扫描失败</el-tag
+              ><el-tag v-else-if="versionOf(row).status === 'NOT_FOUND'" type="info">仓库无版本</el-tag
+              ><el-tag v-else-if="versionOf(row).updateAvailable" type="warning">{{ versionOf(row).latestReleaseTag }}</el-tag
+              ><span v-else>{{ versionOf(row).latestReleaseTag || '-' }}</span>
+              ><div v-if="versionOf(row).latestReleaseDigest" class="ver-digest" :title="versionOf(row).latestReleaseDigest">digest: {{ shortDigest(versionOf(row).latestReleaseDigest) }}</div></template
+            ></el-table-column
+          >
+          <el-table-column label="镜像摘要" width="145"
+            ><template #default="{ row }"
+              ><code>{{ shortDigest(row.imageDigest) }}</code></template
+            ></el-table-column
+          >
+          <el-table-column label="运行" width="90" align="center"
+            ><template #default="{ row }"
+              ><el-tag :type="row.running ? 'success' : 'info'">{{ row.running ? '运行中' : '已停止' }}</el-tag></template
+            ></el-table-column
+          >
+          <el-table-column label="健康" width="90" align="center"
+            ><template #default="{ row }"
+              ><el-tooltip :content="row.status || healthText(row.health)" :disabled="!row.status"
+                ><el-tag :type="healthType(row.health)">{{ healthText(row.health) }}</el-tag></el-tooltip
+              ></template
+            ></el-table-column
+          >
+          <el-table-column label="操作" width="300" fixed="right">
+            <template #default="{ row }">
+              <el-button link type="primary" @click="openDetail(row)">详情</el-button>
+              <el-button v-hasPermi="['ops:container:logs']" link @click="openLogs(row)">日志</el-button>
+              <el-button
+                v-if="!row.running && manageable(row)"
+                v-hasPermi="['ops:container:start']"
+                link
+                type="success"
+                @click="confirmAction(row, 'START')"
+                >启动</el-button
+              >
+              <el-button
+                v-if="row.running && manageable(row)"
+                v-hasPermi="['ops:container:stop']"
+                link
+                type="danger"
+                @click="confirmAction(row, 'STOP')"
+                >停止</el-button
+              >
+              <el-button
+                v-if="row.running && manageable(row)"
+                v-hasPermi="['ops:container:restart']"
+                link
+                type="warning"
+                @click="confirmAction(row, 'RESTART')"
+                >重启</el-button
+              >
+              <el-tooltip v-if="manageable(row)" :content="disabledReason(row)" :disabled="canUpgrade(row)"
+                ><span
+                  ><el-button v-hasPermi="['ops:container:upgrade']" link type="primary" :disabled="!canUpgrade(row)" @click="openUpgrade(row)"
+                    >升级</el-button
+                  ></span
+                ></el-tooltip
+              >
+            </template>
+          </el-table-column>
+        </el-table>
+        <pagination v-show="filteredContainers.length" v-model:page="page.pageNum" v-model:limit="page.pageSize" :total="filteredContainers.length" />
+      </template>
     </el-card>
 
     <el-drawer v-model="detailVisible" title="容器详情" size="620px">
@@ -131,6 +232,11 @@
         <el-descriptions-item label="容器 ID">{{ selected.containerId }}</el-descriptions-item
         ><el-descriptions-item label="镜像">{{ selected.image }}</el-descriptions-item>
         <el-descriptions-item label="镜像 ID / Digest">{{ selected.imageId || '-' }}<br />{{ selected.imageDigest || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="状态"
+          >运行：{{ selected.running ? '是' : '否' }} · 健康：{{ healthText(selected.health) }}<br /><small>{{
+            selected.status || '-'
+          }}</small></el-descriptions-item
+        >
         <el-descriptions-item label="Compose">{{ selected.composeProject || '-' }} / {{ selected.composeService || '-' }}</el-descriptions-item>
         <el-descriptions-item label="配置文件">{{ selected.composeConfigFiles || '-' }}</el-descriptions-item
         ><el-descriptions-item label="端口">{{ selected.ports || '-' }}</el-descriptions-item>
@@ -156,6 +262,8 @@
       <el-alert title="升级只重建目标 Compose 服务；健康检查失败将自动回滚。" type="warning" :closable="false" show-icon />
       <el-descriptions v-if="selected" :column="1" border class="upgrade-info"
         ><el-descriptions-item label="容器">{{ selected.name }}</el-descriptions-item
+        ><el-descriptions-item label="服务器">{{ selected.serverName }}（{{ selected.serverHost }}）</el-descriptions-item
+        ><el-descriptions-item label="Compose 服务">{{ selected.composeService || '-' }}</el-descriptions-item
         ><el-descriptions-item label="当前版本">{{ selected.image }}</el-descriptions-item
         ><el-descriptions-item label="目标版本">{{ targetImage }}</el-descriptions-item
         ><el-descriptions-item label="目标 Digest">{{ versionOf(selected).latestReleaseDigest || '-' }}</el-descriptions-item
@@ -247,12 +355,110 @@ const filteredContainers = computed(() =>
       (!query.value.health || row.health === query.value.health) &&
       (!query.value.updateOnly || versionOf(row).updateAvailable) &&
       (!query.value.keyword ||
-        [row.name, row.image, row.composeService, row.serverName].some((value) => value?.toLowerCase().includes(query.value.keyword.toLowerCase())))
+        [row.name, row.image, row.composeService, row.serverName].some((value) =>
+          value?.toLowerCase().includes(query.value.keyword.toLowerCase())
+        )) &&
+      (quickFilter.value === 'all' ||
+        (quickFilter.value === 'abnormal'
+          ? !row.running || ['unhealthy', 'starting'].includes(row.health)
+          : quickFilter.value === 'upgradeable'
+            ? versionOf(row).updateAvailable
+            : manageable(row)))
   )
 );
 const pagedContainers = computed(() =>
   filteredContainers.value.slice((page.value.pageNum - 1) * page.value.pageSize, page.value.pageNum * page.value.pageSize)
 );
+
+// --- 分层视图（里程碑 1） ---
+const viewMode = ref<'layer' | 'list'>(localStorage.getItem('ops-container-viewmode') === 'list' ? 'list' : 'layer');
+watch(viewMode, (mode) => localStorage.setItem('ops-container-viewmode', mode));
+const quickFilter = ref<'all' | 'abnormal' | 'upgradeable' | 'manageable'>('all');
+const LAYER_NAMES = ['基础资源', '服务发现', '网关', '平台服务', '业务领域', 'Web 前端', '其他'] as const;
+const STACK_LAYER: Record<string, (typeof LAYER_NAMES)[number]> = {
+  infra: '基础资源',
+  discovery: '服务发现',
+  gateway: '网关',
+  platform: '平台服务',
+  domain: '业务领域',
+  ui: 'Web 前端'
+};
+const SERVICE_LAYER: Record<string, (typeof LAYER_NAMES)[number]> = {
+  mysql: '基础资源',
+  redis: '基础资源',
+  kafka: '基础资源',
+  syslog: '基础资源',
+  'log-forwarder': '基础资源',
+  'ops-agent': '基础资源',
+  'ops-executor': '基础资源',
+  'docker-socket-proxy': '基础资源',
+  'ops-executor-socket-proxy': '基础资源',
+  nacos: '服务发现',
+  gateway: '网关',
+  'snowflake-id': '平台服务',
+  admin: '平台服务',
+  auth: '平台服务',
+  ops: '平台服务',
+  crypto: '业务领域',
+  ca: '业务领域',
+  kmc: '业务领域',
+  ra: '业务领域',
+  ocsp: '业务领域',
+  'ui-ops': 'Web 前端',
+  'ui-ca': 'Web 前端',
+  'ui-kmc': 'Web 前端',
+  'ui-ra': 'Web 前端',
+  'ui-ocsp': 'Web 前端'
+};
+const layerOf = (row: Row): (typeof LAYER_NAMES)[number] => {
+  const path = `${row.composeConfigFiles || ''} ${row.composeProject || ''}`;
+  const stack = path.match(/pki-(infra|discovery|gateway|platform|domain|ui)-stack/)?.[1];
+  if (stack && STACK_LAYER[stack]) return STACK_LAYER[stack];
+  const service = row.composeService || row.name;
+  const base = service.startsWith('pki-') ? service.slice(4) : service;
+  if (base.startsWith('ui-') && !['ui-ops', 'ui-ca', 'ui-kmc', 'ui-ra', 'ui-ocsp'].includes(base)) return '其他';
+  return SERVICE_LAYER[base] || '其他';
+};
+const collapsedLayers = ref<string[]>(JSON.parse(localStorage.getItem('ops-container-collapsed-layers') || '[]'));
+const isLayerCollapsed = (name: string) => collapsedLayers.value.includes(name);
+const toggleLayer = (name: string) => {
+  const index = collapsedLayers.value.indexOf(name);
+  if (index >= 0) collapsedLayers.value.splice(index, 1);
+  else collapsedLayers.value.push(name);
+  localStorage.setItem('ops-container-collapsed-layers', JSON.stringify(collapsedLayers.value));
+};
+const setAllLayers = (collapse: boolean) => {
+  collapsedLayers.value = collapse ? layerGroups.value.map((group) => group.name) : [];
+  localStorage.setItem('ops-container-collapsed-layers', JSON.stringify(collapsedLayers.value));
+};
+const quickCounts = computed(() => {
+  const rows = containers.value.filter(
+    (row) =>
+      (!query.value.serverCode || row.serverCode === query.value.serverCode) &&
+      (!query.value.running || String(row.running) === query.value.running) &&
+      (!query.value.health || row.health === query.value.health) &&
+      (!query.value.updateOnly || versionOf(row).updateAvailable) &&
+      (!query.value.keyword ||
+        [row.name, row.image, row.composeService, row.serverName].some((value) => value?.toLowerCase().includes(query.value.keyword.toLowerCase())))
+  );
+  return {
+    all: rows.length,
+    abnormal: rows.filter((row) => !row.running || ['unhealthy', 'starting'].includes(row.health)).length,
+    upgradeable: rows.filter((row) => versionOf(row).updateAvailable).length,
+    manageable: rows.filter((row) => manageable(row)).length
+  };
+});
+const layerGroups = computed(() => {
+  const map = new Map<(typeof LAYER_NAMES)[number], Row[]>();
+  LAYER_NAMES.forEach((name) => map.set(name, []));
+  filteredContainers.value.forEach((row) => map.get(layerOf(row))!.push(row));
+  return LAYER_NAMES.map((name) => ({ name, rows: map.get(name)! })).filter((group) => group.rows.length > 0);
+});
+const layerBadge = (group: { name: string; rows: Row[] }) => ({
+  count: group.rows.length,
+  abnormal: group.rows.filter((row) => !row.running || ['unhealthy', 'starting'].includes(row.health)).length,
+  upgradeable: group.rows.filter((row) => canUpgrade(row)).length
+});
 const summary = computed(() => [
   { label: '容器总数', value: containers.value.length, type: '' },
   { label: '运行中', value: containers.value.filter((v) => v.running).length, type: 'success' },
@@ -278,6 +484,7 @@ const handleQuery = () => {
 };
 const resetQuery = () => {
   query.value = { serverCode: '', running: '', health: '', updateOnly: false, keyword: '' };
+  quickFilter.value = 'all';
   handleQuery();
 };
 const loadData = async () => {
@@ -384,6 +591,11 @@ onBeforeUnmount(() => pollTimer && clearTimeout(pollTimer));
 .ops-query :deep(.el-card__body) {
   padding-bottom: 0;
 }
+.quick-chips {
+  display: flex;
+  align-items: center;
+  padding: 8px 0 4px;
+}
 .panel-header {
   display: flex;
   justify-content: space-between;
@@ -418,5 +630,53 @@ small {
 }
 code {
   font-size: 12px;
+}
+.panel-tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.layer-list {
+  min-height: 120px;
+}
+.layer-group {
+  border: 1px solid #e4e7ed;
+  border-radius: 6px;
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+.layer-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  background: #fafafa;
+  cursor: pointer;
+  user-select: none;
+}
+.layer-head:hover {
+  background: #f0f2f5;
+}
+.layer-arrow {
+  display: inline-block;
+  color: #909399;
+  transition: transform 0.15s;
+  font-size: 12px;
+}
+.layer-arrow.closed {
+  transform: rotate(-90deg);
+}
+.layer-name {
+  min-width: 96px;
+  font-size: 14px;
+}
+.ver-digest {
+  font-size: 12px;
+  color: #909399;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 180px;
 }
 </style>

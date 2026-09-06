@@ -254,3 +254,59 @@ export interface AccessControlCurrentIp {
   inAllowList: boolean;
   source: 'X-PKI-Client-IP' | 'X-Real-IP' | 'REMOTE' | string;
 }
+
+export interface AlertChannel {
+  id?: number;
+  channelType?: string;
+  name: string;
+  enabled: boolean;
+  accessToken?: string;
+  secret?: string;
+  remark?: string;
+  updateTime?: string;
+}
+
+export interface AlertChannelSave {
+  name: string;
+  enabled: boolean;
+  accessToken?: string;
+  secret?: string;
+  remark?: string;
+}
+
+export interface AlertRule {
+  id?: number;
+  channelId: number;
+  serviceCode: string;
+  eventCode: string;
+  level: string;
+  enabled: boolean;
+  cooldownSeconds?: number;
+  updateTime?: string;
+}
+
+export interface AlertRuleSave {
+  channelId: number;
+  serviceCode: string;
+  eventCode: string;
+  level: string;
+  enabled: boolean;
+  cooldownSeconds?: number;
+}
+
+export interface AlertDispatchResult {
+  matched: boolean;
+  delivered: boolean;
+  channelResult?: string;
+}
+
+export interface AlertEventLog {
+  id: number;
+  serviceCode: string;
+  eventCode: string;
+  level: string;
+  summary?: string;
+  delivered: boolean;
+  channelResult?: string;
+  createTime?: string;
+}
