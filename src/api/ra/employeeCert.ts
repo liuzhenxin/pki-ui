@@ -99,9 +99,21 @@ export interface EmployeeCertTemplate {
   id?: number | string;
   templateCode: string;
   channel: string;
+  messageType?: string;
   title: string;
   content: string;
   enabled: boolean;
+}
+
+export interface EmployeeCertDistributionConfig {
+  emailServerUrl?: string;
+  dingtalkServerUrl?: string;
+  appKey?: string;
+  secretKey?: string;
+  emailAccount?: string;
+  dingtalkApp?: string;
+  attachmentMaxSizeMb?: number;
+  secretKeyConfigured?: boolean;
 }
 
 export interface EmployeeEmailCertProfile {
@@ -202,6 +214,12 @@ export const getEmployeeCertTask = (taskNo: string): Promise<Result<EmployeeCert
     method: 'get'
   }) as any;
 
+export const issueEmployeeCertTask = (taskNo: string): Promise<Result<EmployeeCertTaskDetail>> =>
+  request({
+    url: `/ra/v1/employee-certs/tasks/${taskNo}/issue`,
+    method: 'post'
+  }) as any;
+
 export const distributeEmployeeCertTask = (taskNo: string): Promise<Result<EmployeeCertTaskDetail>> =>
   request({
     url: `/ra/v1/employee-certs/tasks/${taskNo}/distribute`,
@@ -235,6 +253,16 @@ export const distributeEmployeeCert = (id: number | string): Promise<Result<Empl
     method: 'post'
   }) as any;
 
+export const uploadEmployeeCertDistributionPackage = (id: number | string, file: File): Promise<Result<EmployeeCert>> => {
+  const form = new FormData();
+  form.append('file', file);
+  return request({
+    url: `/ra/v1/employee-certs/${id}/distribution-package`,
+    method: 'post',
+    data: form
+  }) as any;
+};
+
 export const listEmployeeCertKeys = (employeeId: number | string): Promise<Result<EmployeeCertKey[]>> =>
   request({
     url: `/ra/v1/employee-certs/employees/${employeeId}/keys`,
@@ -257,6 +285,21 @@ export const listEmployeeCertTemplates = (): Promise<Result<EmployeeCertTemplate
 export const saveEmployeeCertTemplate = (data: EmployeeCertTemplate): Promise<Result<EmployeeCertTemplate>> =>
   request({
     url: '/ra/v1/employee-certs/templates',
+    method: 'put',
+    data
+  }) as any;
+
+export const getEmployeeCertDistributionConfig = (): Promise<Result<EmployeeCertDistributionConfig>> =>
+  request({
+    url: '/ra/v1/employee-certs/distribution-config',
+    method: 'get'
+  }) as any;
+
+export const saveEmployeeCertDistributionConfig = (
+  data: EmployeeCertDistributionConfig
+): Promise<Result<EmployeeCertDistributionConfig>> =>
+  request({
+    url: '/ra/v1/employee-certs/distribution-config',
     method: 'put',
     data
   }) as any;

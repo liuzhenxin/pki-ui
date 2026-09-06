@@ -137,12 +137,12 @@
         <el-row :gutter="12">
           <el-col :span="12">
             <el-form-item label="生效时间">
-              <el-date-picker v-model="form.notBefore" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" placeholder="生效时间" style="width: 100%" />
+              <el-date-picker v-model="form.notBefore" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" placeholder="生效时间" style="width: 100%" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item label="到期时间">
-              <el-date-picker v-model="form.notAfter" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" placeholder="到期时间" style="width: 100%" />
+              <el-date-picker v-model="form.notAfter" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" placeholder="到期时间" style="width: 100%" />
             </el-form-item>
           </el-col>
         </el-row>

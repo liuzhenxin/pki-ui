@@ -27,6 +27,15 @@ function unwrap<T>(response: any): T {
   return (body?.data ?? body) as T;
 }
 
+async function portalRequest<T>(request: Promise<any>): Promise<T> {
+  try {
+    return unwrap<T>(await request);
+  } catch (error: any) {
+    const body = error?.response?.data;
+    throw new Error(body?.msg || body?.message || error?.message || '请求失败');
+  }
+}
+
 const cleanQuery = (query: PublicCertQuery) => ({
   ...query,
   domainName: query.domainName || undefined,
@@ -49,31 +58,31 @@ export interface PortalLoginResult {
 }
 
 export const loginPublicCertPortal = async (domainAccount: string): Promise<PortalLoginResult> =>
-  unwrap(await portalClient.post('/ra/v1/public-certs/portal/login', { domainAccount }));
+  portalRequest(portalClient.post('/v1/public-certs/portal/login', { domainAccount }));
 
 export const logoutPublicCertPortal = async (token: string) =>
-  unwrap<void>(await portalClient.post('/ra/v1/public-certs/portal/logout', null, { headers: portalHeaders(token) }));
+  portalRequest<void>(portalClient.post('/v1/public-certs/portal/logout', null, { headers: portalHeaders(token) }));
 
 export const getPublicCertPortalAccess = async (token: string): Promise<SelfAccess> =>
-  unwrap(await portalClient.get('/ra/v1/public-certs/portal/access', { headers: portalHeaders(token) }));
+  portalRequest(portalClient.get('/v1/public-certs/portal/access', { headers: portalHeaders(token) }));
 
 export const pagePublicCertPortal = async (token: string, query: PublicCertQuery): Promise<any> =>
-  unwrap(await portalClient.post('/ra/v1/public-certs/portal/page', cleanQuery(query), { headers: portalHeaders(token) }));
+  portalRequest(portalClient.post('/v1/public-certs/portal/page', cleanQuery(query), { headers: portalHeaders(token) }));
 
 export const listPublicCertPortalTypes = async (token: string): Promise<PublicCertType[]> =>
-  unwrap(await portalClient.get('/ra/v1/public-certs/portal/types', { headers: portalHeaders(token) }));
+  portalRequest(portalClient.get('/v1/public-certs/portal/types', { headers: portalHeaders(token) }));
 
 export const getPublicCertPortal = async (token: string, id: number | string): Promise<PublicCertDetail> =>
-  unwrap(await portalClient.get(`/ra/v1/public-certs/portal/${id}`, { headers: portalHeaders(token) }));
+  portalRequest(portalClient.get(`/v1/public-certs/portal/${id}`, { headers: portalHeaders(token) }));
 
 export const savePublicCertPortal = async (token: string, data: PublicCert): Promise<PublicCertDetail> =>
-  unwrap(await portalClient.post('/ra/v1/public-certs/portal', data, { headers: portalHeaders(token) }));
+  portalRequest(portalClient.post('/v1/public-certs/portal', data, { headers: portalHeaders(token) }));
 
 export const submitPublicCertPortal = async (token: string, id: number | string): Promise<PublicCert> =>
-  unwrap(await portalClient.post(`/ra/v1/public-certs/portal/${id}/submit`, null, { headers: portalHeaders(token) }));
+  portalRequest(portalClient.post(`/v1/public-certs/portal/${id}/submit`, null, { headers: portalHeaders(token) }));
 
 export const uploadPublicCertPortalAttachment = async (token: string, id: number | string, file: File): Promise<PublicCertAttachment> => {
   const form = new FormData();
   form.append('file', file);
-  return unwrap(await portalClient.post(`/ra/v1/public-certs/portal/${id}/attachments`, form, { headers: portalHeaders(token) }));
+  return portalRequest(portalClient.post(`/v1/public-certs/portal/${id}/attachments`, form, { headers: portalHeaders(token) }));
 };

@@ -86,7 +86,9 @@
 
           <el-row :gutter="10" class="mb8 toolbar-row">
             <el-col :span="1.5">
-              <el-button v-hasPermi="['ra:employee:sync']" type="primary" plain icon="Refresh" :loading="syncing" @click="handleSync">立即同步</el-button>
+              <el-button v-hasPermi="['ra:employee:sync']" type="primary" plain icon="Refresh" :loading="syncing" @click="handleSync"
+                >立即同步</el-button
+              >
             </el-col>
             <el-col :span="1.5">
               <el-button v-hasPermi="['ra:employee:config']" plain icon="Setting" @click="openConfig">同步配置</el-button>
@@ -116,7 +118,9 @@
             <el-table-column label="员工类型" prop="employeeTypeName" width="118" show-overflow-tooltip />
             <el-table-column label="同步状态" width="90" align="center">
               <template #default="{ row }">
-                <el-tag :type="row.sourceStatus === 'A' ? 'success' : row.sourceStatus === 'I' ? 'danger' : 'info'" effect="plain">{{ row.sourceStatusName || row.employeeStatus }}</el-tag>
+                <el-tag :type="row.sourceStatus === 'A' ? 'success' : row.sourceStatus === 'I' ? 'danger' : 'info'" effect="plain">{{
+                  row.sourceStatusName || row.employeeStatus
+                }}</el-tag>
               </template>
             </el-table-column>
             <el-table-column label="本地状态" width="90" align="center">
@@ -200,7 +204,13 @@
             <el-input v-model="syncConfig.apiAppKey" autocomplete="off" />
           </el-form-item>
           <el-form-item label="SECRET_KEY">
-            <el-input v-model="syncConfig.apiSecretKey" type="password" show-password autocomplete="new-password" :placeholder="syncConfig.apiSecretConfigured ? '已配置，留空则不修改' : '请输入 SECRET_KEY'" />
+            <el-input
+              v-model="syncConfig.apiSecretKey"
+              type="password"
+              show-password
+              autocomplete="new-password"
+              :placeholder="syncConfig.apiSecretConfigured ? '已配置，留空则不修改' : '请输入 SECRET_KEY'"
+            />
           </el-form-item>
         </template>
       </el-form>
@@ -216,7 +226,9 @@
         <el-table-column label="触发方式" prop="triggerType" width="110" />
         <el-table-column label="状态" prop="status" width="96" align="center">
           <template #default="{ row }">
-            <el-tag :type="row.status === 'SUCCESS' ? 'success' : row.status === 'FAILED' ? 'danger' : 'warning'" effect="plain">{{ row.status }}</el-tag>
+            <el-tag :type="row.status === 'SUCCESS' ? 'success' : row.status === 'FAILED' ? 'danger' : 'warning'" effect="plain">{{
+              row.status
+            }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="组织" prop="totalOrgs" width="80" align="right" />
@@ -540,6 +552,22 @@ onMounted(() => {
     margin-top: 12px;
     max-height: calc(100vh - 230px);
     overflow: auto;
+
+    :deep(.el-tree-node),
+    :deep(.el-tree-node__content) {
+      width: max-content;
+      min-width: 100%;
+    }
+
+    :deep(.el-tree-node__content) {
+      padding-right: 12px;
+    }
+
+    :deep(.el-tree-node__label) {
+      overflow: visible;
+      text-overflow: clip;
+      white-space: nowrap;
+    }
   }
 
   .summary-strip {

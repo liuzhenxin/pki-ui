@@ -93,6 +93,7 @@
             <el-option v-for="root in rootOptions" :key="String(root.id)" :label="rootLabel(root)" :value="String(root.id)" />
           </el-select>
         </el-form-item>
+        <el-alert title="仅展示当前业务管理员已授权的根证书和证书模板。" type="info" :closable="false" show-icon class="mb12" />
         <el-form-item label="签发类型" prop="certMode">
           <el-radio-group v-model="form.certMode" @change="handleCertModeChange">
             <el-radio-button label="single">单证书</el-radio-button>
@@ -102,7 +103,12 @@
         <template v-if="form.certMode !== 'dual'">
           <el-form-item label="证书模板" prop="profileId">
             <el-select v-model="form.profileId" filterable clearable placeholder="请选择证书模板" style="width: 100%" @change="handleProfileChange">
-              <el-option v-for="profile in profileOptions" :key="String(profile.id)" :label="profileApplyLabel(profile)" :value="String(profile.id)" />
+              <el-option
+                v-for="profile in profileOptions"
+                :key="String(profile.id)"
+                :label="profileApplyLabel(profile)"
+                :value="String(profile.id)"
+              />
             </el-select>
           </el-form-item>
           <el-alert
@@ -115,7 +121,14 @@
           />
         </template>
         <el-form-item v-else label="证书模板" prop="dualProfileIndex">
-          <el-select v-model="form.dualProfileIndex" filterable clearable placeholder="请选择双证书模板" style="width: 100%" @change="handleDualProfileChange">
+          <el-select
+            v-model="form.dualProfileIndex"
+            filterable
+            clearable
+            placeholder="请选择双证书模板"
+            style="width: 100%"
+            @change="handleDualProfileChange"
+          >
             <el-option v-for="(pair, index) in dualProfileOptions" :key="index" :label="dualPairLabel(pair)" :value="index" />
           </el-select>
         </el-form-item>
@@ -148,10 +161,22 @@
         <section class="user-picker-main">
           <el-form :model="userPickerQuery" :inline="true" label-width="72px" class="user-picker-query">
             <el-form-item label="用户名称">
-              <el-input v-model="userPickerQuery.username" placeholder="请输入用户名称" clearable style="width: 180px" @keyup.enter="handleUserPickerQuery" />
+              <el-input
+                v-model="userPickerQuery.username"
+                placeholder="请输入用户名称"
+                clearable
+                style="width: 180px"
+                @keyup.enter="handleUserPickerQuery"
+              />
             </el-form-item>
             <el-form-item label="手机号码">
-              <el-input v-model="userPickerQuery.mobile" placeholder="请输入手机号码" clearable style="width: 180px" @keyup.enter="handleUserPickerQuery" />
+              <el-input
+                v-model="userPickerQuery.mobile"
+                placeholder="请输入手机号码"
+                clearable
+                style="width: 180px"
+                @keyup.enter="handleUserPickerQuery"
+              />
             </el-form-item>
             <el-form-item label="用户类别">
               <el-select v-model="userPickerQuery.userCategory" placeholder="全部类别" clearable style="width: 150px">
@@ -573,7 +598,10 @@ function handleProfileChange(profileId?: string | number) {
 }
 
 function profileApplyLabel(profile: RaUserCertScopeProfile) {
-  return isEncryptionProfile(profile) && String(selectedRoot.value?.algorithm || form.rootAlgorithm || '').toUpperCase().includes('RSA')
+  return isEncryptionProfile(profile) &&
+    String(selectedRoot.value?.algorithm || form.rootAlgorithm || '')
+      .toUpperCase()
+      .includes('RSA')
     ? `${profile.name}（KMC加密）`
     : profile.name;
 }
@@ -630,7 +658,9 @@ function isEncryptionProfile(profile?: RaUserCertScopeProfile) {
       items.forEach(push);
     }
   });
-  const hasSign = usages.some((usage) => usage.includes('digitalsignature') || usage.includes('nonrepudiation') || usage.includes('contentcommitment'));
+  const hasSign = usages.some(
+    (usage) => usage.includes('digitalsignature') || usage.includes('nonrepudiation') || usage.includes('contentcommitment')
+  );
   const hasEnc = usages.some((usage) => usage.includes('encipher') || usage.includes('encrypt'));
   return hasEnc && !hasSign;
 }

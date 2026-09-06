@@ -2,13 +2,13 @@
   <div class="public-cert-self">
     <div v-if="!portalReady" class="portal-login-shell">
       <el-card class="portal-login-card" shadow="never">
-        <h1>公网证书申请</h1>
-        <p>请输入域账号完成身份认证后继续。</p>
+        <h1>公网证书录入</h1>
+        <p>请输入已授权的域账号进入录入页面。</p>
         <el-form @submit.prevent="handleLogin">
           <el-form-item label="域账号">
             <el-input v-model="loginAccount" clearable placeholder="例如 ext0085" @keyup.enter="handleLogin" />
           </el-form-item>
-          <el-button type="primary" :loading="loginLoading" class="login-button" @click="handleLogin">前往身份认证</el-button>
+          <el-button type="primary" :loading="loginLoading" class="login-button" @click="handleLogin">登录录入端</el-button>
         </el-form>
       </el-card>
     </div>
@@ -16,11 +16,11 @@
     <div v-else class="self-shell">
       <header class="self-header">
         <div>
-          <h1>公网证书申请</h1>
-          <span>{{ access.employeeName || access.domainAccount || '-' }}</span>
+          <h1>公网证书录入</h1>
+          <span>{{ access.employeeName || '-' }} / {{ access.domainAccount || '-' }}</span>
         </div>
         <div class="header-actions">
-          <el-button type="primary" icon="Plus" :disabled="!access.granted" @click="openCreate">新增证书</el-button>
+          <el-button type="primary" icon="Plus" :disabled="!access.granted" @click="openCreate">新增录入</el-button>
           <el-button @click="handleLogout">退出</el-button>
         </div>
       </header>
@@ -88,70 +88,99 @@
       </el-card>
     </div>
 
-    <el-drawer v-model="formOpen" :title="form.id ? '修改公网证书' : '新增公网证书'" size="720px" append-to-body>
+    <el-drawer v-model="formOpen" :title="form.id ? '修改公网证书录入' : '新增公网证书录入'" size="820px" append-to-body>
       <el-form ref="formRef" :model="form" :rules="rules" label-width="116px">
+        <el-alert
+          v-if="!form.id"
+          title="保存后可在详情中上传 zip/rar 附件；提交审核后由管理员确认入库。"
+          type="info"
+          show-icon
+          :closable="false"
+          class="form-tip"
+        />
+        <el-divider content-position="left">证书信息</el-divider>
         <el-row :gutter="12">
           <el-col :span="12">
             <el-form-item label="证书类型" prop="certTypeId">
-              <el-select v-model="form.certTypeId" style="width: 100%" @change="onTypeChange">
+              <el-select v-model="form.certTypeId" placeholder="请选择证书类型" style="width: 100%" @change="onTypeChange">
                 <el-option v-for="item in types" :key="String(item.id)" :label="item.typeName" :value="item.id" />
               </el-select>
             </el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item label="域名" prop="domainName">
-              <el-input v-model="form.domainName" clearable />
+              <el-input v-model="form.domainName" clearable placeholder="例如 portal.faw-vw.com" />
             </el-form-item>
           </el-col>
         </el-row>
         <el-row :gutter="12">
           <el-col :span="12">
             <el-form-item label="证书序列号">
-              <el-input v-model="form.serialNumber" clearable />
+              <el-input v-model="form.serialNumber" clearable placeholder="可后续补录" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item label="颁发机构">
-              <el-input v-model="form.issuer" clearable />
+              <el-input v-model="form.issuer" clearable placeholder="证书颁发机构" />
             </el-form-item>
           </el-col>
         </el-row>
         <el-row :gutter="12">
           <el-col :span="12">
             <el-form-item label="供应商">
-              <el-input v-model="form.vendor" clearable />
+              <el-input v-model="form.vendor" clearable placeholder="证书供应商" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="到期时间" prop="notAfter">
-              <el-date-picker v-model="form.notAfter" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" style="width: 100%" />
+            <el-form-item label="有效期止" prop="notAfter">
+              <el-date-picker
+                v-model="form.notAfter"
+                type="datetime"
+                value-format="YYYY-MM-DD HH:mm:ss"
+                placeholder="请选择到期时间"
+                style="width: 100%"
+              />
             </el-form-item>
           </el-col>
         </el-row>
+        <el-divider content-position="left">负责人信息</el-divider>
         <el-row :gutter="12">
           <el-col :span="12">
             <el-form-item label="业务负责人" prop="businessOwnerName">
-              <el-input v-model="form.businessOwnerName" clearable />
+              <el-input v-model="form.businessOwnerName" clearable placeholder="业务负责人姓名" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item label="负责人邮箱">
-              <el-input v-model="form.businessOwnerEmail" clearable />
+              <el-input v-model="form.businessOwnerEmail" clearable placeholder="用于到期和驳回通知" />
             </el-form-item>
           </el-col>
         </el-row>
         <el-row :gutter="12">
           <el-col :span="12">
             <el-form-item label="科室">
-              <el-input v-model="form.departmentName" clearable />
+              <el-input v-model="form.departmentName" clearable placeholder="申请人所在科室" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item label="使用系统" prop="systemName">
-              <el-input v-model="form.systemName" clearable />
+              <el-input v-model="form.systemName" clearable placeholder="主要使用系统" />
             </el-form-item>
           </el-col>
         </el-row>
+        <el-row :gutter="12">
+          <el-col :span="12">
+            <el-form-item label="系统负责人">
+              <el-input v-model="form.systemOwnerName" clearable placeholder="系统负责人姓名" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="维护人账号">
+              <el-input v-model="form.maintainerAccount" clearable placeholder="域账号，可后续补录" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-divider content-position="left">使用详情</el-divider>
         <el-form-item label="使用详情">
           <div class="usage-editor">
             <div v-for="(item, index) in form.usages" :key="index" class="usage-row">
@@ -163,7 +192,7 @@
             <el-button type="primary" link icon="Plus" @click="addUsage">新增使用详情</el-button>
           </div>
         </el-form-item>
-        <el-form-item label="备注">
+        <el-form-item label="录入说明">
           <el-input v-model="form.remark" type="textarea" :rows="2" />
         </el-form-item>
       </el-form>
@@ -233,7 +262,7 @@ const detailOpen = ref(false);
 const saving = ref(false);
 const formRef = ref<FormInstance>();
 const types = ref<PublicCertType[]>([]);
-const detail = ref<Partial<PublicCertDetail>>({ cert: {}, usages: [], attachments: [], auditLogs: [] });
+const detail = ref<Partial<PublicCertDetail>>({ usages: [], attachments: [], auditLogs: [] });
 
 const queryParams = reactive<PublicCertQuery>({
   pageNum: 1,
@@ -303,7 +332,12 @@ function resetForm() {
 }
 
 async function openCreate() {
-  await loadTypes();
+  try {
+    await loadTypes();
+  } catch (error: any) {
+    ElMessage.error(error?.message || '证书类型加载失败');
+    return;
+  }
   resetForm();
   formOpen.value = true;
 }
@@ -411,7 +445,7 @@ async function initialisePortal() {
   } catch (error: any) {
     portalToken.value = '';
     sessionStorage.removeItem(portalStorageKey);
-    ElMessage.warning(error?.message || '登录已失效，请重新认证');
+    portalReady.value = false;
   }
 }
 
@@ -515,6 +549,10 @@ onMounted(initialisePortal);
 
 .usage-editor {
   width: 100%;
+}
+
+.form-tip {
+  margin-bottom: 12px;
 }
 
 .usage-row {

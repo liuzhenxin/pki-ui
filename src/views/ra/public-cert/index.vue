@@ -108,7 +108,14 @@
               />
             </el-tooltip>
             <el-tooltip content="审核" placement="top">
-              <el-button v-if="row.approvalStatus === 'PENDING'" v-hasPermi="['ra:public-cert:audit']" link type="warning" icon="Finished" @click="openAudit(row)" />
+              <el-button
+                v-if="row.approvalStatus === 'PENDING'"
+                v-hasPermi="['ra:public-cert:audit']"
+                link
+                type="warning"
+                icon="Finished"
+                @click="openAudit(row)"
+              />
             </el-tooltip>
             <el-tooltip content="归档" placement="top">
               <el-button v-hasPermi="['ra:public-cert:remove']" link type="danger" icon="Delete" @click="handleRemove(row)" />
@@ -164,12 +171,12 @@
         <el-row :gutter="12">
           <el-col :span="12">
             <el-form-item label="生效时间">
-              <el-date-picker v-model="form.notBefore" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" style="width: 100%" />
+              <el-date-picker v-model="form.notBefore" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" style="width: 100%" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item label="到期时间" prop="notAfter">
-              <el-date-picker v-model="form.notAfter" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" style="width: 100%" />
+              <el-date-picker v-model="form.notAfter" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" style="width: 100%" />
             </el-form-item>
           </el-col>
         </el-row>
@@ -241,7 +248,9 @@
       <el-descriptions :column="1" border>
         <el-descriptions-item label="域名">{{ detail.cert?.domainName || '-' }}</el-descriptions-item>
         <el-descriptions-item label="证书类型">{{ detail.cert?.certTypeName || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="有效期">{{ formatDateTime(detail.cert?.notBefore) }} 至 {{ formatDateTime(detail.cert?.notAfter) }}</el-descriptions-item>
+        <el-descriptions-item label="有效期"
+          >{{ formatDateTime(detail.cert?.notBefore) }} 至 {{ formatDateTime(detail.cert?.notAfter) }}</el-descriptions-item
+        >
         <el-descriptions-item label="审核状态">{{ detail.cert?.approvalStatusName || '-' }}</el-descriptions-item>
         <el-descriptions-item label="业务负责人">{{ detail.cert?.businessOwnerName || '-' }}</el-descriptions-item>
         <el-descriptions-item label="科室">{{ detail.cert?.departmentName || '-' }}</el-descriptions-item>
@@ -254,12 +263,7 @@
         <el-table-column label="场景" prop="usageScene" min-width="160" />
       </el-table>
       <el-divider content-position="left">附件</el-divider>
-      <el-upload
-        v-hasPermi="['ra:public-cert:attachment']"
-        :show-file-list="false"
-        :before-upload="beforeUpload"
-        :http-request="uploadAttachment"
-      >
+      <el-upload v-hasPermi="['ra:public-cert:attachment']" :show-file-list="false" :before-upload="beforeUpload" :http-request="uploadAttachment">
         <el-button icon="Upload">上传压缩包</el-button>
       </el-upload>
       <el-table :data="detail.attachments || []" border size="small" class="mt12">
@@ -311,7 +315,13 @@
           </template>
         </el-table-column>
       </el-table>
-      <pagination v-show="employeeTotal > 0" v-model:page="employeeQuery.pageNum" v-model:limit="employeeQuery.pageSize" :total="employeeTotal" @pagination="loadEmployees" />
+      <pagination
+        v-show="employeeTotal > 0"
+        v-model:page="employeeQuery.pageNum"
+        v-model:limit="employeeQuery.pageSize"
+        :total="employeeTotal"
+        @pagination="loadEmployees"
+      />
     </el-dialog>
 
     <el-dialog v-model="typeOpen" title="证书类型维护" width="760px" append-to-body>
@@ -379,7 +389,13 @@
           </template>
         </el-table-column>
       </el-table>
-      <pagination v-show="grantTotal > 0" v-model:page="grantQuery.pageNum" v-model:limit="grantQuery.pageSize" :total="grantTotal" @pagination="loadGrants" />
+      <pagination
+        v-show="grantTotal > 0"
+        v-model:page="grantQuery.pageNum"
+        v-model:limit="grantQuery.pageSize"
+        :total="grantTotal"
+        @pagination="loadGrants"
+      />
     </el-dialog>
   </div>
 </template>
@@ -477,7 +493,7 @@ const rules: FormRules = {
   notAfter: [{ required: true, message: '请选择到期时间', trigger: 'change' }]
 };
 
-const detail = ref<Partial<PublicCertDetail>>({ cert: {}, usages: [], attachments: [], auditLogs: [] });
+const detail = ref<Partial<PublicCertDetail>>({ usages: [], attachments: [], auditLogs: [] });
 const types = ref<PublicCertType[]>([]);
 const typeDraft = reactive<PublicCertType>({
   typeCode: '',
@@ -743,8 +759,8 @@ function beforeUpload(file: File) {
     ElMessage.warning('附件仅支持 zip 或 rar');
     return false;
   }
-  if (file.size > 50 * 1024 * 1024) {
-    ElMessage.warning('附件不能超过 50MB');
+  if (file.size > 10 * 1024 * 1024) {
+    ElMessage.warning('附件不能超过 10MB');
     return false;
   }
   return true;
@@ -771,16 +787,18 @@ function approvalType(status?: string) {
 
 function actionName(action?: string) {
   return (
-    {
-      CREATE: '创建',
-      UPDATE: '修改',
-      SUBMIT: '提交',
-      APPROVE: '通过',
-      REJECT: '驳回',
-      ATTACHMENT: '附件',
-      ARCHIVE: '归档'
-    } as Record<string, string>
-  )[action || ''] || action;
+    (
+      {
+        CREATE: '创建',
+        UPDATE: '修改',
+        SUBMIT: '提交',
+        APPROVE: '通过',
+        REJECT: '驳回',
+        ATTACHMENT: '附件',
+        ARCHIVE: '归档'
+      } as Record<string, string>
+    )[action || ''] || action
+  );
 }
 
 function formatDateTime(value?: string) {

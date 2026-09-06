@@ -13,7 +13,7 @@ import { getTenant } from '@/api/system/tenant';
 import setting from '@/settings';
 
 NProgress.configure({ showSpinner: false });
-const whiteList = ['/login', '/register', '/social-callback', '/register*', '/register/*'];
+const whiteList = ['/login', '/register', '/social-callback', '/register*', '/register/*', '/ra-public-cert', '/ra-public-cert*'];
 const caInitPath = '/ca/setup';
 const licenseInitPath = '/license/setup';
 const kmcInitPath = '/kmc/setup';

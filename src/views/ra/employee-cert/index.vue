@@ -1,5 +1,6 @@
 <template>
   <div class="app-container employee-cert-page">
+    <input ref="packageInputRef" class="hidden-file" type="file" accept=".zip" @change="handlePackageFile" />
     <el-card shadow="never" class="query-card">
       <el-form :model="queryParams" inline>
         <el-form-item label="序列号">
@@ -40,6 +41,9 @@
         <el-col :span="1.5">
           <el-button v-hasPermi="['ra:employee-cert:template']" plain icon="Message" @click="openTemplates">分发模板</el-button>
         </el-col>
+        <el-col :span="1.5">
+          <el-button v-hasPermi="['ra:employee-cert:distribute']" plain icon="Setting" @click="openDistributionConfig">分发配置</el-button>
+        </el-col>
         <right-toolbar v-model:showSearch="showSearch" @queryTable="loadList" />
       </el-row>
 
@@ -63,12 +67,23 @@
         <el-table-column label="发送结果" width="138" align="center">
           <template #default="{ row }">
             <el-tag :type="row.emailStatus === 'SENT' ? 'success' : 'info'" effect="plain">邮件 {{ channelName(row.emailStatus) }}</el-tag>
-            <el-tag :type="row.dingtalkStatus === 'SENT' ? 'success' : 'info'" effect="plain" class="ml4">钉钉 {{ channelName(row.dingtalkStatus) }}</el-tag>
+            <el-tag :type="row.dingtalkStatus === 'SENT' ? 'success' : 'info'" effect="plain" class="ml4"
+              >钉钉 {{ channelName(row.dingtalkStatus) }}</el-tag
+            >
           </template>
         </el-table-column>
-        <el-table-column label="操作" fixed="right" width="136" align="center">
+        <el-table-column label="操作" fixed="right" width="210" align="center">
           <template #default="{ row }">
             <el-button link type="primary" icon="View" @click="openDetail(row)" />
+            <el-button
+              v-if="row.issueStatus === 'ISSUED'"
+              v-hasPermi="['ra:employee-cert:distribute']"
+              link
+              icon="Upload"
+              @click="choosePackage(row)"
+            >
+              上传分发包
+            </el-button>
             <el-button v-hasPermi="['ra:employee-cert:distribute']" link type="success" icon="Promotion" @click="distribute(row)">
               {{ row.distributionStatus === 'SENT' ? '重发' : '分发' }}
             </el-button>
@@ -84,10 +99,14 @@
         <el-descriptions-item label="序列号">{{ detail.cert?.serialNumber || '-' }}</el-descriptions-item>
         <el-descriptions-item label="证书主题">{{ detail.cert?.subject || '-' }}</el-descriptions-item>
         <el-descriptions-item label="员工">{{ detail.cert?.employeeName || '-' }} / {{ detail.cert?.domainAccount || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="科室职位">{{ detail.cert?.departmentPath || detail.cert?.departmentName || '-' }} / {{ detail.cert?.jobName || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="科室职位"
+          >{{ detail.cert?.departmentPath || detail.cert?.departmentName || '-' }} / {{ detail.cert?.jobName || '-' }}</el-descriptions-item
+        >
         <el-descriptions-item label="证书类型">{{ detail.cert?.certTypeName || '-' }}</el-descriptions-item>
         <el-descriptions-item label="证书密码">{{ detail.cert?.certPassword || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="有效期">{{ formatDate(detail.cert?.notBefore) }} 至 {{ formatDate(detail.cert?.notAfter) }}</el-descriptions-item>
+        <el-descriptions-item label="有效期"
+          >{{ formatDate(detail.cert?.notBefore) }} 至 {{ formatDate(detail.cert?.notAfter) }}</el-descriptions-item
+        >
         <el-descriptions-item label="分发状态">{{ detail.cert?.distributionStatusName || '-' }}</el-descriptions-item>
         <el-descriptions-item label="分发说明">{{ detail.cert?.distributionMessage || '-' }}</el-descriptions-item>
       </el-descriptions>
@@ -107,6 +126,7 @@
       <el-table v-loading="templateLoading" :data="templates" border stripe>
         <el-table-column label="编码" prop="templateCode" width="170" />
         <el-table-column label="渠道" prop="channel" width="100" />
+        <el-table-column label="消息类型" prop="messageType" width="120" />
         <el-table-column label="标题" prop="title" min-width="180" />
         <el-table-column label="启用" width="90" align="center">
           <template #default="{ row }">
@@ -123,6 +143,9 @@
         <el-form-item label="标题">
           <el-input v-model="templateForm.title" />
         </el-form-item>
+        <el-form-item label="消息类型">
+          <el-input v-model="templateForm.messageType" placeholder="如 MIXED / markdown" style="width: 180px" />
+        </el-form-item>
         <el-form-item label="内容">
           <el-input v-model="templateForm.content" type="textarea" :rows="8" />
         </el-form-item>
@@ -130,6 +153,50 @@
           <el-button type="primary" @click="saveTemplate(templateForm)">保存模板</el-button>
         </el-form-item>
       </el-form>
+    </el-dialog>
+
+    <el-dialog v-model="distributionConfigOpen" title="员工证书分发配置" width="720px" append-to-body>
+      <el-alert
+        class="mb12"
+        type="warning"
+        :closable="false"
+        show-icon
+        title="Secret Key 仅允许写入，不会回显；留空保存将保留已有 Secret。"
+      />
+      <el-form :model="distributionConfig" label-width="150px">
+        <el-form-item label="邮件服务地址">
+          <el-input v-model="distributionConfig.emailServerUrl" placeholder="https://api.example.com/cmp/mail/v2/send" />
+        </el-form-item>
+        <el-form-item label="钉钉服务地址">
+          <el-input v-model="distributionConfig.dingtalkServerUrl" placeholder="https://api.example.com/cmp/dingtalk/v1/sendMessage" />
+        </el-form-item>
+        <el-form-item label="App Key">
+          <el-input v-model="distributionConfig.appKey" autocomplete="off" />
+        </el-form-item>
+        <el-form-item label="Secret Key">
+          <el-input
+            v-model="distributionConfig.secretKey"
+            type="password"
+            show-password
+            autocomplete="new-password"
+            :placeholder="distributionConfig.secretKeyConfigured ? '已配置，留空保持不变' : '请输入 Secret Key'"
+          />
+        </el-form-item>
+        <el-form-item label="发件邮箱">
+          <el-input v-model="distributionConfig.emailAccount" placeholder="例如 cybersec@faw-vw.com" />
+        </el-form-item>
+        <el-form-item label="钉钉应用标识">
+          <el-input v-model="distributionConfig.dingtalkApp" placeholder="例如 FawVW" />
+        </el-form-item>
+        <el-form-item label="附件最大大小">
+          <el-input-number v-model="distributionConfig.attachmentMaxSizeMb" :min="1" :max="100" />
+          <span class="unit-label">MB</span>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="distributionConfigOpen = false">取消</el-button>
+        <el-button type="primary" :loading="distributionConfigSaving" @click="saveDistributionConfig">保存配置</el-button>
+      </template>
     </el-dialog>
   </div>
 </template>
@@ -140,11 +207,15 @@ import {
   distributeEmployeeCert,
   DistributionLog,
   EmployeeCert,
+  EmployeeCertDistributionConfig,
   EmployeeCertTemplate,
+  getEmployeeCertDistributionConfig,
   getEmployeeCert,
   listEmployeeCertTemplates,
   pageEmployeeCerts,
-  saveEmployeeCertTemplate
+  saveEmployeeCertDistributionConfig,
+  saveEmployeeCertTemplate,
+  uploadEmployeeCertDistributionPackage
 } from '@/api/ra/employeeCert';
 
 const loading = ref(false);
@@ -169,10 +240,25 @@ const templates = ref<EmployeeCertTemplate[]>([]);
 const templateForm = reactive<EmployeeCertTemplate>({
   templateCode: '',
   channel: '',
+  messageType: '',
   title: '',
   content: '',
   enabled: true
 });
+const distributionConfigOpen = ref(false);
+const distributionConfigSaving = ref(false);
+const distributionConfig = reactive<EmployeeCertDistributionConfig>({
+  emailServerUrl: '',
+  dingtalkServerUrl: '',
+  appKey: '',
+  secretKey: '',
+  emailAccount: '',
+  dingtalkApp: '',
+  attachmentMaxSizeMb: 10,
+  secretKeyConfigured: false
+});
+const packageInputRef = ref<HTMLInputElement>();
+const packageCert = ref<EmployeeCert>();
 
 function unwrapData<T>(res: any): T {
   const body = res?.data ?? res;
@@ -210,10 +296,31 @@ async function openDetail(row: EmployeeCert) {
 }
 
 async function distribute(row: EmployeeCert) {
-  await ElMessageBox.confirm(`确认${row.distributionStatus === 'SENT' ? '重新' : ''}分发 ${row.employeeName} 的证书？`, '分发确认', { type: 'warning' });
+  await ElMessageBox.confirm(`确认${row.distributionStatus === 'SENT' ? '重新' : ''}分发 ${row.employeeName} 的证书？`, '分发确认', {
+    type: 'warning'
+  });
   await distributeEmployeeCert(row.id);
   ElMessage.success('分发完成');
   loadList();
+}
+
+function choosePackage(row: EmployeeCert) {
+  packageCert.value = row;
+  packageInputRef.value?.click();
+}
+
+async function handlePackageFile(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = '';
+  if (!file || !packageCert.value?.id) return;
+  if (!file.name.toLowerCase().endsWith('.zip') || file.size > 10 * 1024 * 1024) {
+    ElMessage.error('仅允许上传不超过10MB的ZIP压缩包');
+    return;
+  }
+  await uploadEmployeeCertDistributionPackage(packageCert.value.id, file);
+  ElMessage.success('证书分发压缩包已归档');
+  await loadList();
 }
 
 function handleExport() {
@@ -235,7 +342,10 @@ function handleExport() {
       .map(csvCell)
       .join(',')
   );
-  FileSaver.saveAs(new Blob(['\uFEFF' + [header.join(','), ...lines].join('\n')], { type: 'text/csv;charset=utf-8' }), `fawvw_employee_certs_${Date.now()}.csv`);
+  FileSaver.saveAs(
+    new Blob(['\uFEFF' + [header.join(','), ...lines].join('\n')], { type: 'text/csv;charset=utf-8' }),
+    `fawvw_employee_certs_${Date.now()}.csv`
+  );
 }
 
 async function openTemplates() {
@@ -249,13 +359,54 @@ async function openTemplates() {
 }
 
 function editTemplate(row: EmployeeCertTemplate) {
-  Object.assign(templateForm, { ...row });
+  Object.assign(templateForm, {
+    ...row,
+    messageType: row.messageType || (row.channel === 'DINGTALK' ? 'markdown' : 'MIXED')
+  });
 }
 
 async function saveTemplate(row: EmployeeCertTemplate) {
   await saveEmployeeCertTemplate(row);
   ElMessage.success('模板已保存');
   openTemplates();
+}
+
+async function openDistributionConfig() {
+  const config = unwrapData<EmployeeCertDistributionConfig>(await getEmployeeCertDistributionConfig());
+  Object.assign(distributionConfig, {
+    emailServerUrl: '',
+    dingtalkServerUrl: '',
+    appKey: '',
+    emailAccount: '',
+    dingtalkApp: '',
+    attachmentMaxSizeMb: 10,
+    secretKeyConfigured: false,
+    ...config,
+    secretKey: ''
+  });
+  distributionConfigOpen.value = true;
+}
+
+async function saveDistributionConfig() {
+  distributionConfigSaving.value = true;
+  try {
+    const saved = unwrapData<EmployeeCertDistributionConfig>(
+      await saveEmployeeCertDistributionConfig({
+        emailServerUrl: distributionConfig.emailServerUrl,
+        dingtalkServerUrl: distributionConfig.dingtalkServerUrl,
+        appKey: distributionConfig.appKey,
+        secretKey: distributionConfig.secretKey,
+        emailAccount: distributionConfig.emailAccount,
+        dingtalkApp: distributionConfig.dingtalkApp,
+        attachmentMaxSizeMb: distributionConfig.attachmentMaxSizeMb
+      })
+    );
+    Object.assign(distributionConfig, saved, { secretKey: '' });
+    ElMessage.success('分发配置已保存');
+    distributionConfigOpen.value = false;
+  } finally {
+    distributionConfigSaving.value = false;
+  }
 }
 
 function distributionTag(status?: string) {
@@ -305,7 +456,16 @@ onMounted(loadList);
   margin-left: 4px;
 }
 
+.unit-label {
+  margin-left: 8px;
+  color: var(--el-text-color-regular);
+}
+
 .template-form {
   margin-top: 16px;
+}
+
+.hidden-file {
+  display: none;
 }
 </style>
