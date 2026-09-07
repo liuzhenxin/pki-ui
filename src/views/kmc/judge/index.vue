@@ -26,6 +26,7 @@
       <template #header>
         <div class="card-header">
           <span>三员审批记录</span>
+          <el-button type="warning" plain icon="Download" v-hasPermi="['kmc:judge:export']" @click="handleExport">导出</el-button>
         </div>
       </template>
       <el-table v-loading="loading" :data="rows" border>
@@ -44,43 +45,24 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="180" fixed="right">
+        <el-table-column label="操作" width="150" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" icon="Edit" v-hasPermi="['kmc:judge:modify']" @click="handleUpdate(row)">修改</el-button>
+            <el-button link type="primary" icon="View" v-hasPermi="['kmc:judge:detail']" @click="handleDetail(row)">详情</el-button>
             <el-button link type="primary" icon="CircleCheck" v-hasPermi="['kmc:judge:approve']" @click="openApprove(row)">审批</el-button>
-            <el-button link type="danger" icon="Delete" v-hasPermi="['kmc:judge:remove']" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
       <pagination v-show="total > 0" :total="total" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" @pagination="getList" />
     </el-card>
 
-    <el-dialog v-model="dialog.visible" :title="dialog.title" width="560px" append-to-body>
-      <el-form ref="formRef" :model="form" :rules="rules" label-width="110px">
-        <el-form-item label="对象ID" prop="targetId">
-          <el-input v-model="form.targetId" />
-        </el-form-item>
-        <el-form-item label="对象类型" prop="targetType">
-          <el-input v-model="form.targetType" placeholder="ARCHIVE_KEY / RECOVERY" />
-        </el-form-item>
-        <el-form-item label="操作人" prop="operator">
-          <el-input v-model="form.operator" />
-        </el-form-item>
-        <el-form-item label="状态" prop="status">
-          <el-select v-model="form.status">
-            <el-option label="待审批" value="PENDING" />
-            <el-option label="通过" value="APPROVED" />
-            <el-option label="拒绝" value="REJECTED" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="原因" prop="reason">
-          <el-input v-model="form.reason" type="textarea" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="dialog.visible = false">取消</el-button>
-        <el-button type="primary" @click="submitForm">确定</el-button>
-      </template>
+    <el-dialog v-model="detailDialog.visible" title="审批记录详情" width="560px" append-to-body>
+      <el-descriptions :column="1" border>
+        <el-descriptions-item label="对象类型">{{ detail.targetType || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="对象ID">{{ detail.targetId || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="操作人">{{ detail.operator || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="状态">{{ statusText(detail.status) }}</el-descriptions-item>
+        <el-descriptions-item label="原因">{{ detail.reason || '-' }}</el-descriptions-item>
+      </el-descriptions>
     </el-dialog>
 
     <el-dialog v-model="approveDialog.visible" title="审批" width="520px" append-to-body>
@@ -113,15 +95,15 @@
 </template>
 
 <script setup name="KmcJudge" lang="ts">
-import { onMounted, reactive, ref } from 'vue';
+import { getCurrentInstance, onMounted, reactive, ref } from 'vue';
 import type { FormInstance, FormRules } from 'element-plus';
-import { ElMessage, ElMessageBox } from 'element-plus';
-import { addJudge, approveJudge, delJudge, getJudge, listJudge, updateJudge } from '@/api/kmc/judge';
-import type { JudgeForm, JudgeQuery, JudgeVO } from '@/api/kmc/judge/types';
+import { ElMessage } from 'element-plus';
+import { approveJudge, getJudge, listJudge } from '@/api/kmc/judge';
+import type { JudgeQuery, JudgeVO } from '@/api/kmc/judge/types';
 import { readKmcPage, unwrapKmcData } from '@/api/kmc/common';
 
 const queryFormRef = ref<FormInstance>();
-const formRef = ref<FormInstance>();
+const { proxy } = getCurrentInstance() as ComponentInternalInstance;
 const approveFormRef = ref<FormInstance>();
 const loading = ref(false);
 const rows = ref<JudgeVO[]>([]);
@@ -132,13 +114,7 @@ const queryParams = reactive<JudgeQuery>({
   pageSize: 10
 });
 
-const form = reactive<JudgeForm>({
-  targetId: undefined,
-  targetType: 'ARCHIVE_KEY',
-  operator: '',
-  status: 'PENDING',
-  reason: ''
-});
+const detail = reactive<JudgeVO>({ id: '' });
 
 const approveForm = reactive({
   id: '',
@@ -149,13 +125,9 @@ const approveForm = reactive({
   operatorUkeySn: ''
 });
 
-const dialog = reactive({ visible: false, title: '' });
+const detailDialog = reactive({ visible: false });
 const approveDialog = reactive({ visible: false });
 
-const rules = reactive<FormRules>({
-  targetId: [{ required: true, message: '请输入对象ID', trigger: 'blur' }],
-  targetType: [{ required: true, message: '请输入对象类型', trigger: 'blur' }]
-});
 const approveRules = reactive<FormRules>({
   decision: [{ required: true, message: '请选择决策', trigger: 'change' }],
   operator: [{ required: true, message: '请输入操作人', trigger: 'blur' }],
@@ -164,11 +136,6 @@ const approveRules = reactive<FormRules>({
 });
 
 const statusText = (status?: string) => ({ APPROVED: '通过', REJECTED: '拒绝', PENDING: '待审批' })[status || ''] || status || '-';
-
-const resetForm = () => {
-  Object.assign(form, { id: undefined, targetId: undefined, targetType: 'ARCHIVE_KEY', operator: '', status: 'PENDING', reason: '' });
-  formRef.value?.resetFields();
-};
 
 const getList = async () => {
   loading.value = true;
@@ -191,31 +158,13 @@ const resetQuery = () => {
   handleQuery();
 };
 
-const handleAdd = () => {
-  resetForm();
-  dialog.title = '新增审批记录';
-  dialog.visible = true;
+const handleExport = () => {
+  proxy?.download('kmc/v1/judges/export', { ...queryParams }, `kmc_judges_${new Date().getTime()}.xlsx`);
 };
 
-const handleUpdate = async (row: JudgeVO) => {
-  resetForm();
-  Object.assign(form, unwrapKmcData(await getJudge(row.id)));
-  dialog.title = '修改审批记录';
-  dialog.visible = true;
-};
-
-const submitForm = async () => {
-  if (!(await formRef.value?.validate().catch(() => false))) {
-    return;
-  }
-  if (form.id) {
-    await updateJudge(form);
-  } else {
-    await addJudge(form);
-  }
-  ElMessage.success('保存成功');
-  dialog.visible = false;
-  await getList();
+const handleDetail = async (row: JudgeVO) => {
+  Object.assign(detail, unwrapKmcData(await getJudge(row.id)));
+  detailDialog.visible = true;
 };
 
 const openApprove = (row: JudgeVO) => {
@@ -237,13 +186,6 @@ const submitApprove = async () => {
   await approveJudge(approveForm);
   ElMessage.success('审批提交成功');
   approveDialog.visible = false;
-  await getList();
-};
-
-const handleDelete = async (row: JudgeVO) => {
-  await ElMessageBox.confirm('确认删除该审批记录？', '提示', { type: 'warning' });
-  await delJudge(row.id);
-  ElMessage.success('删除成功');
   await getList();
 };
 
