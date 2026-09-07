@@ -57,8 +57,20 @@ export interface PortalLoginResult {
   access: SelfAccess;
 }
 
+export interface PortalIamStartResult {
+  iamEnabled: boolean;
+  authorizeUrl?: string;
+  loginResult?: PortalLoginResult;
+}
+
 export const loginPublicCertPortal = async (domainAccount: string): Promise<PortalLoginResult> =>
   portalRequest(portalClient.post('/v1/public-certs/portal/login', { domainAccount }));
+
+export const startPublicCertPortalIam = async (domainAccount: string, redirectUri: string): Promise<PortalIamStartResult> =>
+  portalRequest(portalClient.post('/v1/public-certs/portal/iam/start', { domainAccount, redirectUri }));
+
+export const completePublicCertPortalIam = async (code: string, state: string): Promise<PortalLoginResult> =>
+  portalRequest(portalClient.post('/v1/public-certs/portal/iam/callback', { code, state }));
 
 export const logoutPublicCertPortal = async (token: string) =>
   portalRequest<void>(portalClient.post('/v1/public-certs/portal/logout', null, { headers: portalHeaders(token) }));

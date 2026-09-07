@@ -369,6 +369,98 @@
     </el-dialog>
 
     <el-dialog v-model="grantOpen" title="公网证书录入授权" width="940px" append-to-body>
+      <el-card class="portal-config-card" shadow="never">
+        <template #header>
+          <div class="portal-config-header">
+            <span>录入端配置</span>
+            <el-tag :type="portalConfig.clientSecretConfigured ? 'success' : 'info'" effect="plain">
+              {{ portalConfig.clientSecretConfigured ? '密钥已配置' : '密钥未配置' }}
+            </el-tag>
+          </div>
+        </template>
+        <el-form :model="portalConfig" label-width="120px" class="portal-config-form">
+          <el-row :gutter="16">
+            <el-col :span="8">
+              <el-form-item label="IAM认证">
+                <el-switch v-model="portalConfig.iamEnabled" active-text="开启" inactive-text="关闭" />
+              </el-form-item>
+            </el-col>
+            <el-col :span="8">
+              <el-form-item label="AD SSO">
+                <el-switch v-model="portalConfig.isAdSso" active-text="开启" inactive-text="关闭" />
+              </el-form-item>
+            </el-col>
+            <el-col :span="8">
+              <el-form-item label="超时时间">
+                <el-input-number v-model="portalConfig.timeoutSeconds" :min="1" :max="120" controls-position="right" />
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item label="IAM地址">
+                <el-input v-model="portalConfig.iamBaseUrl" placeholder="https://iam.faw-vw.com" />
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item label="回调地址">
+                <el-input v-model="portalConfig.callbackUrl" placeholder="http://10.10.10.128:9085/ra-public-cert" />
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item label="Client ID">
+                <el-input v-model="portalConfig.clientId" placeholder="IAM分配的client_id" />
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item label="Client Secret">
+                <el-input v-model="portalConfig.clientSecret" show-password placeholder="留空则保持原密钥不变" />
+              </el-form-item>
+            </el-col>
+            <el-col :span="8">
+              <el-form-item label="授权地址">
+                <el-input v-model="portalConfig.authorizePath" />
+              </el-form-item>
+            </el-col>
+            <el-col :span="8">
+              <el-form-item label="Token地址">
+                <el-input v-model="portalConfig.tokenPath" />
+              </el-form-item>
+            </el-col>
+            <el-col :span="8">
+              <el-form-item label="Profile地址">
+                <el-input v-model="portalConfig.profilePath" />
+              </el-form-item>
+            </el-col>
+            <el-col :span="8">
+              <el-form-item label="Token方式">
+                <el-select v-model="portalConfig.tokenRequestMode">
+                  <el-option label="FORM" value="FORM" />
+                  <el-option label="BASIC_FORM" value="BASIC_FORM" />
+                  <el-option label="QUERY" value="QUERY" />
+                </el-select>
+              </el-form-item>
+            </el-col>
+            <el-col :span="8">
+              <el-form-item label="Profile Token">
+                <el-select v-model="portalConfig.profileTokenMode">
+                  <el-option label="BEARER" value="BEARER" />
+                  <el-option label="QUERY" value="QUERY" />
+                </el-select>
+              </el-form-item>
+            </el-col>
+            <el-col :span="8">
+              <el-form-item label="账号字段">
+                <el-input
+                  v-model="portalConfig.accountFieldPaths"
+                  placeholder="attributes.account_no,attributes.sAMAccountName,attributes.employeeID,id"
+                />
+              </el-form-item>
+            </el-col>
+          </el-row>
+          <div class="portal-config-actions">
+            <el-button type="primary" icon="Check" @click="savePortalConfig">保存录入端配置</el-button>
+          </div>
+        </el-form>
+      </el-card>
       <el-form :model="grantQuery" inline>
         <el-form-item label="关键词">
           <el-input v-model="grantQuery.keyword" clearable placeholder="姓名/域账号" style="width: 220px" @keyup.enter="loadGrants" />
@@ -407,6 +499,7 @@ import {
   approvePublicCert,
   exportPublicCerts,
   getPublicCert,
+  getPublicCertPortalConfig,
   grantPublicCertPermission,
   listPublicCertTypes,
   pagePublicCertPermissions,
@@ -414,11 +507,13 @@ import {
   PublicCert,
   PublicCertDetail,
   PublicCertPermission,
+  PublicCertPortalConfig,
   PublicCertQuery,
   PublicCertType,
   rejectPublicCert,
   removePublicCert,
   savePublicCert,
+  savePublicCertPortalConfig,
   savePublicCertType,
   submitPublicCert,
   uploadPublicCertAttachment
@@ -504,6 +599,23 @@ const typeDraft = reactive<PublicCertType>({
 const grants = ref<PublicCertPermission[]>([]);
 const grantTotal = ref(0);
 const grantQuery = reactive({ pageNum: 1, pageSize: 10, keyword: '', enabled: null as boolean | null });
+const portalConfig = reactive<PublicCertPortalConfig>({
+  iamEnabled: false,
+  iamBaseUrl: 'https://iam.faw-vw.com',
+  authorizePath: '/esc-sso/oauth2.0/authorize',
+  tokenPath: '/esc-sso/oauth2.0/accessToken',
+  profilePath: '/esc-sso/oauth2.0/profile',
+  clientId: '',
+  clientSecret: '',
+  isAdSso: true,
+  stateTtlSeconds: 300,
+  timeoutSeconds: 15,
+  callbackUrl: 'http://10.10.10.128:9085/ra-public-cert',
+  tokenRequestMode: 'FORM',
+  profileTokenMode: 'BEARER',
+  accountFieldPaths: 'attributes.account_no,attributes.sAMAccountName,attributes.employeeID,id',
+  clientSecretConfigured: false
+});
 const employees = ref<FawvwEmployee[]>([]);
 const employeeTotal = ref(0);
 const employeeLoading = ref(false);
@@ -738,7 +850,37 @@ async function createType() {
 
 function openGrants() {
   grantOpen.value = true;
+  loadPortalConfig();
   loadGrants();
+}
+
+async function loadPortalConfig() {
+  const config = unwrap<PublicCertPortalConfig>(await getPublicCertPortalConfig());
+  Object.assign(portalConfig, {
+    iamEnabled: false,
+    iamBaseUrl: 'https://iam.faw-vw.com',
+    authorizePath: '/esc-sso/oauth2.0/authorize',
+    tokenPath: '/esc-sso/oauth2.0/accessToken',
+    profilePath: '/esc-sso/oauth2.0/profile',
+    clientId: '',
+    clientSecret: '',
+    isAdSso: true,
+    stateTtlSeconds: 300,
+    timeoutSeconds: 15,
+    callbackUrl: 'http://10.10.10.128:9085/ra-public-cert',
+    tokenRequestMode: 'FORM',
+    profileTokenMode: 'BEARER',
+    accountFieldPaths: 'attributes.account_no,attributes.sAMAccountName,attributes.employeeID,id',
+    clientSecretConfigured: false,
+    ...config
+  });
+  portalConfig.clientSecret = '';
+}
+
+async function savePortalConfig() {
+  const saved = unwrap<PublicCertPortalConfig>(await savePublicCertPortalConfig(portalConfig));
+  Object.assign(portalConfig, saved, { clientSecret: '' });
+  ElMessage.success('录入端配置已保存');
 }
 
 async function loadGrants() {
@@ -852,6 +994,36 @@ onMounted(() => {
     grid-template-columns: 1fr 1fr 1fr auto;
     gap: 8px;
     margin-bottom: 8px;
+  }
+
+  .portal-config-card {
+    margin-bottom: 14px;
+
+    :deep(.el-card__header) {
+      padding: 10px 14px;
+    }
+
+    :deep(.el-card__body) {
+      padding: 14px 14px 10px;
+    }
+  }
+
+  .portal-config-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-weight: 600;
+  }
+
+  .portal-config-form {
+    :deep(.el-form-item) {
+      margin-bottom: 12px;
+    }
+  }
+
+  .portal-config-actions {
+    display: flex;
+    justify-content: flex-end;
   }
 
   .mt12 {

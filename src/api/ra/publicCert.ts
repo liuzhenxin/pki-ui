@@ -116,6 +116,24 @@ export interface PublicCertPermission {
   grantTime?: string;
 }
 
+export interface PublicCertPortalConfig {
+  iamEnabled?: boolean;
+  iamBaseUrl?: string;
+  authorizePath?: string;
+  tokenPath?: string;
+  profilePath?: string;
+  clientId?: string;
+  clientSecret?: string;
+  isAdSso?: boolean;
+  stateTtlSeconds?: number;
+  timeoutSeconds?: number;
+  callbackUrl?: string;
+  tokenRequestMode?: string;
+  profileTokenMode?: string;
+  accountFieldPaths?: string;
+  clientSecretConfigured?: boolean;
+}
+
 export interface SelfAccess {
   granted: boolean;
   identityKey?: string;
@@ -207,7 +225,12 @@ export const savePublicCertType = (data: PublicCertType): Promise<Result<PublicC
     data
   }) as any;
 
-export const pagePublicCertPermissions = (query: { pageNum: number; pageSize: number; keyword?: string; enabled?: boolean | null }): Promise<Result<any>> =>
+export const pagePublicCertPermissions = (query: {
+  pageNum: number;
+  pageSize: number;
+  keyword?: string;
+  enabled?: boolean | null;
+}): Promise<Result<any>> =>
   request({
     url: '/ra/v1/public-certs/permissions/page',
     method: 'post',
@@ -222,6 +245,19 @@ export const grantPublicCertPermission = (data: PublicCertPermission): Promise<R
   request({
     url: '/ra/v1/public-certs/permissions',
     method: 'post',
+    data
+  }) as any;
+
+export const getPublicCertPortalConfig = (): Promise<Result<PublicCertPortalConfig>> =>
+  request({
+    url: '/ra/v1/public-certs/portal/config',
+    method: 'get'
+  }) as any;
+
+export const savePublicCertPortalConfig = (data: PublicCertPortalConfig): Promise<Result<PublicCertPortalConfig>> =>
+  request({
+    url: '/ra/v1/public-certs/portal/config',
+    method: 'put',
     data
   }) as any;
 

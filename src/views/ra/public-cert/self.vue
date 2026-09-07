@@ -236,18 +236,23 @@
 import { ElMessage, FormInstance, FormRules, UploadRequestOptions } from 'element-plus';
 import { PublicCert, PublicCertDetail, PublicCertQuery, PublicCertType, SelfAccess } from '@/api/ra/publicCert';
 import {
+  completePublicCertPortalIam,
   getPublicCertPortal,
   getPublicCertPortalAccess,
   listPublicCertPortalTypes,
   loginPublicCertPortal,
   logoutPublicCertPortal,
   pagePublicCertPortal,
+  PortalLoginResult,
   savePublicCertPortal,
+  startPublicCertPortalIam,
   submitPublicCertPortal,
   uploadPublicCertPortalAttachment
 } from '@/api/ra/publicCertPortal';
 
 const portalStorageKey = 'fawvw-public-cert-portal-token';
+const route = useRoute();
+const router = useRouter();
 const portalToken = ref(sessionStorage.getItem(portalStorageKey) || '');
 const portalReady = ref(false);
 const loginAccount = ref('');
@@ -435,7 +440,43 @@ function fileSize(value?: number) {
   return `${(value / 1024 / 1024).toFixed(1)}MB`;
 }
 
+function portalCallbackUri() {
+  return `${window.location.origin}/ra-public-cert`;
+}
+
+async function applyPortalLogin(result: PortalLoginResult) {
+  portalToken.value = result.token;
+  sessionStorage.setItem(portalStorageKey, result.token);
+  access.value = result.access;
+  portalReady.value = true;
+  await loadTypes();
+  await loadList();
+}
+
+async function handleIamCallback(code: string, state: string) {
+  loginLoading.value = true;
+  try {
+    const result = await completePublicCertPortalIam(code, state);
+    await router.replace({ path: '/ra-public-cert' });
+    await applyPortalLogin(result);
+  } catch (error: any) {
+    portalToken.value = '';
+    sessionStorage.removeItem(portalStorageKey);
+    portalReady.value = false;
+    await router.replace({ path: '/ra-public-cert' });
+    ElMessage.error(error?.message || 'IAM认证失败，请重新登录');
+  } finally {
+    loginLoading.value = false;
+  }
+}
+
 async function initialisePortal() {
+  const code = route.query.code;
+  const state = route.query.state;
+  if (typeof code === 'string' && typeof state === 'string') {
+    await handleIamCallback(code, state);
+    return;
+  }
   if (!portalToken.value) return;
   try {
     await loadAccess();
@@ -456,13 +497,13 @@ async function handleLogin() {
   }
   loginLoading.value = true;
   try {
-    const result = await loginPublicCertPortal(loginAccount.value.trim());
-    portalToken.value = result.token;
-    sessionStorage.setItem(portalStorageKey, result.token);
-    access.value = result.access;
-    portalReady.value = true;
-    await loadTypes();
-    await loadList();
+    const iamStart = await startPublicCertPortalIam(loginAccount.value.trim(), portalCallbackUri());
+    if (iamStart.iamEnabled && iamStart.authorizeUrl) {
+      window.location.href = iamStart.authorizeUrl;
+      return;
+    }
+    const result = iamStart.loginResult || (await loginPublicCertPortal(loginAccount.value.trim()));
+    await applyPortalLogin(result);
   } catch (error: any) {
     ElMessage.error(error?.message || '身份认证失败');
   } finally {
