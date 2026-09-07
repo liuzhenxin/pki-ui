@@ -67,23 +67,11 @@
 
     <el-dialog v-model="approveDialog.visible" title="审批" width="520px" append-to-body>
       <el-form ref="approveFormRef" :model="approveForm" :rules="approveRules" label-width="120px">
-        <el-form-item label="决策" prop="decision">
-          <el-radio-group v-model="approveForm.decision">
-            <el-radio value="APPROVED">通过</el-radio>
-            <el-radio value="REJECTED">拒绝</el-radio>
-          </el-radio-group>
+        <el-form-item label="审批人">
+          <el-input :model-value="userStore.name" disabled />
         </el-form-item>
-        <el-form-item label="操作人" prop="operator">
-          <el-input v-model="approveForm.operator" />
-        </el-form-item>
-        <el-form-item label="终端IP" prop="operatorIp">
-          <el-input v-model="approveForm.operatorIp" />
-        </el-form-item>
-        <el-form-item label="UKEY SN" prop="operatorUkeySn">
-          <el-input v-model="approveForm.operatorUkeySn" />
-        </el-form-item>
-        <el-form-item label="原因" prop="reason">
-          <el-input v-model="approveForm.reason" type="textarea" />
+        <el-form-item label="审批意见" prop="comment">
+          <el-input v-model="approveForm.comment" type="textarea" maxlength="500" show-word-limit />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -101,10 +89,12 @@ import { ElMessage } from 'element-plus';
 import { approveJudge, getJudge, listJudge } from '@/api/kmc/judge';
 import type { JudgeQuery, JudgeVO } from '@/api/kmc/judge/types';
 import { readKmcPage, unwrapKmcData } from '@/api/kmc/common';
+import { useUserStore } from '@/store/modules/user';
 
 const queryFormRef = ref<FormInstance>();
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
 const approveFormRef = ref<FormInstance>();
+const userStore = useUserStore();
 const loading = ref(false);
 const rows = ref<JudgeVO[]>([]);
 const total = ref(0);
@@ -117,23 +107,18 @@ const queryParams = reactive<JudgeQuery>({
 const detail = reactive<JudgeVO>({ id: '' });
 
 const approveForm = reactive({
-  id: '',
-  decision: 'APPROVED',
-  reason: '',
-  operator: '',
-  operatorIp: '',
-  operatorUkeySn: ''
+  judgeId: '',
+  approverId: '',
+  approverName: '',
+  approverIp: '',
+  approverUkeySn: '',
+  comment: ''
 });
 
 const detailDialog = reactive({ visible: false });
 const approveDialog = reactive({ visible: false });
 
-const approveRules = reactive<FormRules>({
-  decision: [{ required: true, message: '请选择决策', trigger: 'change' }],
-  operator: [{ required: true, message: '请输入操作人', trigger: 'blur' }],
-  operatorIp: [{ required: true, message: '请输入终端IP', trigger: 'blur' }],
-  operatorUkeySn: [{ required: true, message: '请输入UKEY序列号', trigger: 'blur' }]
-});
+const approveRules = reactive<FormRules>({});
 
 const statusText = (status?: string) => ({ APPROVED: '通过', REJECTED: '拒绝', PENDING: '待审批' })[status || ''] || status || '-';
 
@@ -169,12 +154,12 @@ const handleDetail = async (row: JudgeVO) => {
 
 const openApprove = (row: JudgeVO) => {
   Object.assign(approveForm, {
-    id: row.id,
-    decision: 'APPROVED',
-    reason: row.reason || '',
-    operator: row.operator || '',
-    operatorIp: row.operatorIp || '',
-    operatorUkeySn: row.operatorUkeySn || ''
+    judgeId: row.id,
+    approverId: userStore.userId,
+    approverName: userStore.name,
+    approverIp: '',
+    approverUkeySn: '',
+    comment: ''
   });
   approveDialog.visible = true;
 };
