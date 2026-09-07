@@ -232,7 +232,7 @@ import { ref, reactive, toRefs, getCurrentInstance, ComponentInternalInstance, o
 import { ElMessage, ElMessageBox, FormInstance, FormRules } from 'element-plus';
 import { Refresh } from '@element-plus/icons-vue';
 import { to } from 'await-to-js';
-import { listUser, getUser, addUser, updateUser, delUser, resetUserPwd, changeStatus } from '@/api/system/user';
+import { listUser, getUser, addUser, updateUser, delUser, resetUserPwd, changeStatus, authRole } from '@/api/system/user';
 import { issueAdminCert } from '@/api/ca/root';
 import { getProfileByName } from '@/api/ca/profile';
 import { parseJson } from '@/utils/json';
@@ -496,6 +496,20 @@ async function submitForm() {
             return;
           }
           await addUser(form.value);
+          // 建号后必须走「用户授权」接口绑定业务管理员角色(403)：本页列表按角色 403 查询，
+          // 而用户创建接口本身不绑定角色（角色由 /admin/v1/users/authority 单独维护）
+          const { data: createdData } = await listUser({
+            pageNum: 1,
+            pageSize: 10,
+            username: form.value.username
+          } as any);
+          const created = (createdData?.rows || createdData?.records || [])[0];
+          if (created?.id) {
+            await authRole(created.id, ['403']);
+          }
+          else {
+            ElMessage.warning('用户已创建，但未能自动绑定业务管理员角色(403)，请修改该用户后重新保存');
+          }
         }
         proxy?.$modal.msgSuccess('操作成功');
         dialog.visible = false;
