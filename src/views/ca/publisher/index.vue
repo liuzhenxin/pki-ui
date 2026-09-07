@@ -141,6 +141,9 @@
           <template #default="scope">
             <el-tag v-if="scope.row.certType === 'SIGNING'" type="primary" size="small">签名</el-tag>
             <el-tag v-else-if="scope.row.certType === 'ENCRYPTION'" type="warning" size="small">加密</el-tag>
+            <el-tag v-else-if="scope.row.certType === 'REVOKE'" type="danger" size="small">吊销</el-tag>
+            <el-tag v-else-if="scope.row.certType === 'HOLD'" type="info" size="small">冻结</el-tag>
+            <el-tag v-else-if="scope.row.certType === 'RESUME'" type="success" size="small">解冻</el-tag>
             <span v-else>-</span>
           </template>
         </el-table-column>
@@ -236,6 +239,11 @@
               <el-input v-model="ldapConfig.searchFilter" placeholder="(cn={subjectCn})" />
               <div class="form-tip">支持 {subjectCn}、{serialNumber} 占位符</div>
             </el-form-item>
+            <el-form-item v-if="!readonly">
+              <el-button type="primary" plain :loading="testing" @click="handlePreviewTest">测试连接</el-button>
+              <span class="form-tip-inline">测试通过后才能保存</span>
+            </el-form-item>
+            <div v-if="testMessage" class="form-tip" :style="{ color: testPassed ? 'var(--el-color-success)' : 'var(--el-color-danger)' }">{{ testMessage }}</div>
           </template>
 
           <!-- DATABASE 配置 -->
@@ -293,10 +301,28 @@
             <el-form-item label="失效时间列">
               <el-input v-model="dbConfig.expireTimeColumn" placeholder="expire_time" />
             </el-form-item>
+            <el-row :gutter="20">
+              <el-col :span="12">
+                <el-form-item label="证书状态列">
+                  <el-input v-model="dbConfig.statusColumn" placeholder="status（留空则不写）" />
+                </el-form-item>
+              </el-col>
+              <el-col :span="12">
+                <el-form-item label="注销原因列">
+                  <el-input v-model="dbConfig.revokeReasonColumn" placeholder="revoke_reason（留空则不写）" />
+                </el-form-item>
+              </el-col>
+            </el-row>
+            <div class="form-tip">证书状态写国际标准英文码（VALID/REVOKED/HOLD），注销原因写 CA 原码数字；目标表不存在时保存将按表映射自动创建。</div>
             <el-form-item label="UPSERT">
               <el-switch v-model="dbConfig.upsertEnabled" />
               <span class="form-tip-inline">使用 INSERT ON DUPLICATE KEY UPDATE</span>
             </el-form-item>
+            <el-form-item v-if="!readonly">
+              <el-button type="primary" plain :loading="testing" @click="handlePreviewTest">测试连接并预检</el-button>
+              <span class="form-tip-inline">测试通过后才能保存</span>
+            </el-form-item>
+            <div v-if="testMessage" class="form-tip" :style="{ color: testPassed ? 'var(--el-color-success)' : 'var(--el-color-danger)' }">{{ testMessage }}</div>
           </template>
 
           <!-- FILE 配置 -->
@@ -390,7 +416,7 @@ import { ElMessage, ElMessageBox, type UploadInstance } from 'element-plus';
 import { UploadFilled } from '@element-plus/icons-vue';
 import {
   pagePublisher, getPublisher, savePublisher, modifyPublisher, removePublisher, exportPublisher,
-  pagePublishQueue, retryPublish, testPublisherConnection
+  pagePublishQueue, retryPublish, testPublisherConnection, testPublisherConfig
 } from '@/api/ca/publisher';
 import { PublisherForm, PublisherQuery, PUBLISHER_CONF_TEMPLATES } from '@/api/ca/publisher/types';
 
@@ -410,6 +436,10 @@ const confOpen = ref(false);
 const publisherList = ref<any[]>([]);
 const currentConf = ref('');
 const advancedMode = ref(false);
+const testPassed = ref(false);
+const testing = ref(false);
+const testMessage = ref('');
+const originalConf = ref('');
 
 const queryFormRef = ref();
 const publisherFormRef = ref();
@@ -449,7 +479,7 @@ const dbConfig = reactive({
   additionalParams: '', tableName: '',
   certColumn: 'cert_pem', serialColumn: 'serial_number',
   subjectColumn: 'subject_dn', issueTimeColumn: 'issue_time',
-  expireTimeColumn: 'expire_time', upsertEnabled: true
+  expireTimeColumn: 'expire_time', statusColumn: '', revokeReasonColumn: '', upsertEnabled: true
 });
 
 const fileConfig = reactive({
@@ -505,6 +535,8 @@ function parseConfToFields(confStr: string | undefined, type: string) {
       dbConfig.subjectColumn = conf.subjectColumn || 'subject_dn';
       dbConfig.issueTimeColumn = conf.issueTimeColumn || 'issue_time';
       dbConfig.expireTimeColumn = conf.expireTimeColumn || 'expire_time';
+      dbConfig.statusColumn = conf.statusColumn || '';
+      dbConfig.revokeReasonColumn = conf.revokeReasonColumn || '';
       dbConfig.upsertEnabled = conf.upsertEnabled !== false;
       break;
     case 'FILE':
@@ -548,6 +580,8 @@ function buildConfFromFields(type: string): string {
         subjectColumn: dbConfig.subjectColumn || undefined,
         issueTimeColumn: dbConfig.issueTimeColumn || undefined,
         expireTimeColumn: dbConfig.expireTimeColumn || undefined,
+        statusColumn: dbConfig.statusColumn || undefined,
+        revokeReasonColumn: dbConfig.revokeReasonColumn || undefined,
         upsertEnabled: dbConfig.upsertEnabled
       };
       break;
@@ -568,7 +602,7 @@ function buildConfFromFields(type: string): string {
 
 function resetTypeConfigs() {
   Object.assign(ldapConfig, { url: '', baseDn: '', bindDn: '', password: '', useSsl: false, useTls: false, certAttribute: 'userCertificate;binary', searchBase: '', searchFilter: '(cn={subjectCn})' });
-  Object.assign(dbConfig, { url: '', driverClass: 'com.mysql.cj.jdbc.Driver', username: '', password: '', additionalParams: '', tableName: '', certColumn: 'cert_pem', serialColumn: 'serial_number', subjectColumn: 'subject_dn', issueTimeColumn: 'issue_time', expireTimeColumn: 'expire_time', upsertEnabled: true });
+  Object.assign(dbConfig, { url: '', driverClass: 'com.mysql.cj.jdbc.Driver', username: '', password: '', additionalParams: '', tableName: '', certColumn: 'cert_pem', serialColumn: 'serial_number', subjectColumn: 'subject_dn', issueTimeColumn: 'issue_time', expireTimeColumn: 'expire_time', statusColumn: '', revokeReasonColumn: '', upsertEnabled: true });
   Object.assign(fileConfig, { path: '', filenamePattern: '{serialNumber}.pem', createDirs: true });
   Object.assign(httpConfig, { url: '', timeout: 5000 });
 }
@@ -602,6 +636,10 @@ function cancel() {
 function resetForm() {
   readonly.value = false;
   advancedMode.value = false;
+  testPassed.value = false;
+  testing.value = false;
+  testMessage.value = '';
+  originalConf.value = '';
   resetTypeConfigs();
   form.value = { id: undefined, name: undefined, type: undefined, conf: undefined };
   publisherFormRef.value?.resetFields();
@@ -632,6 +670,7 @@ function handleDetail(row: any) {
   resetForm();
   getPublisher(row.id).then((response) => {
     form.value = response.data;
+    originalConf.value = response.data.conf || '';
     parseConfToFields(form.value.conf, form.value.type || '');
     readonly.value = true;
     open.value = true;
@@ -644,15 +683,35 @@ function handleUpdate(row: any) {
   const id = row.id || ids.value[0];
   getPublisher(id).then((response) => {
     form.value = response.data;
+    originalConf.value = response.data.conf || '';
     parseConfToFields(form.value.conf, form.value.type || '');
     open.value = true;
     title.value = '修改发布者';
   });
 }
 
+function effectiveConf(): string {
+  const type = form.value.type || '';
+  if (!type) return '';
+  return advancedMode.value ? (form.value.conf || '') : buildConfFromFields(type);
+}
+
+function needTestBeforeSave(): boolean {
+  const type = form.value.type || '';
+  if (type !== 'LDAP' && type !== 'DATABASE') return false;
+  if (testPassed.value) return false;
+  if (!form.value.id) return true; // 新增必须测试通过
+  // 修改：仅连接/映射配置变更时需要重测
+  return (originalConf.value || '').trim() !== effectiveConf().trim();
+}
+
 function submitForm() {
   if (!advancedMode.value && form.value.type) {
     form.value.conf = buildConfFromFields(form.value.type);
+  }
+  if (needTestBeforeSave()) {
+    ElMessage.warning('请先点击「测试连接并预检」，测试通过后才能保存');
+    return;
   }
   publisherFormRef.value?.validate((valid: boolean) => {
     if (!valid) return;
@@ -664,6 +723,39 @@ function submitForm() {
       getList();
     });
   });
+}
+
+// ===================== 未保存配置测试（新增/修改对话框） =====================
+
+function handlePreviewTest() {
+  const type = form.value.type || '';
+  if (type !== 'LDAP' && type !== 'DATABASE') {
+    ElMessage.warning('该发布者类型暂不支持连通性测试');
+    return;
+  }
+  const conf = effectiveConf();
+  if (!conf.trim()) {
+    ElMessage.warning('请先填写连接配置');
+    return;
+  }
+  testing.value = true;
+  testMessage.value = '';
+  testPassed.value = false;
+  testPublisherConfig({ co: { type, conf } })
+    .then((response: any) => {
+      const result = response?.data || {};
+      const connected = result.connected === true;
+      const missing = result.missingColumns?.length || 0;
+      testPassed.value = connected && missing === 0;
+      testMessage.value = result.message || (testPassed.value ? '测试通过' : '测试未通过');
+    })
+    .catch((error: any) => {
+      testPassed.value = false;
+      testMessage.value = error?.msg || '连接测试失败';
+    })
+    .finally(() => {
+      testing.value = false;
+    });
 }
 
 function handleDelete(row?: any) {
@@ -726,6 +818,9 @@ function handleTestConnection(row: any) {
 function handleTypeChange(type: string) {
   if (!type) return;
   advancedMode.value = false;
+  testPassed.value = false;
+  testing.value = false;
+  testMessage.value = '';
   resetTypeConfigs();
   parseConfToFields(form.value.conf, type);
 }

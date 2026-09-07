@@ -210,7 +210,7 @@
       <el-alert v-if="issueStep" class="issue-step-alert" :title="issueStep" type="info" show-icon :closable="false" />
       <el-form ref="issueFormRef" :model="issueForm" :rules="issueRules" label-width="118px" class="issue-form">
         <div class="issue-top-grid">
-          <el-form-item label="CSR来源">
+          <el-form-item v-if="!isSmimeSingleProfile" label="CSR来源">
             <el-select v-model="issueType" placeholder="请选择CSR来源" @change="handleIssueTypeChange">
               <el-option label="USB Key" value="key" :disabled="isPostQuantumDualSelected" />
               <el-option label="PKCS10 CSR" value="p10" />
@@ -239,11 +239,32 @@
           <el-col :span="12">
             <div class="form-section">
               <div class="section-title">证书模板</div>
-              <el-form-item v-if="certMode === 'single'" label="证书模板" prop="profileId">
-                <el-select v-model="issueForm.profileId" filterable placeholder="请选择模板" style="width: 100%" @change="handleProfileChange">
-                  <el-option v-for="item in singleProfileList" :key="item.id" :label="item.name" :value="item.id" />
-                </el-select>
-              </el-form-item>
+              <template v-if="certMode === 'single'">
+                <el-form-item label="证书模板" prop="profileId">
+                  <el-select v-model="issueForm.profileId" filterable placeholder="请选择模板" style="width: 100%" @change="handleProfileChange">
+                    <el-option v-for="item in singleProfileList" :key="item.id" :label="item.name" :value="item.id" />
+                  </el-select>
+                </el-form-item>
+                <div v-if="isSmimeSingleProfile" class="smime-kmc-panel">
+                  <el-alert
+                    class="issue-alert"
+                    type="success"
+                    show-icon
+                    :closable="false"
+                    title="S/MIME 加密证书：KMC 托管密钥（RSA 2048 / RSA 4096）"
+                    description="加密私钥由 KMC 生成并永久托管，以 SKF 数字信封封装返回；仅支持上传客户端临时密钥对生成的封装CSR，私钥不入明文。"
+                  />
+                  <el-form-item label="密钥算法">
+                    <el-tag type="success" effect="plain">RSA（KMC 生成并托管）</el-tag>
+                  </el-form-item>
+                  <el-form-item label="密钥长度">
+                    <el-radio-group v-model="issueForm.kmcKeySize">
+                      <el-radio-button value="2048">RSA 2048</el-radio-button>
+                      <el-radio-button value="4096">RSA 4096</el-radio-button>
+                    </el-radio-group>
+                  </el-form-item>
+                </div>
+              </template>
               <template v-else>
                 <el-form-item label="证书模板" prop="profileId">
                   <el-select
@@ -291,7 +312,7 @@
               </el-form-item>
             </div>
 
-            <div class="form-section" v-if="issueType !== 'p10' && issueForm.subjectItems.length > 0">
+            <div class="form-section" v-if="(issueType !== 'p10' || isSmimeSingleProfile) && issueForm.subjectItems.length > 0">
               <div class="section-title">主体信息 (Subject)</div>
               <div class="subject-scroll-area">
                 <CertSubject v-model="issueForm.subjectItems" propPrefix="subjectItems" />
@@ -381,7 +402,7 @@
           </el-col>
 
           <el-col :span="12">
-            <div v-if="issueType === 'key'" class="form-section usb-key-section">
+            <div v-if="issueType === 'key' && !isSmimeSingleProfile" class="form-section usb-key-section">
               <div class="section-title">
                 <span class="usb-title">
                   <svg class="usb-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
@@ -450,7 +471,22 @@
               </div>
             </div>
 
-            <div v-if="issueType === 'p10'" class="form-section">
+            <div v-if="isSmimeSingleProfile" class="form-section">
+              <div class="section-title">上传封装CSR（客户端临时密钥对）</div>
+              <el-alert
+                class="issue-alert"
+                type="info"
+                show-icon
+                :closable="false"
+                title="该 CSR 仅用于 KMC 封装加密私钥，不是证书密钥"
+                description="请使用客户端生成的临时密钥对生成 PEM 格式 CSR 并粘贴到下方；签发结果将返回 SKF 信封材料（encryptedPrivateKey/wrapKey），客户端用临时私钥经 SKF_ImportRSAKeyPair 解封后即可将 S/MIME 加密证书/私钥安装到 USB Key。"
+              />
+              <el-form-item label="封装CSR PEM" prop="csr" label-width="0">
+                <el-input v-model="issueForm.csr" type="textarea" :rows="12" placeholder="-----BEGIN CERTIFICATE REQUEST----- ..." />
+              </el-form-item>
+            </div>
+
+            <div v-if="issueType === 'p10' && !isSmimeSingleProfile" class="form-section">
               <div class="section-title">PKCS10 CSR 内容</div>
               <el-form-item :label="certMode === 'dual' ? '签名CSR PEM' : 'CSR PEM'" prop="csr" label-width="0">
                 <el-input v-model="issueForm.csr" type="textarea" :rows="15" placeholder="-----BEGIN CERTIFICATE REQUEST----- ..." />
@@ -1051,6 +1087,36 @@ const isPostQuantumLifecycle = computed(() => {
   return profileUsesAlgorithm(profile, 'MLDSA', '2.16.840.1.101.3.4.3.') || profileUsesAlgorithm(profile, 'MLKEM', '2.16.840.1.101.3.4.4.');
 });
 
+/**
+ * S/MIME 安全邮件证书模板判定（与后端 KMC 算法解析保持语义一致）：
+ * 扩展含 SMIMECapabilities，且 ExtendedKeyUsage required 含 emailProtection。
+ */
+function isSmimeManagedProfile(profile: any) {
+  const conf = parseJson(profile?.conf);
+  const extensions = Array.isArray(conf?.extensions) ? conf.extensions : [];
+  let hasSmimeCapabilities = false;
+  let emailProtectionRequired = false;
+  for (const ext of extensions) {
+    const typeName = String(ext?.type?.description || ext?.type || '')
+      .trim()
+      .toLowerCase();
+    if (typeName === 'smimecapabilities') {
+      hasSmimeCapabilities = true;
+    } else if (typeName === 'extendedkeyusage') {
+      const required = Array.isArray(ext?.extendedKeyUsage?.required) ? ext.extendedKeyUsage.required : [];
+      emailProtectionRequired = required.some((usage: any) => String(usage).trim().toLowerCase() === 'emailprotection');
+    }
+  }
+  return hasSmimeCapabilities && emailProtectionRequired;
+}
+
+/** 单证书模式下当前选中的是否为 S/MIME 模板（只走 KMC + RSA 2048/4096 + 上传封装CSR）。 */
+const isSmimeSingleProfile = computed(() => {
+  if (certMode.value !== 'single') return false;
+  const profile = issueProfileInfo.value || findProfileById(issueForm.value.profileId);
+  return isSmimeManagedProfile(profile);
+});
+
 function normalizeAlgorithmText(value: any) {
   return String(value || '')
     .toUpperCase()
@@ -1131,6 +1197,7 @@ const data = reactive({
     containerName: '',
     pin: '123456',
     dualProfileName: undefined as string | undefined,
+    kmcKeySize: '2048' as string,
     csr: '',
     encCsr: '',
     extensionItems: [] as any[],
@@ -1443,7 +1510,8 @@ async function handleProfileChange(val: any) {
     const res = await getProfile(val);
     issueProfileInfo.value = res.data || null;
     const conf = parseJson(res.data.conf);
-    if (issueType.value !== 'p10' && conf && conf.subject) {
+    const smimeSingle = certMode.value === 'single' && isSmimeManagedProfile(res.data);
+    if ((issueType.value !== 'p10' || smimeSingle) && conf && conf.subject) {
       const items: any[] = [];
       const rdns = conf.subject.rdns || (Array.isArray(conf.subject) ? conf.subject : []);
       rdns.forEach((rdn: any) => {
@@ -1463,6 +1531,13 @@ async function handleProfileChange(val: any) {
       issueForm.value.subjectItems = sortSubjectItems(items);
     }
     issueForm.value.extensionItems = buildIssueExtensionItems(conf?.extensions || []);
+    // S/MIME 单证：只走 KMC（RSA 2048/4096）+ 上传封装CSR，切换到上传模式并清空旧 CSR。
+    if (smimeSingle) {
+      issueType.value = 'p10';
+      stopDeviceMonitoring();
+      issueForm.value.csr = '';
+      issueForm.value.kmcKeySize = '2048';
+    }
   } catch (e) {}
 }
 
@@ -1562,6 +1637,7 @@ function resetIssueForm() {
     appName: '',
     containerName: '',
     pin: '123456',
+    kmcKeySize: '2048',
     csr: '',
     encCsr: '',
     extensionItems: [],
@@ -2073,13 +2149,54 @@ async function submitIssue() {
           })
           .join(',');
 
-        if (issueType.value === 'key') {
+        if (issueType.value === 'key' && !isSmimeSingleProfile.value) {
           skf = await getSkfClient();
           setIssueStep('正在验证 USB Key PIN...');
           await withTimeout(skf.checkPIN(appPath, issueForm.value.pin), 15000, '验证 PIN 超时');
         }
 
-        if (issueType.value === 'key' && certMode.value === 'single') {
+        if (isSmimeSingleProfile.value) {
+          // S/MIME 单证：KMC 生成并托管 RSA 加密私钥（2048/4096），上传客户端临时密钥对的封装CSR。
+          if (!issueForm.value.subjectItems.some((i: any) => i.value)) {
+            throw new Error('请填写证书主题（主体信息）');
+          }
+          const wrapCsrPem = String(issueForm.value.csr || '').trim();
+          if (!/-----BEGIN CERTIFICATE REQUEST-----/.test(wrapCsrPem)) {
+            throw new Error('请上传客户端临时密钥对生成的封装CSR（PEM）');
+          }
+          const kmcKeySize = Number(issueForm.value.kmcKeySize || 2048);
+          if (kmcKeySize !== 2048 && kmcKeySize !== 4096) {
+            throw new Error('RSA 密钥长度仅支持 2048 或 4096');
+          }
+          setIssueStep(`正在向 KMC 申请 RSA-${kmcKeySize} 加密托管密钥并签发 S/MIME 加密证书...`);
+          const res = await issueCert({
+            rootId: issueForm.value.rootId,
+            profileId: issueForm.value.profileId,
+            subject,
+            csrBase64: pemToBase64(wrapCsrPem),
+            keyGenStrategy: 'KMC',
+            keyAlgorithm: 'RSA',
+            keySize: kmcKeySize,
+            notBefore: issueForm.value.notBefore,
+            notAfter: issueForm.value.notAfter,
+            extensions: buildIssueExtensionsPayload()
+          });
+          if (!res.data || !res.data.cert) {
+            throw new Error(res.msg || '后端签发结果异常');
+          }
+          if (!res.data.encryptionPrivateKey) {
+            throw new Error('KMC未返回可写入 USB Key 的数字信封材料（encryptedPrivateKey）');
+          }
+          ElMessage.success('S/MIME 加密证书签发成功，KMC 托管信封材料已返回');
+          showIssueResult(res.data, {
+            primaryCertLabel: 'S/MIME 加密证书',
+            keySource: 'KMC',
+            operationHint:
+              '证书私钥由 KMC 生成并永久托管（可恢复）。信封材料 encryptedPrivateKey / wrapKey 已随结果返回：请用封装CSR对应的客户端临时私钥经 SKF_ImportRSAKeyPair 解封并安装到 USB Key（导入完成前请保留临时私钥）。'
+          });
+          issueOpen.value = false;
+          getList();
+        } else if (issueType.value === 'key' && certMode.value === 'single') {
           const kmcEncryption = shouldUseKmcSingleEncryption();
           attemptedKmcSingleEncryption = kmcEncryption;
           let res: any;

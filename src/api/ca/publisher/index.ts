@@ -102,3 +102,12 @@ export function testPublisherConnection(id: string | number): Promise<Result<any
     method: 'post'
   }) as any;
 }
+
+/** 测试未保存的发布者配置（新增/修改对话框用） */
+export function testPublisherConfig(data: { co: { type?: string; conf?: string } }): Promise<Result<any>> {
+  return request({
+    url: '/ca/v1/publishers/test',
+    method: 'post',
+    data
+  }) as any;
+}

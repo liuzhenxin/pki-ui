@@ -278,11 +278,14 @@ const certApps = ref<string[]>([]);
 const showCertDialog = ref(false);
 const certPem = ref('');
 
+const ADMIN_CERT_PROFILE_NAME = '管理员证书模板';
+
 const certForm = reactive({
   userId: '',
   username: '',
   mobile: '',
   mail: '',
+  profileId: undefined as string | number | undefined,
   provider: '',
   device: '',
   appName: '',
@@ -561,11 +564,12 @@ async function handleIssueCert(row: any) {
     certForm.pin = '';
     certForm.validityValue = 5;
     certForm.validityUnit = 'y';
+    certForm.profileId = undefined;
 
-    // 获取"管理员证书模板"配置
+    // 获取"管理员证书模板"配置，签发时必须带上 profileId
     ElMessage.info('正在加载证书模板...');
-    const profileRes = await getProfileByName('管理员证书模板');
-    const profile = profileRes.data;
+    const profile = await loadAdminCertProfile();
+    certForm.profileId = profile.id;
     const conf = parseJson(profile.conf);
     applyCertValidity(conf?.validity);
 
@@ -704,6 +708,15 @@ function applyCertValidity(validity?: string) {
   certForm.validityUnit = match[2];
 }
 
+async function loadAdminCertProfile() {
+  const profileRes = await getProfileByName(ADMIN_CERT_PROFILE_NAME);
+  const profile = profileRes.data;
+  if (!profile?.id || profile.name !== ADMIN_CERT_PROFILE_NAME) {
+    throw new Error('未找到管理员证书模板');
+  }
+  return profile;
+}
+
 /** 提交签发证书表单 */
 async function submitCertForm() {
   certFormRef.value?.validate(async (valid: boolean) => {
@@ -730,11 +743,15 @@ async function submitCertForm() {
 
         // 2. 调用后端API签发证书
         ElMessage.info('正在请求后端签发证书...');
+        if (!certForm.profileId) {
+          throw new Error('未找到管理员证书模板');
+        }
         const issueRes = await issueAdminCert({
           co: {
             userId: certForm.userId,
             username: certForm.username,
             csrPem: csrRes.pem,
+            profileId: certForm.profileId,
             validity: `${certForm.validityValue}${certForm.validityUnit}`
           }
         });
@@ -782,6 +799,7 @@ async function submitCertForm() {
 /** 关闭签发证书对话框 */
 function closeCertDialog() {
   certDialog.visible = false;
+  certForm.profileId = undefined;
   certFormRef.value?.resetFields();
 }
 

@@ -18,7 +18,8 @@
     "preview": "vite preview",
     "lint:eslint": "eslint",
     "lint:eslint:fix": "eslint --fix",
-    "prettier": "prettier --write ."
+    "prettier": "prettier --write .",
+    "build:portal": "VITE_APP_CLIENT_ID=95TxSsTPFA3tF12TBSMmUVK0da vite build --mode portal"
   },
   "repository": {
     "type": "git",

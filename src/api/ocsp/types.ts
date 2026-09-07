@@ -105,16 +105,27 @@ export interface OcspRequestLogPageQry {
 
 export interface OcspStatusSource {
   type: 'DB' | 'LDAP' | string;
+  /** 按 CA 配置时必填（CA 与数据源 1:1）；为空表示平台默认数据源 */
+  caId?: number;
+  name?: string;
+  enabled?: boolean;
   db?: {
     url?: string;
     username?: string;
     passwordRef?: string;
     certTable?: string;
+    /** 归档证书表（吊销后移入，如 ca_archive_cert）；空表示不查归档表 */
+    archiveCertTable?: string;
     serialNumberColumn?: string;
     caIdColumn?: string;
     statusColumn?: string;
+    isRevokedColumn?: string;
     revocationTimeColumn?: string;
     revocationReasonColumn?: string;
+    notBeforeColumn?: string;
+    notAfterColumn?: string;
+    /** 空表示不按删除标识过滤 */
+    delFlagColumn?: string;
   };
   ldap?: {
     url?: string;
@@ -125,6 +136,8 @@ export interface OcspStatusSource {
     serialNumberAttribute?: string;
     caIdAttribute?: string;
     statusAttribute?: string;
+    revocationTimeAttribute?: string;
+    revocationReasonAttribute?: string;
     connectTimeout?: number;
     readTimeout?: number;
   };
