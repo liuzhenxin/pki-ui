@@ -199,7 +199,6 @@
       </el-row>
     </div>
 
-
     <!-- 密钥库状态 (全宽) - 仅 KMC admin 显示 -->
     <el-card v-if="!isLicense && isKMC && userStore.permissions.includes('kmc:dashboard:view')" class="box-card status-card" shadow="hover">
       <template #header>
@@ -592,11 +591,7 @@
                 </div>
                 <div class="info">
                   <span class="label">HSM 状态</span>
-                  <el-tag
-                    :type="kmcDashboardStats?.systemHealth?.hsmStatus === 'UP' ? 'success' : 'danger'"
-                    size="small"
-                    effect="light"
-                  >
+                  <el-tag :type="kmcDashboardStats?.systemHealth?.hsmStatus === 'UP' ? 'success' : 'danger'" size="small" effect="light">
                     {{ kmcDashboardStats?.systemHealth?.hsmStatus || '未检测' }}
                   </el-tag>
                 </div>
@@ -607,11 +602,7 @@
                 </div>
                 <div class="info">
                   <span class="label">数据库状态</span>
-                  <el-tag
-                    :type="kmcDashboardStats?.systemHealth?.dbStatus === 'UP' ? 'success' : 'danger'"
-                    size="small"
-                    effect="light"
-                  >
+                  <el-tag :type="kmcDashboardStats?.systemHealth?.dbStatus === 'UP' ? 'success' : 'danger'" size="small" effect="light">
                     {{ kmcDashboardStats?.systemHealth?.dbStatus || '未检测' }}
                   </el-tag>
                 </div>
@@ -713,7 +704,7 @@ const isOps = computed(() => String(currentTenantId.value) === '1');
 const isKMC = computed(() => String(currentTenantId.value) === '3');
 const isNAS = computed(() => String(currentTenantId.value) === '10');
 const isCA = computed(() => String(currentTenantId.value) === '4');
-const isRA = computed(() => String(currentTenantId.value) === '5');
+const isRA = computed(() => ['5', '51'].includes(String(currentTenantId.value)));
 const isLicense = computed(() => String(currentTenantId.value) === '2');
 const opsVersion = computed(() => import.meta.env.VITE_APP_VERSION || '4.1.2');
 
@@ -809,10 +800,13 @@ const licenseProducts = computed(() =>
 );
 
 const licenseProductCounts = computed<Record<string, number>>(() => {
-  return licenseList.value.reduce((counts, item) => {
-    counts[item.product] = (counts[item.product] || 0) + 1;
-    return counts;
-  }, {} as Record<string, number>);
+  return licenseList.value.reduce(
+    (counts, item) => {
+      counts[item.product] = (counts[item.product] || 0) + 1;
+      return counts;
+    },
+    {} as Record<string, number>
+  );
 });
 
 const licenseSummary = computed(() => {
@@ -914,14 +908,26 @@ const raActions = [
   { title: '证书申请', desc: '提交普通证书申请并选择授权模板', path: '/ra-certificate/ra-cert-apply', icon: 'EditPen', permission: 'ra:apply' },
   { title: '证书查询', desc: '查询申请记录、签发状态和证书详情', path: '/ra-certificate/ra-cert-list', icon: 'Search', permission: 'ra:cert' },
   { title: '待办审核', desc: '处理待审核的证书业务流程', path: '/ra-workflow/ra-workflow-todo', icon: 'Checked', permission: 'ra:workflow:todo' },
-  { title: '已办记录', desc: '查看已办流程和业务流转记录', path: '/ra-workflow/ra-workflow-instance', icon: 'Tickets', permission: 'ra:workflow:instance' },
+  {
+    title: '已办记录',
+    desc: '查看已办流程和业务流转记录',
+    path: '/ra-workflow/ra-workflow-instance',
+    icon: 'Tickets',
+    permission: 'ra:workflow:instance'
+  },
   { title: '证书续期', desc: '处理证书有效期延续业务', path: '/ra-certificate/ra-cert-renewal', icon: 'Timer', permission: 'ra:renewal' },
   { title: '证书更新', desc: '处理证书信息或密钥更新业务', path: '/ra-certificate/ra-cert-update', icon: 'Refresh', permission: 'ra:update' },
   { title: '证书吊销', desc: '处理证书吊销申请和状态变更', path: '/ra-certificate/ra-cert-revoke', icon: 'Lock', permission: 'ra:revoke' },
   { title: '证书补办', desc: '提交证书遗失、损坏等补办申请', path: '/ra-certificate/ra-cert-reissue', icon: 'Key', permission: 'ra:reissue' },
   { title: '证书冻结', desc: '对证书进行临时停用控制', path: '/ra-certificate/ra-cert-freeze', icon: 'Lock', permission: 'ra:freeze' },
   { title: '证书解冻', desc: '恢复已冻结证书的使用状态', path: '/ra-certificate/ra-cert-unfreeze', icon: 'Unlock', permission: 'ra:unfreeze' },
-  { title: '证书统计', desc: '查看证书申请、签发和生命周期数据', path: '/ra-statistics/ra-cert-stat', icon: 'DataAnalysis', permission: 'ra:stat:cert' },
+  {
+    title: '证书统计',
+    desc: '查看证书申请、签发和生命周期数据',
+    path: '/ra-statistics/ra-cert-stat',
+    icon: 'DataAnalysis',
+    permission: 'ra:stat:cert'
+  },
   { title: '用户统计', desc: '查看普通证书用户统计数据', path: '/ra-statistics/ra-user-stat', icon: 'User', permission: 'ra:stat:user' },
   { title: '趋势分析', desc: '查看证书业务趋势和变化情况', path: '/ra-statistics/ra-trend', icon: 'TrendCharts', permission: 'ra:stat:trend' },
   { title: '业务管理员', desc: '维护 RA 业务经办与审核账号', path: '/ra-admin/ra-admin-operator', icon: 'Avatar', permission: 'ra:admin' },
@@ -942,7 +948,12 @@ const raStatusItems = [
   { label: '审计留痕', desc: '关键操作进入统一审计日志', status: '开启', type: 'warning' as const }
 ];
 
-const raComplianceItems = ['RA 不保存 CA 私钥，只承接授权签发能力', '管理员与审计员职责分离，关键操作可追溯', '支持国密算法证书申请与 USBKey 交付', '根证书、模板、申请记录按租户隔离'];
+const raComplianceItems = [
+  'RA 不保存 CA 私钥，只承接授权签发能力',
+  '管理员与审计员职责分离，关键操作可追溯',
+  '支持国密算法证书申请与 USBKey 交付',
+  '根证书、模板、申请记录按租户隔离'
+];
 
 /**
  * 获取租户信息
@@ -991,7 +1002,9 @@ const keyDistributionLabels = computed(() => {
   return Array.from(labels).sort();
 });
 
-const reserveKeyDistribution = computed<Record<string, number>>(() => normalizeDistribution(kmcDashboardStats.value.reserveKeyDistribution ?? kmcDashboardStats.value.keyDistribution));
+const reserveKeyDistribution = computed<Record<string, number>>(() =>
+  normalizeDistribution(kmcDashboardStats.value.reserveKeyDistribution ?? kmcDashboardStats.value.keyDistribution)
+);
 const usedKeyDistribution = computed<Record<string, number>>(() => normalizeDistribution(kmcDashboardStats.value.usedKeyDistribution));
 const archiveKeyDistribution = computed<Record<string, number>>(() => normalizeDistribution(kmcDashboardStats.value.archiveKeyDistribution));
 
@@ -1527,7 +1540,10 @@ const handleResize = () => {
     background: #fff;
     cursor: pointer;
     text-align: left;
-    transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
+    transition:
+      border-color 0.2s,
+      box-shadow 0.2s,
+      transform 0.2s;
 
     &:hover {
       border-color: #93c5fd;
@@ -1655,7 +1671,10 @@ const handleResize = () => {
       justify-content: center;
       gap: 8px;
       text-align: center;
-      transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
+      transition:
+        border-color 0.2s,
+        box-shadow 0.2s,
+        transform 0.2s;
 
       .el-icon {
         color: #1d4ed8;
@@ -1969,7 +1988,10 @@ const handleResize = () => {
         align-items: center;
         justify-content: center;
         gap: 8px;
-        transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
+        transition:
+          border-color 0.2s,
+          box-shadow 0.2s,
+          transform 0.2s;
 
         .el-icon {
           color: #2563eb;

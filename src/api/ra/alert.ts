@@ -79,7 +79,7 @@ function withPage(query: { pageNum: number; pageSize: number; [key: string]: any
 
 export function pageRaAlertRule(query: RaAlertRuleQuery): Promise<Result<any>> {
   return request({
-    url: '/ra/v1/alert-rules/page',
+    url: '/ra2-liuzx/v1/alert-rules/page',
     method: 'post',
     data: withPage(query)
   }) as any;
@@ -87,14 +87,14 @@ export function pageRaAlertRule(query: RaAlertRuleQuery): Promise<Result<any>> {
 
 export function getRaAlertRule(id: number | string): Promise<Result<RaAlertRule>> {
   return request({
-    url: `/ra/v1/alert-rules/${id}`,
+    url: `/ra2-liuzx/v1/alert-rules/${id}`,
     method: 'get'
   }) as any;
 }
 
 export function saveRaAlertRule(data: RaAlertRule): Promise<Result<void>> {
   return request({
-    url: '/ra/v1/alert-rules',
+    url: '/ra2-liuzx/v1/alert-rules',
     method: 'post',
     data
   }) as any;
@@ -102,7 +102,7 @@ export function saveRaAlertRule(data: RaAlertRule): Promise<Result<void>> {
 
 export function modifyRaAlertRule(data: RaAlertRule): Promise<Result<void>> {
   return request({
-    url: '/ra/v1/alert-rules',
+    url: '/ra2-liuzx/v1/alert-rules',
     method: 'put',
     data
   }) as any;
@@ -110,7 +110,7 @@ export function modifyRaAlertRule(data: RaAlertRule): Promise<Result<void>> {
 
 export function removeRaAlertRule(ids: Array<number | string>): Promise<Result<void>> {
   return request({
-    url: '/ra/v1/alert-rules',
+    url: '/ra2-liuzx/v1/alert-rules',
     method: 'delete',
     data: ids
   }) as any;
@@ -118,7 +118,7 @@ export function removeRaAlertRule(ids: Array<number | string>): Promise<Result<v
 
 export function updateRaAlertRuleStatus(id: number | string, ruleStatus: number): Promise<Result<void>> {
   return request({
-    url: `/ra/v1/alert-rules/${id}/status`,
+    url: `/ra2-liuzx/v1/alert-rules/${id}/status`,
     method: 'put',
     data: { ruleStatus }
   }) as any;
@@ -126,7 +126,7 @@ export function updateRaAlertRuleStatus(id: number | string, ruleStatus: number)
 
 export function validateRaAlertRule(data: RaAlertRule): Promise<Result<void>> {
   return request({
-    url: '/ra/v1/alert-rules/validate',
+    url: '/ra2-liuzx/v1/alert-rules/validate',
     method: 'post',
     data
   }) as any;
@@ -134,14 +134,14 @@ export function validateRaAlertRule(data: RaAlertRule): Promise<Result<void>> {
 
 export function scanRaAlerts(): Promise<Result<{ ruleCount: number; generatedCount: number }>> {
   return request({
-    url: '/ra/v1/alert-rules/scan',
+    url: '/ra2-liuzx/v1/alert-rules/scan',
     method: 'post'
   }) as any;
 }
 
 export function pageRaAlertHistory(query: RaAlertHistoryQuery): Promise<Result<any>> {
   return request({
-    url: '/ra/v1/alert-histories/page',
+    url: '/ra2-liuzx/v1/alert-histories/page',
     method: 'post',
     data: withPage(query)
   }) as any;
@@ -149,14 +149,17 @@ export function pageRaAlertHistory(query: RaAlertHistoryQuery): Promise<Result<a
 
 export function getRaAlertHistory(id: number | string): Promise<Result<RaAlertHistory>> {
   return request({
-    url: `/ra/v1/alert-histories/${id}`,
+    url: `/ra2-liuzx/v1/alert-histories/${id}`,
     method: 'get'
   }) as any;
 }
 
-export function handleRaAlertHistory(id: number | string, data: { handleStatus: number; handleComment?: string; isResolved?: number }): Promise<Result<void>> {
+export function handleRaAlertHistory(
+  id: number | string,
+  data: { handleStatus: number; handleComment?: string; isResolved?: number }
+): Promise<Result<void>> {
   return request({
-    url: `/ra/v1/alert-histories/${id}/handle`,
+    url: `/ra2-liuzx/v1/alert-histories/${id}/handle`,
     method: 'put',
     data
   }) as any;

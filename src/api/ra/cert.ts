@@ -43,7 +43,7 @@ export interface RaCertDetail {
 
 export function pageRaCert(query: RaCertQuery): Promise<Result<any>> {
   return request({
-    url: '/ra/v1/certs/page',
+    url: '/ra2-liuzx/v1/certs/page',
     method: 'post',
     data: query
   }) as any;
@@ -51,14 +51,14 @@ export function pageRaCert(query: RaCertQuery): Promise<Result<any>> {
 
 export function getRaCert(id: string | number): Promise<Result<RaCertDetail>> {
   return request({
-    url: `/ra/v1/certs/${id}`,
+    url: `/ra2-liuzx/v1/certs/${id}`,
     method: 'get'
   }) as any;
 }
 
 export function downloadRaCert(id: string | number, format: 'pem' | 'cer' | 'p7b'): Promise<Blob> {
   return request({
-    url: `/ra/v1/certs/${id}/download/${format}`,
+    url: `/ra2-liuzx/v1/certs/${id}/download/${format}`,
     method: 'get',
     responseType: 'blob'
   }) as any;
@@ -66,7 +66,7 @@ export function downloadRaCert(id: string | number, format: 'pem' | 'cer' | 'p7b
 
 export function downloadRaPkcs12(id: string | number, password: string): Promise<Blob> {
   return request({
-    url: `/ra/v1/certs/${id}/pkcs12`,
+    url: `/ra2-liuzx/v1/certs/${id}/pkcs12`,
     method: 'post',
     data: { password },
     responseType: 'blob'
@@ -90,14 +90,14 @@ export interface RaCertRecoverPayload {
 
 export function queryRaKmcKeyStatus(id: string | number): Promise<Result<RaKmcKeyStatus>> {
   return request({
-    url: `/ra/v1/certs/${id}/kmc-key-status`,
+    url: `/ra2-liuzx/v1/certs/${id}/kmc-key-status`,
     method: 'get'
   }) as any;
 }
 
 export function recoverRaKey(id: string | number, data: RaCertRecoverPayload): Promise<Result<any>> {
   return request({
-    url: `/ra/v1/certs/${id}/recover-key`,
+    url: `/ra2-liuzx/v1/certs/${id}/recover-key`,
     method: 'post',
     data
   }) as any;

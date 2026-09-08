@@ -51,11 +51,7 @@
       <el-table-column label="操作" align="center" class-name="small-padding" width="380">
         <template #default="scope">
           <el-button link type="primary" icon="View" @click="handleView(scope.row)" v-hasPermi="['ca:root:detail']">详情</el-button>
-          <el-dropdown
-            trigger="click"
-            @command="(command: string) => handleDownload(scope.row, command)"
-            v-hasPermi="['ca:root:download']"
-          >
+          <el-dropdown trigger="click" @command="(command: string) => handleDownload(scope.row, command)" v-hasPermi="['ca:root:download']">
             <el-button link type="primary" icon="Download">
               下载<el-icon class="el-icon--right"><arrow-down /></el-icon>
             </el-button>
@@ -618,7 +614,7 @@ const data = reactive({
     keyIndex: 1,
     password: '',
     // 有效期配置
-    validity: 10,
+    validity: 30,
     validityUnit: 'y',
     expirationPeriod: 365,
     keepExpiredCertDays: -1,
@@ -744,7 +740,9 @@ function formatDuration(value: any, unit: any) {
 }
 
 function parseDuration(value: any, defaultValue = 1, defaultUnit = 'h') {
-  const match = String(value || '').trim().match(/^(\d+)\s*([hd])$/i);
+  const match = String(value || '')
+    .trim()
+    .match(/^(\d+)\s*([hd])$/i);
   if (!match) {
     return { value: defaultValue, unit: defaultUnit };
   }
@@ -1510,7 +1508,7 @@ function reset() {
     signerType: 'PKCS12',
     keyIndex: 1,
     password: '',
-    validity: 10,
+    validity: 30,
     validityUnit: 'y',
     expirationPeriod: 365,
     keepExpiredCertDays: -1,
@@ -1717,7 +1715,9 @@ function applyCrlConfig(data: any) {
   crlConfigForm.intervalTime = config?.intervalTime || '00:00';
   crlConfigForm.nextCrlNumber = toNumberValue(config?.nextCrlNumber, 1);
   crlConfigForm.crlUris = (config?.crlUris && config.crlUris.length > 0 ? config.crlUris : ['']).map((value: string) => ({ value }));
-  crlConfigForm.deltaCrlUris = (config?.deltaCrlUris && config.deltaCrlUris.length > 0 ? config.deltaCrlUris : ['']).map((value: string) => ({ value }));
+  crlConfigForm.deltaCrlUris = (config?.deltaCrlUris && config.deltaCrlUris.length > 0 ? config.deltaCrlUris : ['']).map((value: string) => ({
+    value
+  }));
   crlConfigForm.schedulerRunning = !!config?.schedulerRunning;
 }
 
@@ -1932,7 +1932,11 @@ function normalizePem(pem: string) {
   if (value.includes('-----BEGIN CERTIFICATE-----')) {
     return value.endsWith('\n') ? value : `${value}\n`;
   }
-  const body = value.replace(/\s+/g, '').match(/.{1,64}/g)?.join('\n') || value;
+  const body =
+    value
+      .replace(/\s+/g, '')
+      .match(/.{1,64}/g)
+      ?.join('\n') || value;
   return `-----BEGIN CERTIFICATE-----\n${body}\n-----END CERTIFICATE-----\n`;
 }
 

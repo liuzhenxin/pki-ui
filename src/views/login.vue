@@ -731,7 +731,7 @@ const getTenantAppTitle = (tenantName: string, tenantId: string) => {
   if (tenantId === '3') {
     return `${tenantName} (密钥管理中心)`;
   }
-  if (tenantId === '5') {
+  if (tenantId === '5' || tenantId === '51') {
     return `${tenantName} (注册认证中心)`;
   }
   if (tenantId === '6') {

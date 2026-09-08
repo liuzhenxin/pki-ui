@@ -39,28 +39,28 @@ export interface RaUserCertScopeDetail {
 
 export function listUserCertScopeOptions(): Promise<Result<RaUserCertScopeRoot[]>> {
   return request({
-    url: '/ra/v1/user-cert-scopes/options',
+    url: '/ra2-liuzx/v1/user-cert-scopes/options',
     method: 'get'
   }) as any;
 }
 
 export function listMyUserCertScopeOptions(): Promise<Result<RaUserCertScopeRoot[]>> {
   return request({
-    url: '/ra/v1/user-cert-scopes/my-options',
+    url: '/ra2-liuzx/v1/user-cert-scopes/my-options',
     method: 'get'
   }) as any;
 }
 
 export function getUserCertScopes(userId: string | number): Promise<Result<RaUserCertScopeDetail>> {
   return request({
-    url: `/ra/v1/user-cert-scopes/${userId}`,
+    url: `/ra2-liuzx/v1/user-cert-scopes/${userId}`,
     method: 'get'
   }) as any;
 }
 
 export function saveUserCertScopes(userId: string | number, roots: RaUserCertScopeSaveRoot[]): Promise<Result<void>> {
   return request({
-    url: `/ra/v1/user-cert-scopes/${userId}`,
+    url: `/ra2-liuzx/v1/user-cert-scopes/${userId}`,
     method: 'put',
     data: { roots }
   }) as any;

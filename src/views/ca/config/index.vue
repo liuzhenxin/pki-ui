@@ -68,6 +68,7 @@
                     <el-input-number
                       v-model="identityForm.validityValue"
                       :min="1"
+                      :max="identityForm.validityUnit === 'y' ? 5 : identityForm.validityUnit === 'm' ? 60 : 1825"
                       :step="1"
                       :precision="0"
                       controls-position="right"
@@ -300,8 +301,8 @@ const identityForm = reactive<any>({
   rootId: undefined,
   profileId: undefined,
   subject: 'C=CN,O=LiuZX,OU=CA,CN=CA Identity',
-  validity: '5y',
-  validityValue: 5,
+  validity: '2y',
+  validityValue: 2,
   validityUnit: 'y',
   algo: 'SM2',
   signerType: 'PKCS12',
