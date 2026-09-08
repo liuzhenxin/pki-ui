@@ -54,7 +54,7 @@ export interface RaApplyVO {
 
 export function pageRaApply(query: RaApplyQuery): Promise<Result<any>> {
   return request({
-    url: '/ra/v1/applies/page',
+    url: '/ra2-liuzx/v1/applies/page',
     method: 'post',
     data: {
       ...query,
@@ -65,14 +65,14 @@ export function pageRaApply(query: RaApplyQuery): Promise<Result<any>> {
 
 export function getRaApply(id: string | number): Promise<Result<RaApplyVO>> {
   return request({
-    url: `/ra/v1/applies/${id}`,
+    url: `/ra2-liuzx/v1/applies/${id}`,
     method: 'get'
   }) as any;
 }
 
 export function saveRaApply(data: RaApplyForm): Promise<Result<void>> {
   return request({
-    url: '/ra/v1/applies',
+    url: '/ra2-liuzx/v1/applies',
     method: 'post',
     data
   }) as any;

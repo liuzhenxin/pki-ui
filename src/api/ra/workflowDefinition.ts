@@ -60,7 +60,7 @@ export function pageRaWorkflowDefinition(query: RaWorkflowDefinitionQuery): Prom
   const pageNum = Number(query.pageNum || 1);
   const pageSize = Number(query.pageSize || 10);
   return request({
-    url: '/ra/v1/workflow-definitions/page',
+    url: '/ra2-liuzx/v1/workflow-definitions/page',
     method: 'post',
     data: {
       ...query,
@@ -75,14 +75,14 @@ export function pageRaWorkflowDefinition(query: RaWorkflowDefinitionQuery): Prom
 
 export function getRaWorkflowDefinition(id: number | string): Promise<Result<RaWorkflowDefinition>> {
   return request({
-    url: `/ra/v1/workflow-definitions/${id}`,
+    url: `/ra2-liuzx/v1/workflow-definitions/${id}`,
     method: 'get'
   }) as any;
 }
 
 export function saveRaWorkflowDefinition(data: RaWorkflowDefinition): Promise<Result<void>> {
   return request({
-    url: '/ra/v1/workflow-definitions',
+    url: '/ra2-liuzx/v1/workflow-definitions',
     method: 'post',
     data
   }) as any;
@@ -90,7 +90,7 @@ export function saveRaWorkflowDefinition(data: RaWorkflowDefinition): Promise<Re
 
 export function modifyRaWorkflowDefinition(data: RaWorkflowDefinition): Promise<Result<void>> {
   return request({
-    url: '/ra/v1/workflow-definitions',
+    url: '/ra2-liuzx/v1/workflow-definitions',
     method: 'put',
     data
   }) as any;
@@ -98,7 +98,7 @@ export function modifyRaWorkflowDefinition(data: RaWorkflowDefinition): Promise<
 
 export function removeRaWorkflowDefinition(ids: Array<number | string>): Promise<Result<void>> {
   return request({
-    url: '/ra/v1/workflow-definitions',
+    url: '/ra2-liuzx/v1/workflow-definitions',
     method: 'delete',
     data: ids
   }) as any;
@@ -106,21 +106,21 @@ export function removeRaWorkflowDefinition(ids: Array<number | string>): Promise
 
 export function publishRaWorkflowDefinition(id: number | string): Promise<Result<void>> {
   return request({
-    url: `/ra/v1/workflow-definitions/${id}/publish`,
+    url: `/ra2-liuzx/v1/workflow-definitions/${id}/publish`,
     method: 'post'
   }) as any;
 }
 
 export function copyRaWorkflowDefinition(id: number | string): Promise<Result<void>> {
   return request({
-    url: `/ra/v1/workflow-definitions/${id}/copy`,
+    url: `/ra2-liuzx/v1/workflow-definitions/${id}/copy`,
     method: 'post'
   }) as any;
 }
 
 export function updateRaWorkflowDefinitionStatus(id: number | string, status: number): Promise<Result<void>> {
   return request({
-    url: `/ra/v1/workflow-definitions/${id}/status`,
+    url: `/ra2-liuzx/v1/workflow-definitions/${id}/status`,
     method: 'put',
     data: { status }
   }) as any;
@@ -128,7 +128,7 @@ export function updateRaWorkflowDefinitionStatus(id: number | string, status: nu
 
 export function validateRaWorkflowDefinition(data: RaWorkflowDefinition): Promise<Result<void>> {
   return request({
-    url: '/ra/v1/workflow-definitions/validate',
+    url: '/ra2-liuzx/v1/workflow-definitions/validate',
     method: 'post',
     data
   }) as any;
@@ -136,7 +136,7 @@ export function validateRaWorkflowDefinition(data: RaWorkflowDefinition): Promis
 
 export function listRaWorkflowScopeOptions(): Promise<Result<RaWorkflowRootOption[]>> {
   return request({
-    url: '/ra/v1/workflow-definitions/scope-options',
+    url: '/ra2-liuzx/v1/workflow-definitions/scope-options',
     method: 'get'
   }) as any;
 }

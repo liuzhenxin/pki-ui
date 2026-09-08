@@ -3,7 +3,7 @@ import { Result } from '@/api/types';
 
 export function listRaRootCa(query: any): Promise<Result<any>> {
   return request({
-    url: '/ra/v1/roots/page',
+    url: '/ra2-liuzx/v1/roots/page',
     method: 'post',
     data: query
   }) as any;
@@ -11,7 +11,7 @@ export function listRaRootCa(query: any): Promise<Result<any>> {
 
 export function getRaRootCa(id: string | number): Promise<Result<any>> {
   return request({
-    url: `/ra/v1/roots/${id}`,
+    url: `/ra2-liuzx/v1/roots/${id}`,
     method: 'get'
   }) as any;
 }

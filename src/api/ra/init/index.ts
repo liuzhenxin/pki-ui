@@ -91,28 +91,28 @@ export const unwrapRaData = <T = any>(res: any): T => {
 
 export function getInitStatus(): Promise<Result<RaInitStatus>> {
   return request({
-    url: '/ra/v1/init/status',
+    url: '/ra2-liuzx/v1/init/status',
     method: 'get'
   });
 }
 
 export function getEnvInfo(): Promise<Result<RaEnvRow[]>> {
   return request({
-    url: '/ra/v1/init/env',
+    url: '/ra2-liuzx/v1/init/env',
     method: 'get'
   });
 }
 
 export function listProfiles(): Promise<Result<RaProfileItem[]>> {
   return request({
-    url: '/ra/v1/init/profiles',
+    url: '/ra2-liuzx/v1/init/profiles',
     method: 'get'
   });
 }
 
 export function initProfiles(names: string[]): Promise<Result<any>> {
   return request({
-    url: '/ra/v1/init/profiles',
+    url: '/ra2-liuzx/v1/init/profiles',
     method: 'post',
     data: { names }
   });
@@ -120,7 +120,7 @@ export function initProfiles(names: string[]): Promise<Result<any>> {
 
 export function initIdentity(data: { certPem: string }): Promise<Result<any>> {
   return request({
-    url: '/ra/v1/init/identity',
+    url: '/ra2-liuzx/v1/init/identity',
     method: 'post',
     data
   });
@@ -128,7 +128,7 @@ export function initIdentity(data: { certPem: string }): Promise<Result<any>> {
 
 export function generateIdentityCsr(data: RaIdentityCsrRequest): Promise<Result<RaIdentityCsrResult>> {
   return request({
-    url: '/ra/v1/init/identity/csr',
+    url: '/ra2-liuzx/v1/init/identity/csr',
     method: 'post',
     data
   });
@@ -136,7 +136,7 @@ export function generateIdentityCsr(data: RaIdentityCsrRequest): Promise<Result<
 
 export function importIdentityCert(data: { certPem: string }): Promise<Result<any>> {
   return request({
-    url: '/ra/v1/init/identity/cert',
+    url: '/ra2-liuzx/v1/init/identity/cert',
     method: 'post',
     data
   });
@@ -144,7 +144,7 @@ export function importIdentityCert(data: { certPem: string }): Promise<Result<an
 
 export function initRoot(data: { name: string; cert: string; certchain?: string; profileNames: string[] }): Promise<Result<any>> {
   return request({
-    url: '/ra/v1/init/root',
+    url: '/ra2-liuzx/v1/init/root',
     method: 'post',
     data
   });
@@ -152,7 +152,7 @@ export function initRoot(data: { name: string; cert: string; certchain?: string;
 
 export function syncCa(data: RaCaSyncRequest): Promise<Result<RaCaSyncResult>> {
   return request({
-    url: '/ra/v1/init/sync-ca',
+    url: '/ra2-liuzx/v1/init/sync-ca',
     method: 'post',
     data
   });
@@ -160,14 +160,14 @@ export function syncCa(data: RaCaSyncRequest): Promise<Result<RaCaSyncResult>> {
 
 export function getAdminCertOptions(): Promise<Result<RaAdminCertOptions>> {
   return request({
-    url: '/ra/v1/init/admin/cert-options',
+    url: '/ra2-liuzx/v1/init/admin/cert-options',
     method: 'get'
   });
 }
 
 export function initWorkflow(): Promise<Result<any>> {
   return request({
-    url: '/ra/v1/init/workflow',
+    url: '/ra2-liuzx/v1/init/workflow',
     method: 'post'
   });
 }
@@ -179,7 +179,7 @@ export function initAdmin(data: {
   profileId: string | number;
 }): Promise<Result<any>> {
   return request({
-    url: '/ra/v1/init/admin',
+    url: '/ra2-liuzx/v1/init/admin',
     method: 'post',
     data
   });
@@ -193,7 +193,7 @@ export function issueAdminAccountCert(data: {
   csrPem: string;
 }): Promise<Result<{ cert: string }>> {
   return request({
-    url: '/ra/v1/init/admin/account-cert',
+    url: '/ra2-liuzx/v1/init/admin/account-cert',
     method: 'post',
     data
   });
@@ -201,7 +201,7 @@ export function issueAdminAccountCert(data: {
 
 export function completeInit(): Promise<Result<any>> {
   return request({
-    url: '/ra/v1/init/complete',
+    url: '/ra2-liuzx/v1/init/complete',
     method: 'post'
   });
 }

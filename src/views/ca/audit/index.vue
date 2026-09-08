@@ -167,7 +167,7 @@
           <CertSubject v-model="certForm.subjectItems" propPrefix="subjectItems" />
           <el-form-item label="证书有效期" prop="validityValue">
             <div class="validity-input-group">
-              <el-input-number v-model="certForm.validityValue" :min="1" :max="certForm.validityUnit === 'y' ? 50 : 3650" controls-position="right" />
+              <el-input-number v-model="certForm.validityValue" :min="1" :max="certForm.validityUnit === 'y' ? 5 : 1825" controls-position="right" />
               <el-select v-model="certForm.validityUnit" class="validity-unit">
                 <el-option label="年" value="y" />
                 <el-option label="天" value="d" />
@@ -291,7 +291,7 @@ const certForm = reactive({
   appName: '',
   containerName: '',
   pin: '',
-  validityValue: 5,
+  validityValue: 2,
   validityUnit: 'y',
   subjectItems: [] as any[]
 });
@@ -352,12 +352,13 @@ const data = reactive({
 const { queryParams, form, rules } = toRefs(data);
 
 function randomContainerName(username?: string) {
-  const safeName = String(username || 'auditor')
-    .trim()
-    .replace(/[^a-zA-Z0-9_-]/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '')
-    .slice(0, 24) || 'auditor';
+  const safeName =
+    String(username || 'auditor')
+      .trim()
+      .replace(/[^a-zA-Z0-9_-]/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '')
+      .slice(0, 24) || 'auditor';
   const timePart = Date.now().toString(36);
   const suffix = Math.random().toString(36).slice(2, 8);
   return `audit-${safeName}-${timePart}-${suffix}`;
@@ -562,7 +563,7 @@ async function handleIssueCert(row: any) {
     certForm.appName = '';
     certForm.containerName = randomContainerName(row.username);
     certForm.pin = '';
-    certForm.validityValue = 5;
+    certForm.validityValue = 2;
     certForm.validityUnit = 'y';
     certForm.profileId = undefined;
 
@@ -699,13 +700,10 @@ function onCertAppChange() {
   // 应用变更时的处理
 }
 
-function applyCertValidity(validity?: string) {
-  const match = (validity || '').match(/^(\d+)([dy])$/);
-  if (!match) {
-    return;
-  }
-  certForm.validityValue = Number(match[1]);
-  certForm.validityUnit = match[2];
+function applyCertValidity(_validity?: string) {
+  // 终端实体证书默认有效期为 2 年；模板 validity 仅作为签发上限（由后端校验，最多 5 年）。
+  certForm.validityValue = 2;
+  certForm.validityUnit = 'y';
 }
 
 async function loadAdminCertProfile() {
