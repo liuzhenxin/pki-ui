@@ -70,23 +70,15 @@
             </el-tooltip>
           </template>
         </el-table-column>
-        <el-table-column label="凭据" width="100">
-          <template #default="scope">
-            <el-tag :type="scope.row.credentialConfigured ? 'success' : 'warning'" effect="plain">
-              {{ scope.row.credentialConfigured ? '已配置' : '未配置' }}
-            </el-tag>
-          </template>
-        </el-table-column>
         <el-table-column label="最后检测" prop="lastHealthTime" width="180">
           <template #default="scope">{{ scope.row.lastHealthTime || '-' }}</template>
         </el-table-column>
         <el-table-column label="最后同步" prop="lastSyncTime" width="180">
           <template #default="scope">{{ scope.row.lastSyncTime || '-' }}</template>
         </el-table-column>
-        <el-table-column label="操作" fixed="right" width="420">
+        <el-table-column label="操作" fixed="right" width="360">
           <template #default="scope">
             <el-button v-hasPermi="['ra:ca:modify']" link type="primary" icon="Edit" @click="handleEdit(scope.row)">编辑</el-button>
-            <el-button v-hasPermi="['ra:ca:credential']" link type="primary" icon="Key" @click="handleCredential(scope.row)">凭据</el-button>
             <el-button
               v-hasPermi="['ra:ca:test']"
               link
@@ -198,51 +190,6 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="credentialDialog.visible" :title="`配置凭据 - ${credentialDialog.name}`" width="800px" append-to-body>
-      <el-alert type="warning" :closable="false" show-icon title="Client Secret和身份私钥只允许写入，不会从接口回显；留空保存不会覆盖已有秘密。" />
-      <el-form ref="credentialFormRef" class="credential-form" :model="credentialForm" :rules="credentialRules" label-width="150px">
-        <el-form-item label="认证类型" prop="authType">
-          <el-radio-group v-model="credentialForm.authType">
-            <el-radio-button value="NONE">无需认证</el-radio-button>
-            <el-radio-button value="OAUTH2_CLIENT">OAuth2 Client</el-radio-button>
-            <el-radio-button value="MTLS">mTLS身份认证</el-radio-button>
-          </el-radio-group>
-        </el-form-item>
-        <template v-if="credentialForm.authType === 'OAUTH2_CLIENT'">
-          <el-form-item label="令牌地址" prop="tokenUri"
-            ><el-input v-model="credentialForm.tokenUri" placeholder="https://auth.example.com/oauth2/token"
-          /></el-form-item>
-          <el-form-item label="Client ID" prop="clientId"><el-input v-model="credentialForm.clientId" /></el-form-item>
-          <el-form-item label="Client Secret">
-            <el-input
-              v-model="credentialForm.clientSecret"
-              type="password"
-              show-password
-              :placeholder="secretPlaceholder"
-              autocomplete="new-password"
-            />
-          </el-form-item>
-          <el-form-item label="外部密钥引用"><el-input v-model="credentialForm.clientSecretRef" :placeholder="secretRefPlaceholder" /></el-form-item>
-        </template>
-        <template v-if="credentialForm.authType === 'MTLS'">
-          <el-form-item label="RA身份证书"
-            ><el-input v-model="credentialForm.identityCertPem" type="textarea" :rows="7" placeholder="-----BEGIN CERTIFICATE-----"
-          /></el-form-item>
-          <el-form-item label="RA身份私钥">
-            <el-input v-model="credentialForm.identityPrivateKey" type="textarea" :rows="5" :placeholder="privateKeyPlaceholder" />
-          </el-form-item>
-          <el-form-item label="外部私钥引用"
-            ><el-input v-model="credentialForm.identityPrivateKeyRef" :placeholder="privateKeyRefPlaceholder"
-          /></el-form-item>
-          <el-form-item label="密钥标识"><el-input v-model="credentialForm.keyId" placeholder="可选" /></el-form-item>
-        </template>
-      </el-form>
-      <template #footer>
-        <el-button @click="credentialDialog.visible = false">取消</el-button>
-        <el-button type="primary" :loading="savingCredential" @click="submitCredential">保存凭据</el-button>
-      </template>
-    </el-dialog>
-
     <el-dialog v-model="testDialog.visible" :title="`连接测试 - ${testDialog.name}`" width="620px" append-to-body>
       <el-result :icon="testDialog.result?.passed ? 'success' : 'error'" :title="testDialog.result?.passed ? '连接测试通过' : '连接测试未通过'">
         <template #sub-title>检测时间：{{ testDialog.result?.checkedAt || '-' }}</template>
@@ -261,38 +208,33 @@
 </template>
 
 <script setup name="RaCaInstance" lang="ts">
-import { computed, reactive, ref } from 'vue';
+import { reactive, ref } from 'vue';
 import { ArrowDown } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox, FormInstance, FormRules } from 'element-plus';
 import {
-  getRaCaCredential,
   getRaCaInstance,
   modifyRaCaInstance,
   pageRaCaInstance,
   removeRaCaInstance,
-  saveRaCaCredential,
   saveRaCaInstance,
   setDefaultRaCaInstance,
   syncRaCaInstance,
   testRaCaConnection,
   updateRaCaInstanceStatus
 } from '@/api/ra/caInstance';
-import type { RaCaConnectionTest, RaCaCredential, RaCaInstance, RaCaInstanceQuery, RaCaStatus } from '@/api/ra/caInstance';
+import type { RaCaConnectionTest, RaCaInstance, RaCaInstanceQuery, RaCaStatus } from '@/api/ra/caInstance';
 
 const loading = ref(false);
 const saving = ref(false);
-const savingCredential = ref(false);
 const testingId = ref<number | string>();
 const syncingId = ref<number | string>();
 const total = ref(0);
 const instanceList = ref<RaCaInstance[]>([]);
 const queryFormRef = ref<FormInstance>();
 const instanceFormRef = ref<FormInstance>();
-const credentialFormRef = ref<FormInstance>();
 
 const queryParams = reactive<RaCaInstanceQuery>({ pageNum: 1, pageSize: 10, keyword: '', status: '', mode: '' });
 const instanceDialog = reactive({ visible: false, title: '' });
-const credentialDialog = reactive({ visible: false, id: undefined as number | string | undefined, name: '' });
 const testDialog = reactive({ visible: false, name: '', result: undefined as RaCaConnectionTest | undefined });
 
 const defaultInstance = (): RaCaInstance => ({
@@ -308,23 +250,6 @@ const defaultInstance = (): RaCaInstance => ({
 });
 const instanceForm = reactive<RaCaInstance>(defaultInstance());
 
-const defaultCredential = (): RaCaCredential => ({
-  authType: 'NONE',
-  tokenUri: '',
-  clientId: '',
-  clientSecret: '',
-  clientSecretRef: '',
-  identityCertPem: '',
-  identityPrivateKey: '',
-  identityPrivateKeyRef: '',
-  keyId: '',
-  clientSecretConfigured: false,
-  clientSecretRefConfigured: false,
-  identityPrivateKeyConfigured: false,
-  identityPrivateKeyRefConfigured: false
-});
-const credentialForm = reactive<RaCaCredential>(defaultCredential());
-
 const urlRule = /^https?:\/\/[^\s]+$/i;
 const instanceRules: FormRules = {
   code: [
@@ -339,18 +264,6 @@ const instanceRules: FormRules = {
   mode: [{ required: true, message: '请选择接入模式', trigger: 'change' }],
   status: [{ required: true, message: '请选择业务状态', trigger: 'change' }]
 };
-const credentialRules: FormRules = {
-  authType: [{ required: true, message: '请选择认证类型', trigger: 'change' }],
-  tokenUri: [{ pattern: urlRule, message: '请输入有效的HTTP/HTTPS地址', trigger: 'blur' }]
-};
-
-const secretPlaceholder = computed(() => (credentialForm.clientSecretConfigured ? '已配置，留空保持不变' : '请输入Client Secret'));
-const secretRefPlaceholder = computed(() => (credentialForm.clientSecretRefConfigured ? '外部引用已配置，留空保持不变' : '可选：Vault/KMS引用'));
-const privateKeyPlaceholder = computed(() => (credentialForm.identityPrivateKeyConfigured ? '已配置，留空保持不变' : '-----BEGIN PRIVATE KEY-----'));
-const privateKeyRefPlaceholder = computed(() =>
-  credentialForm.identityPrivateKeyRefConfigured ? '外部引用已配置，留空保持不变' : '可选：HSM/Vault/KMS引用'
-);
-
 const unwrap = (response: any) => {
   const body = response?.data ?? response;
   return body?.data ?? body;
@@ -406,29 +319,6 @@ async function submitInstance() {
     await getList();
   } finally {
     saving.value = false;
-  }
-}
-
-async function handleCredential(row: RaCaInstance) {
-  const data = unwrap(await getRaCaCredential(row.id!)) || {};
-  Object.assign(credentialForm, defaultCredential(), data, { clientSecret: '', identityPrivateKey: '' });
-  credentialDialog.id = row.id;
-  credentialDialog.name = row.name;
-  credentialDialog.visible = true;
-  credentialFormRef.value?.clearValidate();
-}
-
-async function submitCredential() {
-  await credentialFormRef.value?.validate();
-  if (!credentialDialog.id) return;
-  savingCredential.value = true;
-  try {
-    await saveRaCaCredential(credentialDialog.id, { ...credentialForm });
-    ElMessage.success('凭据保存成功');
-    credentialDialog.visible = false;
-    await getList();
-  } finally {
-    savingCredential.value = false;
   }
 }
 
@@ -524,8 +414,5 @@ getList();
   margin-left: 12px;
   color: var(--el-text-color-secondary);
   font-size: 12px;
-}
-.credential-form {
-  margin-top: 18px;
 }
 </style>

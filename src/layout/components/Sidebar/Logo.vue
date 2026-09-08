@@ -51,7 +51,7 @@ function syncLogoText(tenantId?: string | number | null) {
     logoText.value = 'KMC';
   } else if (idStr === '10') {
     logoText.value = 'NAS';
-  } else if (idStr === '5') {
+  } else if (idStr === '5' || idStr === '51') {
     logoText.value = 'RA';
   } else if (idStr === '4' || !idStr) {
     logoText.value = 'CA';
@@ -79,7 +79,7 @@ onMounted(() => {
           title.value = 'KMC密钥管理中心';
         } else if (idStr === '10') {
           title.value = 'NAS网络存储管理系统';
-        } else if (idStr === '5') {
+        } else if (idStr === '5' || idStr === '51') {
           title.value = 'RA注册认证系统';
         } else if (idStr === '4') {
           title.value = 'CA证书认证系统';

@@ -53,7 +53,7 @@ function withPage(query: RaNotificationQuery) {
 
 export function pageRaNotification(query: RaNotificationQuery): Promise<Result<any>> {
   return request({
-    url: '/ra/v1/notifications/page',
+    url: '/ra2-liuzx/v1/notifications/page',
     method: 'post',
     data: withPage(query)
   }) as any;
@@ -61,21 +61,21 @@ export function pageRaNotification(query: RaNotificationQuery): Promise<Result<a
 
 export function getRaNotification(id: number | string): Promise<Result<RaNotification>> {
   return request({
-    url: `/ra/v1/notifications/${id}`,
+    url: `/ra2-liuzx/v1/notifications/${id}`,
     method: 'get'
   }) as any;
 }
 
 export function readRaNotification(id: number | string): Promise<Result<void>> {
   return request({
-    url: `/ra/v1/notifications/${id}/read`,
+    url: `/ra2-liuzx/v1/notifications/${id}/read`,
     method: 'put'
   }) as any;
 }
 
 export function removeRaNotification(ids: Array<number | string>): Promise<Result<void>> {
   return request({
-    url: '/ra/v1/notifications',
+    url: '/ra2-liuzx/v1/notifications',
     method: 'delete',
     data: ids
   }) as any;

@@ -446,7 +446,7 @@
                   <el-input-number
                     v-model="adminForm.validityValue"
                     :min="1"
-                    :max="adminForm.validityUnit === 'y' ? 50 : 3650"
+                    :max="adminForm.validityUnit === 'y' ? 5 : 1825"
                     controls-position="right"
                   />
                   <el-select v-model="adminForm.validityUnit" class="validity-unit">
@@ -549,7 +549,7 @@
                   <el-input-number
                     v-model="auditorForm.validityValue"
                     :min="1"
-                    :max="auditorForm.validityUnit === 'y' ? 50 : 3650"
+                    :max="auditorForm.validityUnit === 'y' ? 5 : 1825"
                     controls-position="right"
                   />
                   <el-select v-model="auditorForm.validityUnit" class="validity-unit">
@@ -1158,7 +1158,7 @@ const rootCaForm = reactive({
   password: '',
 
   // Validity
-  maxValidity: 10,
+  maxValidity: 30,
   maxValidityUnit: 'y',
   expirationPeriod: 365,
   keepExpiredCertDays: -1,
@@ -1238,7 +1238,7 @@ const loadProfileToForm = async (id: string | number, form: any, defaultValues?:
         rdns.forEach((rdn: any) => {
           const rdnType = rdn.type || {};
           // 兼容字符串 type（如 "country"）与对象 type（{ description, oid }）两种模板格式
-          let compType = (typeof rdnType === 'string' ? rdnType : (rdnType.description || rdnType.oid || '')).toLowerCase();
+          let compType = (typeof rdnType === 'string' ? rdnType : rdnType.description || rdnType.oid || '').toLowerCase();
           for (const [type, meta] of Object.entries(typeMapping)) {
             if (meta.key.toLowerCase() === compType || type.toLowerCase() === compType) {
               compType = type;
@@ -1317,9 +1317,9 @@ watch(
   () => rootCaForm.maxValidityUnit,
   (newUnit) => {
     if (newUnit === 'y') {
-      rootCaForm.maxValidity = 10;
+      rootCaForm.maxValidity = 30;
     } else if (newUnit === 'd') {
-      rootCaForm.maxValidity = 3650;
+      rootCaForm.maxValidity = 10950;
     }
   }
 );
@@ -1449,19 +1449,16 @@ const adminForm = reactive({
   appName: '',
   containerName: randomContainerName('admin'),
   pin: '',
-  validityValue: 5,
+  validityValue: 2,
   validityUnit: 'y',
   subjectItems: [] as any[],
   profileId: '' as string | number
 });
 
-function applyCertValidity(form: any, validity?: string) {
-  const match = (validity || '').match(/^(\d+)([dy])$/);
-  if (!match) {
-    return;
-  }
-  form.validityValue = Number(match[1]);
-  form.validityUnit = match[2];
+function applyCertValidity(form: any, _validity?: string) {
+  // 终端实体证书默认有效期为 2 年；模板 validity 仅作为签发上限（由后端校验，最多 5 年）。
+  form.validityValue = 2;
+  form.validityUnit = 'y';
 }
 
 const adminProviders = ref<string[]>([]);
@@ -1654,7 +1651,7 @@ const auditorForm = reactive({
   appName: '',
   containerName: randomContainerName('auditor'),
   pin: '',
-  validityValue: 5,
+  validityValue: 2,
   validityUnit: 'y',
   subjectItems: [] as any[],
   profileId: '' as string | number

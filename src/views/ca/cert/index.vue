@@ -735,11 +735,6 @@
               <el-input v-model="lifecycleForm.csr" type="textarea" :rows="5" placeholder="-----BEGIN CERTIFICATE REQUEST----- ..." />
             </el-form-item>
           </template>
-          <template v-if="lifecycleAction === 'update-dual' && lifecycleOutputMode !== 'usbkey'">
-            <el-form-item label="加密CSR">
-              <el-input v-model="lifecycleForm.encCsr" type="textarea" :rows="5" placeholder="可选；为空时由 KMC 生成加密密钥对" />
-            </el-form-item>
-          </template>
           <el-row :gutter="20">
             <el-col :span="12">
               <el-form-item label="生效时间">
@@ -1137,6 +1132,58 @@ function findProfileById(id: any) {
   return profileLookupList.value.find((profile: any) => String(profile.id) === String(id)) || null;
 }
 
+function getProfileValidity(profile: any) {
+  return String(parseJson(profile?.conf)?.validity || profile?.validity || '').trim();
+}
+
+function addProfileValidity(start: Date, validity: string) {
+  const matched = validity.match(/^(\d+)([ymd])$/i);
+  if (!matched) return null;
+  const result = new Date(start.getTime());
+  const amount = Number(matched[1]);
+  const unit = matched[2].toLowerCase();
+  if (unit === 'y') result.setFullYear(result.getFullYear() + amount);
+  if (unit === 'm') result.setMonth(result.getMonth() + amount);
+  if (unit === 'd') result.setDate(result.getDate() + amount);
+  return result;
+}
+
+function parseIssueDate(value?: string) {
+  if (!value || !/^\d{14}$/.test(value)) return null;
+  const date = new Date(
+    Number(value.slice(0, 4)),
+    Number(value.slice(4, 6)) - 1,
+    Number(value.slice(6, 8)),
+    Number(value.slice(8, 10)),
+    Number(value.slice(10, 12)),
+    Number(value.slice(12, 14))
+  );
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function validateIssueValidity() {
+  if (!issueForm.value.notAfter) return true;
+  const notBefore = parseIssueDate(issueForm.value.notBefore) || new Date();
+  const notAfter = parseIssueDate(issueForm.value.notAfter);
+  if (!notAfter || notAfter <= notBefore) {
+    ElMessage.warning('证书过期时间必须晚于生效时间');
+    return false;
+  }
+  const profiles =
+    certMode.value === 'dual'
+      ? [selectedDualSignProfile.value, selectedDualEncProfile.value]
+      : [issueProfileInfo.value || findProfileById(issueForm.value.profileId)];
+  const limits = profiles
+    .map((profile) => ({ name: profile?.name || '证书模板', end: addProfileValidity(notBefore, getProfileValidity(profile)) }))
+    .filter((item) => item.end != null) as Array<{ name: string; end: Date }>;
+  const exceeded = limits.find((item) => notAfter > item.end);
+  if (exceeded) {
+    ElMessage.warning(`证书有效期不能超过“${exceeded.name}”允许的有效期`);
+    return false;
+  }
+  return true;
+}
+
 function getDualProfileRole(profile: any) {
   const category = String(profile?.profileCategory || '').toUpperCase();
   if (category === 'DUAL_SIGN') return 'SIGNING';
@@ -1201,6 +1248,8 @@ const data = reactive({
     csr: '',
     encCsr: '',
     extensionItems: [] as any[],
+    signExtensionItems: [] as any[],
+    encExtensionItems: [] as any[],
     notBefore: undefined as string | undefined,
     notAfter: undefined as string | undefined
   }
@@ -1238,7 +1287,6 @@ const lifecycleForm = reactive({
 });
 
 const lifecycleRules = computed(() => {
-  const isDual = lifecycleAction.value === 'update-dual' || lifecycleAction.value === 'renew-dual' || lifecycleAction.value === 'reissue-dual';
   const isRenew = lifecycleAction.value === 'renew' || lifecycleAction.value === 'renew-dual';
   const isUpdate = lifecycleAction.value === 'update' || lifecycleAction.value === 'update-dual';
   const isUsbOutput = lifecycleOutputMode.value === 'usbkey';
@@ -1254,7 +1302,7 @@ const lifecycleRules = computed(() => {
       (isUpdate || lifecycleAction.value === 'reissue-dual') && !isUsbOutput
         ? [{ required: true, message: '请输入由新签名密钥生成的CSR', trigger: 'blur' }]
         : [],
-    encCsr: isDual && !isUsbOutput ? [{ required: false, message: '可选', trigger: 'blur' }] : [],
+    encCsr: lifecycleAction.value === 'reissue-dual' && !isUsbOutput ? [{ required: false, message: '可选', trigger: 'blur' }] : [],
     notAfter: [
       {
         validator: (_rule: any, value: string | undefined, callback: (error?: Error) => void) => {
@@ -1462,6 +1510,8 @@ async function handleRootChange(val: any) {
     issueForm.value.dualProfileName = undefined;
     issueForm.value.subjectItems = [];
     issueForm.value.extensionItems = [];
+    issueForm.value.signExtensionItems = [];
+    issueForm.value.encExtensionItems = [];
     return;
   }
   try {
@@ -1586,6 +1636,10 @@ async function handleDualProfileChange(profileId: string | number | undefined) {
   issueForm.value.signProfileId = dualCert.signProfileId;
   issueForm.value.encProfileId = dualCert.encProfileId;
   await handleProfileChange(dualCert.signProfileId);
+  issueForm.value.signExtensionItems = issueForm.value.extensionItems;
+  const encProfileResult = await getProfile(dualCert.encProfileId);
+  const encProfileConf = parseJson(encProfileResult.data?.conf);
+  issueForm.value.encExtensionItems = buildIssueExtensionItems(encProfileConf?.extensions || []);
   issueProfileInfo.value = profile;
   if (isPostQuantumDualSelected.value) {
     issueType.value = 'p10';
@@ -1641,6 +1695,8 @@ function resetIssueForm() {
     csr: '',
     encCsr: '',
     extensionItems: [],
+    signExtensionItems: [],
+    encExtensionItems: [],
     notBefore: undefined,
     notAfter: undefined
   };
@@ -1885,8 +1941,8 @@ function removeSanName(extIndex: number, nameIndex: number) {
   ext.names.splice(nameIndex, 1);
 }
 
-function buildIssueExtensionsPayload() {
-  const extensionItems = issueForm.value.extensionItems || [];
+function buildIssueExtensionsPayload(items?: any[]) {
+  const extensionItems = items || issueForm.value.extensionItems || [];
   const extensions = extensionItems
     .filter((ext: any) => ext.requestable)
     .map((ext: any) => {
@@ -2136,6 +2192,9 @@ async function submitIssue() {
       if (!validateIssueExtensions()) {
         return;
       }
+      if (!validateIssueValidity()) {
+        return;
+      }
       issueLoading.value = true;
       let skf: any = null;
       let attemptedKmcSingleEncryption = false;
@@ -2323,7 +2382,9 @@ async function submitIssue() {
             storageType: 'USB_KEY',
             notBefore: issueForm.value.notBefore,
             notAfter: issueForm.value.notAfter,
-            extensions: buildIssueExtensionsPayload()
+            extensions: buildIssueExtensionsPayload(issueForm.value.signExtensionItems),
+            signExtensions: buildIssueExtensionsPayload(issueForm.value.signExtensionItems),
+            encExtensions: buildIssueExtensionsPayload(issueForm.value.encExtensionItems)
           });
 
           if (res.data && res.data.cert && res.data.encryptionCert) {
@@ -2391,7 +2452,9 @@ async function submitIssue() {
             storageType: isPostQuantumDualSelected.value ? 'SOFTWARE_KEYSTORE' : 'FILE',
             notBefore: issueForm.value.notBefore,
             notAfter: issueForm.value.notAfter,
-            extensions: buildIssueExtensionsPayload()
+            extensions: buildIssueExtensionsPayload(issueForm.value.signExtensionItems),
+            signExtensions: buildIssueExtensionsPayload(issueForm.value.signExtensionItems),
+            encExtensions: buildIssueExtensionsPayload(issueForm.value.encExtensionItems)
           };
           setIssueStep('正在提交签名 CSR，KMC 将自动生成加密密钥对...');
           const res = await issueDualCert(payload);
@@ -3594,8 +3657,7 @@ function submitLifecycle() {
               encCertId,
               subject: subject || undefined,
               signCsrBase64,
-              encCsrBase64: !isPostQuantumLifecycle.value && lifecycleForm.encCsr ? pemToBase64(lifecycleForm.encCsr) : undefined,
-              keyGenStrategy: isPostQuantumLifecycle.value || (useUsbOutput && !lifecycleForm.encCsr) ? 'KMC' : undefined,
+              keyGenStrategy: 'KMC',
               storageType: isPostQuantumLifecycle.value ? 'FILE' : useUsbOutput ? 'USB_KEY' : 'FILE',
               notBefore: lifecycleForm.notBefore,
               notAfter: lifecycleForm.notAfter

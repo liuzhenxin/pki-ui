@@ -59,13 +59,9 @@
                 <span>审计</span>
               </div>
             </template>
-            <el-form-item label="审计日志" prop="audit.enabled">
-              <el-switch v-model="form.audit.enabled" active-text="启用" inactive-text="停用" />
-            </el-form-item>
-            <el-form-item label="保留天数" prop="audit.retentionDays">
-              <el-input-number v-model="form.audit.retentionDays" :min="1" :max="3650" controls-position="right" />
-              <span class="unit">天</span>
-            </el-form-item>
+            <el-alert title="安全审计始终启用" type="success" :closable="false" show-icon>
+              <template #default>KMC 安全事件由平台统一记录并集中保留，不能在本系统中停用或单独清理。</template>
+            </el-alert>
           </el-card>
         </el-col>
 
@@ -114,19 +110,12 @@ const original = ref<KmcRuntimeConfig>();
 
 const defaultConfig = (): KmcRuntimeConfig => ({
   keyGeneration: {
-    enableHardwareGeneration: true,
-    defaultKeyType: 'SM2',
-    defaultKeySize: 256,
     batchSize: 10
   },
   reservePool: {
     enableAutoReplenish: true,
     watermarkCheckInterval: 300,
     generationRateLimit: 5
-  },
-  audit: {
-    enabled: true,
-    retentionDays: 90
   },
   keyRecovery: {
     enabled: true,
@@ -143,15 +132,10 @@ const assignForm = (config: KmcRuntimeConfig) => {
     ...config,
     keyGeneration: { ...defaultConfig().keyGeneration, ...config.keyGeneration },
     reservePool: { ...defaultConfig().reservePool, ...config.reservePool },
-    audit: { ...defaultConfig().audit, ...config.audit },
     keyRecovery: { ...defaultConfig().keyRecovery, ...config.keyRecovery }
   };
-  if (normalized.keyGeneration.defaultKeyType === 'SM4') {
-    normalized.keyGeneration.defaultKeyType = 'SM2';
-  }
   Object.assign(form.keyGeneration, normalized.keyGeneration);
   Object.assign(form.reservePool, normalized.reservePool);
-  Object.assign(form.audit, normalized.audit);
   Object.assign(form.keyRecovery, normalized.keyRecovery);
 };
 
@@ -170,7 +154,6 @@ const rules = reactive<FormRules<KmcRuntimeConfig>>({
   'keyGeneration.batchSize': [numberRule(1, '单批生成数量')],
   'reservePool.watermarkCheckInterval': [numberRule(10, '检查间隔')],
   'reservePool.generationRateLimit': [numberRule(1, '生成限速')],
-  'audit.retentionDays': [numberRule(1, '保留天数')],
   'keyRecovery.totalApprovers': [numberRule(1, '取证员总数')],
   'keyRecovery.requiredApprovers': [
     numberRule(1, '必需审批人数'),

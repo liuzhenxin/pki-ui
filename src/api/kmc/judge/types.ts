@@ -30,10 +30,10 @@ export interface JudgeQuery extends PageQuery {
 }
 
 export interface JudgeApproveForm {
-  id: string | number;
-  decision: string;
-  reason?: string;
-  operator: string;
-  operatorIp: string;
-  operatorUkeySn: string;
+  judgeId: string | number;
+  approverId: string | number;
+  approverName: string;
+  approverIp: string;
+  approverUkeySn: string;
+  comment?: string;
 }

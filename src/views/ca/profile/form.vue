@@ -47,7 +47,7 @@ const initFormData: ProfileForm = {
     details: ''
   },
   maxSize: 8400,
-  validity: '1y',
+  validity: '2y',
   notBeforeTime: 'current',
   keyAlgorithms: ['RSA-2048'],
   signatureAlgorithms: [],
@@ -76,7 +76,7 @@ const presetTemplates = [
     type: 'RootCA',
     certLevel: 'RootCA',
     category: 'RootCA',
-    validity: '8y',
+    validity: '30y',
     keyAlgorithms: ['RSA-2048', 'RSA-4096', 'SM2P256V1']
   },
   {
@@ -541,7 +541,7 @@ const subjectAltNameModeOptions = [
 
 const defaultConstraint: TemplateConstraint = {
   label: '通用终端证书',
-  maxValidityDays: 3650,
+  maxValidityDays: 1825,
   subjectFields: commonOIDs.map((item) => item.value),
   requiredSubjectFields: ['commonName'],
   keyUsages: keyUsageOptions.map((item) => item.value),

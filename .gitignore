@@ -11,6 +11,10 @@ tests/**/coverage/
 tests/e2e/reports
 selenium-debug.log
 
+# Local/remote diagnostic artifacts may contain environment addresses or test credentials.
+/remote-tests/
+/screenshots/
+
 # Editor directories and files
 .idea
 .vscode

@@ -55,7 +55,7 @@ export interface RaRootImportPreview {
 
 export function listRaRootCa(query: any): Promise<Result<RaCertificatePage<RaRootCertificate>>> {
   return request({
-    url: '/ra/v1/roots/page',
+    url: '/ra2-liuzx/v1/roots/page',
     method: 'post',
     data: query
   });
@@ -71,7 +71,7 @@ export function listRaIntermediateCertificates(query: any): Promise<Result<RaCer
 
 export function getRaRootCa(id: string | number): Promise<Result<RaRootCertificate>> {
   return request({
-    url: `/ra/v1/roots/${id}`,
+    url: `/ra2-liuzx/v1/roots/${id}`,
     method: 'get'
   });
 }

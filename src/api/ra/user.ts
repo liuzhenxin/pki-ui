@@ -5,7 +5,7 @@ import { UserForm, UserInfoVO, UserQuery, UserVO } from '@/api/system/user/types
 
 export const listUser = (query: UserQuery): AxiosPromise<UserVO[]> => {
   return request({
-    url: '/ra/v1/users/page',
+    url: '/ra2-liuzx/v1/users/page',
     method: 'post',
     data: {
       params: {},
@@ -16,14 +16,14 @@ export const listUser = (query: UserQuery): AxiosPromise<UserVO[]> => {
 
 export const getUser = (userId?: string | number): AxiosPromise<UserInfoVO> => {
   return request({
-    url: '/ra/v1/users/' + parseStrEmpty(userId),
+    url: '/ra2-liuzx/v1/users/' + parseStrEmpty(userId),
     method: 'get'
   });
 };
 
 export const addUser = (data: UserForm) => {
   return request({
-    url: '/ra/v1/users',
+    url: '/ra2-liuzx/v1/users',
     method: 'post',
     data: { co: data }
   });
@@ -31,7 +31,7 @@ export const addUser = (data: UserForm) => {
 
 export const updateUser = (data: UserForm) => {
   return request({
-    url: '/ra/v1/users',
+    url: '/ra2-liuzx/v1/users',
     method: 'put',
     data: { co: data }
   });
@@ -39,7 +39,7 @@ export const updateUser = (data: UserForm) => {
 
 export const delUser = (userId: Array<string | number> | string | number) => {
   return request({
-    url: '/ra/v1/users',
+    url: '/ra2-liuzx/v1/users',
     method: 'delete',
     data: Array.isArray(userId) ? userId : [userId]
   });
@@ -47,7 +47,7 @@ export const delUser = (userId: Array<string | number> | string | number) => {
 
 export const resetUserPwd = (userId: string | number, password: string) => {
   return request({
-    url: '/ra/v1/users/reset-pwd',
+    url: '/ra2-liuzx/v1/users/reset-pwd',
     method: 'put',
     headers: {
       repeatSubmit: false
@@ -63,7 +63,7 @@ export const resetUserPwd = (userId: string | number, password: string) => {
 
 export const changeStatus = (userId: number | string, status: string | number) => {
   return request({
-    url: '/ra/v1/users/status',
+    url: '/ra2-liuzx/v1/users/status',
     method: 'put',
     data: {
       co: {

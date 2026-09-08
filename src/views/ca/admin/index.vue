@@ -176,7 +176,7 @@
           <CertSubject v-model="certForm.subjectItems" propPrefix="subjectItems" />
           <el-form-item label="证书有效期" prop="validityValue">
             <div class="validity-input-group">
-              <el-input-number v-model="certForm.validityValue" :min="1" :max="certForm.validityUnit === 'y' ? 50 : 3650" controls-position="right" />
+              <el-input-number v-model="certForm.validityValue" :min="1" :max="certForm.validityUnit === 'y' ? 5 : 1825" controls-position="right" />
               <el-select v-model="certForm.validityUnit" class="validity-unit">
                 <el-option label="年" value="y" />
                 <el-option label="天" value="d" />
@@ -232,7 +232,7 @@ import { ref, reactive, toRefs, getCurrentInstance, ComponentInternalInstance, o
 import { ElMessage, ElMessageBox, FormInstance, FormRules } from 'element-plus';
 import { Refresh } from '@element-plus/icons-vue';
 import { to } from 'await-to-js';
-import { listUser, getUser, addUser, updateUser, delUser, resetUserPwd, changeStatus } from '@/api/system/user';
+import { listUser, getUser, addUser, updateUser, delUser, resetUserPwd, changeStatus, authRole } from '@/api/system/user';
 import { issueAdminCert } from '@/api/ca/root';
 import { getProfileByName } from '@/api/ca/profile';
 import { parseJson } from '@/utils/json';
@@ -285,7 +285,7 @@ const certForm = reactive({
   appName: '',
   containerName: '',
   pin: '',
-  validityValue: 5,
+  validityValue: 2,
   validityUnit: 'y',
   subjectItems: [] as any[]
 });
@@ -496,6 +496,19 @@ async function submitForm() {
             return;
           }
           await addUser(form.value);
+          // 建号后必须走「用户授权」接口绑定业务管理员角色(403)：本页列表按角色 403 查询，
+          // 而用户创建接口本身不绑定角色（角色由 /admin/v1/users/authority 单独维护）
+          const { data: createdData } = await listUser({
+            pageNum: 1,
+            pageSize: 10,
+            username: form.value.username
+          } as any);
+          const created = (createdData?.rows || createdData?.records || [])[0];
+          if (created?.id) {
+            await authRole(created.id, ['403']);
+          } else {
+            ElMessage.warning('用户已创建，但未能自动绑定业务管理员角色(403)，请修改该用户后重新保存');
+          }
         }
         proxy?.$modal.msgSuccess('操作成功');
         dialog.visible = false;
@@ -556,7 +569,7 @@ async function handleIssueCert(row: any) {
     certForm.appName = '';
     certForm.containerName = 'admin-' + Date.now().toString(36).slice(-6);
     certForm.pin = '';
-    certForm.validityValue = 5;
+    certForm.validityValue = 2;
     certForm.validityUnit = 'y';
     certForm.profileId = undefined;
 
@@ -698,13 +711,10 @@ function genRandomContainerName() {
   certForm.containerName = 'admin-' + Date.now().toString(36).slice(-6);
 }
 
-function applyCertValidity(validity?: string) {
-  const match = (validity || '').match(/^(\d+)([dy])$/);
-  if (!match) {
-    return;
-  }
-  certForm.validityValue = Number(match[1]);
-  certForm.validityUnit = match[2];
+function applyCertValidity(_validity?: string) {
+  // 终端实体证书默认有效期为 2 年；模板 validity 仅作为签发上限（由后端校验，最多 5 年）。
+  certForm.validityValue = 2;
+  certForm.validityUnit = 'y';
 }
 
 async function loadAdminCertProfile() {

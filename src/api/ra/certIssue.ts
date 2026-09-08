@@ -75,7 +75,7 @@ export interface RaCertIssueResult {
 
 export function pageRaCertIssue(query: RaCertIssueQuery): Promise<Result<any>> {
   return request({
-    url: '/ra/v1/cert-issues/page',
+    url: '/ra2-liuzx/v1/cert-issues/page',
     method: 'post',
     data: query
   }) as any;
@@ -83,14 +83,14 @@ export function pageRaCertIssue(query: RaCertIssueQuery): Promise<Result<any>> {
 
 export function getRaCertIssue(businessType: string, businessId: string | number): Promise<Result<RaCertIssue>> {
   return request({
-    url: `/ra/v1/cert-issues/${businessType}/${businessId}`,
+    url: `/ra2-liuzx/v1/cert-issues/${businessType}/${businessId}`,
     method: 'get'
   }) as any;
 }
 
 export function issueRaCert(businessType: string, businessId: string | number, data: RaCertIssueForm): Promise<Result<RaCertIssueResult>> {
   return request({
-    url: `/ra/v1/cert-issues/${businessType}/${businessId}/issue`,
+    url: `/ra2-liuzx/v1/cert-issues/${businessType}/${businessId}/issue`,
     method: 'post',
     data
   }) as any;
@@ -98,14 +98,14 @@ export function issueRaCert(businessType: string, businessId: string | number, d
 
 export function executeRaCert(businessType: string, businessId: string | number): Promise<Result<RaCertIssueResult>> {
   return request({
-    url: `/ra/v1/cert-issues/${businessType}/${businessId}/execute`,
+    url: `/ra2-liuzx/v1/cert-issues/${businessType}/${businessId}/execute`,
     method: 'post'
   }) as any;
 }
 
 export function confirmRaRenewalDistribution(businessId: string | number, success: boolean, message?: string): Promise<Result<void>> {
   return request({
-    url: `/ra/v1/cert-issues/cert_renewal/${businessId}/distribution`,
+    url: `/ra2-liuzx/v1/cert-issues/cert_renewal/${businessId}/distribution`,
     method: 'post',
     data: { success, message }
   }) as any;
