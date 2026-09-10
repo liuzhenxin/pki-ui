@@ -40,9 +40,9 @@ const rules = ref({
   newPassword: [
     { required: true, message: '新密码不能为空', trigger: 'blur' },
     {
-      min: 12,
-      max: 20,
-      message: '新密码长度建议为 12 到 20 个字符，例如：FLZX3000cYSHL9T!',
+      min: 6,
+      max: 30,
+      message: '新密码长度为 6 到 30 个字符',
       trigger: 'blur'
     },
     { pattern: /^[^<>"'|\\]+$/, message: '不能包含非法字符：< > " \' \\ |', trigger: 'blur' }
