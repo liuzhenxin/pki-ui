@@ -572,8 +572,8 @@
                   <el-icon><Monitor /></el-icon>
                 </div>
                 <div class="info">
-                  <span class="label">系统版本</span>
-                  <span class="value">{{ systemVersion }}</span>
+                  <span class="label">前端版本</span>
+                  <span class="value">{{ frontendVersion }}</span>
                 </div>
               </div>
               <div class="version-item">
@@ -698,7 +698,9 @@ let historyKeyChart: echarts.ECharts | null = null;
 
 const tenantInfo = ref<any>(null);
 const kmcDashboardStats = ref<any>({});
-const systemVersion = ref<string>(import.meta.env.VITE_APP_VERSION || '3.5.5');
+// 前端版本（＝前端镜像版本）：构建时按租户注入，见 package.json 的 build:<tenant> 里的 VITE_APP_VERSION，
+// 与镜像 tag 的版本号对齐；未注入时显示“未知”，不拿平台版本号冒充（原实现回退 3.5.5 会误导）。
+const frontendVersion = computed(() => String(import.meta.env.VITE_APP_VERSION || '未知'));
 const currentTenantId = computed(() => userStore.tenantId || localStorage.getItem('tenantId'));
 const isOps = computed(() => String(currentTenantId.value) === '1');
 const isKMC = computed(() => String(currentTenantId.value) === '3');

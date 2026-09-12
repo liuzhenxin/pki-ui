@@ -273,7 +273,7 @@ import licenseLoginBackground from '@/assets/images/login/tenant-license.webp';
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
 
 const title = import.meta.env.VITE_APP_TITLE;
-const systemVersion = import.meta.env.VITE_APP_VERSION || '4.2.1';
+const systemVersion = import.meta.env.VITE_APP_VERSION || '未知';
 const userStore = useUserStore();
 const settingsStore = useSettingsStore();
 const router = useRouter();
