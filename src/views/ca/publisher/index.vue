@@ -77,6 +77,14 @@
             <el-tag v-else type="info">{{ scope.row.type || '-' }}</el-tag>
           </template>
         </el-table-column>
+        <el-table-column label="关联根CA" align="center" min-width="150">
+          <template #default="scope">
+            <template v-if="scope.row.rootIds && scope.row.rootIds.length">
+              <el-tag v-for="rid in scope.row.rootIds" :key="rid" size="small" style="margin-right: 4px">{{ rootName(rid) }}</el-tag>
+            </template>
+            <span v-else class="form-tip-inline">全局</span>
+          </template>
+        </el-table-column>
         <el-table-column label="配置" align="center" prop="conf" min-width="220" :show-overflow-tooltip="true">
           <template #default="scope">
             <el-button v-if="scope.row.conf" link type="primary" @click="handleViewConf(scope.row)">查看配置</el-button>
@@ -97,7 +105,13 @@
               <el-button v-hasPermi="['ca:publisher:modify']" link type="primary" icon="Edit" @click="handleUpdate(scope.row)"></el-button>
             </el-tooltip>
             <el-tooltip content="测试连接" placement="top">
-              <el-button v-hasPermi="['ca:publisher:test']" link type="success" icon="Connection" @click="handleTestConnection(scope.row)"></el-button>
+              <el-button
+                v-hasPermi="['ca:publisher:test']"
+                link
+                type="success"
+                icon="Connection"
+                @click="handleTestConnection(scope.row)"
+              ></el-button>
             </el-tooltip>
             <el-tooltip content="删除" placement="top">
               <el-button v-hasPermi="['ca:publisher:remove']" link type="danger" icon="Delete" @click="handleDelete(scope.row)"></el-button>
@@ -125,7 +139,16 @@
             </el-select>
           </el-col>
           <el-col :span="1.5">
-            <el-button v-hasPermi="['ca:publisher:retry']" type="warning" plain size="small" icon="RefreshRight" :disabled="queueMultiple" @click="handleQueueRetry()">重试选中</el-button>
+            <el-button
+              v-hasPermi="['ca:publisher:retry']"
+              type="warning"
+              plain
+              size="small"
+              icon="RefreshRight"
+              :disabled="queueMultiple"
+              @click="handleQueueRetry()"
+              >重试选中</el-button
+            >
           </el-col>
           <el-col :span="1.5">
             <el-button type="primary" plain size="small" icon="Refresh" @click="handleQueueQuery">刷新</el-button>
@@ -171,13 +194,26 @@
         <el-table-column label="操作" fixed="right" width="80" align="center">
           <template #default="scope">
             <el-tooltip content="重试" placement="top">
-              <el-button v-hasPermi="['ca:publisher:retry']" link type="warning" icon="RefreshRight" size="small" @click="handleQueueRetry(scope.row)"></el-button>
+              <el-button
+                v-hasPermi="['ca:publisher:retry']"
+                link
+                type="warning"
+                icon="RefreshRight"
+                size="small"
+                @click="handleQueueRetry(scope.row)"
+              ></el-button>
             </el-tooltip>
           </template>
         </el-table-column>
       </el-table>
 
-      <pagination v-show="queueTotal > 0" v-model:page="queueParams.pageNum" v-model:limit="queueParams.pageSize" :total="queueTotal" @pagination="getQueueList" />
+      <pagination
+        v-show="queueTotal > 0"
+        v-model:page="queueParams.pageNum"
+        v-model:limit="queueParams.pageSize"
+        :total="queueTotal"
+        @pagination="getQueueList"
+      />
     </el-card>
 
     <!-- 新增/修改/查看对话框 -->
@@ -190,7 +226,24 @@
           <el-select v-model="form.type" placeholder="请选择发布者类型" style="width: 100%" :disabled="readonly" @change="handleTypeChange">
             <el-option label="LDAP / AD" value="LDAP" />
             <el-option label="数据库" value="DATABASE" />
+            <el-option label="文件" value="FILE" />
+            <el-option label="HTTP" value="HTTP" />
+            <el-option label="OCSP" value="OCSP" />
           </el-select>
+        </el-form-item>
+
+        <el-form-item v-if="bindableRoot(form.type)" label="关联根CA">
+          <el-select
+            v-model="form.rootIds"
+            multiple
+            clearable
+            filterable
+            placeholder="不选择 = 全局发布者（不参与证书发布）"
+            style="width: 100%"
+          >
+            <el-option v-for="r in rootOptions" :key="r.id" :label="r.name || 'CA-' + r.id" :value="r.id" />
+          </el-select>
+          <div class="form-tip">关联后，该根CA的证书签发/吊销会发布到此发布者；HTTP/OCSP 类型不可绑定（仅用于 CRL 发布）</div>
         </el-form-item>
 
         <!-- === 高级模式切换 === -->
@@ -200,7 +253,6 @@
 
         <!-- === 表单模式：类型特定配置 === -->
         <template v-if="!advancedMode && form.type">
-
           <!-- LDAP 配置 -->
           <template v-if="form.type === 'LDAP'">
             <el-divider content-position="left">连接配置</el-divider>
@@ -243,7 +295,9 @@
               <el-button type="primary" plain :loading="testing" @click="handlePreviewTest">测试连接</el-button>
               <span class="form-tip-inline">测试通过后才能保存</span>
             </el-form-item>
-            <div v-if="testMessage" class="form-tip" :style="{ color: testPassed ? 'var(--el-color-success)' : 'var(--el-color-danger)' }">{{ testMessage }}</div>
+            <div v-if="testMessage" class="form-tip" :style="{ color: testPassed ? 'var(--el-color-success)' : 'var(--el-color-danger)' }">
+              {{ testMessage }}
+            </div>
           </template>
 
           <!-- DATABASE 配置 -->
@@ -322,7 +376,9 @@
               <el-button type="primary" plain :loading="testing" @click="handlePreviewTest">测试连接并预检</el-button>
               <span class="form-tip-inline">测试通过后才能保存</span>
             </el-form-item>
-            <div v-if="testMessage" class="form-tip" :style="{ color: testPassed ? 'var(--el-color-success)' : 'var(--el-color-danger)' }">{{ testMessage }}</div>
+            <div v-if="testMessage" class="form-tip" :style="{ color: testPassed ? 'var(--el-color-success)' : 'var(--el-color-danger)' }">
+              {{ testMessage }}
+            </div>
           </template>
 
           <!-- FILE 配置 -->
@@ -415,10 +471,19 @@ import { getCurrentInstance, reactive, ref } from 'vue';
 import { ElMessage, ElMessageBox, type UploadInstance } from 'element-plus';
 import { UploadFilled } from '@element-plus/icons-vue';
 import {
-  pagePublisher, getPublisher, savePublisher, modifyPublisher, removePublisher, exportPublisher,
-  pagePublishQueue, retryPublish, testPublisherConnection, testPublisherConfig
+  pagePublisher,
+  getPublisher,
+  savePublisher,
+  modifyPublisher,
+  removePublisher,
+  exportPublisher,
+  pagePublishQueue,
+  retryPublish,
+  testPublisherConnection,
+  testPublisherConfig
 } from '@/api/ca/publisher';
 import { PublisherForm, PublisherQuery, PUBLISHER_CONF_TEMPLATES } from '@/api/ca/publisher/types';
+import { listRootCa } from '@/api/ca/root';
 
 const { proxy } = getCurrentInstance() as any;
 
@@ -455,6 +520,9 @@ const queryParams = reactive<PublisherQuery>({
 
 const form = ref<PublisherForm>({});
 
+// 关联根CA选项（发布者↔根CA 多对多绑定）
+const rootOptions = ref<any[]>([]);
+
 const rules = reactive({
   name: [{ required: true, message: '发布者名称不能为空', trigger: 'blur' }],
   type: [{ required: true, message: '发布者类型不能为空', trigger: 'change' }]
@@ -468,26 +536,43 @@ const upload = reactive({
 
 // --- 类型特定配置 ---
 const ldapConfig = reactive({
-  url: '', baseDn: '', bindDn: '', password: '',
-  useSsl: false, useTls: false,
+  url: '',
+  baseDn: '',
+  bindDn: '',
+  password: '',
+  useSsl: false,
+  useTls: false,
   certAttribute: 'userCertificate;binary',
-  searchBase: '', searchFilter: '(cn={subjectCn})'
+  searchBase: '',
+  searchFilter: '(cn={subjectCn})'
 });
 
 const dbConfig = reactive({
-  url: '', driverClass: 'com.mysql.cj.jdbc.Driver', username: '', password: '',
-  additionalParams: '', tableName: '',
-  certColumn: 'cert_pem', serialColumn: 'serial_number',
-  subjectColumn: 'subject_dn', issueTimeColumn: 'issue_time',
-  expireTimeColumn: 'expire_time', statusColumn: '', revokeReasonColumn: '', upsertEnabled: true
+  url: '',
+  driverClass: 'com.mysql.cj.jdbc.Driver',
+  username: '',
+  password: '',
+  additionalParams: '',
+  tableName: '',
+  certColumn: 'cert_pem',
+  serialColumn: 'serial_number',
+  subjectColumn: 'subject_dn',
+  issueTimeColumn: 'issue_time',
+  expireTimeColumn: 'expire_time',
+  statusColumn: '',
+  revokeReasonColumn: '',
+  upsertEnabled: true
 });
 
 const fileConfig = reactive({
-  path: '', filenamePattern: '{serialNumber}.pem', createDirs: true
+  path: '',
+  filenamePattern: '{serialNumber}.pem',
+  createDirs: true
 });
 
 const httpConfig = reactive({
-  url: '', timeout: 5000
+  url: '',
+  timeout: 5000
 });
 
 // --- Queue state ---
@@ -509,7 +594,11 @@ const queueParams = reactive<{ pageNum: number; pageSize: number; status?: strin
 function parseConfToFields(confStr: string | undefined, type: string) {
   let conf: any = {};
   if (confStr) {
-    try { conf = JSON.parse(confStr); } catch { return; }
+    try {
+      conf = JSON.parse(confStr);
+    } catch {
+      return;
+    }
   }
   switch (type) {
     case 'LDAP':
@@ -557,7 +646,8 @@ function buildConfFromFields(type: string): string {
   switch (type) {
     case 'LDAP':
       conf = {
-        url: ldapConfig.url, baseDn: ldapConfig.baseDn,
+        url: ldapConfig.url,
+        baseDn: ldapConfig.baseDn,
         bindDn: ldapConfig.bindDn || undefined,
         password: ldapConfig.password || undefined,
         useSsl: ldapConfig.useSsl || undefined,
@@ -601,8 +691,33 @@ function buildConfFromFields(type: string): string {
 }
 
 function resetTypeConfigs() {
-  Object.assign(ldapConfig, { url: '', baseDn: '', bindDn: '', password: '', useSsl: false, useTls: false, certAttribute: 'userCertificate;binary', searchBase: '', searchFilter: '(cn={subjectCn})' });
-  Object.assign(dbConfig, { url: '', driverClass: 'com.mysql.cj.jdbc.Driver', username: '', password: '', additionalParams: '', tableName: '', certColumn: 'cert_pem', serialColumn: 'serial_number', subjectColumn: 'subject_dn', issueTimeColumn: 'issue_time', expireTimeColumn: 'expire_time', statusColumn: '', revokeReasonColumn: '', upsertEnabled: true });
+  Object.assign(ldapConfig, {
+    url: '',
+    baseDn: '',
+    bindDn: '',
+    password: '',
+    useSsl: false,
+    useTls: false,
+    certAttribute: 'userCertificate;binary',
+    searchBase: '',
+    searchFilter: '(cn={subjectCn})'
+  });
+  Object.assign(dbConfig, {
+    url: '',
+    driverClass: 'com.mysql.cj.jdbc.Driver',
+    username: '',
+    password: '',
+    additionalParams: '',
+    tableName: '',
+    certColumn: 'cert_pem',
+    serialColumn: 'serial_number',
+    subjectColumn: 'subject_dn',
+    issueTimeColumn: 'issue_time',
+    expireTimeColumn: 'expire_time',
+    statusColumn: '',
+    revokeReasonColumn: '',
+    upsertEnabled: true
+  });
   Object.assign(fileConfig, { path: '', filenamePattern: '{serialNumber}.pem', createDirs: true });
   Object.assign(httpConfig, { url: '', timeout: 5000 });
 }
@@ -641,7 +756,7 @@ function resetForm() {
   testMessage.value = '';
   originalConf.value = '';
   resetTypeConfigs();
-  form.value = { id: undefined, name: undefined, type: undefined, conf: undefined };
+  form.value = { id: undefined, name: undefined, type: undefined, conf: undefined, rootIds: [] };
   publisherFormRef.value?.resetFields();
 }
 
@@ -693,7 +808,7 @@ function handleUpdate(row: any) {
 function effectiveConf(): string {
   const type = form.value.type || '';
   if (!type) return '';
-  return advancedMode.value ? (form.value.conf || '') : buildConfFromFields(type);
+  return advancedMode.value ? form.value.conf || '' : buildConfFromFields(type);
 }
 
 function needTestBeforeSave(): boolean {
@@ -717,11 +832,15 @@ function submitForm() {
     if (!valid) return;
     const commandData = { co: form.value };
     const request = form.value.id ? modifyPublisher(commandData) : savePublisher(commandData);
-    request.then(() => {
-      ElMessage.success(form.value.id ? '修改成功' : '新增成功');
-      open.value = false;
-      getList();
-    });
+    request
+      .then(() => {
+        ElMessage.success(form.value.id ? '修改成功' : '新增成功');
+        open.value = false;
+        getList();
+      })
+      .catch((error: any) => {
+        ElMessage.error(error?.msg || error?.message || (form.value.id ? '修改失败' : '新增失败'));
+      });
   });
 }
 
@@ -761,25 +880,38 @@ function handlePreviewTest() {
 function handleDelete(row?: any) {
   const deleteIds = row?.id || ids.value;
   ElMessageBox.confirm('是否确认删除发布者编号为"' + deleteIds + '"的数据项？', '警告', {
-    confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning'
+    confirmButtonText: '确定',
+    cancelButtonText: '取消',
+    type: 'warning'
   })
     .then(() => removePublisher(Array.isArray(deleteIds) ? deleteIds : [deleteIds]))
-    .then(() => { getList(); ElMessage.success('删除成功'); })
+    .then(() => {
+      getList();
+      ElMessage.success('删除成功');
+    })
     .catch(() => {});
 }
 
-function handleImport() { importOpen.value = true; }
+function handleImport() {
+  importOpen.value = true;
+}
 
 function handleExport() {
   ElMessageBox.confirm('是否确认导出发布者数据项?', '警告', {
-    confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning'
+    confirmButtonText: '确定',
+    cancelButtonText: '取消',
+    type: 'warning'
   })
     .then(() => exportPublisher(queryParams))
-    .then((response) => { proxy.download(response, 'publisher_' + new Date().getTime() + '.xlsx'); })
+    .then((response) => {
+      proxy.download(response, 'publisher_' + new Date().getTime() + '.xlsx');
+    })
     .catch(() => {});
 }
 
-function handleFileUploadProgress() { upload.isUploading = true; }
+function handleFileUploadProgress() {
+  upload.isUploading = true;
+}
 
 function handleFileSuccess() {
   upload.isUploading = false;
@@ -789,11 +921,16 @@ function handleFileSuccess() {
   getList();
 }
 
-function submitFileForm() { uploadRef.value?.submit(); }
+function submitFileForm() {
+  uploadRef.value?.submit();
+}
 
 function handleViewConf(row: any) {
-  try { currentConf.value = JSON.stringify(JSON.parse(row.conf), null, 2); }
-  catch { currentConf.value = row.conf || ''; }
+  try {
+    currentConf.value = JSON.stringify(JSON.parse(row.conf), null, 2);
+  } catch {
+    currentConf.value = row.conf || '';
+  }
   confOpen.value = true;
 }
 
@@ -809,8 +946,12 @@ function handleTestConnection(row: any) {
         ElMessage.warning('连接测试失败: ' + (response.data?.msg || response.msg || '未知错误'));
       }
     })
-    .catch(() => { ElMessage.error('连接测试失败'); })
-    .finally(() => { loadingMsg.close(); });
+    .catch(() => {
+      ElMessage.error('连接测试失败');
+    })
+    .finally(() => {
+      loadingMsg.close();
+    });
 }
 
 // ===================== 类型切换 =====================
@@ -828,12 +969,17 @@ function handleTypeChange(type: string) {
 function applyConfTemplate() {
   if (!form.value.type) return;
   const template = PUBLISHER_CONF_TEMPLATES[form.value.type];
-  if (template) { form.value.conf = template; }
+  if (template) {
+    form.value.conf = template;
+  }
 }
 
 // ===================== 发布队列 =====================
 
-function handleQueueQuery() { queueParams.pageNum = 1; getQueueList(); }
+function handleQueueQuery() {
+  queueParams.pageNum = 1;
+  getQueueList();
+}
 
 function getQueueList() {
   queueLoading.value = true;
@@ -842,7 +988,9 @@ function getQueueList() {
       queueList.value = response.data.records || response.data.rows || [];
       queueTotal.value = response.data.total || 0;
     })
-    .finally(() => { queueLoading.value = false; });
+    .finally(() => {
+      queueLoading.value = false;
+    });
 }
 
 function handleQueueSelectionChange(selection: any[]) {
@@ -852,31 +1000,97 @@ function handleQueueSelectionChange(selection: any[]) {
 
 function handleQueueRetry(row?: any) {
   const retryIds = row?.id ? [row.id] : queueIds.value;
-  if (!retryIds || retryIds.length === 0) { ElMessage.warning('请选择要重试的队列项'); return; }
+  if (!retryIds || retryIds.length === 0) {
+    ElMessage.warning('请选择要重试的队列项');
+    return;
+  }
   retryPublish(retryIds)
-    .then(() => { ElMessage.success('已加入重试队列'); getQueueList(); })
-    .catch(() => { ElMessage.error('重试失败'); });
+    .then(() => {
+      ElMessage.success('已加入重试队列');
+      getQueueList();
+    })
+    .catch(() => {
+      ElMessage.error('重试失败');
+    });
 }
 
 getList();
+loadRootOptions();
+
+function loadRootOptions() {
+  listRootCa({ pageNum: 1, pageSize: 500 })
+    .then((response: any) => {
+      rootOptions.value = response.data?.records || response.data?.rows || [];
+    })
+    .catch(() => {
+      rootOptions.value = [];
+    });
+}
+
+function rootName(id: any) {
+  const hit = rootOptions.value.find((r) => String(r.id) === String(id));
+  return hit?.name || String(id);
+}
+
+function bindableRoot(type?: string) {
+  return !!type && type !== 'HTTP' && type !== 'OCSP';
+}
 </script>
 
 <style scoped lang="scss">
-.p-2 { padding: 8px; }
-.mb-10px { margin-bottom: 10px; }
-.mt-10px { margin-top: 10px; }
-.ml-5px { margin-left: 5px; }
-.small-padding { .cell { padding: 0 5px; } }
-.fixed-width { min-width: 220px; }
-.form-tip { margin-top: 4px; color: var(--el-text-color-secondary); font-size: 12px; line-height: 18px; }
-.form-tip-inline { margin-left: 8px; color: var(--el-text-color-secondary); font-size: 12px; }
-.conf-preview {
-  max-height: 520px; margin: 0; padding: 12px; overflow: auto;
-  color: var(--el-text-color-primary); background: var(--el-fill-color-light);
-  border: 1px solid var(--el-border-color); border-radius: 4px;
-  line-height: 1.5; white-space: pre-wrap; word-break: break-word;
+.p-2 {
+  padding: 8px;
 }
-.conf-editor { width: 100%; }
-.conf-template-btn { margin-top: 4px; }
-.queue-title { font-size: 14px; font-weight: 600; line-height: 32px; }
+.mb-10px {
+  margin-bottom: 10px;
+}
+.mt-10px {
+  margin-top: 10px;
+}
+.ml-5px {
+  margin-left: 5px;
+}
+.small-padding {
+  .cell {
+    padding: 0 5px;
+  }
+}
+.fixed-width {
+  min-width: 220px;
+}
+.form-tip {
+  margin-top: 4px;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+.form-tip-inline {
+  margin-left: 8px;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+}
+.conf-preview {
+  max-height: 520px;
+  margin: 0;
+  padding: 12px;
+  overflow: auto;
+  color: var(--el-text-color-primary);
+  background: var(--el-fill-color-light);
+  border: 1px solid var(--el-border-color);
+  border-radius: 4px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.conf-editor {
+  width: 100%;
+}
+.conf-template-btn {
+  margin-top: 4px;
+}
+.queue-title {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 32px;
+}
 </style>

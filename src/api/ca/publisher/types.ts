@@ -11,6 +11,7 @@ export interface PublisherForm {
   name?: string;
   type?: string;
   conf?: string;
+  rootIds?: (string | number)[];
 }
 
 export interface PublisherCO {
@@ -18,6 +19,7 @@ export interface PublisherCO {
   name: string;
   type?: string;
   conf?: string;
+  rootIds?: (string | number)[];
   createTime?: string;
   updateTime?: string;
 }
@@ -55,37 +57,53 @@ export interface PublishQueueCO {
 
 /** 发布者类型配置模板 */
 export const PUBLISHER_CONF_TEMPLATES: Record<string, string> = {
-  LDAP: JSON.stringify({
-    url: 'ldap://ad.example.com:389',
-    baseDn: 'dc=example,dc=com',
-    bindDn: 'cn=admin,dc=example,dc=com',
-    password: '',
-    useSsl: false,
-    useTls: true,
-    certAttribute: 'userCertificate;binary',
-    searchBase: 'ou=Users,dc=example,dc=com',
-    searchFilter: '(cn={subjectCn})'
-  }, null, 2),
-  DATABASE: JSON.stringify({
-    url: 'jdbc:mysql://db.example.com:3306/certstore',
-    driverClass: 'com.mysql.cj.jdbc.Driver',
-    username: 'certuser',
-    password: '',
-    tableName: 'cert_records',
-    certColumn: 'cert_pem',
-    serialColumn: 'serial_number',
-    subjectColumn: 'subject_dn',
-    issueTimeColumn: 'issue_time',
-    expireTimeColumn: 'expire_time',
-    upsertEnabled: true
-  }, null, 2),
-  FILE: JSON.stringify({
-    path: '/data/certs/published',
-    filenamePattern: '{serialNumber}.pem',
-    createDirs: true
-  }, null, 2),
-  OCSP: JSON.stringify({
-    url: 'http://ocsp.example.com/responder',
-    timeout: 5000
-  }, null, 2)
+  LDAP: JSON.stringify(
+    {
+      url: 'ldap://ad.example.com:389',
+      baseDn: 'dc=example,dc=com',
+      bindDn: 'cn=admin,dc=example,dc=com',
+      password: '',
+      useSsl: false,
+      useTls: true,
+      certAttribute: 'userCertificate;binary',
+      searchBase: 'ou=Users,dc=example,dc=com',
+      searchFilter: '(cn={subjectCn})'
+    },
+    null,
+    2
+  ),
+  DATABASE: JSON.stringify(
+    {
+      url: 'jdbc:mysql://db.example.com:3306/certstore',
+      driverClass: 'com.mysql.cj.jdbc.Driver',
+      username: 'certuser',
+      password: '',
+      tableName: 'cert_records',
+      certColumn: 'cert_pem',
+      serialColumn: 'serial_number',
+      subjectColumn: 'subject_dn',
+      issueTimeColumn: 'issue_time',
+      expireTimeColumn: 'expire_time',
+      upsertEnabled: true
+    },
+    null,
+    2
+  ),
+  FILE: JSON.stringify(
+    {
+      path: '/data/certs/published',
+      filenamePattern: '{serialNumber}.pem',
+      createDirs: true
+    },
+    null,
+    2
+  ),
+  OCSP: JSON.stringify(
+    {
+      url: 'http://ocsp.example.com/responder',
+      timeout: 5000
+    },
+    null,
+    2
+  )
 };
