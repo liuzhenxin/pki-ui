@@ -68,6 +68,7 @@
             >授权模板</el-button
           >
           <el-button link type="primary" icon="Setting" @click="handleCrlConfig(scope.row)" v-hasPermi="['ca:root:crl-config']">CRL配置</el-button>
+          <el-button link type="primary" icon="Link" @click="handleBindPublishers(scope.row)" v-hasPermi="['ca:publisher:save']">关联发布者</el-button>
           <el-button
             v-if="scope.row.caStatus !== 'inactive'"
             link
@@ -83,6 +84,27 @@
     </el-table>
 
     <pagination v-show="total > 0" :total="total" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" @pagination="getList" />
+
+    <!-- 关联证书发布者对话框 -->
+    <el-dialog v-model="bindOpen" title="关联证书发布者" width="560px" append-to-body>
+      <el-form label-width="110px">
+        <el-form-item label="根CA">
+          <span>{{ bindRow?.name || bindRow?.id }}</span>
+        </el-form-item>
+        <el-form-item label="证书发布者">
+          <el-select v-model="bindPublisherIds" multiple clearable filterable placeholder="不选择 = 不发布" style="width: 100%">
+            <el-option v-for="p in bindPublisherList" :key="p.id" :label="p.name" :value="p.id" />
+          </el-select>
+          <div class="form-tip">关联后，该根CA的证书签发/吊销会发布到所选发布者；HTTP/OCSP 类型不参与证书发布。</div>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button type="primary" :loading="bindSaving" @click="submitBindPublishers">确 定</el-button>
+          <el-button @click="bindOpen = false">取 消</el-button>
+        </div>
+      </template>
+    </el-dialog>
 
     <!-- 创建证书对话框 -->
     <el-dialog class="root-cert-dialog" :title="title" v-model="open" width="960px" append-to-body>
@@ -535,6 +557,7 @@ import {
   genSubCaOnline,
   getRootCrlConfig,
   saveRootCrlConfig,
+  saveRootPublishers,
   issueRootCrl,
   startRootCrlScheduler,
   stopRootCrlScheduler
@@ -591,6 +614,13 @@ const dialogType = ref('root'); // 'root' or 'sub'
 const rootCaProfiles = ref([]);
 const signerList = ref([]);
 const publisherList = ref<any[]>([]);
+
+// 关联证书发布者（根CA侧）
+const bindOpen = ref(false);
+const bindRow = ref<any>(null);
+const bindPublisherIds = ref<(string | number)[]>([]);
+const bindPublisherList = ref<any[]>([]);
+const bindSaving = ref(false);
 const crlOperationRecords = ref<any[]>([]);
 const availableAlgos = ref(['RSA2048', 'RSA4096', 'SM2']);
 
@@ -2001,6 +2031,40 @@ async function handleDisable(row: any) {
     ElMessage.success('停用成功');
     getList();
   } catch (error) {}
+}
+
+/** 关联证书发布者 */
+async function handleBindPublishers(row: any) {
+  bindRow.value = row;
+  bindPublisherIds.value = [];
+  bindOpen.value = true;
+  try {
+    const res = await pagePublisher({ pageNum: 1, pageSize: 500 });
+    const all = res.data?.rows || res.data?.records || [];
+    bindPublisherList.value = (all || []).filter((p: any) => {
+      const t = (p.type || '').toUpperCase();
+      return t !== 'HTTP' && t !== 'OCSP';
+    });
+    const detail = await getRootCa(row.id);
+    bindPublisherIds.value = detail.data?.publisherIds || [];
+  } catch (error) {
+    bindPublisherList.value = [];
+  }
+}
+
+async function submitBindPublishers() {
+  if (!bindRow.value) return;
+  bindSaving.value = true;
+  try {
+    await saveRootPublishers(bindRow.value.id, bindPublisherIds.value || []);
+    ElMessage.success('关联已保存');
+    bindOpen.value = false;
+    getList();
+  } catch (error: any) {
+    ElMessage.error(error?.msg || error?.message || '保存失败');
+  } finally {
+    bindSaving.value = false;
+  }
 }
 
 /** 注销按钮操作 */
