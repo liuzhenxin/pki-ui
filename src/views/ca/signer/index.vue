@@ -128,7 +128,7 @@
               </el-select>
             </el-form-item>
           </el-col>
-          <el-col v-if="form.algo === 'RSA'" :xs="24" :sm="12">
+          <el-col v-if="form.algo === 'RSA' && form.signerType !== 'SDF'" :xs="24" :sm="12">
             <el-form-item label="密钥长度" prop="keySize">
               <el-select v-model="form.keySize" placeholder="请选择密钥长度" style="width: 100%">
                 <el-option v-for="item in rsaKeySizeOptions" :key="item.value" :label="item.label" :value="item.value" />
@@ -156,6 +156,11 @@
           <div class="form-tip">{{ form.signerType === 'SDF' ? 'SDF 签名者通常按密钥索引加载。' : 'PKCS12 签名者使用密钥别名定位私钥。' }}</div>
         </el-form-item>
       </el-form>
+      <div v-if="readonly" class="public-key-block">
+        <div class="public-key-label">公钥数据</div>
+        <el-input v-model="form.publicKey" type="textarea" readonly placeholder="未读取到公钥数据" :rows="4" />
+        <div class="form-tip">公钥为 PEM 格式（X.509 SubjectPublicKeyInfo），可直接复制使用。</div>
+      </div>
       <template #footer>
         <div class="dialog-footer">
           <el-button v-hasPermi="['ca:signer:test']" icon="Connection" :loading="testLoading" @click="handleTestForm">测试</el-button>
@@ -253,7 +258,7 @@ const validateKeyIndex = (_rule: any, value: any, callback: any) => {
 };
 
 const validateKeySize = (_rule: any, value: any, callback: any) => {
-  if (form.value.algo === 'RSA' && ![2048, 4096].includes(Number(value))) {
+  if (form.value.algo === 'RSA' && form.value.signerType !== 'SDF' && ![2048, 4096].includes(Number(value))) {
     callback(new Error('请选择密钥长度'));
     return;
   }
@@ -345,8 +350,10 @@ function loadSigner(row: any, viewOnly: boolean) {
       signerType: response.data?.signerType || response.data?.type || 'PKCS12',
       category: response.data?.category || 'ISSUER',
       algo: response.data?.algo || 'SM2',
-      keySize: response.data?.algo === 'RSA' ? response.data?.keySize || 2048 : undefined,
-      keyIndex: response.data?.keyIndex || 1
+      keySize:
+        response.data?.algo === 'RSA' && (response.data?.signerType || response.data?.type) !== 'SDF' ? response.data?.keySize || 2048 : undefined,
+      keyIndex: response.data?.keyIndex || 1,
+      publicKey: response.data?.publicKey
     };
     readonly.value = viewOnly;
     open.value = true;
@@ -363,17 +370,26 @@ function handleUpdate(row: any) {
 }
 
 function handleSignerTypeChange(value: string) {
-  if (value === 'SDF' && !form.value.keyIndex) {
-    form.value.keyIndex = 1;
+  if (value === 'SDF') {
+    // SDF 签名者按密钥索引定位，不选择密钥长度
+    form.value.keySize = undefined;
+    if (!form.value.keyIndex) {
+      form.value.keyIndex = 1;
+    }
+    if (String(form.value.algo || '').startsWith('ML-DSA-')) {
+      form.value.algo = 'SM2';
+    }
+    return;
   }
-  if (value === 'SDF' && String(form.value.algo || '').startsWith('ML-DSA-')) {
-    form.value.algo = 'SM2';
+  if (value === 'PKCS12' && form.value.algo === 'RSA' && !form.value.keySize) {
+    form.value.keySize = 2048;
   }
 }
 
 function handleAlgorithmChange(value: string) {
   if (value === 'RSA') {
-    form.value.keySize = form.value.keySize || 2048;
+    // SDF 的 RSA 密钥在设备中，无需选择密钥长度
+    form.value.keySize = form.value.signerType === 'SDF' ? undefined : form.value.keySize || 2048;
     return;
   }
   form.value.keySize = undefined;
@@ -451,7 +467,7 @@ function categoryLabel(category?: string) {
 }
 
 function formatAlgorithm(row: any) {
-  if (row?.algo === 'RSA' && row?.keySize) {
+  if (row?.algo === 'RSA' && row?.keySize && row?.signerType !== 'SDF') {
     return `RSA-${row.keySize}`;
   }
   return row?.algo || '-';
@@ -538,6 +554,22 @@ getList();
   color: var(--el-text-color-secondary);
   font-size: 12px;
   line-height: 18px;
+}
+
+.public-key-block {
+  margin-top: 4px;
+
+  .public-key-label {
+    margin-bottom: 8px;
+    font-weight: 500;
+    color: var(--el-text-color-regular);
+  }
+
+  :deep(.el-textarea__inner) {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+    line-height: 1.55;
+    word-break: break-all;
+  }
 }
 
 .dialog-footer {
