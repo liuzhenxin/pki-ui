@@ -48,15 +48,21 @@
                 <p>OCSP 初始化需要确认业务表、租户、响应者配置和证书状态验证数据源准备完成。</p>
               </el-alert>
               <div class="help-card">
-                <div class="help-card-header"><el-tag type="danger" effect="dark" round size="small">必选</el-tag><span class="help-card-title">OCSP业务库</span></div>
+                <div class="help-card-header">
+                  <el-tag type="danger" effect="dark" round size="small">必选</el-tag><span class="help-card-title">OCSP业务库</span>
+                </div>
                 <div class="help-card-body">检查 `ocsp_responder` 和 `ocsp_request_log` 是否存在。</div>
               </div>
               <div class="help-card">
-                <div class="help-card-header"><el-tag type="warning" effect="light" round size="small">必选</el-tag><span class="help-card-title">平台租户</span></div>
+                <div class="help-card-header">
+                  <el-tag type="warning" effect="light" round size="small">必选</el-tag><span class="help-card-title">平台租户</span>
+                </div>
                 <div class="help-card-body">检查平台库中是否存在租户 6，初始化完成后会标记该租户状态。</div>
               </div>
               <div class="help-card">
-                <div class="help-card-header"><el-tag type="success" effect="light" round size="small">必选</el-tag><span class="help-card-title">验证数据源</span></div>
+                <div class="help-card-header">
+                  <el-tag type="success" effect="light" round size="small">必选</el-tag><span class="help-card-title">验证数据源</span>
+                </div>
                 <div class="help-card-body">支持数据库和 LDAP 两种证书状态验证模式，敏感密码仅保存引用。</div>
               </div>
             </div>
@@ -262,8 +268,7 @@ const companyName = ref('');
 const signerTypeOptions = ['SOFTWARE', 'HSM'];
 const statusSourceOptions = ['DB', 'LDAP'];
 const certSource = ref<'CSR' | 'PEM'>('CSR');
-const softwareSignerConf =
-  '{\n  "keyAlias": "ocsp-responder-key",\n  "algorithm": "SM3withSM2",\n  "keyStoreRef": "ocsp-db"\n}';
+const softwareSignerConf = '{\n  "keyAlias": "ocsp-responder-key",\n  "algorithm": "SM3withSM2",\n  "keyStoreRef": "ocsp-db"\n}';
 
 const form = reactive({
   name: 'default-ocsp-responder',

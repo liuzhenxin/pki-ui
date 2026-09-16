@@ -117,8 +117,7 @@ const certVisible = ref(false);
 const certPem = ref('');
 const formRef = ref<FormInstance>();
 const certSource = ref<'CSR' | 'PEM'>('CSR');
-const softwareSignerConf =
-  '{\n  "keyAlias": "ocsp-responder-key",\n  "algorithm": "SM3withSM2",\n  "keyStoreRef": "ocsp-db"\n}';
+const softwareSignerConf = '{\n  "keyAlias": "ocsp-responder-key",\n  "algorithm": "SM3withSM2",\n  "keyStoreRef": "ocsp-db"\n}';
 const query = reactive({ pageNum: 1, pageSize: 10, name: '', status: '' });
 const form = reactive<OcspResponder>({
   name: '',

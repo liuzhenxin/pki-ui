@@ -57,7 +57,12 @@
       <pagination v-show="total > 0" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" :total="total" @pagination="getList" />
     </el-card>
 
-    <SecurityConfirm v-model="securityConfirm.visible" :title="securityConfirm.title" :action="securityConfirm.action" @confirm="securityConfirm.onConfirm" />
+    <SecurityConfirm
+      v-model="securityConfirm.visible"
+      :title="securityConfirm.title"
+      :action="securityConfirm.action"
+      @confirm="securityConfirm.onConfirm"
+    />
 
     <el-dialog v-model="dialog.visible" :title="dialog.title" width="600px" append-to-body>
       <el-form ref="userFormRef" :model="form" :rules="rules" label-width="80px">
