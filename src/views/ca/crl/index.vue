@@ -343,7 +343,6 @@ getList();
       </el-descriptions>
       <el-input class="mt-10px crl-content" :model-value="detailDialog.data?.crl" type="textarea" :rows="18" readonly placeholder="暂无CRL内容" />
     </el-drawer>
-
   </div>
 </template>
 

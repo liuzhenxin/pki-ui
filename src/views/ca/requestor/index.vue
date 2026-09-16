@@ -189,8 +189,15 @@
               <div class="profile-auth-toolbar">
                 <span>{{ activeRootName || '请选择根证书' }}</span>
                 <div>
-                  <el-button size="small" :disabled="!activeRootAuthorized || !profileOptions.length || rootProfileLoading" @click="selectAllRootProfiles">全选</el-button>
-                  <el-button size="small" :disabled="!activeRootAuthorized || !profileOptions.length || rootProfileLoading" @click="clearRootProfiles">全不选</el-button>
+                  <el-button
+                    size="small"
+                    :disabled="!activeRootAuthorized || !profileOptions.length || rootProfileLoading"
+                    @click="selectAllRootProfiles"
+                    >全选</el-button
+                  >
+                  <el-button size="small" :disabled="!activeRootAuthorized || !profileOptions.length || rootProfileLoading" @click="clearRootProfiles"
+                    >全不选</el-button
+                  >
                 </div>
               </div>
               <el-table v-loading="rootProfileLoading" border :data="profileOptions" empty-text="请选择根证书后查看模板">
@@ -343,7 +350,12 @@ const activeRootName = computed(() => rootOptions.value.find((item) => normalize
 const activeRootAuthorized = computed(() => !!activeRootAuth.value?.authorized);
 const allRootProfileIds = computed(() => profileOptions.value.map((item) => item.id));
 const ADMIN_PROFILE_NAME = '管理员证书模板';
-const isRaAuthorizeRequestor = computed(() => String(authorizeForm.requestorType || '').trim().toUpperCase() === 'RA');
+const isRaAuthorizeRequestor = computed(
+  () =>
+    String(authorizeForm.requestorType || '')
+      .trim()
+      .toUpperCase() === 'RA'
+);
 const requestorTypeOptions = [
   { label: 'RA(证书注册系统)', value: 'RA' },
   { label: '业务系统', value: 'BUSINESS' }
@@ -624,7 +636,10 @@ async function loadAuthorizeOptions() {
     }
     const authorizationResults = await Promise.all(
       roots.map(async (root: any) => {
-        const [rootDetailRes, authRes]: any[] = await Promise.all([getRootCa(root.id), getRequestorAuthorization(authorizeForm.requestorId, root.id)]);
+        const [rootDetailRes, authRes]: any[] = await Promise.all([
+          getRootCa(root.id),
+          getRequestorAuthorization(authorizeForm.requestorId, root.id)
+        ]);
         const rootDetail = rootDetailRes.data || {};
         const authorization = authRes.data || {};
         const rootProfileIds = normalizeIdList(rootDetail.profileIds || []);
@@ -907,11 +922,17 @@ function normalizeRequestorRow(row: any) {
 }
 
 function normalizeRequestorType(row: any) {
-  const rawType = String(row?.requestorType || '').trim().toUpperCase();
+  const rawType = String(row?.requestorType || '')
+    .trim()
+    .toUpperCase();
   if (rawType === 'RA' || rawType === 'BUSINESS') {
     return rawType;
   }
-  return String(row?.name || '').trim().toUpperCase() === 'RA' ? 'RA' : 'BUSINESS';
+  return String(row?.name || '')
+    .trim()
+    .toUpperCase() === 'RA'
+    ? 'RA'
+    : 'BUSINESS';
 }
 
 function parseFormCertificate() {

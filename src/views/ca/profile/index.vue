@@ -5,7 +5,16 @@ import { UploadFilled, View, Plus, Delete, Top, Bottom } from '@element-plus/ico
 import { to } from 'await-to-js';
 import { useRouter } from 'vue-router';
 import { parseJson, parseKeyAlgorithms } from '@/utils/json';
-import { pageProfile, getProfile, saveProfile, modifyProfile, removeProfile, importProfile, exportProfile, listDualCertProfiles } from '@/api/ca/profile';
+import {
+  pageProfile,
+  getProfile,
+  saveProfile,
+  modifyProfile,
+  removeProfile,
+  importProfile,
+  exportProfile,
+  listDualCertProfiles
+} from '@/api/ca/profile';
 import { ProfileForm, ProfileQuery } from '@/api/ca/profile/types';
 import { DualCertProfileCO } from '@/api/ca/types';
 import { Connection } from '@element-plus/icons-vue';
@@ -486,7 +495,9 @@ loadDualProfilePairs();
     <el-card v-if="dualProfilePairs.length > 0" shadow="never" style="margin-top: 16px">
       <template #header>
         <div style="display: flex; justify-content: space-between; align-items: center">
-          <span style="font-weight: bold; font-size: 15px"><el-icon><Connection /></el-icon> 双证书模板对</span>
+          <span style="font-weight: bold; font-size: 15px"
+            ><el-icon><Connection /></el-icon> 双证书模板对</span
+          >
           <el-button link type="primary" @click="loadDualProfilePairs">刷新</el-button>
         </div>
       </template>

@@ -226,21 +226,11 @@
           <el-select v-model="form.type" placeholder="请选择发布者类型" style="width: 100%" :disabled="readonly" @change="handleTypeChange">
             <el-option label="LDAP / AD" value="LDAP" />
             <el-option label="数据库" value="DATABASE" />
-            <el-option label="文件" value="FILE" />
-            <el-option label="HTTP" value="HTTP" />
-            <el-option label="OCSP" value="OCSP" />
           </el-select>
         </el-form-item>
 
         <el-form-item v-if="bindableRoot(form.type)" label="关联根CA">
-          <el-select
-            v-model="form.rootIds"
-            multiple
-            clearable
-            filterable
-            placeholder="不选择 = 全局发布者（不参与证书发布）"
-            style="width: 100%"
-          >
+          <el-select v-model="form.rootIds" multiple clearable filterable placeholder="不选择 = 全局发布者（不参与证书发布）" style="width: 100%">
             <el-option v-for="r in rootOptions" :key="r.id" :label="r.name || 'CA-' + r.id" :value="r.id" />
           </el-select>
           <div class="form-tip">关联后，该根CA的证书签发/吊销会发布到此发布者；HTTP/OCSP 类型不可绑定（仅用于 CRL 发布）</div>

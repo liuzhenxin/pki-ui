@@ -232,11 +232,7 @@ function formatDn(value?: string) {
   const text = String(value).trim();
   if (!text) return '-';
   if (text.startsWith('/')) {
-    return text
-      .slice(1)
-      .split('/')
-      .filter(Boolean)
-      .join(',');
+    return text.slice(1).split('/').filter(Boolean).join(',');
   }
   return text.replace(/\s*,\s*/g, ',');
 }
