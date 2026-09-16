@@ -57,7 +57,9 @@
         <el-button type="success" plain icon="CircleCheck" @click="handleVerify" v-hasPermi="['license:license:verify']">校验</el-button>
       </el-col>
       <el-col :span="1.5">
-        <el-button type="danger" plain icon="Delete" :disabled="multiple" @click="handleDelete()" v-hasPermi="['license:license:remove']">删除</el-button>
+        <el-button type="danger" plain icon="Delete" :disabled="multiple" @click="handleDelete()" v-hasPermi="['license:license:remove']"
+          >删除</el-button
+        >
       </el-col>
       <right-toolbar v-model:showSearch="showSearch" @queryTable="getList" />
     </el-row>
@@ -102,7 +104,14 @@
             <el-button link type="primary" icon="Download" @click="handleDownload(scope.row)" v-hasPermi="['license:license:download']" />
           </el-tooltip>
           <el-tooltip content="吊销" placement="top">
-            <el-button link type="primary" icon="CircleClose" :disabled="scope.row.status === 'REVOKED'" @click="handleRevoke(scope.row)" v-hasPermi="['license:license:revoke']" />
+            <el-button
+              link
+              type="primary"
+              icon="CircleClose"
+              :disabled="scope.row.status === 'REVOKED'"
+              @click="handleRevoke(scope.row)"
+              v-hasPermi="['license:license:revoke']"
+            />
           </el-tooltip>
           <el-tooltip content="删除" placement="top">
             <el-button link type="primary" icon="Delete" @click="handleDelete(scope.row)" v-hasPermi="['license:license:remove']" />
@@ -178,13 +187,7 @@
           </el-col>
           <el-col :span="12">
             <el-form-item label="失效时间" prop="notAfter">
-              <el-date-picker
-                v-model="form.notAfter"
-                type="datetime"
-                value-format="YYYY-MM-DD HH:mm:ss"
-                placeholder="长期有效"
-                style="width: 100%"
-              />
+              <el-date-picker v-model="form.notAfter" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" placeholder="长期有效" style="width: 100%" />
             </el-form-item>
           </el-col>
           <el-col :span="24">
@@ -258,7 +261,14 @@
         <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item label="产品">
-              <el-select v-model="verifyForm.product" clearable filterable style="width: 100%" placeholder="可选，选择待校验产品" @change="handleVerifyProductChange">
+              <el-select
+                v-model="verifyForm.product"
+                clearable
+                filterable
+                style="width: 100%"
+                placeholder="可选，选择待校验产品"
+                @change="handleVerifyProductChange"
+              >
                 <el-option v-for="item in productOptions" :key="item.name" :label="item.label" :value="item.name" />
               </el-select>
             </el-form-item>
@@ -283,7 +293,12 @@
         </el-row>
       </el-form>
       <div v-if="verifyResult" class="verify-result">
-        <el-alert :title="verifyResult.valid ? 'License 校验通过' : 'License 校验未通过'" :type="verifyResult.valid ? 'success' : 'error'" show-icon :closable="false" />
+        <el-alert
+          :title="verifyResult.valid ? 'License 校验通过' : 'License 校验未通过'"
+          :type="verifyResult.valid ? 'success' : 'error'"
+          show-icon
+          :closable="false"
+        />
         <el-descriptions :column="2" border size="small" class="verify-desc">
           <el-descriptions-item label="授权编号">{{ verifyResult.licenseId || '-' }}</el-descriptions-item>
           <el-descriptions-item label="状态">{{ statusLabel(verifyResult.status) }}</el-descriptions-item>
@@ -673,7 +688,12 @@ function toDateTimeValue(value: Date) {
 }
 
 function normalizeDateTimeValue(value?: string) {
-  return value ? value.replace('T', ' ').replace(/\.\d{3}Z?$/, '').slice(0, 19) : value;
+  return value
+    ? value
+        .replace('T', ' ')
+        .replace(/\.\d{3}Z?$/, '')
+        .slice(0, 19)
+    : value;
 }
 
 function formatLicenseJson(value?: string) {

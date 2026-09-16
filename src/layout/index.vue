@@ -74,10 +74,13 @@ let idleTimer: number | undefined;
 const resetIdleTimer = () => {
   const minutes = Number(sessionStorage.getItem('idleTimeoutMinutes') || 240);
   window.clearTimeout(idleTimer);
-  idleTimer = window.setTimeout(async () => {
-    await useUserStore().logout();
-    window.location.href = '/login';
-  }, Math.max(5, minutes) * 60 * 1000);
+  idleTimer = window.setTimeout(
+    async () => {
+      await useUserStore().logout();
+      window.location.href = '/login';
+    },
+    Math.max(5, minutes) * 60 * 1000
+  );
 };
 
 onMounted(() => {
