@@ -20,7 +20,7 @@
 
     <el-scrollbar max-height="64vh">
       <!-- 一、密钥信息 -->
-	      <el-card shadow="never" class="section-card">
+      <el-card shadow="never" class="section-card">
         <template #header>
           <div class="card-title">
             <el-icon><InfoFilled /></el-icon> 一、密钥信息
@@ -232,16 +232,16 @@
           </div>
         </template>
         <el-alert v-if="!direct && submitted && !detail?.canRecover" :title="recoverDisabledText" type="info" show-icon :closable="false" />
-	        <el-form ref="executeFormRef" :model="form" :rules="rules" label-width="130px">
-	          <el-alert
-	            v-if="isMlKemRecovery"
-	            type="info"
-	            show-icon
-	            :closable="false"
-	            title="ML-KEM私钥不导出；恢复仅校验并恢复KMC托管关系和密钥服务能力"
-	          />
-	          <el-row :gutter="16">
-	            <el-col v-if="!isMlKemRecovery" :span="24">
+        <el-form ref="executeFormRef" :model="form" :rules="rules" label-width="130px">
+          <el-alert
+            v-if="isMlKemRecovery"
+            type="info"
+            show-icon
+            :closable="false"
+            title="ML-KEM私钥不导出；恢复仅校验并恢复KMC托管关系和密钥服务能力"
+          />
+          <el-row :gutter="16">
+            <el-col v-if="!isMlKemRecovery" :span="24">
               <el-form-item label="恢复介质" prop="mediaType">
                 <el-radio-group v-model="form.mediaType" :disabled="!canRecover">
                   <el-radio-button label="FILE">加密PEM文件</el-radio-button>
@@ -249,14 +249,14 @@
                 </el-radio-group>
               </el-form-item>
             </el-col>
-	            <template v-if="!isMlKemRecovery && form.mediaType === 'FILE'">
+            <template v-if="!isMlKemRecovery && form.mediaType === 'FILE'">
               <el-col :span="12">
                 <el-form-item label="文件口令" prop="filePassword">
                   <el-input v-model="form.filePassword" :disabled="!canRecover" type="password" show-password autocomplete="new-password" />
                 </el-form-item>
               </el-col>
             </template>
-	            <template v-else-if="!isMlKemRecovery">
+            <template v-else-if="!isMlKemRecovery">
               <el-col :span="24">
                 <div class="usb-key-header">
                   <div class="usb-key-status">
