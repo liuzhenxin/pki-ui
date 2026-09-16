@@ -1,7 +1,9 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 const { execSync } = require('child_process');
 const JSEncrypt = require('jsencrypt');
 
-const publicKey = 'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEApesV0cwa8Xw8xBxU3X6mwL+G4OehdVEhA35HpLK/wsZlzLAC0h9zgFn0knbPknq25KghnjDkiAGQXXlL5cP9o0xqniOAe0GhfeoAl07WoYpUf7bB1Rz3UGn2k3e00MSQcqsIa/f3RU1px7ZR8EDcO8h9KU9JlO2Yd6Pmr9B9q0jCLaPvA1geToZ7sZInvztVxQv+IPvxeHkmArOiDrux1QknlN1S1b+DRsPcRhv73vVu8lcOp6OyGA70sITxhnFZIZH1ecp44Zy9nkTNPhQMaK++n/J050bmmQ/I4FU4yIsza4DRnQWSviXE4hVn0qb1/qaVFOUd01CM60LaFLUTwQIDAQAB';
+const publicKey =
+  'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEApesV0cwa8Xw8xBxU3X6mwL+G4OehdVEhA35HpLK/wsZlzLAC0h9zgFn0knbPknq25KghnjDkiAGQXXlL5cP9o0xqniOAe0GhfeoAl07WoYpUf7bB1Rz3UGn2k3e00MSQcqsIa/f3RU1px7ZR8EDcO8h9KU9JlO2Yd6Pmr9B9q0jCLaPvA1geToZ7sZInvztVxQv+IPvxeHkmArOiDrux1QknlN1S1b+DRsPcRhv73vVu8lcOp6OyGA70sITxhnFZIZH1ecp44Zy9nkTNPhQMaK++n/J050bmmQ/I4FU4yIsza4DRnQWSviXE4hVn0qb1/qaVFOUd01CM60LaFLUTwQIDAQAB';
 const enc = new JSEncrypt();
 enc.setPublicKey(publicKey);
 

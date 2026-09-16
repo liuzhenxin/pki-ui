@@ -19,8 +19,8 @@ test.describe('证书签发页面 - 编译产物验证', () => {
   test('2. 支持 USB Key 与 PKCS10 两种 CSR 来源', async () => {
     expect(compiledSource).toContain('label="USB Key" value="key"');
     expect(compiledSource).toContain('label="PKCS10 CSR" value="p10"');
-    expect(compiledSource).toContain('issueType === \'key\'');
-    expect(compiledSource).toContain('issueType === \'p10\'');
+    expect(compiledSource).toContain("issueType === 'key'");
+    expect(compiledSource).toContain("issueType === 'p10'");
   });
 
   test('3. 支持单证书/双证书签发模式', async () => {
@@ -45,7 +45,7 @@ test.describe('证书签发页面 - 编译产物验证', () => {
     expect(compiledSource).toContain('加密证书模板');
     expect(compiledSource).toContain('加密密钥来源');
     expect(compiledSource).toContain('KMC 生成并托管');
-    expect(compiledSource).toContain('keyGenStrategy: \'KMC\'');
+    expect(compiledSource).toContain("keyGenStrategy: 'KMC'");
   });
 
   test('6. 签发成功文案覆盖单证书/双证书', async () => {

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 const JSEncrypt = require('jsencrypt');
 const [pub, username, password] = process.argv.slice(2);
 const enc = new JSEncrypt();
