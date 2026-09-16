@@ -64,6 +64,7 @@
           </div>
           <el-form-item v-if="tenantEnabled" prop="tenantId">
             <el-select
+              v-if="!singleTenant"
               v-model="loginForm.tenantId"
               filterable
               :placeholder="proxy.$t('login.selectPlaceholder')"
@@ -73,7 +74,19 @@
               <el-option v-for="item in tenantList" :key="item.tenantId" :label="item.companyName" :value="item.tenantId"></el-option>
               <template #prefix><svg-icon icon-class="company" class="el-input__icon input-icon" /></template>
             </el-select>
+            <el-input v-else :model-value="tenantList[0]?.companyName || ''" disabled readonly aria-label="当前系统租户">
+              <template #prefix><svg-icon icon-class="company" class="el-input__icon input-icon" /></template>
+            </el-input>
           </el-form-item>
+          <el-alert
+            v-if="tenantWhitelistMissed"
+            type="error"
+            :closable="false"
+            show-icon
+            class="tenant-whitelist-miss-alert"
+            title="当前系统租户未启用"
+            description="构建时配置的租户白名单在本环境未匹配到任何租户，请检查租户状态或前端构建参数 VITE_APP_TENANT_IDS。"
+          />
           <template v-if="authMode === 'password'">
             <el-form-item prop="username">
               <el-input
@@ -327,6 +340,10 @@ let lastCaptchaRequestAt = 0;
 const tenantEnabled = ref(false);
 // 租户列表
 const tenantList = ref<TenantVO[]>([]);
+// 单租户：白名单只命中一个租户，下拉选择无意义，改为只读展示
+const singleTenant = computed(() => tenantList.value.length === 1);
+// 白名单未命中：构建时配置了 VITE_APP_TENANT_IDS，但后端返回的租户中没有匹配项
+const tenantWhitelistMissed = ref(false);
 
 // 注册开关
 const register = ref(false);
@@ -530,6 +547,10 @@ watch(
 );
 
 const handleLogin = () => {
+  if (tenantWhitelistMissed.value) {
+    ElMessage.error('当前系统租户未启用，无法登录，请联系管理员');
+    return;
+  }
   loginRef.value?.validate(async (valid: boolean, fields: any) => {
     if (valid) {
       loading.value = true;
@@ -642,6 +663,10 @@ async function handleReadCertificates() {
 }
 
 async function handleCertificateLogin() {
+  if (tenantWhitelistMissed.value) {
+    ElMessage.error('当前系统租户未启用，无法登录，请联系管理员');
+    return;
+  }
   const certificate = selectedCertificate.value;
   const tenantCode = String(loginForm.value.tenantCode || '');
   if (!tenantCode) {
@@ -810,6 +835,22 @@ const initTenantList = async () => {
     const list: any[] = (Array.isArray(data) ? data : []).filter(isPkiTenant);
     // 按本 UI 部署的系统过滤租户（VITE_APP_TENANT_IDS 逗号分隔；空 = 全部 PKI 租户）
     const filtered: any[] = configuredTenantIds.length ? list.filter((t) => configuredTenantIds.includes(String(t.id))) : list;
+
+    // 白名单未命中：本 UI 指定了租户，但后端返回的租户中没有匹配项。
+    // 这是部署/配置问题，必须显式告警，并清掉可能已预置或缓存的租户上下文，
+    // 否则会用错误的 tenantId/tenantCode 静默发起验证码、RADIUS 与登录请求。
+    tenantWhitelistMissed.value = configuredTenantIds.length > 0 && filtered.length === 0;
+    if (tenantWhitelistMissed.value) {
+      loginForm.value.tenantId = '';
+      loginForm.value.tenantCode = '';
+      localStorage.removeItem('tenantId');
+      localStorage.removeItem('tenantCode');
+      tenantList.value = [];
+      tenantEnabled.value = false;
+      ElMessage.error(`租户白名单未命中：本系统限定租户 [${configuredTenantIds.join(', ')}]，但后端未返回匹配租户`);
+      return;
+    }
+
     tenantEnabled.value = filtered.length > 0;
     if (tenantEnabled.value) {
       tenantList.value = filtered.map((item: any) => ({
