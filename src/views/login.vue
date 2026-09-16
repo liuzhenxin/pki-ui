@@ -1,43 +1,43 @@
 <template>
   <div class="login" :class="{ 'login--tenant-background': hasTenantLoginBackground }" :style="loginBackgroundStyle">
-    <div v-if="!hasTenantLoginBackground" class="cyber-field" aria-hidden="true">
-      <div class="pki-backdrop">
-        <span class="cert-visual cert-primary">
-          <i></i>
-          <i></i>
-          <i></i>
-          <b></b>
-        </span>
-        <span class="cert-visual cert-secondary">
-          <i></i>
-          <i></i>
-          <b></b>
-        </span>
-        <span class="key-visual"></span>
-        <span class="chip-visual"></span>
-        <span class="trust-chain">
-          <i></i>
-          <i></i>
-          <i></i>
-          <i></i>
-        </span>
-      </div>
-      <span class="field-node node-a"></span>
-      <span class="field-node node-b"></span>
-      <span class="field-node node-c"></span>
-      <span class="scan-line"></span>
-    </div>
     <div class="login-shell">
+      <section class="brand-panel" :class="tenantBrand.className" aria-label="平台介绍">
+        <div class="brand-header">
+          <span class="brand-logo">{{ tenantBrand.logo }}</span>
+          <span class="brand-name">{{ title }}</span>
+        </div>
+        <div class="brand-visual" aria-hidden="true">
+          <span class="visual-base"></span>
+          <span class="visual-platform"></span>
+          <span class="visual-shield"></span>
+          <span class="visual-cert visual-cert-a"></span>
+          <span class="visual-cert visual-cert-b"></span>
+          <span class="visual-key"></span>
+          <span class="visual-bar visual-bar-a"></span>
+          <span class="visual-bar visual-bar-b"></span>
+          <span class="visual-bar visual-bar-c"></span>
+          <span class="visual-node visual-node-a"></span>
+          <span class="visual-node visual-node-b"></span>
+          <span class="visual-app visual-app-ops"></span>
+          <span class="visual-app visual-app-ca"></span>
+          <span class="visual-app visual-app-kmc"></span>
+          <span class="visual-app visual-app-ra"></span>
+          <span class="visual-app visual-app-ocsp"></span>
+        </div>
+        <div class="brand-copy">
+          <h1>{{ tenantBrand.heading }}</h1>
+          <p>{{ tenantBrand.subtitle }}</p>
+        </div>
+      </section>
       <section class="auth-panel" aria-label="登录">
         <el-form ref="loginRef" :model="loginForm" :rules="loginRules" class="login-form">
           <div class="title-box">
             <div>
-              <p class="form-kicker">Secure Access Node</p>
-              <h2 class="title">{{ loginTitle }}</h2>
+              <h2 class="title">欢迎回来</h2>
+              <p class="form-subtitle">请输入您的账户信息以进入 {{ loginTitle }}</p>
             </div>
             <lang-select />
           </div>
-          <p class="form-subtitle">请输入授权账号，进入 PKI 综合管理控制台。</p>
           <div class="auth-mode-switch" role="tablist" aria-label="登录方式">
             <button
               type="button"
@@ -452,7 +452,64 @@ const tenantLoginPanelThemes: Record<string, { panel: string; input: string; bor
     border: 'rgba(255, 255, 255, 0.5)'
   }
 };
+const defaultTenantBrand = {
+  className: 'brand-panel--pki',
+  logo: 'PKI',
+  heading: 'PKI 综合管理平台',
+  subtitle: '面向 CA、RA、KMC、OCSP 的统一安全运营入口'
+};
+const tenantBrandProfiles: Record<string, typeof defaultTenantBrand> = {
+  '1': {
+    className: 'brand-panel--ops',
+    logo: 'OPS',
+    heading: '平台运维中心',
+    subtitle: '统一编排平台组件、容器状态、安全策略与审计任务'
+  },
+  '3': {
+    className: 'brand-panel--kmc',
+    logo: 'KMC',
+    heading: '密钥管理中心',
+    subtitle: '集中管理密钥生命周期、恢复流程与密码资源调度'
+  },
+  '4': {
+    className: 'brand-panel--ca',
+    logo: 'CA',
+    heading: '证书认证中心',
+    subtitle: '签发、更新、吊销与归档数字证书的可信根入口'
+  },
+  '5': {
+    className: 'brand-panel--ra',
+    logo: 'RA',
+    heading: '注册认证中心',
+    subtitle: '承载证书申请、审核流转与业务身份核验'
+  },
+  '51': {
+    className: 'brand-panel--ra',
+    logo: 'RA',
+    heading: '注册认证中心',
+    subtitle: '承载证书申请、审核流转与业务身份核验'
+  },
+  '6': {
+    className: 'brand-panel--ocsp',
+    logo: 'OCSP',
+    heading: '在线证书状态服务',
+    subtitle: '实时响应证书有效性查询，保障验证链路可用可信'
+  },
+  '10': {
+    className: 'brand-panel--nas',
+    logo: 'NAS',
+    heading: '网络存储管理系统',
+    subtitle: '管理存储资源、迁移任务与数据访问安全边界'
+  },
+  '100': {
+    className: 'brand-panel--license',
+    logo: 'LIC',
+    heading: 'License 授权系统',
+    subtitle: '统一管理产品授权、许可状态与客户交付凭证'
+  }
+};
 const hasTenantLoginBackground = computed(() => Boolean(tenantLoginBackgrounds[String(loginForm.value.tenantId || '')]));
+const tenantBrand = computed(() => tenantBrandProfiles[String(loginForm.value.tenantId || '')] || defaultTenantBrand);
 const loginBackgroundStyle = computed(() => {
   const tenantId = String(loginForm.value.tenantId || '');
   const panelTheme = tenantLoginPanelThemes[tenantId];
@@ -1774,6 +1831,1001 @@ onBeforeUnmount(() => {
   50% {
     opacity: 0.82;
     transform: translateX(120px) rotate(16deg);
+  }
+}
+
+/* Light enterprise login layout inspired by the attached reference. */
+.login {
+  align-items: stretch;
+  justify-content: stretch;
+  padding: 0;
+  background: #ffffff;
+  color: #1f2937;
+}
+
+.login::before,
+.login::after {
+  display: none;
+}
+
+.login--tenant-background {
+  background:
+    linear-gradient(90deg, rgba(241, 247, 255, 0.92) 0%, rgba(241, 247, 255, 0.92) 58%, rgba(255, 255, 255, 0.98) 58%),
+    var(--login-background-image) center / cover no-repeat;
+}
+
+.login-shell {
+  display: grid;
+  grid-template-columns: minmax(420px, 58%) minmax(360px, 42%);
+  width: 100%;
+  min-height: 100dvh;
+  align-items: stretch;
+}
+
+.brand-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100dvh;
+  padding: 32px 48px 86px;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 72% 24%, rgba(98, 168, 255, 0.2), transparent 31%), linear-gradient(135deg, #f7fbff 0%, #e9f3ff 46%, #dfeaf6 100%);
+}
+
+.brand-panel::before {
+  position: absolute;
+  inset: 0;
+  content: '';
+  background:
+    linear-gradient(120deg, rgba(255, 255, 255, 0.58), transparent 46%), radial-gradient(circle at 34% 54%, rgba(0, 122, 255, 0.1), transparent 34%);
+}
+
+.brand-header {
+  position: absolute;
+  top: 24px;
+  left: 28px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: #2f3a4a;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.brand-logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  color: #0b8cff;
+  border: 2px solid #26a8ff;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.74);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.brand-name {
+  line-height: 1.3;
+}
+
+.brand-visual {
+  position: relative;
+  z-index: 1;
+  width: min(380px, 72vw);
+  height: 300px;
+  margin-top: 14px;
+  filter: drop-shadow(0 26px 32px rgba(37, 99, 235, 0.18));
+}
+
+.visual-base,
+.visual-platform,
+.visual-shield,
+.visual-cert,
+.visual-key,
+.visual-bar,
+.visual-node,
+.visual-app {
+  position: absolute;
+  display: block;
+}
+
+.visual-app {
+  display: none;
+  z-index: 3;
+}
+
+.visual-base {
+  left: 68px;
+  bottom: 28px;
+  width: 244px;
+  height: 126px;
+  border-radius: 18px;
+  background: linear-gradient(145deg, #0a7cff, #1751d8);
+  transform: skewY(-24deg) rotate(24deg);
+  box-shadow:
+    0 16px 0 #0852c8,
+    0 28px 36px rgba(31, 96, 220, 0.22);
+}
+
+.visual-platform {
+  left: 132px;
+  bottom: 92px;
+  width: 118px;
+  height: 118px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 50% 42%, rgba(255, 255, 255, 0.95) 0 18%, rgba(120, 204, 255, 0.38) 19% 42%, transparent 43%),
+    linear-gradient(145deg, #2bc7ff, #2468ef);
+  box-shadow:
+    inset 0 0 0 12px rgba(255, 255, 255, 0.16),
+    0 16px 0 #1543c3;
+}
+
+.visual-shield {
+  left: 166px;
+  bottom: 158px;
+  width: 52px;
+  height: 70px;
+  border-radius: 26px 26px 18px 18px;
+  background: linear-gradient(160deg, #83e3ff, #1167ec);
+  clip-path: polygon(50% 0, 94% 18%, 84% 78%, 50% 100%, 16% 78%, 6% 18%);
+  box-shadow: 0 12px 24px rgba(17, 103, 236, 0.26);
+}
+
+.visual-cert {
+  width: 82px;
+  height: 100px;
+  border-radius: 8px;
+  background: linear-gradient(180deg, rgba(18, 113, 240, 0.16) 16px, transparent 17px), linear-gradient(180deg, #ffffff, #dff4ff);
+  box-shadow: 0 12px 20px rgba(30, 93, 200, 0.16);
+}
+
+.visual-cert::before,
+.visual-cert::after {
+  position: absolute;
+  left: 14px;
+  height: 6px;
+  content: '';
+  border-radius: 999px;
+  background: rgba(23, 100, 221, 0.38);
+}
+
+.visual-cert::before {
+  top: 42px;
+  width: 50px;
+}
+
+.visual-cert::after {
+  top: 62px;
+  width: 36px;
+}
+
+.visual-cert-a {
+  left: 90px;
+  top: 46px;
+  transform: rotate(-15deg);
+}
+
+.visual-cert-b {
+  right: 64px;
+  top: 36px;
+  transform: rotate(13deg);
+}
+
+.visual-key {
+  right: 54px;
+  bottom: 74px;
+  width: 96px;
+  height: 34px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #7fe6ff, #1d7bff);
+  transform: rotate(23deg);
+}
+
+.visual-key::before {
+  position: absolute;
+  left: -24px;
+  top: -12px;
+  width: 48px;
+  height: 48px;
+  content: '';
+  border: 12px solid #2f88ff;
+  border-radius: 50%;
+  background: transparent;
+}
+
+.visual-key::after {
+  position: absolute;
+  right: 12px;
+  top: 24px;
+  width: 38px;
+  height: 10px;
+  content: '';
+  background: #1862e6;
+  box-shadow: 28px 0 0 #1862e6;
+}
+
+.visual-bar {
+  bottom: 92px;
+  width: 20px;
+  border-radius: 6px 6px 2px 2px;
+  background: linear-gradient(180deg, #78e7ff, #1357df);
+}
+
+.visual-bar-a {
+  left: 96px;
+  height: 48px;
+}
+
+.visual-bar-b {
+  left: 126px;
+  height: 72px;
+}
+
+.visual-bar-c {
+  left: 156px;
+  height: 38px;
+}
+
+.visual-node {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: linear-gradient(145deg, #7868ff, #1d77ff);
+  box-shadow: 0 10px 18px rgba(53, 93, 218, 0.22);
+}
+
+.visual-app-ops {
+  left: 122px;
+  top: 82px;
+  width: 136px;
+  height: 104px;
+  border: 8px solid rgba(255, 255, 255, 0.88);
+  border-radius: 14px;
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.72) 1px, transparent 1px), linear-gradient(rgba(255, 255, 255, 0.72) 1px, transparent 1px),
+    linear-gradient(145deg, #1a8dff, #1459db);
+  background-size:
+    22px 22px,
+    22px 22px,
+    auto;
+  box-shadow:
+    0 15px 0 #1148bc,
+    0 24px 28px rgba(17, 72, 188, 0.18);
+}
+
+.visual-app-ops::before {
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  bottom: 18px;
+  height: 36px;
+  content: '';
+  border-bottom: 5px solid rgba(255, 255, 255, 0.78);
+  border-left: 5px solid rgba(255, 255, 255, 0.78);
+  background:
+    linear-gradient(135deg, transparent 0 28%, #9cf0ff 29% 34%, transparent 35% 56%, #ffffff 57% 62%, transparent 63%),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.18), transparent);
+}
+
+.visual-app-ops::after {
+  position: absolute;
+  left: 22px;
+  top: 16px;
+  width: 18px;
+  height: 18px;
+  content: '';
+  border-radius: 50%;
+  background: #9cf0ff;
+  box-shadow:
+    38px 0 0 #ffffff,
+    76px 0 0 rgba(255, 255, 255, 0.62);
+}
+
+.visual-app-ca {
+  left: 134px;
+  top: 58px;
+  width: 112px;
+  height: 146px;
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(13, 148, 136, 0.14) 22px, transparent 23px), linear-gradient(180deg, #ffffff, #ddfbff);
+  box-shadow:
+    0 15px 0 #0b72c8,
+    0 26px 28px rgba(11, 114, 200, 0.16);
+}
+
+.visual-app-ca::before {
+  position: absolute;
+  left: 22px;
+  top: 50px;
+  width: 68px;
+  height: 9px;
+  content: '';
+  border-radius: 999px;
+  background: rgba(9, 117, 138, 0.42);
+  box-shadow:
+    0 24px 0 rgba(9, 117, 138, 0.28),
+    0 48px 0 rgba(9, 117, 138, 0.2);
+}
+
+.visual-app-ca::after {
+  position: absolute;
+  right: -18px;
+  bottom: 18px;
+  width: 58px;
+  height: 58px;
+  content: '';
+  border-radius: 50%;
+  background: radial-gradient(circle, #ffffff 0 24%, transparent 25%), repeating-conic-gradient(from 10deg, #14b8a6 0 14deg, #6ee7f9 14deg 28deg);
+  box-shadow:
+    0 0 0 8px rgba(20, 184, 166, 0.14),
+    0 14px 24px rgba(20, 184, 166, 0.24);
+}
+
+.visual-app-kmc {
+  left: 114px;
+  top: 72px;
+  width: 154px;
+  height: 118px;
+  border-radius: 18px;
+  background: linear-gradient(145deg, #8d7aff, #355fe8);
+  box-shadow:
+    inset 0 0 0 10px rgba(255, 255, 255, 0.16),
+    0 16px 0 #283bb7,
+    0 28px 30px rgba(40, 59, 183, 0.18);
+}
+
+.visual-app-kmc::before {
+  position: absolute;
+  left: 42px;
+  top: -44px;
+  width: 70px;
+  height: 62px;
+  content: '';
+  border: 14px solid #6f63f4;
+  border-bottom: 0;
+  border-radius: 42px 42px 0 0;
+  box-shadow: inset 0 0 0 8px rgba(255, 255, 255, 0.16);
+}
+
+.visual-app-kmc::after {
+  position: absolute;
+  left: 58px;
+  top: 34px;
+  width: 40px;
+  height: 40px;
+  content: '';
+  border-radius: 50%;
+  background:
+    linear-gradient(180deg, transparent 42%, rgba(255, 255, 255, 0.86) 43% 56%, transparent 57%),
+    radial-gradient(circle, #ffffff 0 28%, #c9c2ff 29% 48%, transparent 49%);
+  box-shadow:
+    0 0 0 11px rgba(255, 255, 255, 0.18),
+    0 0 22px rgba(255, 255, 255, 0.22);
+}
+
+.visual-app-ra {
+  left: 108px;
+  top: 58px;
+  width: 168px;
+  height: 132px;
+}
+
+.visual-app-ra::before {
+  position: absolute;
+  left: 4px;
+  top: 15px;
+  width: 64px;
+  height: 78px;
+  content: '';
+  border-radius: 10px;
+  background: radial-gradient(circle at 50% 30%, #f8b84e 0 18%, transparent 19%), linear-gradient(180deg, #ffffff, #fff4dc);
+  box-shadow:
+    92px 0 0 #ffffff,
+    92px 0 0 1px rgba(245, 158, 11, 0.2),
+    0 13px 0 #d07812,
+    92px 13px 0 #d07812,
+    0 24px 28px rgba(191, 106, 16, 0.16);
+}
+
+.visual-app-ra::after {
+  position: absolute;
+  left: 70px;
+  top: 45px;
+  width: 50px;
+  height: 18px;
+  content: '';
+  border-top: 6px solid #f6a723;
+  border-right: 6px solid #f6a723;
+  transform: skewX(-20deg);
+  box-shadow:
+    17px -10px 0 -6px #f6a723,
+    17px 10px 0 -6px #f6a723;
+}
+
+.visual-app-ocsp {
+  left: 116px;
+  top: 62px;
+  width: 150px;
+  height: 128px;
+  border-radius: 22px;
+  background: linear-gradient(145deg, #3ee47c, #127de0);
+  box-shadow:
+    inset 0 0 0 10px rgba(255, 255, 255, 0.16),
+    0 16px 0 #108241,
+    0 28px 30px rgba(16, 130, 65, 0.18);
+}
+
+.visual-app-ocsp::before {
+  position: absolute;
+  left: 36px;
+  top: 48px;
+  width: 72px;
+  height: 34px;
+  content: '';
+  border-left: 8px solid rgba(255, 255, 255, 0.9);
+  border-bottom: 8px solid rgba(255, 255, 255, 0.9);
+  transform: rotate(-45deg);
+}
+
+.visual-app-ocsp::after {
+  position: absolute;
+  left: -24px;
+  right: -24px;
+  top: 30px;
+  height: 20px;
+  content: '';
+  background:
+    linear-gradient(
+      90deg,
+      transparent 0 8%,
+      rgba(255, 255, 255, 0.82) 9% 18%,
+      transparent 19% 34%,
+      rgba(255, 255, 255, 0.82) 35% 50%,
+      transparent 51% 66%,
+      rgba(255, 255, 255, 0.82) 67% 76%,
+      transparent 77%
+    ),
+    linear-gradient(180deg, transparent 45%, rgba(255, 255, 255, 0.34) 46% 56%, transparent 57%);
+}
+
+.visual-node-a {
+  left: 64px;
+  top: 90px;
+}
+
+.visual-node-b {
+  right: 124px;
+  bottom: 46px;
+}
+
+.brand-copy {
+  position: relative;
+  z-index: 1;
+  margin-top: 12px;
+  text-align: center;
+}
+
+.brand-copy h1 {
+  margin: 0;
+  color: #344054;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.brand-copy p {
+  margin: 10px 0 0;
+  color: #667085;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.auth-panel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 100dvh;
+  padding: 72px 56px 84px;
+  background: #ffffff;
+}
+
+.login-form {
+  width: min(388px, 100%);
+  padding: 0;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.login-form::before,
+.login-form::after {
+  display: none;
+}
+
+.title-box {
+  align-items: flex-start;
+  margin-bottom: 18px;
+}
+
+.title-box .title {
+  margin: 0 0 8px;
+  color: #202631;
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.form-subtitle {
+  margin: 0;
+  color: #8a94a6;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.auth-mode-switch {
+  gap: 10px;
+  padding: 0;
+  margin-bottom: 18px;
+  border: 0;
+  background: transparent;
+}
+
+.auth-mode-button {
+  min-height: 38px;
+  color: #5d6b82;
+  border: 1px solid #e5eaf2;
+  border-radius: 6px;
+  background: #ffffff;
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.03);
+}
+
+.auth-mode-button:hover,
+.auth-mode-button:focus-visible,
+.auth-mode-button.active {
+  color: #0b7ff3;
+  border-color: #b9dcff;
+  background: #f5faff;
+  box-shadow: 0 0 0 3px rgba(11, 127, 243, 0.08);
+}
+
+.login-form :deep(.el-form-item) {
+  margin-bottom: 14px;
+}
+
+.login-form :deep(.el-input__wrapper),
+.login-form :deep(.el-select__wrapper) {
+  min-height: 42px;
+  border-radius: 6px;
+  background: #ffffff;
+  box-shadow: 0 0 0 1px #e5e9f0 inset;
+}
+
+.login-form :deep(.el-input__wrapper:hover),
+.login-form :deep(.el-select__wrapper:hover) {
+  box-shadow: 0 0 0 1px #c9d7e8 inset;
+}
+
+.login-form :deep(.el-input__wrapper.is-focus),
+.login-form :deep(.el-select__wrapper.is-focused) {
+  box-shadow:
+    0 0 0 1px #1684fc inset,
+    0 0 0 3px rgba(22, 132, 252, 0.1);
+}
+
+.login-form .el-input,
+.login-form .el-input input {
+  height: 42px;
+}
+
+.login-form .input-icon {
+  height: 40px;
+  color: #9aa5b5;
+}
+
+.form-options {
+  margin: -2px 0 18px;
+}
+
+.secure-note {
+  color: #0b7ff3;
+  font-weight: 500;
+}
+
+.login-code {
+  flex-basis: 124px;
+  height: 42px;
+  border-color: #e5e9f0;
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+.login-code:hover,
+.login-code:focus-visible {
+  border-color: #1684fc;
+  box-shadow: 0 0 0 3px rgba(22, 132, 252, 0.1);
+}
+
+.cert-reader {
+  min-height: 82px;
+  border-color: #dcecff;
+  border-radius: 6px;
+  background: #f6fbff;
+}
+
+.cert-reader-icon {
+  color: #0b7ff3;
+  border-color: #cfe6ff;
+  border-radius: 6px;
+  box-shadow: none;
+}
+
+.cert-reader-title {
+  color: #202631;
+}
+
+.cert-reader-desc,
+.cert-placeholder-line {
+  color: #667085;
+}
+
+.cert-select-button {
+  min-height: 42px;
+  color: #0b7ff3;
+  border-color: #b9dcff;
+  border-radius: 6px;
+  background: #f8fbff;
+}
+
+.cert-placeholder {
+  border-color: #e5e9f0;
+  border-radius: 6px;
+  background: #fbfcfe;
+}
+
+.cert-flow span {
+  color: #0b7ff3;
+  border-color: #dcecff;
+  border-radius: 6px;
+  background: #f6fbff;
+}
+
+.login-button {
+  min-height: 42px;
+  border-radius: 6px;
+  background: #0878e8;
+  box-shadow: 0 10px 20px rgba(8, 120, 232, 0.18);
+  font-weight: 600;
+}
+
+.login-button:hover,
+.login-button:focus {
+  filter: none;
+  background: #0b84ff;
+  box-shadow: 0 12px 24px rgba(8, 120, 232, 0.24);
+}
+
+.register-link {
+  margin-top: 12px;
+}
+
+.el-login-footer {
+  color: #98a2b3;
+}
+
+.brand-panel--ops {
+  background:
+    radial-gradient(circle at 72% 24%, rgba(59, 130, 246, 0.2), transparent 31%), linear-gradient(135deg, #f7fbff 0%, #e9f3ff 46%, #dfeaf6 100%);
+
+  .brand-logo {
+    color: #0b72e7;
+    border-color: #2d9cff;
+  }
+
+  .visual-base {
+    background: linear-gradient(145deg, #0a7cff, #174fd2);
+  }
+
+  .visual-platform::before {
+    position: absolute;
+    inset: 31px;
+    content: '';
+    border: 7px solid rgba(255, 255, 255, 0.78);
+    border-left-color: rgba(255, 255, 255, 0.2);
+    border-radius: 50%;
+  }
+
+  .visual-app-ops {
+    display: block;
+  }
+
+  .visual-platform,
+  .visual-shield,
+  .visual-cert-a,
+  .visual-key {
+    display: none;
+  }
+
+  .visual-cert-b {
+    right: 48px;
+    top: 52px;
+    opacity: 0.72;
+  }
+}
+
+.brand-panel--ca {
+  background:
+    radial-gradient(circle at 72% 24%, rgba(20, 184, 166, 0.18), transparent 31%), linear-gradient(135deg, #f7fffd 0%, #e7f7ff 48%, #d9e9f8 100%);
+
+  .brand-logo {
+    color: #077e95;
+    border-color: #1eb7cf;
+  }
+
+  .visual-base {
+    background: linear-gradient(145deg, #00a9d6, #1167ec);
+  }
+
+  .visual-shield {
+    background: linear-gradient(160deg, #7df4e2, #0877d9);
+  }
+
+  .visual-cert-b {
+    width: 92px;
+    height: 112px;
+    transform: rotate(9deg);
+  }
+
+  .visual-app-ca {
+    display: block;
+  }
+
+  .visual-platform,
+  .visual-shield,
+  .visual-cert-a,
+  .visual-cert-b {
+    display: none;
+  }
+
+  .visual-key {
+    right: 44px;
+    bottom: 70px;
+    opacity: 0.64;
+  }
+}
+
+.brand-panel--kmc {
+  background:
+    radial-gradient(circle at 72% 24%, rgba(124, 92, 255, 0.18), transparent 31%), linear-gradient(135deg, #fbf9ff 0%, #edf0ff 48%, #e0e8fb 100%);
+
+  .brand-logo {
+    width: 40px;
+    flex: 0 0 40px;
+    color: #5b4ddf;
+    border-color: #8377ff;
+    font-size: 10px;
+  }
+
+  .visual-base {
+    background: linear-gradient(145deg, #7c5cff, #2558d8);
+  }
+
+  .visual-platform {
+    background:
+      radial-gradient(circle at 50% 42%, rgba(255, 255, 255, 0.95) 0 16%, rgba(190, 181, 255, 0.42) 17% 40%, transparent 41%),
+      linear-gradient(145deg, #9d8cff, #365eea);
+  }
+
+  .visual-key {
+    right: 36px;
+    bottom: 124px;
+    width: 124px;
+    background: linear-gradient(90deg, #c1b7ff, #4d62ff);
+    transform: rotate(-18deg);
+  }
+
+  .visual-app-kmc {
+    display: block;
+  }
+
+  .visual-platform,
+  .visual-shield,
+  .visual-cert-a,
+  .visual-cert-b {
+    display: none;
+  }
+
+  .visual-key {
+    right: 36px;
+    bottom: 64px;
+    opacity: 0.72;
+  }
+}
+
+.brand-panel--ra {
+  background:
+    radial-gradient(circle at 72% 24%, rgba(245, 158, 11, 0.18), transparent 31%), linear-gradient(135deg, #fffdf7 0%, #fff2df 48%, #eaf0fb 100%);
+
+  .brand-logo {
+    color: #c26a03;
+    border-color: #f7a928;
+  }
+
+  .visual-base {
+    background: linear-gradient(145deg, #f6a723, #2869df);
+    box-shadow:
+      0 16px 0 #bd6a10,
+      0 28px 36px rgba(191, 106, 16, 0.18);
+  }
+
+  .visual-platform {
+    background:
+      radial-gradient(circle at 50% 42%, rgba(255, 255, 255, 0.95) 0 18%, rgba(255, 219, 150, 0.5) 19% 42%, transparent 43%),
+      linear-gradient(145deg, #ffc15c, #276fe8);
+  }
+
+  .visual-cert-a,
+  .visual-cert-b {
+    border-bottom: 8px solid rgba(245, 158, 11, 0.32);
+  }
+
+  .visual-app-ra {
+    display: block;
+  }
+
+  .visual-platform,
+  .visual-shield,
+  .visual-cert-a,
+  .visual-cert-b,
+  .visual-key {
+    display: none;
+  }
+
+  .visual-bar {
+    background: linear-gradient(180deg, #ffd071, #e38a13);
+  }
+}
+
+.brand-panel--ocsp {
+  background:
+    radial-gradient(circle at 72% 24%, rgba(34, 197, 94, 0.18), transparent 31%), linear-gradient(135deg, #f8fffb 0%, #e6f8ef 48%, #dcebf8 100%);
+
+  .brand-logo {
+    width: 42px;
+    flex: 0 0 42px;
+    color: #138a45;
+    border-color: #38c878;
+    font-size: 10px;
+  }
+
+  .visual-base {
+    background: linear-gradient(145deg, #22c55e, #0b78d8);
+    box-shadow:
+      0 16px 0 #108241,
+      0 28px 36px rgba(16, 130, 65, 0.16);
+  }
+
+  .visual-platform {
+    background:
+      radial-gradient(circle at 50% 42%, rgba(255, 255, 255, 0.95) 0 14%, rgba(187, 247, 208, 0.55) 15% 42%, transparent 43%),
+      linear-gradient(145deg, #3ee47c, #1379df);
+  }
+
+  .visual-platform::after {
+    position: absolute;
+    left: 35px;
+    top: 58px;
+    width: 52px;
+    height: 24px;
+    content: '';
+    border-left: 5px solid rgba(255, 255, 255, 0.78);
+    border-bottom: 5px solid rgba(255, 255, 255, 0.78);
+    transform: rotate(-45deg);
+  }
+
+  .visual-bar {
+    background: linear-gradient(180deg, #94f7b8, #10a557);
+  }
+
+  .visual-app-ocsp {
+    display: block;
+  }
+
+  .visual-platform,
+  .visual-shield,
+  .visual-cert-a,
+  .visual-cert-b,
+  .visual-key {
+    display: none;
+  }
+}
+
+.brand-panel--nas {
+  background:
+    radial-gradient(circle at 72% 24%, rgba(99, 102, 241, 0.16), transparent 31%), linear-gradient(135deg, #f8fbff 0%, #edf2ff 48%, #e1e8f3 100%);
+
+  .brand-logo {
+    color: #4051c8;
+    border-color: #7282ff;
+  }
+}
+
+.brand-panel--license {
+  background:
+    radial-gradient(circle at 72% 24%, rgba(14, 165, 233, 0.18), transparent 31%), linear-gradient(135deg, #f7fcff 0%, #eaf7ff 48%, #e6eef7 100%);
+
+  .brand-logo {
+    color: #0876a8;
+    border-color: #27b4e8;
+    font-size: 10px;
+  }
+}
+
+@media (max-width: 980px) {
+  .login-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .brand-panel {
+    min-height: 360px;
+    padding: 72px 24px 32px;
+  }
+
+  .brand-visual {
+    width: min(320px, 84vw);
+    height: 230px;
+    transform: scale(0.82);
+    transform-origin: center;
+  }
+
+  .auth-panel {
+    min-height: auto;
+    padding: 36px 24px 76px;
+  }
+}
+
+@media (max-width: 560px) {
+  .brand-panel {
+    min-height: 300px;
+  }
+
+  .brand-header {
+    left: 18px;
+    top: 18px;
+  }
+
+  .brand-visual {
+    height: 196px;
+    margin-top: 0;
+    transform: scale(0.7);
+  }
+
+  .brand-copy h1 {
+    font-size: 20px;
+  }
+
+  .brand-copy p {
+    font-size: 13px;
+  }
+
+  .title-box .title {
+    font-size: 26px;
+  }
+
+  .auth-panel {
+    padding-inline: 20px;
   }
 }
 </style>
