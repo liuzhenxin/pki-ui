@@ -68,7 +68,13 @@
               <el-button v-hasPermi="['ra:alert:rule']" link type="primary" icon="Edit" @click="handleEdit(row)" />
             </el-tooltip>
             <el-tooltip :content="row.ruleStatus === 1 ? '禁用' : '启用'" placement="top">
-              <el-button v-hasPermi="['ra:alert:rule']" link type="primary" :icon="row.ruleStatus === 1 ? 'VideoPause' : 'VideoPlay'" @click="handleStatus(row)" />
+              <el-button
+                v-hasPermi="['ra:alert:rule']"
+                link
+                type="primary"
+                :icon="row.ruleStatus === 1 ? 'VideoPause' : 'VideoPlay'"
+                @click="handleStatus(row)"
+              />
             </el-tooltip>
             <el-tooltip content="删除" placement="top">
               <el-button v-hasPermi="['ra:alert:rule']" link type="danger" icon="Delete" @click="handleDelete(row)" />
@@ -208,7 +214,8 @@ const ruleFormRef = ref<FormInstance>();
 const queryParams = reactive({ pageNum: 1, pageSize: 10, ruleName: '', alertType: '', alertLevel: '', ruleStatus: '' as number | string });
 const dialog = reactive({ visible: false, title: '' });
 
-const defaultCondition = (type = 'cert_expire') => (type === 'pending_approval' ? { maxPendingCount: 10, olderThanHours: 0 } : { days: 30, includeRevoked: false });
+const defaultCondition = (type = 'cert_expire') =>
+  type === 'pending_approval' ? { maxPendingCount: 10, olderThanHours: 0 } : { days: 30, includeRevoked: false };
 const defaultForm = (): RaAlertRule => ({
   ruleName: '',
   alertType: 'cert_expire',
@@ -349,7 +356,8 @@ function normalizeSubmitForm(): RaAlertRule {
     ...form,
     ruleName: form.ruleName.trim(),
     description: form.description?.trim(),
-    thresholdValue: form.alertType === 'pending_approval' ? String(form.triggerCondition.maxPendingCount || 10) : String(form.triggerCondition.days || 30)
+    thresholdValue:
+      form.alertType === 'pending_approval' ? String(form.triggerCondition.maxPendingCount || 10) : String(form.triggerCondition.days || 30)
   };
 }
 

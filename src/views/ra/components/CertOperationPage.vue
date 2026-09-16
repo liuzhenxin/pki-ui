@@ -248,13 +248,7 @@ async function getList() {
       ...item,
       status: item.statusName,
       statusType:
-        item.statusName === '已吊销'
-          ? 'danger'
-          : item.statusName === '已冻结'
-            ? 'warning'
-            : item.statusName === '已过期'
-              ? 'warning'
-              : 'success'
+        item.statusName === '已吊销' ? 'danger' : item.statusName === '已冻结' ? 'warning' : item.statusName === '已过期' ? 'warning' : 'success'
     }));
     total.value = page.total;
   } finally {

@@ -650,9 +650,11 @@ function findRootName(rootId?: number | string) {
 }
 
 function findProfileName(profileId?: number | string) {
-  return rootOptions.value
-    .flatMap((root) => root.profiles || [])
-    .find((item: RaWorkflowProfileOption) => String(item.id) === String(profileId))?.name || profileId || '-';
+  return (
+    rootOptions.value.flatMap((root) => root.profiles || []).find((item: RaWorkflowProfileOption) => String(item.id) === String(profileId))?.name ||
+    profileId ||
+    '-'
+  );
 }
 
 function rootScopeText(row?: RaWorkflowDefinition) {

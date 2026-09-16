@@ -1402,7 +1402,13 @@ onMounted(() => {
                         <span>模板类别</span>
                       </div>
                     </template>
-                    <el-select v-model="form.metadata.category" placeholder="请选择模板类别" style="width: 100%" :disabled="isEdit" @change="handleTemplateCategoryChange">
+                    <el-select
+                      v-model="form.metadata.category"
+                      placeholder="请选择模板类别"
+                      style="width: 100%"
+                      :disabled="isEdit"
+                      @change="handleTemplateCategoryChange"
+                    >
                       <el-option v-for="category in categoryOptions" :key="category.value" :label="category.label" :value="category.value" />
                     </el-select>
                   </el-form-item>
