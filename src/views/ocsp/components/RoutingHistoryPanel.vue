@@ -56,7 +56,9 @@
     <el-drawer v-model="detailVisible" title="脱敏配置历史" size="720px">
       <el-descriptions v-if="selected" :column="2" border
         ><el-descriptions-item label="目标">{{ selected.targetKey }}</el-descriptions-item
-        ><el-descriptions-item label="版本">{{ selected.revision }}</el-descriptions-item></el-descriptions
+        ><el-descriptions-item label="版本">{{ selected.revision }}</el-descriptions-item
+        ><el-descriptions-item label="回滚自">{{ selected.rollbackOf || '-' }}</el-descriptions-item
+        ><el-descriptions-item label="被回滚记录">{{ selected.rolledBackBy?.join(', ') || '-' }}</el-descriptions-item></el-descriptions
       >
       <h4>变更前</h4>
       <pre class="safe-json">{{ formatSafe(selected?.beforeJson) }}</pre>
