@@ -500,12 +500,6 @@ const tenantBrandProfiles: Record<string, typeof defaultTenantBrand> = {
     heading: '注册认证中心',
     subtitle: '承载证书申请、审核流转与业务身份核验'
   },
-  '51': {
-    className: 'brand-panel--ra',
-    logo: 'RA',
-    heading: '注册认证中心',
-    subtitle: '承载证书申请、审核流转与业务身份核验'
-  },
   '6': {
     className: 'brand-panel--ocsp',
     logo: 'OCSP',
@@ -813,7 +807,7 @@ const getTenantAppTitle = (tenantName: string, tenantId: string) => {
   if (tenantId === '3') {
     return `${tenantName} (密钥管理中心)`;
   }
-  if (tenantId === '5' || tenantId === '51') {
+  if (tenantId === '5') {
     return `${tenantName} (注册认证中心)`;
   }
   if (tenantId === '6') {

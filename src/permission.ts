@@ -34,7 +34,7 @@ const getCurrentInitPath = () => {
   if (tenantId === '3') {
     return kmcInitPath;
   }
-  if (tenantId === '5' || tenantId === '51') {
+  if (tenantId === '5') {
     return raInitPath;
   }
   if (tenantId === '6') {
@@ -60,9 +60,6 @@ const getTenantAppTitle = (tenantName: string, tenantId: string, longName = fals
   }
   if (tenantId === '5') {
     return `${tenantName} (${longName ? '注册认证中心' : 'RA'})`;
-  }
-  if (tenantId === '51') {
-    return `${tenantName} (${longName ? '注册认证中心-LiuZX测试' : 'RA2'})`;
   }
   if (tenantId === '6') {
     return `${tenantName} (${longName ? '在线证书状态服务' : 'OCSP'})`;

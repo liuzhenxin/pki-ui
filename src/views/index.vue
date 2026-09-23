@@ -681,7 +681,7 @@ const isOps = computed(() => String(currentTenantId.value) === '1');
 const isKMC = computed(() => String(currentTenantId.value) === '3');
 const isNAS = computed(() => String(currentTenantId.value) === '10');
 const isCA = computed(() => String(currentTenantId.value) === '4');
-const isRA = computed(() => ['5', '51'].includes(String(currentTenantId.value)));
+const isRA = computed(() => String(currentTenantId.value) === '5');
 const isLicense = computed(() => String(currentTenantId.value) === '2');
 const opsVersion = computed(() => import.meta.env.VITE_APP_VERSION || '3.0.3');
 

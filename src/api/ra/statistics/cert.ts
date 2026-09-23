@@ -40,7 +40,7 @@ export interface CertStatisticsQuery {
 
 export function getRaCertStatistics(query: CertStatisticsQuery): Promise<Result<CertStatistics>> {
   return request({
-    url: '/ra2-liuzx/v1/statistics/cert/overview',
+    url: '/ra/v1/statistics/cert/overview',
     method: 'get',
     params: query
   }) as any;

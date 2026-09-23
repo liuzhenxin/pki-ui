@@ -19,7 +19,7 @@ export interface RaProfileCO {
 
 export function pageRaProfile(query: RaProfileQuery): Promise<Result<any>> {
   return request({
-    url: '/ra2-liuzx/v1/profiles/page',
+    url: '/ra/v1/profiles/page',
     method: 'post',
     data: query
   }) as any;
@@ -27,14 +27,14 @@ export function pageRaProfile(query: RaProfileQuery): Promise<Result<any>> {
 
 export function getRaProfile(id: string | number): Promise<Result<RaProfileCO>> {
   return request({
-    url: `/ra2-liuzx/v1/profiles/${id}`,
+    url: `/ra/v1/profiles/${id}`,
     method: 'get'
   }) as any;
 }
 
 export function saveRaProfileApprovalMode(id: string | number, approvalMode: 'required' | 'optional'): Promise<Result<void>> {
   return request({
-    url: `/ra2-liuzx/v1/profiles/${id}/approval-mode`,
+    url: `/ra/v1/profiles/${id}/approval-mode`,
     method: 'post',
     data: { approvalMode }
   }) as any;

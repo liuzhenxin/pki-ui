@@ -33,7 +33,7 @@ export interface TrendStatisticsQuery {
 
 export function getRaTrendStatistics(query: TrendStatisticsQuery): Promise<Result<TrendStatistics>> {
   return request({
-    url: '/ra2-liuzx/v1/statistics/trend/overview',
+    url: '/ra/v1/statistics/trend/overview',
     method: 'get',
     params: query
   }) as any;

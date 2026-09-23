@@ -209,9 +209,44 @@ const stepStatus = (index: number) => {
   return { text: '等待', type: 'info' as const };
 };
 const copyText = async (text: string, message: string) => {
-  await navigator.clipboard.writeText(text);
-  ElMessage.success(message);
+  try {
+    if (window.isSecureContext && navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+    } else if (!copyWithTextarea(text)) {
+      throw new Error('copy failed');
+    }
+    ElMessage.success(message);
+  } catch {
+    if (copyWithTextarea(text)) {
+      ElMessage.success(message);
+      return;
+    }
+    ElMessage.error('复制失败，请手动选择文本');
+  }
 };
+
+/** HTTP 页面没有 Clipboard API，用临时文本框走 execCommand。 */
+function copyWithTextarea(input: string) {
+  const element = document.createElement('textarea');
+  element.value = input;
+  element.setAttribute('readonly', '');
+  element.style.position = 'fixed';
+  element.style.top = '0';
+  element.style.left = '-9999px';
+  document.body.append(element);
+  element.focus();
+  element.select();
+  element.selectionStart = 0;
+  element.selectionEnd = input.length;
+  let ok = false;
+  try {
+    ok = document.execCommand('copy');
+  } catch {
+    ok = false;
+  }
+  element.remove();
+  return ok;
+}
 
 watch(
   () => props.operation?.status,

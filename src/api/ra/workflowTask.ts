@@ -77,7 +77,7 @@ export interface RaOperationSubmitForm {
 
 export function pageRaWorkflowTodo(query: RaWorkflowTaskQuery): Promise<Result<any>> {
   return request({
-    url: '/ra2-liuzx/v1/workflow-tasks/todo/page',
+    url: '/ra/v1/workflow-tasks/todo/page',
     method: 'post',
     data: query
   }) as any;
@@ -85,7 +85,7 @@ export function pageRaWorkflowTodo(query: RaWorkflowTaskQuery): Promise<Result<a
 
 export function pageRaWorkflowDone(query: RaWorkflowTaskQuery): Promise<Result<any>> {
   return request({
-    url: '/ra2-liuzx/v1/workflow-tasks/done/page',
+    url: '/ra/v1/workflow-tasks/done/page',
     method: 'post',
     data: query
   }) as any;
@@ -93,14 +93,14 @@ export function pageRaWorkflowDone(query: RaWorkflowTaskQuery): Promise<Result<a
 
 export function getRaWorkflowTask(id: string | number): Promise<Result<RaWorkflowTask>> {
   return request({
-    url: `/ra2-liuzx/v1/workflow-tasks/${id}`,
+    url: `/ra/v1/workflow-tasks/${id}`,
     method: 'get'
   }) as any;
 }
 
 export function approveRaWorkflowTask(id: string | number, comment?: string): Promise<Result<void>> {
   return request({
-    url: `/ra2-liuzx/v1/workflow-tasks/${id}/approve`,
+    url: `/ra/v1/workflow-tasks/${id}/approve`,
     method: 'post',
     data: { comment }
   }) as any;
@@ -108,7 +108,7 @@ export function approveRaWorkflowTask(id: string | number, comment?: string): Pr
 
 export function rejectRaWorkflowTask(id: string | number, comment: string): Promise<Result<void>> {
   return request({
-    url: `/ra2-liuzx/v1/workflow-tasks/${id}/reject`,
+    url: `/ra/v1/workflow-tasks/${id}/reject`,
     method: 'post',
     data: { comment }
   }) as any;
@@ -116,7 +116,7 @@ export function rejectRaWorkflowTask(id: string | number, comment: string): Prom
 
 export function pageRaOperationCert(query: RaOperationCertQuery): Promise<Result<any>> {
   return request({
-    url: '/ra2-liuzx/v1/workflow-tasks/certs/page',
+    url: '/ra/v1/workflow-tasks/certs/page',
     method: 'post',
     data: query
   }) as any;
@@ -124,7 +124,7 @@ export function pageRaOperationCert(query: RaOperationCertQuery): Promise<Result
 
 export function submitRaOperation(data: RaOperationSubmitForm): Promise<Result<void>> {
   return request({
-    url: '/ra2-liuzx/v1/workflow-tasks/operations',
+    url: '/ra/v1/workflow-tasks/operations',
     method: 'post',
     data
   }) as any;

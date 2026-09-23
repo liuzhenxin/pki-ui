@@ -626,6 +626,38 @@ const availableSubjectAltNameModeOptions = computed(() => {
   return subjectAltNameModeOptions.filter((item) => allowed.has(item.value));
 });
 
+/** 建议项之外、但当前已保存的值仍要显示，否则页面上没有复选框，无法取消。 */
+function optionsWithSelectedOutside(
+  allowed: Array<{ value: string; label: string }>,
+  catalog: Array<{ value: string; label: string }>,
+  selected: string[] | undefined
+) {
+  const allowedValues = new Set(allowed.map((item) => item.value));
+  const extras = (selected || [])
+    .filter((value) => value && !allowedValues.has(value))
+    .map((value) => {
+      const known = catalog.find((item) => item.value === value);
+      return { value, label: known?.label || value, outsideSuggestion: true };
+    });
+  return [...allowed.map((item) => ({ value: item.value, label: item.label, outsideSuggestion: false })), ...extras];
+}
+
+function keyUsageOptionsForExtension(index: number) {
+  return optionsWithSelectedOutside(availableKeyUsageOptions.value, keyUsageOptions, selectedKeyUsages.value[index]);
+}
+
+function extendedKeyUsageOptionsForExtension(index: number) {
+  return optionsWithSelectedOutside(availableExtendedKeyUsageOptions.value, extendedKeyUsageOptions, selectedExtendedKeyUsages.value[index]);
+}
+
+function subjectAltNameModeOptionsForExtension(index: number) {
+  return optionsWithSelectedOutside(
+    availableSubjectAltNameModeOptions.value,
+    subjectAltNameModeOptions,
+    selectedSubjectAltNameModes.value[index]
+  );
+}
+
 function parseValidityDays(validity?: string) {
   const match = (validity || '').match(/^(\d+)([ymd])$/);
   if (!match) {
@@ -1732,7 +1764,7 @@ onMounted(() => {
                       <el-divider content-position="left" style="margin: 15px 0">密钥用法配置</el-divider>
                       <div class="keyusages-checkbox-list">
                         <div class="keyusage-grid">
-                          <div v-for="opt in availableKeyUsageOptions" :key="opt.value" class="keyusage-checkbox-item">
+                          <div v-for="opt in keyUsageOptionsForExtension(index)" :key="opt.value" class="keyusage-checkbox-item">
                             <el-row :gutter="8" align="middle">
                               <el-col :span="16">
                                 <el-checkbox
@@ -1751,6 +1783,7 @@ onMounted(() => {
                                   "
                                 >
                                   {{ opt.label }}
+                                  <el-tag v-if="opt.outsideSuggestion" type="warning" size="small" effect="plain" style="margin-left: 6px">可取消</el-tag>
                                 </el-checkbox>
                               </el-col>
                               <el-col :span="8">
@@ -1774,14 +1807,14 @@ onMounted(() => {
                       <el-divider content-position="left" style="margin: 15px 0">增强密钥用法配置</el-divider>
                       <div class="keyusages-checkbox-list">
                         <el-alert
-                          v-if="availableExtendedKeyUsageOptions.length === 0"
+                          v-if="extendedKeyUsageOptionsForExtension(index).length === 0"
                           type="info"
                           :closable="false"
                           show-icon
                           title="当前证书级别不建议配置增强密钥用法"
                         />
                         <div v-else class="keyusage-grid">
-                          <div v-for="opt in availableExtendedKeyUsageOptions" :key="opt.value" class="keyusage-checkbox-item">
+                          <div v-for="opt in extendedKeyUsageOptionsForExtension(index)" :key="opt.value" class="keyusage-checkbox-item">
                             <el-row :gutter="8" align="middle">
                               <el-col :span="16">
                                 <el-checkbox
@@ -1800,6 +1833,7 @@ onMounted(() => {
                                   "
                                 >
                                   {{ opt.label }}
+                                  <el-tag v-if="opt.outsideSuggestion" type="warning" size="small" effect="plain" style="margin-left: 6px">可取消</el-tag>
                                 </el-checkbox>
                               </el-col>
                               <el-col :span="8">
@@ -1824,9 +1858,10 @@ onMounted(() => {
                       <div class="keyusages-checkbox-list">
                         <el-checkbox-group v-model="selectedSubjectAltNameModes[index]" @change="handleSubjectAltNameModeGroupChange(index, $event)">
                           <div class="keyusage-grid">
-                            <div v-for="opt in availableSubjectAltNameModeOptions" :key="opt.value" class="keyusage-checkbox-item">
+                            <div v-for="opt in subjectAltNameModeOptionsForExtension(index)" :key="opt.value" class="keyusage-checkbox-item">
                               <el-checkbox :value="opt.value">
                                 {{ opt.label }}
+                                <el-tag v-if="opt.outsideSuggestion" type="warning" size="small" effect="plain" style="margin-left: 6px">可取消</el-tag>
                               </el-checkbox>
                             </div>
                           </div>

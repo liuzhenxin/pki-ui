@@ -39,7 +39,7 @@ export interface UserStatisticsQuery {
 
 export function getRaUserStatistics(query: UserStatisticsQuery): Promise<Result<UserStatistics>> {
   return request({
-    url: '/ra2-liuzx/v1/statistics/user/overview',
+    url: '/ra/v1/statistics/user/overview',
     method: 'get',
     params: query
   }) as any;
