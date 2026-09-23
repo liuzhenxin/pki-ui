@@ -68,6 +68,22 @@
           <el-checkbox v-model="form.includeCerts">包含证书链</el-checkbox>
           <el-checkbox v-model="form.nonceEnabled">启用 Nonce</el-checkbox>
         </el-form-item>
+        <el-collapse>
+          <el-collapse-item title="高级协议扩展（默认关闭）" name="protocol">
+            <el-form-item label="Archive Cutoff"><el-switch v-model="form.protocolExtensionPolicy!.archiveCutoffEnabled" /></el-form-item>
+            <el-form-item v-if="form.protocolExtensionPolicy?.archiveCutoffEnabled" label="Cutoff 值"
+              ><el-input v-model="form.protocolExtensionPolicy!.archiveCutoff" placeholder="UTC/GeneralizedTime 风格值"
+            /></el-form-item>
+            <el-form-item label="CRL 引用"><el-switch v-model="form.protocolExtensionPolicy!.crlReferenceEnabled" /></el-form-item>
+            <el-form-item v-if="form.protocolExtensionPolicy?.crlReferenceEnabled" label="CRL URL"
+              ><el-input v-model="form.protocolExtensionPolicy!.crlUrl" placeholder="不得包含账号、口令或 token"
+            /></el-form-item>
+            <el-form-item v-if="form.protocolExtensionPolicy?.crlReferenceEnabled" label="CRL Number"
+              ><el-input v-model="form.protocolExtensionPolicy!.crlNumber"
+            /></el-form-item>
+            <el-form-item label="签名算法协商"><el-switch v-model="form.protocolExtensionPolicy!.preferredSignatureEnabled" /></el-form-item>
+          </el-collapse-item>
+        </el-collapse>
         <el-form-item label="签名配置" prop="signerConf">
           <el-input
             v-model="form.signerConf"
@@ -127,7 +143,12 @@ const form = reactive<OcspResponder>({
   signerCert: '',
   responseValidity: 3600,
   includeCerts: true,
-  nonceEnabled: true
+  nonceEnabled: true,
+  protocolExtensionPolicy: {
+    archiveCutoffEnabled: false,
+    crlReferenceEnabled: false,
+    preferredSignatureEnabled: false
+  }
 });
 
 const rules: FormRules = {
@@ -191,7 +212,12 @@ const openEdit = async (row?: OcspResponder) => {
       signerCert: '',
       responseValidity: 3600,
       includeCerts: true,
-      nonceEnabled: true
+      nonceEnabled: true,
+      protocolExtensionPolicy: {
+        archiveCutoffEnabled: false,
+        crlReferenceEnabled: false,
+        preferredSignatureEnabled: false
+      }
     });
     certSource.value = 'CSR';
   }
@@ -213,6 +239,10 @@ const submit = async () => {
     return;
   }
   try {
+    const crlUrl = form.protocolExtensionPolicy?.crlUrl || '';
+    if (/@|password=|passwd=|secret=|token=|pin=/i.test(crlUrl)) {
+      throw new Error('CRL URL 不得包含凭据或敏感参数');
+    }
     form.signerConf = assertSafeSignerConf(form.signerConf || '');
     form.signerCert = assertSafeSignerCert(form.signerCert || '');
   } catch (error: any) {

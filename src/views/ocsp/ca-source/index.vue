@@ -10,6 +10,9 @@
       </div>
     </el-card>
 
+    <RoutingHistoryPanel />
+    <CanaryPanel />
+
     <el-card shadow="hover">
       <el-alert
         v-if="probeResult"
@@ -244,6 +247,8 @@
 import { computed, onMounted, reactive, ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { listOcspCaStatusSources, probeOcspCaStatusSource, removeOcspCaStatusSource, saveOcspCaStatusSource } from '@/api/ocsp/caSource';
+import RoutingHistoryPanel from '@/views/ocsp/components/RoutingHistoryPanel.vue';
+import CanaryPanel from '@/views/ocsp/components/CanaryPanel.vue';
 import type { OcspProbe, OcspStatusSource } from '@/api/ocsp/types';
 
 const CA_DB_TEMPLATE = {
