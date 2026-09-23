@@ -30,7 +30,7 @@ RUN case "$BUILD_TARGET" in \
 # ============================================
 # Stage 2: 运行阶段
 # ============================================
-FROM nginx:alpine
+FROM nginx:1.28.3-alpine
 
 # 时区设置
 RUN apk add --no-cache tzdata && \
