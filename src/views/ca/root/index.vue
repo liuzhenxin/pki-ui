@@ -68,7 +68,9 @@
             >授权模板</el-button
           >
           <el-button link type="primary" icon="Setting" @click="handleCrlConfig(scope.row)" v-hasPermi="['ca:root:crl-config']">CRL配置</el-button>
-          <el-button link type="primary" icon="Link" @click="handleBindPublishers(scope.row)" v-hasPermi="['ca:publisher:save']">关联发布者</el-button>
+          <el-button link type="primary" icon="Link" @click="handleBindPublishers(scope.row)" v-hasPermi="['ca:publisher:save']"
+            >关联发布者</el-button
+          >
           <el-button
             v-if="scope.row.caStatus !== 'inactive'"
             link
@@ -278,10 +280,14 @@
                 <div v-for="(ext, extIndex) in onlineSubForm.extensionItems" :key="ext.key" class="sub-extension-item">
                   <div class="sub-extension-title">
                     <span>{{ ext.label }}</span>
-                    <el-tag v-if="ext.required" type="danger" size="small" effect="plain">必填</el-tag>
+                    <el-tag v-if="ext.kind === 'templateManaged'" type="success" size="small" effect="plain">模板内置</el-tag>
+                    <el-tag v-else-if="ext.required" type="danger" size="small" effect="plain">必填</el-tag>
                     <el-tag v-else type="info" size="small" effect="plain">可选</el-tag>
                   </div>
-                  <template v-if="ext.kind === 'subjectAlternativeName'">
+                  <template v-if="ext.kind === 'templateManaged'">
+                    <el-text type="info">{{ ext.summary }}</el-text>
+                  </template>
+                  <template v-else-if="ext.kind === 'subjectAlternativeName'">
                     <div v-for="(name, nameIndex) in ext.names" :key="`${ext.key}-${nameIndex}`" class="san-row">
                       <el-select v-model="name.type" placeholder="类型" style="width: 130px">
                         <el-option v-for="mode in ext.modes" :key="mode" :label="getSanModeLabel(mode)" :value="mode" />
@@ -916,85 +922,115 @@ function normalizeKeyUsageValue(usage: any) {
 }
 
 function getTemplateKeyUsages(ext: any) {
-  const values = (ext?.keyUsage?.usages || [])
-    .map(normalizeKeyUsageValue)
-    .filter((value: string) => keyUsageOptions.some((item) => item.value === value));
-  return Array.from(new Set(values));
+  const values = (ext?.keyUsage?.usages || []).flatMap((usage: any) => {
+    if (Array.isArray(usage?.required) || Array.isArray(usage?.optional)) {
+      return [...(usage.required || []), ...(usage.optional || [])];
+    }
+    return [normalizeKeyUsageValue(usage)];
+  });
+  return Array.from(new Set(values.filter((value: string) => keyUsageOptions.some((item) => item.value === value))));
+}
+
+function getTemplateManagedExtensionSummary(ext: any) {
+  const meta = getExtensionTypeMeta(ext);
+  const key = normalizeExtensionKey(meta.description);
+  if (key === 'basicconstraints') {
+    const pathLen = ext?.basicConstraints?.pathLen;
+    return pathLen === undefined ? '由模板设置 CA 基本约束' : `由模板设置 CA 基本约束，路径长度：${pathLen}`;
+  }
+  if (key === 'authorityinfoaccess') {
+    const entries = [];
+    if (ext?.authorityInfoAccess?.includeCaIssuers) entries.push('CA 颁发者地址');
+    if (ext?.authorityInfoAccess?.includeOcsp) entries.push('OCSP 地址');
+    return entries.length ? `由签发服务自动写入：${entries.join('、')}` : '由签发服务根据模板自动写入';
+  }
+  if (key === 'subjectkeyidentifier') return '由证书公钥自动生成';
+  if (key === 'authoritykeyidentifier') return '由上级 CA 证书自动生成';
+  if (key === 'crldistributionpoints') return '由上级 CA 的 CRL 配置自动生成';
+  return '由证书模板和签发服务自动生成，无需手工填写';
 }
 
 function buildSubCaExtensionItems(extensions: any[]) {
-  return (extensions || [])
-    .filter((ext: any) => ext?.inRequest === 'required' || ext?.inRequest === 'optional' || (ext?.required && ext?.subjectAltName))
-    .map((ext: any, index: number) => {
-      const meta = getExtensionTypeMeta(ext);
-      const key = normalizeExtensionKey(meta.description);
-      const modes = ext?.subjectAltName?.modes?.length ? ext.subjectAltName.modes : ['DNSName'];
-      if (key === 'subjectalternativename') {
-        return {
-          key: `${meta.oid || meta.description || 'san'}-${index}`,
-          kind: 'subjectAlternativeName',
-          label: getExtensionLabel(ext),
-          oid: meta.oid,
-          description: meta.description,
-          critical: !!ext.critical,
-          required: ext.inRequest === 'required' || !!ext.required,
-          modes,
-          names: [{ type: modes[0], value: '' }]
-        };
-      }
-      if (key === 'subjectinfoaccess') {
-        const accessMethods = (ext?.subjectInfoAccess?.accesses || []).map((access: any) => ({
-          oid: access?.accessMethod?.oid || '',
-          description: access?.accessMethod?.description || access?.accessMethod?.oid || '',
-          modes: access?.accessLocation?.modes?.length ? access.accessLocation.modes : ['uniformResourceIdentifier']
-        }));
-        const defaultMethod = accessMethods[0] || {
-          oid: '1.3.6.1.5.5.7.48.5',
-          description: 'ad-caRepository',
-          modes: ['uniformResourceIdentifier']
-        };
-        return {
-          key: `${meta.oid || meta.description || 'sia'}-${index}`,
-          kind: 'subjectInfoAccess',
-          label: getExtensionLabel(ext),
-          oid: meta.oid,
-          description: meta.description,
-          critical: !!ext.critical,
-          required: ext.inRequest === 'required' || !!ext.required,
-          accessMethods,
-          accesses: [
-            {
-              accessMethodOid: defaultMethod.oid,
-              locationType: defaultMethod.modes[0],
-              locationValue: '',
-              modes: defaultMethod.modes
-            }
-          ]
-        };
-      }
-      if (key === 'keyusage') {
-        return {
-          key: `${meta.oid || meta.description || 'keyusage'}-${index}`,
-          kind: 'keyUsage',
-          label: getExtensionLabel(ext),
-          oid: meta.oid || '2.5.29.15',
-          description: meta.description || 'keyUsage',
-          critical: !!ext.critical,
-          required: ext.inRequest === 'required' || !!ext.required,
-          usages: getTemplateKeyUsages(ext)
-        };
-      }
+  return (extensions || []).map((ext: any, index: number) => {
+    const meta = getExtensionTypeMeta(ext);
+    const key = normalizeExtensionKey(meta.description);
+    const requestable = ext?.inRequest === 'required' || ext?.inRequest === 'optional' || (ext?.required && ext?.subjectAltName);
+    const modes = ext?.subjectAltName?.modes?.length ? ext.subjectAltName.modes : ['DNSName'];
+    if (!requestable) {
       return {
-        key: `${meta.oid || meta.description || 'ext'}-${index}`,
-        kind: 'generic',
+        key: `${meta.oid || meta.description || 'managed'}-${index}`,
+        kind: 'templateManaged',
+        label: getExtensionLabel(ext),
+        required: !!ext.required,
+        summary: getTemplateManagedExtensionSummary(ext)
+      };
+    }
+    if (key === 'subjectalternativename') {
+      return {
+        key: `${meta.oid || meta.description || 'san'}-${index}`,
+        kind: 'subjectAlternativeName',
         label: getExtensionLabel(ext),
         oid: meta.oid,
         description: meta.description,
         critical: !!ext.critical,
         required: ext.inRequest === 'required' || !!ext.required,
-        value: ''
+        modes,
+        names: [{ type: modes[0], value: '' }]
       };
-    });
+    }
+    if (key === 'subjectinfoaccess') {
+      const accessMethods = (ext?.subjectInfoAccess?.accesses || []).map((access: any) => ({
+        oid: access?.accessMethod?.oid || '',
+        description: access?.accessMethod?.description || access?.accessMethod?.oid || '',
+        modes: access?.accessLocation?.modes?.length ? access.accessLocation.modes : ['uniformResourceIdentifier']
+      }));
+      const defaultMethod = accessMethods[0] || {
+        oid: '1.3.6.1.5.5.7.48.5',
+        description: 'ad-caRepository',
+        modes: ['uniformResourceIdentifier']
+      };
+      return {
+        key: `${meta.oid || meta.description || 'sia'}-${index}`,
+        kind: 'subjectInfoAccess',
+        label: getExtensionLabel(ext),
+        oid: meta.oid,
+        description: meta.description,
+        critical: !!ext.critical,
+        required: ext.inRequest === 'required' || !!ext.required,
+        accessMethods,
+        accesses: [
+          {
+            accessMethodOid: defaultMethod.oid,
+            locationType: defaultMethod.modes[0],
+            locationValue: '',
+            modes: defaultMethod.modes
+          }
+        ]
+      };
+    }
+    if (key === 'keyusage') {
+      return {
+        key: `${meta.oid || meta.description || 'keyusage'}-${index}`,
+        kind: 'keyUsage',
+        label: getExtensionLabel(ext),
+        oid: meta.oid || '2.5.29.15',
+        description: meta.description || 'keyUsage',
+        critical: !!ext.critical,
+        required: ext.inRequest === 'required' || !!ext.required,
+        usages: getTemplateKeyUsages(ext)
+      };
+    }
+    return {
+      key: `${meta.oid || meta.description || 'ext'}-${index}`,
+      kind: 'generic',
+      label: getExtensionLabel(ext),
+      oid: meta.oid,
+      description: meta.description,
+      critical: !!ext.critical,
+      required: ext.inRequest === 'required' || !!ext.required,
+      value: ''
+    };
+  });
 }
 
 function getSanModeLabel(mode: string) {
@@ -1071,6 +1107,7 @@ function onSubSiaAccessMethodChange(extIndex: number, accessIndex: number) {
 function buildSubCaExtensionsPayload() {
   const extensions = (onlineSubForm.value.extensionItems || [])
     .map((ext: any) => {
+      if (ext.kind === 'templateManaged') return null;
       if (ext.kind === 'subjectAlternativeName') {
         const names = (ext.names || [])
           .filter((name: any) => name.value && String(name.value).trim())
@@ -1131,7 +1168,7 @@ function buildSubCaExtensionsPayload() {
 
 function validateSubCaExtensions() {
   for (const ext of onlineSubForm.value.extensionItems || []) {
-    if (!ext.required) continue;
+    if (ext.kind === 'templateManaged' || !ext.required) continue;
     if (ext.kind === 'subjectAlternativeName') {
       const hasValue = (ext.names || []).some((name: any) => name.value && String(name.value).trim());
       if (!hasValue) {
