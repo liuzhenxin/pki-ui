@@ -41,8 +41,8 @@ RUN apk add --no-cache tzdata && \
 # 复制构建产物
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-# 复制 Nginx 配置
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# 使用官方镜像的 envsubst 模板，在容器启动时注入网关地址。
+COPY docker/default.conf.template /etc/nginx/templates/default.conf.template
 
 # 健康检查
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
