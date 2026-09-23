@@ -27,6 +27,7 @@
         ><el-col :span="12"
           ><el-form-item label="变更原因"><el-input v-model="reason" maxlength="255" /></el-form-item></el-col
       ></el-row>
+      <el-button :disabled="!form.caId" :loading="busy" @click="loadCandidate">加载当前候选</el-button>
       <el-button v-hasPermi="['ocsp:source:save']" type="primary" :loading="busy" @click="stage">暂存并健康检查</el-button>
     </el-form>
     <el-descriptions v-if="candidate" class="candidate" :column="4" border>
@@ -45,18 +46,13 @@
       >
       <el-button v-hasPermi="['ocsp:source:publish']" type="danger" :loading="busy" @click="abort">废弃</el-button>
     </div>
-    <el-alert
-      title="候选状态当前由本次暂存响应维护；刷新后可从配置历史查看证据，后端尚未提供候选查询接口。"
-      type="info"
-      :closable="false"
-      class="note"
-    />
+    <el-alert title="候选与已发布权威相互隔离；只有健康候选可启用或原子提升。" type="info" :closable="false" class="note" />
   </el-card>
 </template>
 <script setup lang="ts">
 import { reactive, ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { abortOcspCanary, disableOcspCanary, enableOcspCanary, promoteOcspCanary, stageOcspCanary } from '@/api/ocsp/operations';
+import { abortOcspCanary, disableOcspCanary, enableOcspCanary, getActiveOcspCanary, promoteOcspCanary, stageOcspCanary } from '@/api/ocsp/operations';
 import type { OcspCanaryCandidate, OcspCanaryScope, OcspStatusSource } from '@/api/ocsp/types';
 const busy = ref(false);
 const candidate = ref<OcspCanaryCandidate>();
@@ -79,6 +75,11 @@ const run = async (fn: () => Promise<any>) => {
   } finally {
     busy.value = false;
   }
+};
+const loadCandidate = async () => {
+  if (!form.caId) return;
+  candidate.value = (await run(() => getActiveOcspCanary(form.caId!))) || undefined;
+  if (!candidate.value) ElMessage.info('该 CA 暂无活动候选');
 };
 const stage = async () => {
   if (!guard()) return;
