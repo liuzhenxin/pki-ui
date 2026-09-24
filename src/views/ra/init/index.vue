@@ -15,7 +15,7 @@
         <el-step title="协议" />
         <el-step title="RA身份证书" />
         <el-step title="同步CA" />
-        <el-step title="审批流程" />
+        <el-step title="审批配置" />
         <el-step title="管理员设置" />
         <el-step title="审计员设置" />
         <el-step title="完成" />
@@ -158,13 +158,13 @@
 
         <section v-if="activeStep === 3" class="step-content">
           <div class="step-title">
-            <h2>审批流程初始化</h2>
-            <p>写入 RA 默认配置和证书申请审批流程。</p>
+            <h2>审批配置初始化</h2>
+            <p>写入证书申请的默认审批配置。是否人工审核由证书模板的审核策略决定。</p>
           </div>
           <el-descriptions border :column="1" class="init-summary">
             <el-descriptions-item label="CA模式">接入已有 CA，不在 RA 保存 CA 私钥</el-descriptions-item>
-            <el-descriptions-item label="证书申请">启用注册申请、资料审核、证书签发的默认流程</el-descriptions-item>
-            <el-descriptions-item label="审批规则">默认一审，由 RA 审核员处理</el-descriptions-item>
+            <el-descriptions-item label="证书申请">保留注册申请、资料审核和证书签发</el-descriptions-item>
+            <el-descriptions-item label="审批规则">模板为人工审核时由 RA 审核员处理，模板为自动审核时直接通过</el-descriptions-item>
             <el-descriptions-item label="审计要求">初始化后启用操作审计和生命周期策略</el-descriptions-item>
           </el-descriptions>
         </section>
@@ -516,7 +516,7 @@ const statusCards = computed(() => [
   { label: '模板', value: statusInfo.value.profileCount ?? 0 },
   { label: 'CA根', value: statusInfo.value.rootCount ?? 0 },
   { label: '授权关系', value: statusInfo.value.relationCount ?? 0 },
-  { label: '流程', value: statusInfo.value.workflowCount ?? 0 },
+  { label: '审批配置', value: statusInfo.value.workflowCount ?? 0 },
   { label: '账号', value: statusInfo.value.userCount ?? 0 }
 ]);
 
@@ -976,7 +976,7 @@ const next = async () => {
     } else if (activeStep.value === 3) {
       await initWorkflow();
       await loadInitInfo();
-      ElMessage.success('审批流程已初始化');
+      ElMessage.success('审批配置已初始化');
     } else if (activeStep.value === 4) {
       const valid = await adminFormRef.value?.validate().catch(() => false);
       if (!valid) {
