@@ -347,7 +347,7 @@
                       <el-checkbox
                         v-for="usage in getAllowedUsageOptions(keyUsageOptions, ext)"
                         :key="usage.value"
-                        :label="usage.value"
+                        :value="usage.value"
                         :disabled="ext.requiredUsages.includes(usage.value)"
                       >
                         {{ usage.label }}
@@ -359,7 +359,7 @@
                       <el-checkbox
                         v-for="usage in getAllowedUsageOptions(extendedKeyUsageOptions, ext)"
                         :key="usage.value"
-                        :label="usage.value"
+                        :value="usage.value"
                         :disabled="ext.requiredUsages.includes(usage.value)"
                       >
                         {{ usage.label }}
@@ -1898,13 +1898,30 @@ function normalizeKeyUsageValues(usages: any[]) {
     .filter((usage: string) => validValues.has(usage));
 }
 
+function canonicalizeExtendedKeyUsage(raw: any) {
+  const text = String(typeof raw === 'object' ? raw?.value || raw?.oid || raw?.description || '' : raw || '').trim();
+  if (!text) return '';
+  const matched = extendedKeyUsageOptions.find((item) => item.value === text || item.label === text);
+  if (matched) return matched.value;
+  const oidMap: Record<string, string> = {
+    '1.3.6.1.5.5.7.3.1': 'serverAuth',
+    '1.3.6.1.5.5.7.3.2': 'clientAuth',
+    '1.3.6.1.5.5.7.3.3': 'codeSigning',
+    '1.3.6.1.5.5.7.3.4': 'emailProtection',
+    '1.3.6.1.5.5.7.3.5': 'ipsecEndSystem',
+    '1.3.6.1.5.5.7.3.6': 'ipsecTunnel',
+    '1.3.6.1.5.5.7.3.7': 'ipsecUser',
+    '1.3.6.1.5.5.7.3.8': 'timeStamping',
+    '1.3.6.1.5.5.7.3.9': 'OCSPSigning',
+    '2.5.29.37.0': 'anyExtendedKeyUsage'
+  };
+  return oidMap[text] || '';
+}
+
 function normalizeExtendedKeyUsageValues(usages: any[]) {
   if (!Array.isArray(usages)) return [];
-  const validValues = new Set(extendedKeyUsageOptions.map((item) => item.value));
-  return usages
-    .map((usage: any) => (typeof usage === 'object' ? usage.value || usage.oid || usage.description : usage))
-    .map((usage: any) => String(usage || '').trim())
-    .filter((usage: string) => validValues.has(usage));
+  const values = usages.map((usage: any) => canonicalizeExtendedKeyUsage(usage)).filter(Boolean);
+  return [...new Set(values)];
 }
 
 function getSanModeLabel(mode: string) {

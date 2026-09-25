@@ -955,6 +955,7 @@ function buildProfileConf() {
               const oidInfo = extendedKeyUsageOIDMap[normalizeUsageValue(u)] || { oid: normalizeUsageValue(u), description: normalizeUsageValue(u) };
               return {
                 required: u.required || false,
+                value: normalizeUsageValue(u),
                 oid: oidInfo.oid,
                 description: oidInfo.description
               };
