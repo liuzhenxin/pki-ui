@@ -485,7 +485,7 @@ const templateConstraints: Record<string, TemplateConstraint> = {
     requiredSubjectFields: ['commonName'],
     keyUsages: ['digitalSignature', 'keyEncipherment', 'dataEncipherment', 'keyAgreement'],
     requiredKeyUsages: ['digitalSignature'],
-    extendedKeyUsages: ['serverAuth'],
+    extendedKeyUsages: ['serverAuth', 'clientAuth'],
     requiredExtendedKeyUsages: ['serverAuth'],
     subjectAltNameModes: ['DNSName', 'IPAddress', 'dNSName', 'iPAddress']
   },
