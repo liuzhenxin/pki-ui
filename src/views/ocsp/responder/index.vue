@@ -2,13 +2,9 @@
   <div class="app-container ocsp-page">
     <ResponderDetail v-if="selectedId" :id="selectedId" :revision="detailRevision" @back="closeDetail" @edit="openEdit" @certificate="openCert" />
     <template v-else>
-      <header class="page-heading">
-        <div>
-          <h1>响应者管理</h1>
-          <p>查看响应者、签名证书和关联数据源。</p>
-        </div>
-        <el-button v-hasPermi="['ocsp:responder:save']" type="primary" icon="Plus" @click="openEdit()">新建响应者</el-button>
-      </header>
+      <OcspPageHeader title="响应者管理" description="查看响应者、签名证书和关联数据源。"
+        ><el-button v-hasPermi="['ocsp:responder:save']" type="primary" icon="Plus" @click="openEdit()">新建响应者</el-button></OcspPageHeader
+      >
       <el-card shadow="never" class="mb16">
         <el-form :inline="true" :model="query">
           <el-form-item label="名称">
@@ -30,14 +26,20 @@
       <el-card shadow="never">
         <el-table v-loading="loading" :data="rows" border>
           <template #empty>
-            <el-empty description="暂无响应者" />
+            <OcspEmptyState
+              v-if="!loading"
+              :error="loadError"
+              :title="loadError ? '响应者读取失败' : '暂无响应者'"
+              :description="loadError ? '请重试，或检查当前账号的访问权限。' : '可调整筛选条件，或创建用于签名响应的响应者。'"
+              ><el-button @click="loadError ? getList() : resetQuery()">{{ loadError ? '重新加载' : '重置筛选' }}</el-button></OcspEmptyState
+            >
           </template>
           <el-table-column prop="name" label="名称" min-width="180"
             ><template #default="{ row }"
               ><el-button link type="primary" @click="openDetail(row)">{{ row.name }}</el-button></template
             ></el-table-column
           >
-          <el-table-column prop="caId" label="CA ID" width="90" />
+          <el-table-column prop="caId" label="CA ID" min-width="190" />
           <el-table-column label="签名类型" min-width="130"
             ><template #default="{ row }">{{ signerTypeLabel(row.signerType) }}</template></el-table-column
           >
@@ -130,6 +132,8 @@
 </template>
 
 <script setup name="OcspResponder" lang="ts">
+import OcspPageHeader from '@/views/ocsp/components/OcspPageHeader.vue';
+import OcspEmptyState from '@/views/ocsp/components/OcspEmptyState.vue';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import type { FormInstance, FormRules } from 'element-plus';
@@ -157,6 +161,7 @@ const closeDetail = () => {
   router.push({ path: route.path, query });
 };
 const loading = ref(false);
+const loadError = ref(false);
 const saving = ref(false);
 const rows = ref<OcspResponder[]>([]);
 const total = ref(0);
@@ -209,10 +214,15 @@ const rules: FormRules = {
 
 const getList = async () => {
   loading.value = true;
+  loadError.value = false;
   try {
     const page = await pageOcspResponders(query);
     rows.value = page?.records || [];
     total.value = page?.total || 0;
+  } catch {
+    rows.value = [];
+    total.value = 0;
+    loadError.value = true;
   } finally {
     loading.value = false;
   }
@@ -345,28 +355,9 @@ onMounted(getList);
 .ocsp-page {
   padding: 24px;
 }
-.page-heading {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 16px;
-  margin-bottom: 24px;
-}
-.page-heading h1 {
-  font-size: 26px;
-  margin: 0 0 10px;
-}
-.page-heading p {
-  margin: 0;
-  color: var(--el-text-color-secondary);
-}
 @media (max-width: 760px) {
   .ocsp-page {
     padding: 12px;
-  }
-  .page-heading {
-    align-items: flex-start;
-    flex-direction: column;
   }
 }
 .mb16 {

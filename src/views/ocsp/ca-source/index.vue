@@ -1,18 +1,13 @@
 <template>
   <div class="app-container ocsp-page">
-    <el-card shadow="never" class="mb16">
-      <div class="card-header">
-        <span>状态数据源 · 按 CA 配置</span>
-        <div>
-          <el-button icon="Refresh" @click="getList">刷新</el-button>
-          <el-button v-hasPermi="['ocsp:source:save']" type="primary" plain icon="Plus" @click="openEdit()">新建</el-button>
-        </div>
-      </div>
-    </el-card>
+    <OcspPageHeader title="按 CA 配置" description="为指定 CA 设置证书状态来源，查看路由与发布记录。"
+      ><el-button icon="Refresh" @click="getList">刷新</el-button
+      ><el-button v-hasPermi="['ocsp:source:save']" type="primary" icon="Plus" @click="openEdit()">新建数据源</el-button></OcspPageHeader
+    >
 
     <el-tabs v-model="activeTab"
       ><el-tab-pane label="数据源列表" name="sources">
-        <el-card shadow="hover">
+        <el-card shadow="never">
           <el-alert
             v-if="probeResult"
             :title="probeResult.ok ? '探测成功' : '探测失败（仍可保存）'"
@@ -24,9 +19,15 @@
           />
           <el-table v-loading="loading" :data="rows" border>
             <template #empty>
-              <el-empty description="暂无 CA 数据源配置" />
+              <OcspEmptyState
+                v-if="!loading"
+                :error="loadError"
+                :title="loadError ? '数据源读取失败' : '暂无 CA 数据源配置'"
+                :description="loadError ? '请重试，当前来源配置尚未确认。' : '按 CA 配置可覆盖默认来源，创建后请检查路由与发布状态。'"
+                ><el-button v-if="loadError" @click="getList">重新加载</el-button></OcspEmptyState
+              >
             </template>
-            <el-table-column prop="caId" label="CA ID" width="90" />
+            <el-table-column prop="caId" label="CA ID" min-width="190" />
             <el-table-column prop="name" label="名称" min-width="120" />
             <el-table-column label="类型" width="80" align="center">
               <template #default="{ row }">
@@ -238,6 +239,8 @@
 </template>
 
 <script setup name="OcspCaSource" lang="ts">
+import OcspPageHeader from '@/views/ocsp/components/OcspPageHeader.vue';
+import OcspEmptyState from '@/views/ocsp/components/OcspEmptyState.vue';
 import { computed, onMounted, reactive, ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { listOcspCaStatusSources, probeOcspCaStatusSource, removeOcspCaStatusSource, saveOcspCaStatusSource } from '@/api/ocsp/caSource';
@@ -262,6 +265,7 @@ const CA_DB_TEMPLATE = {
 
 const activeTab = ref('sources');
 const loading = ref(false);
+const loadError = ref(false);
 const saving = ref(false);
 const probing = ref(false);
 const probingCaId = ref<number | string | null>(null);
@@ -300,8 +304,12 @@ const form = reactive<OcspStatusSource & { db: any; ldap: any }>(newForm());
 
 const getList = async () => {
   loading.value = true;
+  loadError.value = false;
   try {
     rows.value = (await listOcspCaStatusSources()) || [];
+  } catch {
+    rows.value = [];
+    loadError.value = true;
   } finally {
     loading.value = false;
   }
@@ -392,7 +400,12 @@ onMounted(getList);
 
 <style scoped>
 .ocsp-page {
-  padding: 16px;
+  padding: 24px;
+}
+@media (max-width: 760px) {
+  .ocsp-page {
+    padding: 12px;
+  }
 }
 .mb16 {
   margin-bottom: 16px;

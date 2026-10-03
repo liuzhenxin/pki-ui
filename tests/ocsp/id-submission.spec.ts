@@ -13,7 +13,7 @@ const loadSetup = (file: string, api: Record<string, unknown>) => {
   const exports: any = {};
   const requireMock = (name: string) => {
     if (name === 'vue') return { ...vue, onMounted: () => {} };
-    if (name === 'vue-router') return { useRouter: () => ({}) };
+    if (name === 'vue-router') return { useRouter: () => ({}), useRoute: () => ({ query: {} }) };
     if (name === 'element-plus') return { ElMessage: { warning: vi.fn(), error: vi.fn(), success: vi.fn() } };
     if (name === '@/utils/ocspIdentifier') return { normalizeOcspCaId, normalizeOptionalOcspId };
     if (name === '@/api/ocsp/common') return { assertSafeSignerCert: () => {}, assertSafeSignerConf: () => {} };
@@ -70,5 +70,43 @@ describe('real OCSP ID submission handlers', () => {
     page.previewForm.caId = '9223372036854775808';
     await page.preview();
     expect(previewOcspRouting).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('OCSP loading failures and recovery', () => {
+  it('distinguishes log request failure from a successful empty result', async () => {
+    const pageOcspRequestLogs = vi.fn().mockRejectedValueOnce(new Error('unavailable')).mockResolvedValueOnce({ records: [], total: 0 });
+    const page = loadSetup('views/ocsp/log/index.vue', { pageOcspRequestLogs });
+    await page.getList();
+    expect(page.loadError.value).toBe(true);
+    expect(page.loading.value).toBe(false);
+    await page.getList();
+    expect(page.loadError.value).toBe(false);
+    expect(page.rows.value).toEqual([]);
+  });
+  it('does not display zero monitoring counts or no-alert success when reads fail', async () => {
+    const getOcspMonitoringSummary = vi.fn().mockRejectedValueOnce(new Error('unavailable')).mockResolvedValueOnce({ openAlertCount: 0 });
+    const listOcspAlerts = vi.fn().mockRejectedValueOnce(new Error('unavailable')).mockResolvedValueOnce([]);
+    const page = loadSetup('views/ocsp/components/MonitoringPanel.vue', { getOcspMonitoringSummary, listOcspAlerts });
+    await page.load();
+    expect(page.summaryError.value).toBe(true);
+    expect(page.alertsError.value).toBe(true);
+    expect(page.cards.value[0].value).toBe('-');
+    await page.load();
+    expect(page.summaryError.value).toBe(false);
+    expect(page.alertsError.value).toBe(false);
+    expect(page.cards.value[0].value).toBe(0);
+  });
+  it('distinguishes a failed status query from a real UNKNOWN certificate result', async () => {
+    const queryOcspCertStatus = vi.fn().mockRejectedValueOnce(new Error('unavailable')).mockResolvedValueOnce({ status: 'UNKNOWN' });
+    const page = loadSetup('views/ocsp/status/index.vue', { queryOcspCertStatus });
+    page.form.caId = largeId;
+    page.form.serialNumber = 'abcdef';
+    await page.queryStatus();
+    expect(page.queryError.value).toBe(true);
+    expect(page.result.value).toBeNull();
+    await page.queryStatus();
+    expect(page.queryError.value).toBe(false);
+    expect(page.result.value.status).toBe('UNKNOWN');
   });
 });

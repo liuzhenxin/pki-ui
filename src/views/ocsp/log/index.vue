@@ -1,7 +1,8 @@
 <template>
   <div class="app-container ocsp-page">
+    <OcspPageHeader title="请求日志" description="按证书、响应者与时间筛选请求，查看协议处理结果。" />
     <RetentionPanel />
-    <el-card shadow="hover" class="mb16">
+    <el-card shadow="never" class="mb16">
       <el-form :inline="true" :model="query">
         <el-form-item label="时间">
           <el-date-picker
@@ -48,16 +49,22 @@
       </el-form>
     </el-card>
 
-    <el-card shadow="hover">
+    <el-card shadow="never">
       <el-table v-loading="loading" :data="rows" border>
         <template #empty>
-          <el-empty description="暂无请求日志" />
+          <OcspEmptyState
+            v-if="!loading"
+            :error="loadError"
+            :title="loadError ? '请求日志读取失败' : '没有匹配的请求日志'"
+            :description="loadError ? '请重试，当前不能确认是否存在匹配记录。' : '尝试清空筛选条件，或调整查询时间范围。'"
+            ><el-button @click="loadError ? getList() : resetQuery()">{{ loadError ? '重新加载' : '重置筛选' }}</el-button></OcspEmptyState
+          >
         </template>
         <el-table-column prop="requestTime" label="请求时间" min-width="170" />
         <el-table-column prop="certSerialNumber" label="序列号" min-width="140" />
         <el-table-column prop="certStatus" label="证书状态" width="110" />
         <el-table-column prop="responseStatus" label="响应状态" width="150" />
-        <el-table-column prop="caId" label="CA ID" width="90" />
+        <el-table-column prop="caId" label="CA ID" min-width="190" />
         <el-table-column prop="responderId" label="响应者" width="90" />
         <el-table-column prop="clientIp" label="客户端 IP" min-width="130" />
         <el-table-column label="耗时(ms)" width="100">
@@ -75,7 +82,7 @@
       <pagination v-show="total > 0" v-model:page="query.pageNum" v-model:limit="query.pageSize" :total="total" @pagination="getList" />
     </el-card>
 
-    <el-drawer v-model="detailVisible" title="请求日志详情" size="480px">
+    <el-drawer v-model="detailVisible" title="请求日志详情" size="min(560px, 100vw)">
       <el-descriptions v-if="detail" :column="1" border>
         <el-descriptions-item label="请求时间">{{ detail.requestTime }}</el-descriptions-item>
         <el-descriptions-item label="序列号">{{ detail.certSerialNumber }}</el-descriptions-item>
@@ -92,6 +99,8 @@
 </template>
 
 <script setup name="OcspRequestLog" lang="ts">
+import OcspPageHeader from '@/views/ocsp/components/OcspPageHeader.vue';
+import OcspEmptyState from '@/views/ocsp/components/OcspEmptyState.vue';
 import { onMounted, reactive, ref } from 'vue';
 import { ElMessage } from 'element-plus';
 import { normalizeOptionalOcspId } from '@/utils/ocspIdentifier';
@@ -100,6 +109,7 @@ import RetentionPanel from '@/views/ocsp/components/RetentionPanel.vue';
 import type { OcspRequestLog, OcspRequestLogPageQry } from '@/api/ocsp/types';
 
 const loading = ref(false);
+const loadError = ref(false);
 const rows = ref<OcspRequestLog[]>([]);
 const total = ref(0);
 const detailVisible = ref(false);
@@ -141,10 +151,15 @@ const getList = async () => {
   const qry = buildQry();
   if (!qry) return;
   loading.value = true;
+  loadError.value = false;
   try {
     const page = await pageOcspRequestLogs(qry);
     rows.value = page?.records || [];
     total.value = page?.total || 0;
+  } catch {
+    rows.value = [];
+    total.value = 0;
+    loadError.value = true;
   } finally {
     loading.value = false;
   }
@@ -190,7 +205,12 @@ onMounted(getList);
 
 <style scoped>
 .ocsp-page {
-  padding: 16px;
+  padding: 24px;
+}
+@media (max-width: 760px) {
+  .ocsp-page {
+    padding: 12px;
+  }
 }
 .mb16 {
   margin-bottom: 16px;

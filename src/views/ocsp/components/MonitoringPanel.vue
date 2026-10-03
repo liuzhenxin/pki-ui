@@ -1,5 +1,5 @@
 <template>
-  <el-card shadow="hover" class="panel"
+  <el-card shadow="never" class="panel"
     ><template #header
       ><div class="header">
         <b>一致性监控与告警</b>
@@ -11,10 +11,19 @@
       </div></template
     >
     <el-row :gutter="12" v-loading="loading"
-      ><el-col v-for="item in cards" :key="item.label" :span="4"><el-statistic :title="item.label" :value="item.value" /></el-col
+      ><el-col v-for="item in cards" :key="item.label" :xs="12" :sm="8" :lg="4"><el-statistic :title="item.label" :value="item.value" /></el-col
     ></el-row>
-    <el-tabs v-model="tab" @tab-change="loadAlerts"><el-tab-pane label="打开告警" name="open" /><el-tab-pane label="历史" name="history" /></el-tabs>
-    <el-table :data="alerts" border
+    <el-tabs v-model="tab" @tab-change="load"><el-tab-pane label="打开告警" name="open" /><el-tab-pane label="历史" name="history" /></el-tabs>
+    <el-alert v-if="summaryError" type="error" title="监控摘要读取失败，当前状态未确认" :closable="false" class="summary-error" />
+    <el-table v-loading="loading" :data="alerts" border
+      ><template #empty
+        ><OcspEmptyState
+          v-if="!loading"
+          :error="alertsError"
+          :title="alertsError ? '告警读取失败' : tab === 'history' ? '暂无历史告警' : '暂无打开告警'"
+          :description="alertsError ? '请重新加载，不能将读取失败视为没有告警。' : '当前查询未返回告警记录，服务健康请结合诊断结果判断。'"
+          ><el-button v-if="alertsError" @click="load">重新加载</el-button></OcspEmptyState
+        ></template
       ><el-table-column prop="lastSeenTime" label="最后出现" width="170" /><el-table-column prop="severity" label="级别" width="90"
         ><template #default="{ row }"
           ><el-tag :type="row.severity === 'ERROR' ? 'danger' : row.severity === 'WARN' ? 'warning' : 'info'">{{ row.severity }}</el-tag></template
@@ -29,10 +38,10 @@
         ></el-table-column
       ></el-table
     >
-    <el-empty v-if="!loading && !alerts.length" description="暂无告警"
-  /></el-card>
+  </el-card>
 </template>
 <script setup lang="ts">
+import OcspEmptyState from './OcspEmptyState.vue';
 import { computed, onMounted, ref } from 'vue';
 import { ElMessage } from 'element-plus';
 import { getOcspMonitoringSummary, listOcspAlerts, runOcspMonitoring } from '@/api/ocsp/operations';
@@ -40,15 +49,17 @@ import type { OcspAlert, OcspMonitoringSummary } from '@/api/ocsp/types';
 const loading = ref(false),
   running = ref(false),
   tab = ref('open');
-const summary = ref<OcspMonitoringSummary>({ openAlertCount: 0, sourceAlertCount: 0, signerAlertCount: 0, sloAlertCount: 0, syntheticAlertCount: 0 });
+const summary = ref<OcspMonitoringSummary>();
+const summaryError = ref(false);
+const alertsError = ref(false);
 const alerts = ref<OcspAlert[]>([]);
 const cards = computed(() => [
-  { label: '打开告警', value: summary.value.openAlertCount },
-  { label: '来源', value: summary.value.sourceAlertCount },
-  { label: '签名', value: summary.value.signerAlertCount },
-  { label: 'SLO', value: summary.value.sloAlertCount },
-  { label: '合成检查', value: summary.value.syntheticAlertCount },
-  { label: '最严重', value: summary.value.worstSeverity || '-' }
+  { label: '打开告警', value: summary.value?.openAlertCount ?? '-' },
+  { label: '来源', value: summary.value?.sourceAlertCount ?? '-' },
+  { label: '签名', value: summary.value?.signerAlertCount ?? '-' },
+  { label: 'SLO', value: summary.value?.sloAlertCount ?? '-' },
+  { label: '合成检查', value: summary.value?.syntheticAlertCount ?? '-' },
+  { label: '最严重', value: summary.value?.worstSeverity || '-' }
 ]);
 const safeEvidence = (v?: string) => {
   if (!v) return '-';
@@ -59,13 +70,29 @@ const safeEvidence = (v?: string) => {
   }
 };
 const loadAlerts = async () => {
-  alerts.value = await listOcspAlerts(tab.value === 'history');
+  alertsError.value = false;
+  alerts.value = [];
+  try {
+    alerts.value = await listOcspAlerts(tab.value === 'history');
+  } catch {
+    alertsError.value = true;
+  }
 };
 const load = async () => {
   loading.value = true;
   try {
-    summary.value = await getOcspMonitoringSummary();
-    await loadAlerts();
+    await Promise.allSettled([
+      (async () => {
+        summaryError.value = false;
+        summary.value = undefined;
+        try {
+          summary.value = await getOcspMonitoringSummary();
+        } catch {
+          summaryError.value = true;
+        }
+      })(),
+      loadAlerts()
+    ]);
   } finally {
     loading.value = false;
   }
@@ -94,5 +121,14 @@ onMounted(load);
 }
 .evidence {
   overflow-wrap: anywhere;
+}
+.summary-error {
+  margin: 16px 0;
+}
+@media (max-width: 760px) {
+  .header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
 }
 </style>

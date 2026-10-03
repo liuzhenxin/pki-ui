@@ -1,22 +1,20 @@
 <template>
   <div class="app-container ocsp-monitoring">
-    <h1>运行监控</h1>
-    <p>查看来源健康、一致性检查与告警记录。</p>
+    <OcspPageHeader title="运行监控" description="查看来源健康、一致性检查与告警记录。" />
     <MonitoringPanel />
   </div>
 </template>
 <script setup name="OcspMonitoring" lang="ts">
+import OcspPageHeader from '@/views/ocsp/components/OcspPageHeader.vue';
 import MonitoringPanel from '@/views/ocsp/components/MonitoringPanel.vue';
 </script>
 <style scoped>
 .ocsp-monitoring {
-  padding: 28px;
+  padding: 24px;
 }
-h1 {
-  font-size: 26px;
-  margin: 0 0 10px;
-}
-p {
-  color: var(--el-text-color-secondary);
+@media (max-width: 760px) {
+  .ocsp-monitoring {
+    padding: 12px;
+  }
 }
 </style>

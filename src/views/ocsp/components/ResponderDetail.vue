@@ -85,7 +85,7 @@
                     <dd>{{ routing ? (routing.sourceValidationOk ? '校验通过' : routing.sourceFailureCode || '未通过校验') : '尚未检查' }}</dd>
                   </div>
                 </dl>
-                <el-empty v-else description="当前账号无数据源查看权限" :image-size="72" />
+                <OcspEmptyState v-else title="暂无查看权限" description="当前账号无法查看关联数据源，可联系管理员确认权限。" />
               </section>
               <section>
                 <h2>响应参数配置</h2>
@@ -144,6 +144,7 @@
                 v-else-if="canReadHistory"
                 :data="historyRows"
                 class="history-table"
+                ><template #empty><OcspEmptyState v-if="!loading" title="暂无配置变更记录" description="此响应者尚无可显示的历史记录。" /></template
                 ><el-table-column prop="createTime" label="时间" min-width="170" /><el-table-column
                   prop="action"
                   label="操作"
@@ -151,7 +152,7 @@
                   prop="revision"
                   label="版本"
                   width="90" /><el-table-column prop="actorUserId" label="操作人 ID" width="115" /></el-table
-              ><el-empty v-else description="当前账号无配置历史查看权限" :image-size="72" />
+              ><OcspEmptyState v-else title="暂无查看权限" description="当前账号无法查看配置变更历史。" />
             </section>
           </el-tab-pane>
           <el-tab-pane label="签名与证书" name="certificate"
@@ -236,7 +237,11 @@
                 ><el-descriptions-item label="配置可激活">{{ routing.wouldActivate ? '是' : '否' }}</el-descriptions-item
                 ><el-descriptions-item label="数据源类型">{{ routing.sourceType || '-' }}</el-descriptions-item
                 ><el-descriptions-item label="结果">{{ routing.safeMessage || routing.rejectionCode || '-' }}</el-descriptions-item></el-descriptions
-              ><el-empty v-else description="尚未执行诊断" :image-size="80" />
+              ><OcspEmptyState
+                v-else-if="!diagnosticError && !diagnosing"
+                title="尚未执行路由诊断"
+                description="执行只读诊断，查看此 CA 当前的数据源和签名选择。"
+              />
             </section>
             <section class="tab-section">
               <h2>证书状态查询</h2>
@@ -265,6 +270,7 @@
   </div>
 </template>
 <script setup lang="ts">
+import OcspEmptyState from './OcspEmptyState.vue';
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue';
 import { ArrowLeft, Edit, Search } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
@@ -401,7 +407,7 @@ watch(
 </script>
 <style scoped>
 .responder-detail {
-  padding: 12px 8px;
+  padding: 0;
   color: var(--el-text-color-primary);
 }
 .back-link {
@@ -412,7 +418,7 @@ watch(
   justify-content: space-between;
   align-items: flex-start;
   gap: 20px;
-  margin: 0 16px 28px;
+  margin: 0 0 24px;
 }
 .title-line {
   display: flex;
@@ -421,14 +427,17 @@ watch(
   flex-wrap: wrap;
 }
 h1 {
-  font-size: 28px;
+  font-size: 26px;
   line-height: 1.4;
   margin: 0;
-  font-weight: 650;
+  overflow-wrap: anywhere;
+  font-weight: 600;
 }
 .detail-heading p {
   color: var(--el-text-color-secondary);
   margin: 12px 0 0;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
 }
 .separator {
   display: inline-block;
@@ -447,7 +456,7 @@ h1 {
 .detail-surface {
   background: var(--el-bg-color);
   border: 1px solid var(--el-border-color-lighter);
-  border-radius: 4px;
+  border-radius: 8px;
   padding: 0 24px 24px;
 }
 .detail-surface :deep(.el-tabs__item) {
@@ -524,6 +533,7 @@ dd {
 }
 .tab-section {
   max-width: 900px;
+  overflow-wrap: anywhere;
   margin-bottom: 32px;
 }
 .policy-heading {
