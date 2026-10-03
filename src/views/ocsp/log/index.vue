@@ -26,10 +26,10 @@
           <el-input v-model="query.responseStatus" clearable style="width: 160px" />
         </el-form-item>
         <el-form-item label="CA ID">
-          <el-input-number v-model="query.caId" :min="1" controls-position="right" />
+          <el-input v-model="query.caId" inputmode="numeric" placeholder="完整 CA ID，可留空" clearable />
         </el-form-item>
         <el-form-item label="响应者">
-          <el-input-number v-model="query.responderId" :min="1" controls-position="right" />
+          <el-input v-model="query.responderId" inputmode="numeric" placeholder="完整响应者 ID，可留空" clearable />
         </el-form-item>
         <el-form-item label="客户端 IP">
           <el-input v-model="query.clientIp" clearable />
@@ -94,6 +94,7 @@
 <script setup name="OcspRequestLog" lang="ts">
 import { onMounted, reactive, ref } from 'vue';
 import { ElMessage } from 'element-plus';
+import { normalizeOptionalOcspId } from '@/utils/ocspIdentifier';
 import { exportOcspRequestLogs, getOcspRequestLog, pageOcspRequestLogs } from '@/api/ocsp/log';
 import RetentionPanel from '@/views/ocsp/components/RetentionPanel.vue';
 import type { OcspRequestLog, OcspRequestLogPageQry } from '@/api/ocsp/types';
@@ -114,11 +115,20 @@ const query = reactive<OcspRequestLogPageQry>({
   hasNonce: null
 });
 
-const buildQry = (): OcspRequestLogPageQry => ({
-  ...query,
-  requestTimeFrom: timeRange.value?.[0],
-  requestTimeTo: timeRange.value?.[1]
-});
+const buildQry = (): OcspRequestLogPageQry | null => {
+  try {
+    return {
+      ...query,
+      caId: normalizeOptionalOcspId(query.caId),
+      responderId: normalizeOptionalOcspId(query.responderId),
+      requestTimeFrom: timeRange.value?.[0],
+      requestTimeTo: timeRange.value?.[1]
+    };
+  } catch {
+    ElMessage.warning('CA ID 和响应者 ID 必须为有效正整数');
+    return null;
+  }
+};
 
 const durationMs = (row: OcspRequestLog) => {
   if (!row.requestTime || !row.responseTime) {
@@ -128,9 +138,11 @@ const durationMs = (row: OcspRequestLog) => {
 };
 
 const getList = async () => {
+  const qry = buildQry();
+  if (!qry) return;
   loading.value = true;
   try {
-    const page = await pageOcspRequestLogs(buildQry());
+    const page = await pageOcspRequestLogs(qry);
     rows.value = page?.records || [];
     total.value = page?.total || 0;
   } finally {
@@ -150,8 +162,8 @@ const resetQuery = () => {
   query.responseStatus = '';
   query.clientIp = '';
   query.hasNonce = null;
-  query.caId = undefined;
-  query.responderId = undefined;
+  query.caId = '';
+  query.responderId = '';
   handleQuery();
 };
 
@@ -161,7 +173,9 @@ const openDetail = async (id: number) => {
 };
 
 const handleExport = async () => {
-  const blob = (await exportOcspRequestLogs(buildQry())) as unknown as Blob;
+  const qry = buildQry();
+  if (!qry) return;
+  const blob = (await exportOcspRequestLogs(qry)) as unknown as Blob;
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;

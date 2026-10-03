@@ -4,3 +4,8 @@ export const normalizeOcspCaId = (value: string | number): string => {
   if (!/^[1-9]\d*$/.test(text) || BigInt(text) > 9223372036854775807n) throw new Error('CA ID 必须为有效的正整数');
   return text;
 };
+
+export const normalizeOptionalOcspId = (value?: string | number | null): string | undefined => {
+  if (value == null || (typeof value === 'string' && !value.trim())) return undefined;
+  return normalizeOcspCaId(value);
+};

@@ -107,7 +107,7 @@
                   <el-input v-model="form.name" />
                 </el-form-item>
                 <el-form-item label="CA ID" prop="caId">
-                  <el-input-number v-model="form.caId" :min="1" controls-position="right" class="full-input" />
+                  <el-input v-model="form.caId" inputmode="numeric" placeholder="完整 CA ID" class="full-input" />
                 </el-form-item>
                 <el-form-item label="签名者类型" prop="signerType">
                   <el-segmented v-model="form.signerType" :options="signerTypeOptions" />
@@ -236,6 +236,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import type { FormInstance, FormRules } from 'element-plus';
 import { ElMessage } from 'element-plus';
+import { normalizeOcspCaId } from '@/utils/ocspIdentifier';
 import { useRouter } from 'vue-router';
 import { QuestionFilled, Refresh } from '@element-plus/icons-vue';
 import { getOcspEnvInfo, getOcspInitStatus, initOcspResponder } from '@/api/ocsp/init';
@@ -272,7 +273,7 @@ const softwareSignerConf = '{\n  "keyAlias": "ocsp-responder-key",\n  "algorithm
 
 const form = reactive({
   name: 'default-ocsp-responder',
-  caId: 1,
+  caId: '1',
   signerType: 'SOFTWARE' as 'HSM' | 'SOFTWARE',
   signerConf: softwareSignerConf,
   signerCert: '',
@@ -459,6 +460,7 @@ const submitInit = async () => {
   const valid = await formRef.value.validate().catch(() => false);
   if (!valid) return;
   try {
+    form.caId = normalizeOcspCaId(form.caId);
     assertSafeSignerCert(form.signerCert);
     assertSafeSignerConf(form.signerConf);
   } catch (error: any) {

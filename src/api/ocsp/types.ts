@@ -105,8 +105,8 @@ export interface OcspRequestLogPageQry {
   pageSize?: number;
   requestTimeFrom?: string;
   requestTimeTo?: string;
-  responderId?: number;
-  caId?: number;
+  responderId?: number | string;
+  caId?: number | string;
   certSerialNumber?: string;
   certStatus?: string;
   responseStatus?: string;
