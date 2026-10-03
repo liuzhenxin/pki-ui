@@ -9,7 +9,7 @@
       </template>
       <el-form :model="form" label-width="120px" class="query-form">
         <el-form-item label="CA ID">
-          <el-input-number v-model="form.caId" :min="1" controls-position="right" class="w-full" />
+          <el-input v-model="form.caId" inputmode="numeric" placeholder="完整 CA ID" class="w-full" />
         </el-form-item>
         <el-form-item label="证书序列号">
           <el-input v-model="form.serialNumber" placeholder="十六进制，大小写不敏感" @keyup.enter="queryStatus" />
@@ -39,6 +39,7 @@
 
 <script setup name="OcspStatus" lang="ts">
 import { reactive, ref, watch } from 'vue';
+import { normalizeOcspCaId } from '@/utils/ocspIdentifier';
 import { useRoute } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { queryOcspCertStatus } from '@/api/ocsp/status';
@@ -48,7 +49,7 @@ const route = useRoute();
 const loading = ref(false);
 const result = ref<OcspCertStatus | null>(null);
 const form = reactive({
-  caId: 1,
+  caId: '1',
   serialNumber: '',
   bypassCache: false
 });
@@ -56,10 +57,12 @@ const form = reactive({
 watch(
   () => route.query.caId,
   (value) => {
-    const id = Number(value);
-    if (Number.isSafeInteger(id) && id > 0) {
-      form.caId = id;
+    if (typeof value !== 'string') return;
+    try {
+      form.caId = normalizeOcspCaId(value);
       result.value = null;
+    } catch {
+      ElMessage.warning('CA ID 必须为有效的正整数');
     }
   },
   { immediate: true }
@@ -74,6 +77,12 @@ const statusType = (status?: string) => {
 const queryStatus = async () => {
   if (!form.serialNumber.trim()) {
     ElMessage.warning('请输入证书序列号');
+    return;
+  }
+  try {
+    form.caId = normalizeOcspCaId(form.caId);
+  } catch {
+    ElMessage.warning('CA ID 必须为有效的正整数');
     return;
   }
   result.value = null;

@@ -6,7 +6,7 @@
     <el-form :model="form" label-width="120px">
       <el-row :gutter="12"
         ><el-col :span="6"
-          ><el-form-item label="CA ID"><el-input-number v-model="form.caId" :min="1" /></el-form-item></el-col
+          ><el-form-item label="CA ID"><el-input v-model="form.caId" inputmode="numeric" placeholder="完整 CA ID" /></el-form-item></el-col
         ><el-col :span="6"
           ><el-form-item label="来源类型"
             ><el-select v-model="form.type"
@@ -51,20 +51,31 @@
 </template>
 <script setup lang="ts">
 import { reactive, ref } from 'vue';
+import { normalizeOcspCaId } from '@/utils/ocspIdentifier';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { abortOcspCanary, disableOcspCanary, enableOcspCanary, getActiveOcspCanary, promoteOcspCanary, stageOcspCanary } from '@/api/ocsp/operations';
 import type { OcspCanaryCandidate, OcspCanaryScope, OcspStatusSource } from '@/api/ocsp/types';
 const busy = ref(false);
 const candidate = ref<OcspCanaryCandidate>();
 const reason = ref('');
-const form = reactive({ caId: undefined as number | undefined, type: 'DB', url: '' });
+const form = reactive({ caId: '', type: 'DB', url: '' });
 const scope = reactive<OcspCanaryScope>({ type: 'PERCENT', percent: 5, value: '' });
 const source = (): OcspStatusSource =>
   form.type === 'DB'
     ? { caId: form.caId, type: 'DB', enabled: true, db: { url: form.url } }
     : { caId: form.caId, type: 'LDAP', enabled: true, ldap: { url: form.url } };
+const validateCaId = () => {
+  try {
+    form.caId = normalizeOcspCaId(form.caId);
+    return true;
+  } catch {
+    ElMessage.warning('CA ID 必须为有效的正整数');
+    return false;
+  }
+};
 const guard = () => {
   if (!form.caId || !form.url) return (ElMessage.warning('请填写 CA ID 和来源地址'), false);
+  if (!validateCaId()) return false;
   if (/@|password=|token=|secret=/i.test(form.url)) return (ElMessage.error('来源地址不得包含凭据'), false);
   return true;
 };
@@ -77,7 +88,7 @@ const run = async (fn: () => Promise<any>) => {
   }
 };
 const loadCandidate = async () => {
-  if (!form.caId) return;
+  if (!validateCaId()) return;
   candidate.value = (await run(() => getActiveOcspCanary(form.caId!))) || undefined;
   if (!candidate.value) ElMessage.info('该 CA 暂无活动候选');
 };
