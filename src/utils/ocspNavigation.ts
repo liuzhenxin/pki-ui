@@ -63,3 +63,7 @@ export const buildOcspNavigation = (routes: RouteRecordRaw[], monitoringAllowed:
   }
   return [...result, ...remaining];
 };
+
+/** A restored session may omit its tenant; only a single-tenant build is a safe visual fallback. */
+export const isOcspTenantContext = (tenantId?: string | number | null, buildTenantIds?: string): boolean =>
+  String(tenantId || buildTenantIds || '') === '6';

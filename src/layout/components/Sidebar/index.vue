@@ -32,6 +32,7 @@
 <script setup lang="ts">
 import Logo from './Logo.vue';
 import { useUserStore } from '@/store/modules/user';
+import { isOcspTenantContext } from '@/utils/ocspNavigation';
 import SidebarItem from './SidebarItem.vue';
 import variables from '@/assets/styles/variables.module.scss';
 import { useAppStore } from '@/store/modules/app';
@@ -43,7 +44,7 @@ const { proxy } = getCurrentInstance() as ComponentInternalInstance;
 
 const route = useRoute();
 const userStore = useUserStore();
-const isOcspTenant = computed(() => String(userStore.tenantId) === '6');
+const isOcspTenant = computed(() => isOcspTenantContext(userStore.tenantId, import.meta.env.VITE_APP_TENANT_IDS));
 const appStore = useAppStore();
 const settingsStore = useSettingsStore();
 const permissionStore = usePermissionStore();

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { RouteRecordRaw } from 'vue-router';
-import { buildOcspNavigation } from '../../src/utils/ocspNavigation';
+import { buildOcspNavigation, isOcspTenantContext } from '../../src/utils/ocspNavigation';
 const route = (component: string, path: string, hidden = false) =>
   ({ path, component, hidden, name: path, meta: { title: path } }) as unknown as RouteRecordRaw;
 const fixture = () =>
@@ -46,5 +46,19 @@ describe('OCSP navigation permission and URL boundaries', () => {
       false
     );
     expect(output[0].hidden).toBe(true);
+  });
+});
+
+describe('OCSP visual tenant context', () => {
+  it('uses explicit tenant identity before build target', () => {
+    expect(isOcspTenantContext('6', '4')).toBe(true);
+    expect(isOcspTenantContext('4', '6')).toBe(false);
+  });
+  it('keeps OCSP branding after a restored session omits tenant metadata', () => {
+    expect(isOcspTenantContext('', '6')).toBe(true);
+  });
+  it('does not infer OCSP for a generic or multi-tenant build', () => {
+    expect(isOcspTenantContext('')).toBe(false);
+    expect(isOcspTenantContext('', '4,6')).toBe(false);
   });
 });
