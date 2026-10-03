@@ -1,8 +1,8 @@
 <template>
   <div class="app-container ocsp-page">
-    <el-card shadow="hover" class="mb16">
+    <el-card shadow="never" class="mb16">
       <div class="card-header">
-        <span>CA 数据源（按 CA 独立配置，未配置的 CA 使用默认数据源）</span>
+        <span>状态数据源 · 按 CA 配置</span>
         <div>
           <el-button icon="Refresh" @click="getList">刷新</el-button>
           <el-button v-hasPermi="['ocsp:source:save']" type="primary" plain icon="Plus" @click="openEdit()">新建</el-button>
@@ -10,63 +10,64 @@
       </div>
     </el-card>
 
-    <RoutingHistoryPanel />
-    <CanaryPanel />
-
-    <el-card shadow="hover">
-      <el-alert
-        v-if="probeResult"
-        :title="probeResult.ok ? '探测成功' : '探测失败（仍可保存）'"
-        :type="probeResult.ok ? 'success' : 'error'"
-        :description="probeResult.message"
-        show-icon
-        :closable="false"
-        class="mb16"
-      />
-      <el-table v-loading="loading" :data="rows" border>
-        <template #empty>
-          <el-empty description="暂无 CA 数据源配置" />
-        </template>
-        <el-table-column prop="caId" label="CA ID" width="90" />
-        <el-table-column prop="name" label="名称" min-width="120" />
-        <el-table-column label="类型" width="80" align="center">
-          <template #default="{ row }">
-            <el-tag :type="row.type === 'LDAP' ? 'warning' : 'primary'" size="small">{{ row.type }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="启用" width="80" align="center">
-          <template #default="{ row }">
-            <el-tag :type="row.enabled === false ? 'info' : 'success'" size="small">{{ row.enabled === false ? '停用' : '启用' }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column v-if="hasDbSource" label="证书表 / 归档表" min-width="200">
-          <template #default="{ row }">
-            <span v-if="row.type === 'DB'"
-              >{{ row.db?.certTable || '-' }}<span v-if="row.db?.archiveCertTable"> / {{ row.db.archiveCertTable }}</span></span
-            >
-            <span v-else>-</span>
-          </template>
-        </el-table-column>
-        <el-table-column v-if="hasLdapSource" label="LDAP 地址" min-width="220" show-overflow-tooltip>
-          <template #default="{ row }">
-            <span v-if="row.type === 'LDAP'">{{ row.ldap?.url || '-' }}</span>
-            <span v-else>-</span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="updateTime" label="更新时间" min-width="160" />
-        <el-table-column label="操作" width="210" fixed="right">
-          <template #default="{ row }">
-            <el-button v-hasPermi="['ocsp:source:save']" link type="primary" @click="openEdit(row)">编辑</el-button>
-            <el-button v-hasPermi="['ocsp:source:probe']" link type="success" :loading="probingCaId === row.caId" @click="probe(row.caId)"
-              >探测</el-button
-            >
-            <el-button v-hasPermi="['ocsp:source:save']" link type="danger" @click="remove(row)">删除</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-    </el-card>
-
-    <el-drawer v-model="editVisible" :title="form.caId ? `编辑 CA ${form.caId} 数据源` : '新建 CA 数据源'" size="760px">
+    <el-tabs v-model="activeTab"
+      ><el-tab-pane label="数据源列表" name="sources">
+        <el-card shadow="hover">
+          <el-alert
+            v-if="probeResult"
+            :title="probeResult.ok ? '探测成功' : '探测失败（仍可保存）'"
+            :type="probeResult.ok ? 'success' : 'error'"
+            :description="probeResult.message"
+            show-icon
+            :closable="false"
+            class="mb16"
+          />
+          <el-table v-loading="loading" :data="rows" border>
+            <template #empty>
+              <el-empty description="暂无 CA 数据源配置" />
+            </template>
+            <el-table-column prop="caId" label="CA ID" width="90" />
+            <el-table-column prop="name" label="名称" min-width="120" />
+            <el-table-column label="类型" width="80" align="center">
+              <template #default="{ row }">
+                <el-tag :type="row.type === 'LDAP' ? 'warning' : 'primary'" size="small">{{ row.type }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="启用" width="80" align="center">
+              <template #default="{ row }">
+                <el-tag :type="row.enabled === false ? 'info' : 'success'" size="small">{{ row.enabled === false ? '停用' : '启用' }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column v-if="hasDbSource" label="证书表 / 归档表" min-width="200">
+              <template #default="{ row }">
+                <span v-if="row.type === 'DB'"
+                  >{{ row.db?.certTable || '-' }}<span v-if="row.db?.archiveCertTable"> / {{ row.db.archiveCertTable }}</span></span
+                >
+                <span v-else>-</span>
+              </template>
+            </el-table-column>
+            <el-table-column v-if="hasLdapSource" label="LDAP 地址" min-width="220" show-overflow-tooltip>
+              <template #default="{ row }">
+                <span v-if="row.type === 'LDAP'">{{ row.ldap?.url || '-' }}</span>
+                <span v-else>-</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="updateTime" label="更新时间" min-width="160" />
+            <el-table-column label="操作" width="210" fixed="right">
+              <template #default="{ row }">
+                <el-button v-hasPermi="['ocsp:source:save']" link type="primary" @click="openEdit(row)">编辑</el-button>
+                <el-button v-hasPermi="['ocsp:source:probe']" link type="success" :loading="probingCaId === row.caId" @click="probe(row.caId)"
+                  >探测</el-button
+                >
+                <el-button v-hasPermi="['ocsp:source:save']" link type="danger" @click="remove(row)">删除</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </el-card> </el-tab-pane
+      ><el-tab-pane label="路由与配置历史" name="history" lazy><RoutingHistoryPanel v-if="activeTab === 'history'" /></el-tab-pane
+      ><el-tab-pane label="灰度发布" name="canary" lazy><CanaryPanel v-if="activeTab === 'canary'" /></el-tab-pane
+    ></el-tabs>
+    <el-drawer v-model="editVisible" :title="form.caId ? `编辑 CA ${form.caId} 数据源` : '新建 CA 数据源'" size="min(760px, 100vw)">
       <el-form :model="form" label-width="150px">
         <el-row :gutter="16">
           <el-col :span="12">
@@ -265,6 +266,7 @@ const CA_DB_TEMPLATE = {
   delFlagColumn: 'del_flag'
 };
 
+const activeTab = ref('sources');
 const loading = ref(false);
 const saving = ref(false);
 const probing = ref(false);

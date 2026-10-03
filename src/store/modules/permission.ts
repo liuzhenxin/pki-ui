@@ -10,6 +10,7 @@ import InnerLink from '@/layout/components/InnerLink/index.vue';
 import { ref } from 'vue';
 import { createCustomNameComponent } from '@/utils/createCustomNameComponent';
 import { Result } from '@/api/types';
+import { buildOcspNavigation } from '@/utils/ocspNavigation';
 
 // 匹配views里面所有的.vue文件
 const modules = import.meta.glob('./../../views/**/*.vue');
@@ -52,7 +53,7 @@ export const usePermissionStore = defineStore('permission', () => {
     const sdata = removeRetiredKmcRoutes(JSON.parse(JSON.stringify(data)));
     const rdata = removeRetiredKmcRoutes(JSON.parse(JSON.stringify(data)));
     const defaultData = removeRetiredKmcRoutes(JSON.parse(JSON.stringify(data)));
-    const sidebarRoutes = filterAsyncRouter(sdata);
+    const sidebarRoutes = filterAsyncRouter(buildOcspNavigation(sdata, auth.hasPermi('ocsp:monitoring')));
     const rewriteRoutes = filterAsyncRouter(rdata, undefined, true);
     const defaultRoutes = filterAsyncRouter(defaultData);
     const asyncRoutes = filterDynamicRoutes(dynamicRoutes);
@@ -74,7 +75,7 @@ export const usePermissionStore = defineStore('permission', () => {
     const sdata = removeRetiredKmcRoutes(JSON.parse(JSON.stringify(res.data)));
     const rdata = removeRetiredKmcRoutes(JSON.parse(JSON.stringify(res.data)));
     const defaultData = removeRetiredKmcRoutes(JSON.parse(JSON.stringify(res.data)));
-    const sidebarRoutes = filterAsyncRouter(sdata);
+    const sidebarRoutes = filterAsyncRouter(buildOcspNavigation(sdata, false));
     const rewriteRoutes = filterAsyncRouter(rdata, undefined, true);
     const defaultRoutes = filterAsyncRouter(defaultData);
     const asyncRoutes = filterDynamicRoutes(dynamicRoutes);

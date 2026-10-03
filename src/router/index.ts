@@ -250,7 +250,16 @@ export const constantRoutes: RouteRecordRaw[] = [
 ];
 
 // 动态路由，基于用户权限动态去加载
-export const dynamicRoutes: RouteRecordRaw[] = [];
+export const dynamicRoutes: RouteRecordRaw[] = [
+  {
+    path: '/ocsp/monitoring',
+    component: Layout,
+    permissions: ['ocsp:monitoring'],
+    children: [
+      { path: '', name: 'OcspMonitoring', component: () => import('@/views/ocsp/monitoring/index.vue'), meta: { title: '运行监控', icon: 'monitor' } }
+    ]
+  }
+];
 
 /**
  * 创建路由

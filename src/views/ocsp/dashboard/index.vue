@@ -3,7 +3,7 @@
     <div class="dashboard-header">
       <div>
         <p class="header-label">在线证书状态服务</p>
-        <h1>OCSP 服务看板</h1>
+        <h1>服务概览</h1>
         <p class="header-desc">聚合最近请求量、证书状态分布与活跃响应者，不含序列号</p>
       </div>
       <div class="header-actions">
@@ -72,14 +72,16 @@
             <el-table-column prop="signerType" label="签名类型" width="120" />
             <el-table-column label="状态" width="110" align="center">
               <template #default="{ row }">
-                <el-tag :type="row.status === 'ACTIVE' ? 'success' : 'info'" size="small">{{ row.status }}</el-tag>
+                <el-tag :type="row.status === 'ACTIVE' ? 'success' : 'info'" size="small">{{
+                  row.status === 'ACTIVE' ? '已启用' : row.status === 'INACTIVE' ? '已停用' : row.status
+                }}</el-tag>
               </template>
             </el-table-column>
           </el-table>
         </el-card>
       </el-col>
     </el-row>
-    <MonitoringPanel />
+    <el-button v-if="checkPermi(['ocsp:monitoring'])" class="mt20" @click="router.push('/ocsp/monitoring')">查看运行监控</el-button>
   </div>
 </template>
 
@@ -89,7 +91,6 @@ import { useRouter } from 'vue-router';
 import * as echarts from 'echarts';
 import { Connection, Refresh, TrendCharts, Warning, CircleCheck } from '@element-plus/icons-vue';
 import { getOcspDashboardSummary } from '@/api/ocsp/dashboard';
-import MonitoringPanel from '@/views/ocsp/components/MonitoringPanel.vue';
 import type { OcspDashboardSummary, OcspResponder } from '@/api/ocsp/types';
 import { checkPermi } from '@/utils/permission';
 

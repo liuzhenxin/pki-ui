@@ -38,11 +38,13 @@
 </template>
 
 <script setup name="OcspStatus" lang="ts">
-import { reactive, ref } from 'vue';
+import { reactive, ref, watch } from 'vue';
+import { useRoute } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { queryOcspCertStatus } from '@/api/ocsp/status';
 import type { OcspCertStatus } from '@/api/ocsp/types';
 
+const route = useRoute();
 const loading = ref(false);
 const result = ref<OcspCertStatus | null>(null);
 const form = reactive({
@@ -50,6 +52,18 @@ const form = reactive({
   serialNumber: '',
   bypassCache: false
 });
+
+watch(
+  () => route.query.caId,
+  (value) => {
+    const id = Number(value);
+    if (Number.isSafeInteger(id) && id > 0) {
+      form.caId = id;
+      result.value = null;
+    }
+  },
+  { immediate: true }
+);
 
 const statusType = (status?: string) => {
   if (status === 'GOOD') return 'success';
@@ -62,6 +76,7 @@ const queryStatus = async () => {
     ElMessage.warning('请输入证书序列号');
     return;
   }
+  result.value = null;
   loading.value = true;
   try {
     result.value = await queryOcspCertStatus({
