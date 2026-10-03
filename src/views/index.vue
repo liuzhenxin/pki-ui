@@ -1,7 +1,7 @@
 <template>
   <div class="app-container home">
     <!-- 头部介绍 -->
-    <el-card v-if="!isLicense && !isOps" class="box-card header-card" shadow="hover">
+    <el-card v-if="!isLicense && !isOps && !isOCSP" class="box-card header-card" shadow="hover">
       <div class="header">
         <div class="icon-wrapper">
           <el-icon :size="48" color="#fff"><Platform /></el-icon>
@@ -12,6 +12,8 @@
         </div>
       </div>
     </el-card>
+
+    <OcspHome v-if="isOCSP" />
 
     <OpsOverview v-if="isOps" />
 
@@ -323,7 +325,7 @@
       </el-row>
     </div>
 
-    <el-row v-if="!isLicense && !isNAS && !isCA && !isRA && !isOps" :gutter="20" class="main-content">
+    <el-row v-if="!isLicense && !isNAS && !isCA && !isRA && !isOps && !isOCSP" :gutter="20" class="main-content">
       <!-- 左侧：核心功能 -->
       <el-col :xs="24" :sm="24" :lg="16">
         <el-card class="box-card feature-card" shadow="hover">
@@ -508,7 +510,7 @@
     </el-row>
 
     <!-- 系统信息 (全宽) -->
-    <el-card v-if="!isLicense && !isNAS && !isCA && !isRA && !isOps" class="box-card update-log" shadow="hover">
+    <el-card v-if="!isLicense && !isNAS && !isCA && !isRA && !isOps && !isOCSP" class="box-card update-log" shadow="hover">
       <template #header>
         <div class="card-header">
           <el-icon><InfoFilled /></el-icon>
@@ -660,6 +662,7 @@ import { LicenseVO, ProductVO } from '@/api/license/license/types';
 import NASDashboard from '@/views/nas/index.vue';
 import CADashboard from '@/views/ca/index.vue';
 import OpsOverview from '@/views/ops/overview/index.vue';
+import OcspHome from '@/views/ocsp/home/index.vue';
 
 const router = useRouter();
 const userStore = useUserStore();
@@ -682,6 +685,7 @@ const isKMC = computed(() => String(currentTenantId.value) === '3');
 const isNAS = computed(() => String(currentTenantId.value) === '10');
 const isCA = computed(() => String(currentTenantId.value) === '4');
 const isRA = computed(() => String(currentTenantId.value) === '5');
+const isOCSP = computed(() => String(currentTenantId.value) === '6');
 const isLicense = computed(() => String(currentTenantId.value) === '2');
 const opsVersion = computed(() => import.meta.env.VITE_APP_VERSION || '3.0.3');
 
