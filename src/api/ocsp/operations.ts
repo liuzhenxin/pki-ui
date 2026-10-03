@@ -25,7 +25,7 @@ export const pageOcspConfigHistory = (params: OcspConfigHistoryQry) =>
 export const getOcspConfigHistory = (id: number) =>
   request({ url: `/ocsp/v1/config-history/${id}`, method: 'get' }).then((res) => unwrapOcspData<OcspConfigHistory>(res));
 
-export const getActiveOcspCanary = (caId: number) =>
+export const getActiveOcspCanary = (caId: number | string) =>
   request({ url: `/ocsp/v1/ca-status-sources/canary/${caId}`, method: 'get' }).then((res) => unwrapOcspData<OcspCanaryCandidate | null>(res));
 
 export const stageOcspCanary = (source: OcspStatusSource, canaryScope?: OcspCanaryScope) =>

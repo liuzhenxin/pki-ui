@@ -71,7 +71,7 @@
           <el-input v-model="form.name" />
         </el-form-item>
         <el-form-item label="CA ID" prop="caId">
-          <el-input-number v-model="form.caId" :min="1" controls-position="right" class="w-full" />
+          <el-input v-model="form.caId" inputmode="numeric" placeholder="完整 CA ID" />
         </el-form-item>
         <el-form-item label="签名者类型" prop="signerType">
           <el-segmented v-model="form.signerType" :options="['SOFTWARE', 'HSM']" />
@@ -136,6 +136,7 @@ import type { FormInstance, FormRules } from 'element-plus';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import X509Cert from '@/components/X509Cert/index.vue';
 import ResponderDetail from '@/views/ocsp/components/ResponderDetail.vue';
+import { normalizeOcspCaId } from '@/utils/ocspIdentifier';
 import { responderStatusLabel, signerTypeLabel } from '@/utils/ocspPresentation';
 import ResponderCsrPanel from '@/views/ocsp/components/ResponderCsrPanel.vue';
 import { assertSafeSignerCert, assertSafeSignerConf } from '@/api/ocsp/common';
@@ -282,6 +283,7 @@ const submit = async () => {
     return;
   }
   try {
+    form.caId = normalizeOcspCaId(form.caId);
     const crlUrl = form.protocolExtensionPolicy?.crlUrl || '';
     if (/@|password=|passwd=|secret=|token=|pin=/i.test(crlUrl)) {
       throw new Error('CRL URL 不得包含凭据或敏感参数');

@@ -9,7 +9,7 @@ export const listOcspCaStatusSources = () => {
   }).then((res) => unwrapOcspData<OcspStatusSource[]>(res));
 };
 
-export const getOcspCaStatusSource = (caId: number) => {
+export const getOcspCaStatusSource = (caId: number | string) => {
   return request({
     url: `/ocsp/v1/ca-status-sources/${caId}`,
     method: 'get'
@@ -24,14 +24,14 @@ export const saveOcspCaStatusSource = (data: OcspStatusSource) => {
   }).then((res) => unwrapOcspData<OcspStatusSource>(res));
 };
 
-export const removeOcspCaStatusSource = (caId: number) => {
+export const removeOcspCaStatusSource = (caId: number | string) => {
   return request({
     url: `/ocsp/v1/ca-status-sources/${caId}`,
     method: 'delete'
   }).then((res) => unwrapOcspData<boolean>(res));
 };
 
-export const probeOcspCaStatusSource = (caId: number) => {
+export const probeOcspCaStatusSource = (caId: number | string) => {
   return request({
     url: '/ocsp/v1/ca-status-sources/probe',
     method: 'post',

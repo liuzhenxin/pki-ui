@@ -72,14 +72,7 @@
         <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item label="CA ID" required>
-              <el-input-number
-                v-model="form.caId"
-                :min="1"
-                :disabled="editing"
-                controls-position="right"
-                class="w-full"
-                placeholder="对应 CA 根 CA ID"
-              />
+              <el-input v-model="form.caId" :disabled="editing" inputmode="numeric" placeholder="完整 CA ID" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
@@ -250,6 +243,7 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { listOcspCaStatusSources, probeOcspCaStatusSource, removeOcspCaStatusSource, saveOcspCaStatusSource } from '@/api/ocsp/caSource';
 import RoutingHistoryPanel from '@/views/ocsp/components/RoutingHistoryPanel.vue';
 import CanaryPanel from '@/views/ocsp/components/CanaryPanel.vue';
+import { normalizeOcspCaId } from '@/utils/ocspIdentifier';
 import type { OcspProbe, OcspStatusSource } from '@/api/ocsp/types';
 
 const CA_DB_TEMPLATE = {
@@ -270,7 +264,7 @@ const activeTab = ref('sources');
 const loading = ref(false);
 const saving = ref(false);
 const probing = ref(false);
-const probingCaId = ref<number | null>(null);
+const probingCaId = ref<number | string | null>(null);
 const rows = ref<OcspStatusSource[]>([]);
 const editVisible = ref(false);
 const editing = ref(false);
@@ -295,7 +289,7 @@ const defaultLdap = () => ({
 });
 
 const newForm = () => ({
-  caId: undefined as number | undefined,
+  caId: undefined as number | string | undefined,
   name: '',
   type: 'DB' as 'DB' | 'LDAP',
   enabled: true,
@@ -331,8 +325,10 @@ const fillCaDbTemplate = () => {
 };
 
 const validateForm = (): string => {
-  if (!form.caId || form.caId <= 0) {
-    return '请输入 CA ID';
+  try {
+    form.caId = normalizeOcspCaId(form.caId ?? '');
+  } catch (error: any) {
+    return error.message;
   }
   if (form.type === 'DB') {
     if (!form.db.url || !form.db.username || !form.db.passwordRef) {
@@ -364,7 +360,7 @@ const submit = async () => {
   }
 };
 
-const probe = async (caId: number) => {
+const probe = async (caId: number | string) => {
   if (!caId) {
     return;
   }
