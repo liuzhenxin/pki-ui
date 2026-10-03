@@ -114,6 +114,7 @@
           v-model:signer-cert="form.signerCert"
           v-model:signer-conf="form.signerConf"
           v-model:cert-source="certSource"
+          @imported="handleCertificateImported"
         />
       </el-form>
       <template #footer>
@@ -259,6 +260,11 @@ const openEdit = async (row?: OcspResponder) => {
     certSource.value = 'CSR';
   }
   editVisible.value = true;
+};
+
+const handleCertificateImported = () => {
+  detailRevision.value++;
+  void getList();
 };
 
 const openCert = (row: OcspResponder) => {
