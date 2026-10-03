@@ -11,8 +11,13 @@
       </div></template
     >
     <el-row :gutter="12" v-loading="loading"
-      ><el-col v-for="item in cards" :key="item.label" :xs="12" :sm="8" :lg="4"><el-statistic :title="item.label" :value="item.value" /></el-col
-    ></el-row>
+      ><el-col v-for="item in cards" :key="item.label" :xs="12" :sm="8" :lg="4"
+        ><div class="monitor-metric">
+          <span>{{ item.label }}</span
+          ><strong>{{ item.value }}</strong>
+        </div></el-col
+      ></el-row
+    >
     <el-tabs v-model="tab" @tab-change="load"><el-tab-pane label="打开告警" name="open" /><el-tab-pane label="历史" name="history" /></el-tabs>
     <el-alert v-if="summaryError" type="error" title="监控摘要读取失败，当前状态未确认" :closable="false" class="summary-error" />
     <el-table v-loading="loading" :data="alerts" border
@@ -121,6 +126,21 @@ onMounted(load);
 }
 .evidence {
   overflow-wrap: anywhere;
+}
+.monitor-metric {
+  padding: 12px 0 20px;
+}
+.monitor-metric span {
+  display: block;
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
+}
+.monitor-metric strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
 }
 .summary-error {
   margin: 16px 0;
