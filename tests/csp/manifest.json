@@ -1,0 +1,8 @@
+{
+  "unit": { "evidenceKind": "unit", "required": { "unit-smoke": "@csp-smoke-unit" } },
+  "e2e": { "evidenceKind": "mock", "required": { "e2e-smoke": "@csp-smoke-e2e" } },
+  "a11y": { "evidenceKind": "a11y", "required": {} },
+  "visual": { "evidenceKind": "visual", "required": {} },
+  "security": { "evidenceKind": "security", "required": {} },
+  "contract": { "evidenceKind": "live", "required": {} }
+}
