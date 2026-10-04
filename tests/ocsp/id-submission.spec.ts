@@ -4,6 +4,8 @@ import ts from 'typescript';
 import * as vue from 'vue';
 import { describe, expect, it, vi } from 'vitest';
 import { normalizeOcspCaId, normalizeOptionalOcspId } from '../../src/utils/ocspIdentifier';
+import { signerPolicyLabel } from '../../src/utils/ocspSignerPolicy';
+import * as presentation from '../../src/utils/ocspPresentation';
 
 // Execute each real SFC submission handler with API calls replaced; no initialization occurs.
 const loadSetup = (file: string, api: Record<string, unknown>) => {
@@ -12,7 +14,10 @@ const loadSetup = (file: string, api: Record<string, unknown>) => {
   const code = ts.transpileModule(script, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   const exports: any = {};
   const requireMock = (name: string) => {
-    if (name === 'vue') return { ...vue, onMounted: () => {} };
+    if (name === 'vue') return { ...vue, onMounted: () => {}, onBeforeUnmount: () => {}, watch: () => {} };
+    if (name === '@/plugins/auth') return { default: { hasPermi: () => true } };
+    if (name === '@/utils/ocspSignerPolicy') return { signerPolicyLabel };
+    if (name === '@/utils/ocspPresentation') return presentation;
     if (name === 'vue-router') return { useRouter: () => ({}), useRoute: () => ({ query: {} }) };
     if (name === 'element-plus') return { ElMessage: { warning: vi.fn(), error: vi.fn(), success: vi.fn() } };
     if (name === '@/utils/ocspIdentifier') return { normalizeOcspCaId, normalizeOptionalOcspId };
@@ -22,10 +27,25 @@ const loadSetup = (file: string, api: Record<string, unknown>) => {
     return { default: {} };
   };
   new Function('require', 'exports', code)(requireMock, exports);
-  return exports.default.setup({}, { expose: () => {} });
+  return exports.default.setup({ id: 1 }, { expose: () => {}, emit: () => {} });
 };
 
 const largeId = '99183839863111681';
+describe('real signer diagnostic handler', () => {
+  it('clears stale verdict on failure and displays the subsequent explicit result', async () => {
+    const diagnoseOcspResponderSigner = vi.fn().mockRejectedValueOnce(new Error('unavailable')).mockResolvedValueOnce({ signerPolicyOk: true });
+    const page = loadSetup('views/ocsp/components/ResponderDetail.vue', { diagnoseOcspResponderSigner });
+    page.responder.value = { id: 1, signerPolicyOk: false, signerRejectionCode: 'EXPIRED' };
+    await page.checkSigner();
+    expect(page.signerCheckError.value).toBe(true);
+    expect(page.responder.value.signerPolicyOk).toBeNull();
+    expect(page.responder.value.signerRejectionCode).toBeUndefined();
+    await page.checkSigner();
+    expect(page.signerCheckError.value).toBe(false);
+    expect(page.responder.value.signerPolicyOk).toBe(true);
+    expect(diagnoseOcspResponderSigner).toHaveBeenCalledWith(1);
+  });
+});
 describe('real OCSP ID submission handlers', () => {
   it('keeps log CA/responder IDs as text and omits cleared filters', async () => {
     const pageOcspRequestLogs = vi.fn().mockResolvedValue({ records: [], total: 0 });
