@@ -121,18 +121,12 @@
                   </div>
                   <div>
                     <dt>签名策略</dt>
-                    <dd>
-                      {{
-                        responder.signerPolicyOk === undefined
-                          ? '未提供校验结果'
-                          : responder.signerPolicyOk
-                            ? '通过'
-                            : responder.signerRejectionCode || '未通过'
-                      }}
-                    </dd>
+                    <dd>{{ signerPolicyLabel(responder.signerPolicyOk, responder.signerRejectionCode) }}</dd>
                   </div>
                 </dl>
                 <p class="hint">证书时间有效性不代表签名链验证或实时服务健康。</p>
+                <el-button v-hasPermi="['ocsp:responder']" :loading="checkingSigner" @click="checkSigner">检查签名策略</el-button>
+                <el-alert v-if="signerCheckError" type="error" :closable="false" title="签名策略检查失败，未取得有效结果" />
               </section>
             </div>
             <section class="history-section">
@@ -275,7 +269,8 @@ import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue';
 import { ArrowLeft, Edit, Search } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 import auth from '@/plugins/auth';
-import { getOcspResponder } from '@/api/ocsp/responder';
+import { diagnoseOcspResponderSigner, getOcspResponder } from '@/api/ocsp/responder';
+import { signerPolicyLabel } from '@/utils/ocspSignerPolicy';
 import { getOcspCaStatusSource } from '@/api/ocsp/caSource';
 import { getOcspStatusSource } from '@/api/ocsp/config';
 import { pageOcspConfigHistory, previewOcspRouting } from '@/api/ocsp/operations';
@@ -299,6 +294,8 @@ const diagnosing = ref(false),
   querying = ref(false),
   statusError = ref(false);
 const statusResult = ref<OcspCertStatus>();
+const checkingSigner = ref(false),
+  signerCheckError = ref(false);
 const statusForm = reactive({ serialNumber: '', bypassCache: false });
 const canReadSource = computed(() => auth.hasPermi('ocsp:source'));
 const canReadHistory = computed(() => auth.hasPermi('ocsp:config'));
@@ -327,6 +324,8 @@ const load = async () => {
   statusError.value = false;
   diagnosing.value = false;
   querying.value = false;
+  checkingSigner.value = false;
+  signerCheckError.value = false;
   try {
     const detail = await getOcspResponder(props.id);
     if (current !== generation) return;
@@ -361,6 +360,25 @@ const load = async () => {
     }
   } finally {
     if (current === generation) loading.value = false;
+  }
+};
+const checkSigner = async () => {
+  if (!responder.value || checkingSigner.value || !auth.hasPermi('ocsp:responder')) return;
+  const current = generation;
+  checkingSigner.value = true;
+  signerCheckError.value = false;
+  responder.value.signerPolicyOk = null;
+  responder.value.signerRejectionCode = undefined;
+  try {
+    const result = await diagnoseOcspResponderSigner(props.id);
+    if (current !== generation || !responder.value) return;
+    responder.value.signerPolicyOk = result.signerPolicyOk;
+    responder.value.signerRejectionCode = result.signerRejectionCode;
+    responder.value.signerAlgorithm = result.signerAlgorithm;
+  } catch {
+    if (current === generation) signerCheckError.value = true;
+  } finally {
+    if (current === generation) checkingSigner.value = false;
   }
 };
 const diagnose = async () => {

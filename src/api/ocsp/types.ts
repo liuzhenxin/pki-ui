@@ -22,7 +22,7 @@ export interface OcspResponder {
     crlNumber?: string;
     preferredSignatureEnabled?: boolean;
   };
-  signerPolicyOk?: boolean;
+  signerPolicyOk?: boolean | null;
   signerRejectionCode?: string;
   signerAlgorithm?: string;
   updateTime?: string;

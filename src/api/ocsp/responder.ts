@@ -24,6 +24,10 @@ export const getOcspResponder = (id: number) => {
   }).then((res) => unwrapOcspData<OcspResponder>(res));
 };
 
+export const diagnoseOcspResponderSigner = (id: number) => {
+  return request({ url: `/ocsp/v1/responders/${id}/signer-diagnostics`, method: 'get' }).then((res) => unwrapOcspData<OcspResponder>(res));
+};
+
 export const createOcspResponder = (data: OcspResponder) => {
   return request({
     url: '/ocsp/v1/responders',
