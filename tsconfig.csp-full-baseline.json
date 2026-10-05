@@ -1,0 +1,5 @@
+{
+  "extends": "./tsconfig.csp-tests.json",
+  "include": ["src/**/*.ts", "src/**/*.vue", "src/**/*.d.ts", "tests/csp/unit/**/*.ts", "tests/csp/fixtures/**/*.ts"],
+  "exclude": ["node_modules", "dist", "src/**/__tests__/**"]
+}

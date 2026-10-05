@@ -1,5 +1,21 @@
 {
   "extends": "./tsconfig.json",
-  "include": ["src/**/*.ts", "src/**/*.vue", "src/**/*.d.ts", "tests/csp/unit/**/*.ts", "tests/csp/fixtures/**/*.ts"],
+  "include": [
+    "src/api/csp/**/*.ts",
+    "src/views/csp/**/*.ts",
+    "src/views/csp/**/*.vue",
+    "src/components/Csp/**/*.ts",
+    "src/components/Csp/**/*.vue",
+    "src/config/csp*.ts",
+    "src/services/csp/**/*.ts",
+    "src/store/modules/csp*.ts",
+    "src/composables/useCsp*.ts",
+    "src/types/env.d.ts",
+    "tests/csp/unit/**/*.ts",
+    "tests/csp/fixtures/**/*.ts",
+    "tests/csp/security/**/*.ts",
+    "tests/csp/a11y/**/*.ts",
+    "tests/csp/visual/**/*.ts"
+  ],
   "exclude": ["node_modules", "dist", "src/**/__tests__/**"]
 }
