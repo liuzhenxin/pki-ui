@@ -67,8 +67,10 @@ for (const name of requirements) {
     `Missing executed scenario ${name}`
   );
 }
-if (requirements.includes('unit-smoke') || requirements.includes('e2e-smoke'))
-  assert.equal(executed.length, 1, 'Bootstrap smoke must run exactly once');
+for (const name of ['unit-smoke', 'e2e-smoke']) {
+  if (requirements.includes(name))
+    assert.equal(executed.filter((title) => title.includes(suite.required[name])).length, 1, 'Bootstrap smoke must run exactly once');
+}
 const scan = (directory) => {
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
     const file = resolve(directory, entry.name);

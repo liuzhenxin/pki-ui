@@ -1,8 +1,8 @@
 {
-  "unit": { "evidenceKind": "unit", "required": { "unit-smoke": "@csp-smoke-unit" } },
+  "unit": { "evidenceKind": "unit", "required": { "unit-smoke": "@csp-smoke-unit", "fixtures-contract": "@fixtures-contract" } },
   "e2e": { "evidenceKind": "mock", "required": { "e2e-smoke": "@csp-smoke-e2e" } },
-  "a11y": { "evidenceKind": "a11y", "required": {} },
-  "visual": { "evidenceKind": "visual", "required": {} },
-  "security": { "evidenceKind": "security", "required": {} },
+  "a11y": { "evidenceKind": "a11y", "required": { "shell-a11y": "@shell-a11y" } },
+  "visual": { "evidenceKind": "visual", "required": { "shell-visual": "@shell-visual" } },
+  "security": { "evidenceKind": "security", "required": { "security-harness": "@security-harness" } },
   "contract": { "evidenceKind": "live", "required": {} }
 }
