@@ -1,6 +1,7 @@
 import { createWebHistory, createRouter, RouteRecordRaw } from 'vue-router';
 /* Layout */
 import Layout from '@/layout/index.vue';
+import { svsConstantRoutes } from './svs';
 
 /**
  * Note: 路由配置项
@@ -25,7 +26,7 @@ import Layout from '@/layout/index.vue';
  */
 
 // 公共路由
-export const constantRoutes: RouteRecordRaw[] = [
+export const constantRoutes: RouteRecordRaw[] = import.meta.env.VITE_APP_TENANT_IDS === '9' ? svsConstantRoutes : [
   {
     path: '/redirect',
     component: Layout,
@@ -52,12 +53,6 @@ export const constantRoutes: RouteRecordRaw[] = [
     component: () => import('@/views/svs/init/index.vue'),
     hidden: true,
     meta: { title: '初始化' }
-  },
-  {
-    path: '/svs/change-password',
-    component: () => import('@/views/svs/password/index.vue'),
-    hidden: true,
-    meta: { title: '修改口令' }
   },
   {
     path: '/register',
@@ -262,7 +257,7 @@ export const constantRoutes: RouteRecordRaw[] = [
 ];
 
 // 动态路由，基于用户权限动态去加载
-export const dynamicRoutes: RouteRecordRaw[] = [
+export const dynamicRoutes: RouteRecordRaw[] = import.meta.env.VITE_APP_TENANT_IDS === '9' ? [] : [
   {
     path: '/ocsp/monitoring',
     component: Layout,

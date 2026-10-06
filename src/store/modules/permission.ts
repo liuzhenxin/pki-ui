@@ -10,10 +10,11 @@ import InnerLink from '@/layout/components/InnerLink/index.vue';
 import { ref } from 'vue';
 import { createCustomNameComponent } from '@/utils/createCustomNameComponent';
 import { Result } from '@/api/types';
+import { isSvsProduct, svsRoutes } from '@/utils/svsNavigation';
 import { buildOcspNavigation } from '@/utils/ocspNavigation';
 
 // 匹配views里面所有的.vue文件
-const modules = import.meta.glob('./../../views/**/*.vue');
+const modules = import.meta.env.VITE_APP_TENANT_IDS === '9' ? {} : import.meta.glob('./../../views/**/*.vue');
 export const usePermissionStore = defineStore('permission', () => {
   const routes = ref<RouteRecordRaw[]>([]);
   const addRoutes = ref<RouteRecordRaw[]>([]);
@@ -48,6 +49,14 @@ export const usePermissionStore = defineStore('permission', () => {
     sidebarRouters.value = routes;
   };
   const generateRoutes = async (): Promise<RouteRecordRaw[]> => {
+    if (isSvsProduct()) {
+      const productRoutes = await svsRoutes();
+      setRoutes(productRoutes);
+      setSidebarRouters(productRoutes);
+      setDefaultRoutes(productRoutes);
+      setTopbarRoutes(productRoutes);
+      return productRoutes;
+    }
     const res = await getRouters({ types: ['M', 'C'] });
     const { data } = res;
     const sdata = removeRetiredKmcRoutes(JSON.parse(JSON.stringify(data)));
@@ -70,6 +79,7 @@ export const usePermissionStore = defineStore('permission', () => {
   };
 
   const generateInitRoutes = async (): Promise<RouteRecordRaw[]> => {
+    if (isSvsProduct()) return generateRoutes();
     const res = await getInitRouters({ types: ['M', 'C'] });
     // const { data } = res.data;
     const sdata = removeRetiredKmcRoutes(JSON.parse(JSON.stringify(res.data)));

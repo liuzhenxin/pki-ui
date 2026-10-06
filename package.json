@@ -28,7 +28,9 @@
     "lint:eslint": "eslint",
     "lint:eslint:fix": "eslint --fix",
     "prettier": "prettier --write .",
-    "build:portal": "VITE_APP_CLIENT_ID=95TxSsTPFA3tF12TBSMmUVK0da vite build --mode portal"
+    "build:portal": "VITE_APP_CLIENT_ID=95TxSsTPFA3tF12TBSMmUVK0da vite build --mode portal",
+    "build:svs": "VITE_APP_VERSION=${VITE_APP_VERSION:-1.0.0} VITE_APP_TENANT_IDS=9 VITE_APP_CLIENT_ID=${SVS_PLATFORM_CLIENT_ID:?Configure the registered platform client} vite build --mode production",
+    "typecheck:svs": "vue-tsc --noEmit -p tsconfig.svs.json"
   },
   "repository": {
     "type": "git",

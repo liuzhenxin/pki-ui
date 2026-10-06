@@ -1,3 +1,4 @@
+import { getSvsInitialization } from '@/api/svs/init';
 import { to as tos } from 'await-to-js';
 import router from './router';
 import NProgress from 'nprogress';
@@ -37,6 +38,7 @@ const getCurrentInitPath = () => {
   if (tenantId === '5') {
     return raInitPath;
   }
+  if (tenantId === '9') return '/svs/init';
   if (tenantId === '6') {
     return ocspInitPath;
   }
@@ -44,7 +46,7 @@ const getCurrentInitPath = () => {
 };
 
 const isInitRoute = (path: string) =>
-  path === caInitPath || path === licenseInitPath || path === kmcInitPath || path === raInitPath || path === ocspInitPath || path.includes('/setup');
+  path === '/svs/init' || path === caInitPath || path === licenseInitPath || path === kmcInitPath || path === raInitPath || path === ocspInitPath || path.includes('/setup');
 
 const isTenantInitialized = (status: unknown) => Number(status) === -1;
 
@@ -67,6 +69,7 @@ const getTenantAppTitle = (tenantName: string, tenantId: string, longName = fals
   if (tenantId === '10') {
     return `${tenantName} (${longName ? 'NAS网络存储管理系统' : 'NAS'})`;
   }
+  if (tenantId === '9') return `${tenantName} (${longName ? '签名验签服务器' : 'SVS'})`;
   return `${tenantName} (CA)`;
 };
 
@@ -89,6 +92,12 @@ const syncTenantContext = async () => {
 };
 
 const ensureTenantBoundary = async (path: string) => {
+  if (getCurrentTenantId() === '9') {
+    const state = await getSvsInitialization();
+    if (!state.locked && path !== '/svs/init') return '/svs/init';
+    if (state.locked && (path === '/svs/init' || path === '/')) return '/svs/runtime';
+    return '';
+  }
   const userStore = useUserStore();
   let status = userStore.tenantInitStatus;
   if (status === undefined) {
