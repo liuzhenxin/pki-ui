@@ -48,6 +48,18 @@ export const constantRoutes: RouteRecordRaw[] = [
     hidden: true
   },
   {
+    path: '/svs/init',
+    component: () => import('@/views/svs/init/index.vue'),
+    hidden: true,
+    meta: { title: '初始化' }
+  },
+  {
+    path: '/svs/change-password',
+    component: () => import('@/views/svs/password/index.vue'),
+    hidden: true,
+    meta: { title: '修改口令' }
+  },
+  {
     path: '/register',
     component: () => import('@/views/register.vue'),
     hidden: true

@@ -274,6 +274,16 @@ import { HttpStatus } from '@/enums/RespEnum';
 import { useI18n } from 'vue-i18n';
 import { v4 as uuidv4 } from 'uuid';
 import { getRadiusStatus } from '@/api/ops';
+import {
+  SVS_INIT_PATH,
+  SVS_LOCKED_MESSAGE,
+  SVS_PASSWORD_PATH,
+  SVS_PRESET_INIT_ACCOUNT,
+  SVS_TENANT_CODE,
+  openSvsInitSession,
+  readMustChangeUsernames,
+  responseText
+} from '@/api/svs/init';
 import defaultLoginBackground from '@/assets/images/login-background.jpg';
 import opsLoginBackground from '@/assets/images/login/tenant-ops.webp';
 import caLoginBackground from '@/assets/images/login/tenant-ca.webp';
@@ -540,6 +550,33 @@ watch(
   { immediate: true }
 );
 
+/** SVS init stays off the sidebar. mustChangePassword blocks daily menus until POST /admin/svs/account/password succeeds. */
+async function svsPostLoginPath(): Promise<string | null> {
+  const tenantCode = String(loginForm.value.tenantCode || '');
+  const tenantId = String(loginForm.value.tenantId || '');
+  const username = String(loginForm.value.username || '');
+  if (tenantCode !== SVS_TENANT_CODE && tenantId !== '9') {
+    return null;
+  }
+  sessionStorage.setItem('svs.username', username);
+  if (username === SVS_PRESET_INIT_ACCOUNT) {
+    const mode = String(router.currentRoute.value.query.svsMode || '') === 'FACTORY_RESET' ? 'FACTORY_RESET' : undefined;
+    try {
+      await openSvsInitSession(username, mode);
+      return mode === 'FACTORY_RESET' ? `${SVS_INIT_PATH}?mode=FACTORY_RESET` : SVS_INIT_PATH;
+    } catch (error) {
+      if (responseText(error).includes(SVS_LOCKED_MESSAGE)) {
+        return null;
+      }
+      return null;
+    }
+  }
+  if (readMustChangeUsernames().includes(username)) {
+    return SVS_PASSWORD_PATH;
+  }
+  return null;
+}
+
 const handleLogin = () => {
   if (tenantWhitelistMissed.value) {
     ElMessage.error('当前系统租户未启用，无法登录，请联系管理员');
@@ -570,7 +607,7 @@ const handleLogin = () => {
 
       const [err] = await to(userStore.login(loginData.value));
       if (!err) {
-        const redirectUrl = redirect.value || '/';
+        const redirectUrl = (await svsPostLoginPath()) || redirect.value || '/';
         await router.push(redirectUrl);
         loading.value = false;
       } else {
@@ -701,7 +738,7 @@ async function handleCertificateLogin() {
     localStorage.setItem('tenantId', String(loginForm.value.tenantId || ''));
     localStorage.setItem('tenantCode', tenantCode);
     certificateForm.pin = '';
-    await router.push(redirect.value || '/');
+    await router.push((await svsPostLoginPath()) || redirect.value || '/');
   } catch (error: any) {
     certificateForm.pin = '';
     ElMessage.error(error?.message || error?.msg || '证书登录失败，请重新读取证书后重试');

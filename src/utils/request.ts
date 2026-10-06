@@ -184,6 +184,10 @@ service.interceptors.request.use(
     if (config.data instanceof FormData) {
       delete config.headers['Content-Type'];
     }
+    const svsUsername = sessionStorage.getItem('svs.username');
+    if (svsUsername && String(config.url || '').includes('/admin/svs')) {
+      config.headers['X-Svs-Username'] = svsUsername;
+    }
     // 添加 request-id
     config.headers['request-id'] = new Date().getTime();
     return config;
@@ -316,6 +320,30 @@ service.interceptors.response.use(
         error.response?.data?.error === 'invalid_grant');
     if (refreshFailed) {
       return Promise.reject(handleSessionExpired());
+    }
+
+    const rawBody = error.response?.data;
+    const bodyText = typeof rawBody === 'string' ? rawBody : String(rawBody?.msg || '');
+    if (bodyText.includes('当前账号必须先修改口令')) {
+      const username = sessionStorage.getItem('svs.username');
+      if (username) {
+        let names: string[] = [];
+        try {
+          const stored = sessionStorage.getItem('svs.mustChangePassword');
+          const parsed = stored ? JSON.parse(stored) : [];
+          names = Array.isArray(parsed) ? parsed : [];
+        } catch {
+          names = [];
+        }
+        if (!names.includes(username)) {
+          names.push(username);
+          sessionStorage.setItem('svs.mustChangePassword', JSON.stringify(names));
+        }
+      }
+      if (!String(window.location.pathname).includes('/svs/change-password')) {
+        window.location.assign('/svs/change-password');
+      }
+      return Promise.reject(error);
     }
 
     console.log(error);
