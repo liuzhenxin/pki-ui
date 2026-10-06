@@ -1,40 +1,66 @@
 <template>
   <div class="hsm-initialization">
     <el-card>
-      <template #header><span>密码机初始化</span></template>
-      <el-alert type="warning" :closable="false" show-icon title="初始化会修改真实密码机状态，请确认设备连接和操作权限。" />
-      <el-steps :active="activeStep" finish-status="success" class="steps">
-        <el-step title="设备连接" />
-        <el-step title="网络配置" />
-        <el-step title="设备密钥" />
-        <el-step title="主管 UKey" />
-        <el-step title="站点证书" />
-      </el-steps>
-      <el-descriptions v-if="status" :column="2" border>
-        <el-descriptions-item label="设备状态">{{ status.state }}</el-descriptions-item>
-        <el-descriptions-item label="初始化批次">{{ status.currentAttemptId || '未开始' }}</el-descriptions-item>
-        <el-descriptions-item label="历史批次">{{ status.attemptCount }}</el-descriptions-item>
-      </el-descriptions>
-      <div class="actions">
-        <el-button :loading="loading" type="primary" @click="start">开始初始化</el-button>
-        <el-button :loading="loading" @click="refresh">刷新状态</el-button>
+      <template #header><span>密码机初始化状态</span></template>
+      <el-alert type="warning" :closable="false" show-icon title="设备授权接口与审批流程尚未验证，初始化写操作暂未开放。" />
+      <el-alert v-if="error" class="status-message" type="error" :closable="false" :title="error" show-icon />
+      <div v-loading="loading" class="status-content">
+        <el-descriptions v-if="status" :column="2" border>
+          <el-descriptions-item label="记录状态">{{ status.state }}</el-descriptions-item>
+          <el-descriptions-item label="初始化批次">{{ status.currentAttemptId || '未开始' }}</el-descriptions-item>
+          <el-descriptions-item label="历史批次">{{ status.attemptCount }}</el-descriptions-item>
+        </el-descriptions>
+        <el-empty v-else-if="!loading && !error" description="尚未查询状态" />
       </div>
-      <el-form v-if="attemptId" label-width="120px" class="device-form">
-        <el-form-item label="设备密钥口令"><el-input v-model="deviceSecret" type="password" show-password autocomplete="new-password" /></el-form-item>
-        <el-form-item><el-button type="primary" :loading="loading" @click="submitDeviceKey">初始化设备密钥</el-button></el-form-item>
-      </el-form>
+      <p>以上为服务端保存的进度；实时设备状态需要真机联调后接入。</p>
+      <div class="actions">
+        <el-button v-hasPermi="['hsm:init:view']" :loading="loading" @click="refresh">刷新状态</el-button>
+        <el-tooltip content="需要已验证的设备 UKey 授权及审批流程">
+          <span><el-button v-hasPermi="['hsm:init:manage']" type="primary" disabled>开始初始化</el-button></span>
+        </el-tooltip>
+      </div>
     </el-card>
   </div>
 </template>
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
-import { ElMessage, ElMessageBox } from 'element-plus';
-import { beginInitialization, getInitializationStatus, initializeDeviceKey, type InitializationStatus } from '@/api/hsm/initialization';
-const status = ref<InitializationStatus>(); const loading = ref(false); const attemptId = ref(''); const deviceSecret = ref('');
-const activeStep = computed(() => ({ UNINITIALIZED: 0, DEVICE_CONNECTED: 1, NETWORK_CONFIGURED: 2, DEVICE_KEY_INITIALIZED: 3, SUPERVISORS_INITIALIZED: 4, READY: 5 }[status.value?.state || 'UNINITIALIZED'] ?? 0));
-async function refresh() { status.value = await getInitializationStatus(); attemptId.value = status.value.currentAttemptId || ''; }
-async function start() { await ElMessageBox.confirm('确认开始真实密码机初始化？', '安全确认'); loading.value = true; try { const result: any = await beginInitialization(); attemptId.value = result.id; await refresh(); ElMessage.success('初始化批次已创建'); } finally { loading.value = false; } }
-async function submitDeviceKey() { if (!deviceSecret.value) return ElMessage.warning('请输入设备密钥口令'); loading.value = true; try { await initializeDeviceKey({ attemptId: attemptId.value, deviceSecret: deviceSecret.value }); deviceSecret.value = ''; await refresh(); ElMessage.success('设备密钥初始化成功'); } finally { loading.value = false; } }
+import { onMounted, ref } from 'vue';
+import { getInitializationStatus, type InitializationStatus } from '@/api/hsm/initialization';
+
+const status = ref<InitializationStatus>();
+const loading = ref(false);
+const error = ref('');
+
+async function refresh() {
+  if (loading.value) return;
+  loading.value = true;
+  error.value = '';
+  status.value = undefined;
+  try {
+    const response = await getInitializationStatus();
+    status.value = response.data;
+  } catch {
+    error.value = '状态查询失败，请检查登录权限、服务连接后重试。';
+  } finally {
+    loading.value = false;
+  }
+}
 onMounted(refresh);
 </script>
-<style scoped>.hsm-initialization{padding:20px}.steps{margin:32px 0}.actions{margin:24px 0}.device-form{max-width:600px}</style>
+<style scoped>
+.hsm-initialization {
+  padding: 20px;
+}
+.status-message,
+.status-content,
+.actions {
+  margin-top: 24px;
+}
+.status-content {
+  min-height: 80px;
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+</style>
