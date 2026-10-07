@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-labelledby="title description">
+  <title id="title">LiuZX CSP 密码服务平台图标</title>
+  <desc id="description">2026-10-07 用户批准的正式 CSP 品牌。C 形边界与密钥，深色背景反白版。</desc>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M91 31A44 44 0 1 0 91 97" stroke="#FFFFFF" stroke-width="14"/>
+    <circle cx="55" cy="64" r="11" stroke="#5DD4CA" stroke-width="9"/>
+    <path d="M66 64H110M91 64V78M105 64V73" stroke="#5DD4CA" stroke-width="9"/>
+  </g>
+</svg>
