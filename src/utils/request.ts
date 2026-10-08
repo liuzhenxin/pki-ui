@@ -212,6 +212,10 @@ service.interceptors.response.use(
         res.data = JSON.parse(decryptData);
       }
     }
+    // SVS management returns domain objects; `code` is the product code, not a platform status.
+    if (String(res.config?.url || '').startsWith('/admin/svs/')) {
+      return Promise.resolve(res.data);
+    }
     // 未设置状态码则默认成功状态
     //const code = res.data.code || HttpStatus.SUCCESS;
     // 未设置状态码则默认成功状态
