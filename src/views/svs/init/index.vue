@@ -1,7 +1,7 @@
 <template>
   <main class="svs-init-page">
     <h1>签名验签服务器初始化</h1>
-    <el-alert title="绑定已有平台账号：一个系统管理员、两个安全管理员和一个审计员。账号和口令由平台管理。" type="info" :closable="false" />
+    <el-alert title="绑定已有平台账号：一个系统管理员、两个安全管理员和一个审计员。两名安全管理员权限相同，每笔操作由不同账号申请和审批，禁止自审批。账号和口令由平台管理。" type="info" :closable="false" />
     <el-card v-loading="loading" shadow="never">
       <p>产品租户：9 / svs</p>
       <p>平台租户检查：{{ state?.platformTenantValid ? '通过' : '未通过' }}</p>
@@ -29,7 +29,7 @@ const router = useRouter();
 const state = ref<Initialization>();
 const loading = ref(false);
 const saving = ref(false);
-const labels = ['系统管理员', '安全管理员（申请）', '安全管理员（审批）', '审计员'];
+const labels = ['系统管理员', '安全管理员 1', '安全管理员 2', '审计员'];
 const roles = ['SYSADMIN', 'SECADMIN', 'SECADMIN', 'AUDITOR'];
 const users = ref(['', '', '', '']);
 async function load() {
