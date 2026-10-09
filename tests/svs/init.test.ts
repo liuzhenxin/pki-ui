@@ -11,8 +11,8 @@ const button = (w: ReturnType<typeof mountWizard>, label: string) => w.findAll('
 describe('SVS initialization wizard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(api.getSvsInitPlan).mockResolvedValue({ nextStep: 0, keyId: 'sm2-test', keys: ['sm2-test'], hostType: 'STANDALONE', deployment: { networkReady: 'true', securityReady: 'true' } });
-    vi.mocked(api.reviewSvsInitStep).mockResolvedValue({ nextStep: 1, keyId: 'sm2-test', keys: ['sm2-test'], hostType: 'STANDALONE', deployment: {} }); vi.mocked(api.getSvsInitialization).mockResolvedValue(ready);
+    vi.mocked(api.getSvsInitPlan).mockResolvedValue({ nextStep: 0, keyId: 'sm2-test', keys: ['sm2-test'], hostType: 'STANDALONE', deploymentRevision: 'revision', deployment: { networkReady: 'true', securityReady: 'true' } });
+    vi.mocked(api.reviewSvsInitStep).mockResolvedValue({ nextStep: 1, keyId: 'sm2-test', keys: ['sm2-test'], hostType: 'STANDALONE', deploymentRevision: 'revision', deployment: {} }); vi.mocked(api.getSvsInitialization).mockResolvedValue(ready);
     vi.mocked(api.getSvsInitAccounts).mockResolvedValue({ sys: 'SYSADMIN', sec1: 'SECADMIN', sec2: 'SECADMIN', audit: 'AUDITOR' });
     vi.mocked(api.validateSvsInitAccounts).mockResolvedValue({ ready: true, rows: [] });
     vi.mocked(api.completeSvsInitialization).mockResolvedValue();
@@ -35,12 +35,12 @@ describe('SVS initialization wizard', () => {
     expect(api.validateSvsInitAccounts).toHaveBeenCalledWith({ admin: 'SYSADMIN', secadmin: 'SECADMIN', secadmin2: 'SECADMIN', auditor: 'AUDITOR' });
     expect(button(w, '确认并完成初始化').attributes('disabled')).toBeDefined();expect(api.completeSvsInitialization).not.toHaveBeenCalled();
     await button(w, '执行签名验签自测').trigger('click');await flushPromises();
-    expect(api.reviewSvsInitStep).toHaveBeenLastCalledWith(6, 'sm2-test');
+    expect(api.reviewSvsInitStep).toHaveBeenLastCalledWith(6, 'sm2-test', 'revision');
     (w.vm as any).confirmed = true;await flushPromises();await button(w, '确认并完成初始化').trigger('click');await flushPromises();
     expect(api.completeSvsInitialization).toHaveBeenCalledTimes(1);expect(w.text()).toContain('初始化已完成');w.unmount();
   });
   it('does not accept a failed self-test or force completion', async () => {
-    vi.mocked(api.getSvsInitPlan).mockResolvedValue({ nextStep: 6, keyId: 'sm2-test', keys: ['sm2-test'], hostType: 'STANDALONE', deployment: {} });
+    vi.mocked(api.getSvsInitPlan).mockResolvedValue({ nextStep: 6, keyId: 'sm2-test', keys: ['sm2-test'], hostType: 'STANDALONE', deploymentRevision: 'revision', deployment: {} });
     vi.mocked(api.reviewSvsInitStep).mockRejectedValue(new Error('设备签名验签自测未通过'));
     const w = mountWizard();await flushPromises();await button(w, '执行签名验签自测').trigger('click');await flushPromises();
     expect(w.text()).toContain('设备签名验签自测未通过');

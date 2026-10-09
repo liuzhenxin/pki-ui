@@ -99,14 +99,14 @@ async function next() {
   saving.value = true; error.value = '';
   try {
     if (step.value === 5) { validation.value = await validateSvsInitAccounts(subjects); if (!validation.value.ready) return; }
-    plan.value = await reviewSvsInitStep(step.value, keyId.value); step.value++; reviewed.value = false; verified.value = false;
+    plan.value = await reviewSvsInitStep(step.value, keyId.value, plan.value?.deploymentRevision); step.value++; reviewed.value = false; verified.value = false;
   } catch (e) { error.value = message(e); }
   finally { saving.value = false; }
 }
 async function verify() {
   if (saving.value) return;
   saving.value = true; error.value = ''; verified.value = false; confirmed.value = false;
-  try { plan.value = await reviewSvsInitStep(6, keyId.value); verified.value = true; }
+  try { plan.value = await reviewSvsInitStep(6, keyId.value, plan.value?.deploymentRevision); verified.value = true; }
   catch (e) { error.value = message(e); }
   finally { saving.value = false; }
 }

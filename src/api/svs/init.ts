@@ -25,8 +25,9 @@ export interface InitPlan {
   keyId: string;
   keys: string[];
   hostType: 'STANDALONE';
+  deploymentRevision: string;
   deployment: Record<string, string>;
 }
 export const getSvsInitPlan = (): Promise<InitPlan> => request({ url: '/admin/svs/init/plan', method: 'get', hideErrorNotify: true } as any);
-export const reviewSvsInitStep = (step: number, keyId = ''): Promise<InitPlan> =>
-  request({ url: `/admin/svs/init/steps/${step}`, method: 'post', data: { keyId }, hideErrorNotify: true } as any);
+export const reviewSvsInitStep = (step: number, keyId = '', deploymentRevision = ''): Promise<InitPlan> =>
+  request({ url: `/admin/svs/init/steps/${step}`, method: 'post', data: { keyId, deploymentRevision }, hideErrorNotify: true } as any);
