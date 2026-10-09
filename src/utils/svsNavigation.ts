@@ -1,5 +1,6 @@
 import type { RouteRecordRaw } from 'vue-router';
 import Layout from '@/layout/index.vue';
+import { svsInitializationRoute } from '@/router/svs';
 import { getSvsInitialization } from '@/api/svs/init';
 import { menus } from '@/api/svs/product';
 const pages = new Set([
@@ -19,7 +20,7 @@ const pages = new Set([
 ]);
 export const isSvsProduct = () => String(import.meta.env.VITE_APP_TENANT_IDS) === '9';
 export async function svsRoutes(): Promise<RouteRecordRaw[]> {
-  if (!(await getSvsInitialization()).locked) return [];
+  if (!(await getSvsInitialization()).locked) return [svsInitializationRoute];
   const groups = await menus();
   return groups.map((group, index) => ({
     path: `/svs-group-${index}`,

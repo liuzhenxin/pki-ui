@@ -1,7 +1,7 @@
 import { createWebHistory, createRouter, RouteRecordRaw } from 'vue-router';
 /* Layout */
 import Layout from '@/layout/index.vue';
-import { svsConstantRoutes } from './svs';
+import { svsConstantRoutes, svsInitializationRoute } from './svs';
 
 /**
  * Note: 路由配置项
@@ -48,12 +48,7 @@ export const constantRoutes: RouteRecordRaw[] = import.meta.env.VITE_APP_TENANT_
     component: () => import('@/views/login.vue'),
     hidden: true
   },
-  {
-    path: '/svs/init',
-    component: () => import('@/views/svs/init/index.vue'),
-    hidden: true,
-    meta: { title: '初始化' }
-  },
+  { ...svsInitializationRoute, hidden: true },
   {
     path: '/register',
     component: () => import('@/views/register.vue'),
