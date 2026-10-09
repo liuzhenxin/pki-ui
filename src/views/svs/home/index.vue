@@ -157,7 +157,7 @@ const title = computed(() => ({ SYSADMIN: '运行工作台', SECADMIN: '安全�
 const description = computed(
   () =>
     ({
-      SYSADMIN: '关注服务是否可用，及时定位调用与接入问题。',
+      SYSADMIN: '掌握设备与服务运行情况，检查应用接入，维护现有系统配置。',
       SECADMIN: '处理安全变更与资源配置，关注证书及授权有效期。',
       AUDITOR: '追溯直接操作与历史变更，记录异常分析和审计意见。'
     })[identity.value?.role || ''] || '正在校验平台身份'
@@ -223,10 +223,10 @@ const grantRows = computed(() => (ready('grants') ? data.value?.sections.grants.
 const quickLinks = computed(() =>
   (identity.value?.role === 'SYSADMIN'
     ? [
-        ['接入应用', 'applications'],
-        ['运行状态', 'runtime'],
-        ['配置备份', 'backup'],
-        ['历史审批记录', 'approvals']
+        ['设备基本信息', 'device'],
+        ['应用登记', 'applications'],
+        ['网络配置', 'network'],
+        ['公开配置导出', 'backup']
       ]
     : identity.value?.role === 'SECADMIN'
       ? [

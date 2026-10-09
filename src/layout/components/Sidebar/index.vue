@@ -16,7 +16,8 @@
           :collapse="isCollapse"
           :background-color="bgColor"
           :text-color="textColor"
-          :unique-opened="true"
+          :unique-opened="!svsExpanded"
+          :default-openeds="svsOpenGroups"
           :active-text-color="theme"
           :collapse-transition="false"
           :popper-offset="12"
@@ -49,6 +50,8 @@ const appStore = useAppStore();
 const settingsStore = useSettingsStore();
 const permissionStore = usePermissionStore();
 const sidebarRouters = computed<RouteRecordRaw[]>(() => permissionStore.getSidebarRoutes());
+const svsExpanded = computed(() => sidebarRouters.value.some((route) => route.meta?.svsExpanded === true));
+const svsOpenGroups = computed(() => sidebarRouters.value.filter((route) => route.meta?.svsExpanded === true).map((route) => route.path));
 const showLogo = computed(() => settingsStore.sidebarLogo);
 const sideTheme = computed(() => settingsStore.sideTheme);
 const theme = computed(() => settingsStore.theme);
