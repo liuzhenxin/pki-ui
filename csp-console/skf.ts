@@ -1,6 +1,36 @@
 // 仅允许用户主动调用固定 loopback SKF 服务，不向平台发送 PIN。
 let connection: WebSocket | null = null;
 let sequence = 0;
+export function normalizeSkfSignature(value: string): string {
+  const bytes = Array.from(atob(value), (c) => c.charCodeAt(0));
+  // SKF 固定 64 字节 r||s，即使 r 的首字节为 0x30，也不能误认为 DER。
+  if (bytes.length === 64) {
+    const integer = (part: number[]) => {
+      while (part.length > 1 && part[0] === 0) part.shift();
+      if (part[0] & 0x80) part.unshift(0);
+      return [2, part.length, ...part];
+    };
+    const body = [...integer(bytes.slice(0, 32)), ...integer(bytes.slice(32))];
+    return btoa(String.fromCharCode(0x30, body.length, ...body));
+  }
+  const rLength = bytes[3];
+  const sOffset = 4 + rLength;
+  if (
+    bytes.length < 8 ||
+    bytes.length > 72 ||
+    bytes[0] !== 0x30 ||
+    bytes[1] !== bytes.length - 2 ||
+    bytes[2] !== 2 ||
+    rLength < 1 ||
+    rLength > 33 ||
+    bytes[sOffset] !== 2 ||
+    bytes[sOffset + 1] < 1 ||
+    bytes[sOffset + 1] > 33 ||
+    sOffset + 2 + bytes[sOffset + 1] !== bytes.length
+  )
+    throw new Error('USB Key 签名格式无效。');
+  return value;
+}
 export function closeSkf() {
   connection?.close();
   connection = null;

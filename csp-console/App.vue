@@ -4,8 +4,8 @@ import logo from '../src/assets/brand/csp-logo.svg';
 import mark from '../src/assets/brand/csp-mark-inverse.svg';
 import brandMark from '../src/assets/brand/csp-mark.svg';
 import { User, Lock, OfficeBuilding, CircleCheck } from '@element-plus/icons-vue';
-import { skfCall, closeSkf } from './skf';
-import { calculateSm2SignatureDigest, normalizeSm2SignatureForApi } from '../src/utils/sm2SignatureDigest';
+import { skfCall, closeSkf, normalizeSkfSignature } from './skf';
+import { calculateSm2SignatureDigest } from '../src/utils/sm2SignatureDigest';
 
 const loginMode = ref<'account' | 'certificate'>('account');
 const certificateEnabled = ref(false);
@@ -61,7 +61,7 @@ async function certificateLogin() {
     const digest = calculateSm2SignatureDigest(certificate.cert, challenge.signData, challenge.sm2UserId);
     const rawSignature = await skfCall('SignData', [certificate.key, digest]);
     if (typeof rawSignature !== 'string') throw new Error('USB Key 签名响应无效。');
-    await api('certificate-login', { challengeId: challenge.challengeId, signature: normalizeSm2SignatureForApi(rawSignature) });
+    await api('certificate-login', { challengeId: challenge.challengeId, signature: normalizeSkfSignature(rawSignature) });
     certificates.value = [];
     certificateKey.value = '';
     signedIn.value = true;
