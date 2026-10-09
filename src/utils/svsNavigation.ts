@@ -1,6 +1,6 @@
 import type { RouteRecordRaw } from 'vue-router';
 import Layout from '@/layout/index.vue';
-import { svsInitializationRoute } from '@/router/svs';
+import { svsInitializationRoute } from '@/utils/svsInitializationRoute';
 import { getSvsInitialization } from '@/api/svs/init';
 import { menus } from '@/api/svs/product';
 const pages = new Set([

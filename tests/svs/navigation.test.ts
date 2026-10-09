@@ -15,10 +15,11 @@ it('only implemented two-level routes are accepted from the menu response', asyn
   const routes = await svsRoutes();expect(routes[0].children).toHaveLength(1);expect(routes[0].children![0].path).toBe('/svs/approvals');
 });
 
-it('initialization uses the management Layout providing sidebar and user logout', () => {
+it('initialization lazily loads management Layout providing sidebar and user logout', async () => {
   const router = createRouter({ history: createMemoryHistory(), routes: svsConstantRoutes });
   const matched = router.resolve('/svs/init').matched;
   expect(matched).toHaveLength(2);
-  expect(matched[0].components!.default).toBe(Layout);
+  const load = matched[0].components!.default as () => Promise<any>;
+  expect((await load()).default).toBe(Layout);
   expect(matched[1].name).toBe('SvsInitialization');
 });

@@ -1,13 +1,8 @@
 import type { RouteRecordRaw } from 'vue-router';
 import Layout from '@/layout/index.vue';
 
-export const svsInitializationRoute: RouteRecordRaw = {
-  path: '/svs',
-  component: Layout,
-  name: 'SvsInitializationLayout',
-  redirect: '/svs/init',
-  children: [{ path: 'init', component: () => import('@/views/svs/init/index.vue'), name: 'SvsInitialization', meta: { title: 'SVS 初始化', icon: 'settings', noCache: true } }]
-};
+import { svsInitializationRoute } from '@/utils/svsInitializationRoute';
+export { svsInitializationRoute } from '@/utils/svsInitializationRoute';
 
 export const svsConstantRoutes: RouteRecordRaw[] = [
   { path: '/', redirect: '/svs/runtime', hidden: true },
