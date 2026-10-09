@@ -459,7 +459,7 @@ import {
 } from '@/api/kmc/keyRecovery';
 import { unwrapKmcData } from '@/api/kmc/common';
 import { getKmcRuntimeConfig } from '@/api/kmc/config';
-import { listUser } from '@/api/system/user';
+import { listRecoveryApprovers } from '@/api/kmc/keyRecovery';
 import SKFClient from '@/api/skf/skf_api';
 
 interface RecoveryTarget {
@@ -850,7 +850,7 @@ const regenerateUsbContainerName = async () => {
 const loadJudgeUsers = async (keyword = '') => {
   judgeLoading.value = true;
   try {
-    const res: any = await listUser({ pageNum: 1, pageSize: 50, username: keyword || undefined, roleId: '306' } as any);
+    const res: any = await listRecoveryApprovers(keyword || undefined);
     judgeUsers.value = normalizeUserList(unwrapKmcData<any>(res));
     judgeLoaded.value = true;
   } finally {

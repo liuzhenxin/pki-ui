@@ -196,3 +196,6 @@ export const resolveUsedKeyByCertificate = (certificate: string) => {
     data: { certificate }
   });
 };
+
+/** Minimal trusted projection for recovery candidate selection. */
+export const listRecoveryApprovers = (keyword?: string) => request({ url: '/kmc/v1/key-recovery/approvers', method: 'get', params: { keyword } });
