@@ -19,3 +19,14 @@ export interface AccountValidation { ready: boolean; rows: { username: string; r
 export const getSvsInitAccounts = (): Promise<Record<string, InitRole>> => request({ url: '/admin/svs/init/accounts', method: 'get', hideErrorNotify: true } as any);
 export const validateSvsInitAccounts = (subjects: Record<string, string>): Promise<AccountValidation> =>
   request({ url: '/admin/svs/init/validate', method: 'post', data: subjects, hideErrorNotify: true } as any);
+
+export interface InitPlan {
+  nextStep: number;
+  keyId: string;
+  keys: string[];
+  hostType: 'STANDALONE';
+  deployment: Record<string, string>;
+}
+export const getSvsInitPlan = (): Promise<InitPlan> => request({ url: '/admin/svs/init/plan', method: 'get', hideErrorNotify: true } as any);
+export const reviewSvsInitStep = (step: number, keyId = ''): Promise<InitPlan> =>
+  request({ url: `/admin/svs/init/steps/${step}`, method: 'post', data: { keyId }, hideErrorNotify: true } as any);
