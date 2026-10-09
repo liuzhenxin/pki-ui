@@ -17,14 +17,33 @@ try {
     let loginCount = 0;
     let failLogin = false;
     let initialized = false;
+    let pinAttempts = 0;
+    let certificateLoginAttempts = 0;
+    await page.routeWebSocket('ws://127.0.0.1:9001', (socket) => {
+      socket.onMessage((raw) => {
+        const request = JSON.parse(String(raw));
+        let result;
+        if (request.method === 'FindCertificates') result = [{ key: 'synthetic-key', value: '测试签名证书', type: 'Sign', cert: 'A'.repeat(100) }];
+        else if (request.method === 'CheckPIN') {
+          pinAttempts++;
+          result = false;
+        } else throw new Error('PIN failure must not sign');
+        socket.send(JSON.stringify({ id: request.id, result }));
+      });
+    });
     const errors = [];
     page.on('pageerror', (error) => errors.push(error.message));
     await page.route('**/console-api/**', async (route) => {
       const action = new URL(route.request().url()).pathname.split('/').pop();
+      assert.equal((route.request().postData() || '').includes('Synthetic-PIN-only'), false);
       let body;
       let status = 200;
-      if (action === 'session') body = { csrf: 'test-csrf', authenticated: false };
-      else if (action === 'challenge')
+      if (action === 'session') body = { csrf: 'test-csrf', authenticated: false, certificateLoginEnabled: true };
+      else if (action === 'certificate-challenge') body = { challengeId: 'synthetic-challenge', signData: 'dGVzdA', sm2UserId: '1234567812345678' };
+      else if (action === 'certificate-login') {
+        certificateLoginAttempts++;
+        throw new Error('PIN failure must not verify');
+      } else if (action === 'challenge')
         body = {
           csrf: 'test-csrf',
           captchaEnabled: true,
@@ -70,6 +89,21 @@ try {
     assert.equal(new URL(page.url()).pathname, '/csp/overview');
     await page.getByRole('button', { name: '退出登录' }).click();
     await page.getByRole('heading', { name: '欢迎回来' }).waitFor();
+    await page.getByRole('button', { name: '证书登录', exact: true }).click();
+    await page.getByRole('button', { name: '读取 USB Key 证书' }).click();
+    await page.getByLabel('USB Key PIN', { exact: true }).fill('Synthetic-PIN-only');
+    await page.screenshot({ path: `/tmp/csp-console-certificate-${width}.png`, fullPage: true });
+    assert.deepEqual(
+      (await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze()).violations.map((v) => v.id),
+      []
+    );
+    await page.getByRole('button', { name: '证书登录', exact: true }).last().click();
+    await page.getByRole('alert').waitFor();
+    assert.equal(await page.getByLabel('USB Key PIN', { exact: true }).inputValue(), '');
+    assert.equal(pinAttempts, 1);
+    assert.equal(certificateLoginAttempts, 0);
+    assert.equal(await page.evaluate(() => localStorage.length + sessionStorage.length), 0);
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
     assert.deepEqual(errors, []);
     await context.close();
     process.stdout.write(`CSP_UI_MOCK_PASS width=${width} login/error/setup/overview/logout/storage/overflow\n`);

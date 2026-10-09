@@ -4,6 +4,76 @@ import logo from '../src/assets/brand/csp-logo.svg';
 import mark from '../src/assets/brand/csp-mark-inverse.svg';
 import brandMark from '../src/assets/brand/csp-mark.svg';
 import { User, Lock, OfficeBuilding, CircleCheck } from '@element-plus/icons-vue';
+import { skfCall, closeSkf } from './skf';
+import { calculateSm2SignatureDigest, normalizeSm2SignatureForApi } from '../src/utils/sm2SignatureDigest';
+
+const loginMode = ref<'account' | 'certificate'>('account');
+const certificateEnabled = ref(false);
+const pin = ref('');
+const certificates = ref<{ key: string; cert: string; label: string }[]>([]);
+const certificateKey = ref('');
+function switchMode(mode: 'account' | 'certificate') {
+  loginMode.value = mode;
+  pin.value = '';
+  password.value = '';
+  error.value = '';
+}
+async function readCertificates() {
+  if (busy.value || !secure || !certificateEnabled.value) return;
+  busy.value = true;
+  error.value = '';
+  certificates.value = [];
+  certificateKey.value = '';
+  pin.value = '';
+  try {
+    const result = await skfCall('FindCertificates', ['Sign']);
+    if (!Array.isArray(result)) throw new Error('本机证书列表无效。');
+    certificates.value = result
+      .filter((item) => item?.type === 'Sign' && typeof item.key === 'string' && typeof item.cert === 'string')
+      .map((item, index) => ({
+        key: item.key,
+        cert: item.cert.replace(/\s+/g, ''),
+        label: `签名证书 ${index + 1} · ${String(item.value || item.key).slice(0, 180)}`
+      }));
+    certificateKey.value = certificates.value[0]?.key || '';
+    if (!certificateKey.value) throw new Error('USB Key 中未发现签名证书。');
+  } catch (failure) {
+    error.value = (failure as Error).message;
+  } finally {
+    closeSkf();
+    busy.value = false;
+  }
+}
+async function certificateLogin() {
+  if (busy.value || !secure || !certificateEnabled.value) return;
+  const certificate = certificates.value.find((item) => item.key === certificateKey.value);
+  if (!certificate || !pin.value) {
+    error.value = '请选择签名证书并输入 PIN。';
+    return;
+  }
+  busy.value = true;
+  error.value = '';
+  try {
+    const challenge = await api('certificate-challenge', { certificate: certificate.cert });
+    const verified = await skfCall('CheckPIN', [certificate.key, pin.value]);
+    pin.value = '';
+    if (verified !== true) throw new Error('PIN 验证未通过；不会自动重试。');
+    const digest = calculateSm2SignatureDigest(certificate.cert, challenge.signData, challenge.sm2UserId);
+    const rawSignature = await skfCall('SignData', [certificate.key, digest]);
+    if (typeof rawSignature !== 'string') throw new Error('USB Key 签名响应无效。');
+    await api('certificate-login', { challengeId: challenge.challengeId, signature: normalizeSm2SignatureForApi(rawSignature) });
+    certificates.value = [];
+    certificateKey.value = '';
+    signedIn.value = true;
+    await refresh();
+  } catch (failure) {
+    error.value = (failure as Error).message;
+  } finally {
+    closeSkf();
+    pin.value = '';
+    busy.value = false;
+  }
+}
 
 const username = ref('');
 const password = ref('');
@@ -103,6 +173,7 @@ async function logout() {
     history.replaceState(null, '', '/login');
     const session = await api('session');
     csrf.value = session.csrf;
+    certificateEnabled.value = session.certificateLoginEnabled === true;
     await reloadChallenge();
   } catch {
     error.value = '退出或新会话状态未确认，请刷新页面核查。';
@@ -115,6 +186,7 @@ onMounted(async () => {
   try {
     const session = await api('session');
     csrf.value = session.csrf;
+    certificateEnabled.value = session.certificateLoginEnabled === true;
     if (session.authenticated) {
       await refresh();
       return;
@@ -146,10 +218,11 @@ onMounted(async () => {
         <h2>欢迎回来</h2>
         <p class="muted form-subtitle">请输入您的账户信息以进入密码服务平台</p>
         <div class="login-method">
-          <span><User aria-hidden="true" />账号登录</span><small>测试环境</small>
+          <button type="button" :aria-pressed="loginMode === 'account'" :disabled="busy" @click="switchMode('account')">账号登录</button>
+          <button type="button" :aria-pressed="loginMode === 'certificate'" :disabled="busy" @click="switchMode('certificate')">证书登录</button>
         </div>
         <div v-if="!secure" class="notice" role="status">当前为 HTTP 测试预览，已禁止发送账号密码。请通过 HTTPS 或 localhost SSH 隧道登录。</div>
-        <form @submit.prevent="login">
+        <form v-if="loginMode === 'account'" @submit.prevent="login">
           <el-input class="tenant-field" model-value="密码服务平台（CSP）" aria-label="当前系统租户" disabled readonly
             ><template #prefix><OfficeBuilding aria-hidden="true" class="field-icon" /></template
           ></el-input>
@@ -183,6 +256,36 @@ onMounted(async () => {
           <p v-if="error" class="error" role="alert">{{ error }}</p>
           <el-button class="submit" type="primary" native-type="submit" :loading="busy" :disabled="!secure || !csrf || (captchaEnabled && !image)"
             >登录</el-button
+          >
+        </form>
+        <form v-else @submit.prevent="certificateLogin">
+          <p class="muted">插入已绑定 CSP 账号的 USB Key，并启动本机 SKF 服务。PIN 仅交本机设备验证。</p>
+          <p v-if="!certificateEnabled" class="notice" role="status">证书登录尚待客户端授权、信任链及吊销校验验收，暂未启用。</p>
+          <el-button :disabled="busy || !secure || !certificateEnabled" @click="readCertificates">读取 USB Key 证书</el-button>
+          <label for="certificate">签名证书</label>
+          <select id="certificate" v-model="certificateKey" class="certificate-select" :disabled="busy || !secure" required>
+            <option value="" disabled>请选择签名证书</option>
+            <option v-for="item in certificates" :key="item.key" :value="item.key">{{ item.label }}</option>
+          </select>
+          <label for="pin">USB Key PIN</label>
+          <el-input
+            id="pin"
+            v-model="pin"
+            type="password"
+            autocomplete="off"
+            maxlength="64"
+            placeholder="请输入 USB Key PIN"
+            :disabled="busy || !secure"
+            required
+          />
+          <p v-if="error" class="error" role="alert">{{ error }}</p>
+          <el-button
+            class="submit"
+            type="primary"
+            native-type="submit"
+            :loading="busy"
+            :disabled="!secure || !csrf || !certificateEnabled || !certificateKey || !pin"
+            >证书登录</el-button
           >
         </form>
         <p class="security-note"><Lock aria-hidden="true" class="field-icon" />不保存密码 · 会话受控</p>

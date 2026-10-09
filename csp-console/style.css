@@ -239,6 +239,33 @@ label {
   border-radius: 6px;
   color: #175fa9;
 }
+.login-method button {
+  flex: 1;
+  min-height: 44px;
+  border: 1px solid #d8dfe2;
+  background: white;
+  color: #526776;
+  border-radius: 6px;
+}
+.login-method {
+  gap: 12px;
+}
+.login-method button[aria-pressed='true'] {
+  background: #f0f7ff;
+  border-color: #bbd7f3;
+  color: #175fa9;
+}
+.certificate-select {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  margin: 16px 0;
+  padding: 8px;
+  border: 1px solid #d8dfe2;
+  border-radius: 6px;
+  background: white;
+  color: #182b3b;
+}
 .login-method svg,
 .field-icon,
 .security-note svg {
