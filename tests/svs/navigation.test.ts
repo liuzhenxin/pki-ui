@@ -23,3 +23,15 @@ it('initialization lazily loads management Layout providing sidebar and user log
   expect((await load()).default).toBe(Layout);
   expect(matched[1].name).toBe('SvsInitialization');
 });
+
+
+it('registers business routes after initialization in the same router session', async () => {
+  vi.mocked(getSvsInitialization).mockResolvedValue({ locked: false, platformTenantValid: true, deviceReady: true, tenantId: 9, code: 'svs' });
+  const router = createRouter({ history: createMemoryHistory(), routes: svsConstantRoutes });
+  (await svsRoutes()).forEach(route => router.addRoute(route));
+  expect(router.resolve('/svs/runtime').matched.at(-1)?.name).not.toBe('Svsruntime');
+  vi.mocked(getSvsInitialization).mockResolvedValue({ locked: true, platformTenantValid: true, deviceReady: true, tenantId: 9, code: 'svs' });
+  vi.mocked(menus).mockResolvedValue([{ title: '系统管理', path: '', mutable: false, children: [{ title: '运行状态', path: '/svs/runtime', mutable: false, children: [] }] }]);
+  (await svsRoutes()).forEach(route => router.addRoute(route));
+  expect(router.resolve('/svs/runtime').matched.at(-1)?.name).toBe('Svsruntime');
+});

@@ -48,7 +48,7 @@
         <el-button :disabled="step === 0 || step === 7 || loading || saving" @click="back">上一步</el-button>
         <el-button v-if="step < 6" type="primary" :loading="saving" :disabled="!canContinue" @click="next">{{ step === 5 ? '校验并继续' : '下一步' }}</el-button>
         <el-button v-else-if="step === 6" type="primary" :loading="saving" :disabled="!verified || !confirmed" @click="complete">确认并完成初始化</el-button>
-        <el-button v-else type="primary" @click="router.replace('/svs/runtime')">进入管理台</el-button>
+        <el-button v-else type="primary" :loading="saving" @click="enterManagement">进入管理台</el-button>
       </div>
     </el-card>
   </main>
@@ -56,6 +56,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
+import { usePermissionStore } from '@/store/modules/permission';
 import { Refresh } from '@element-plus/icons-vue';
 import { getSvsInitialization, completeSvsInitialization, validateSvsInitAccounts, getSvsInitPlan, reviewSvsInitStep, type Initialization, type AccountValidation, type InitPlan } from '@/api/svs/init';
 const router = useRouter();
@@ -115,6 +116,17 @@ async function complete() {
   saving.value = true; error.value = '';
   try { await completeSvsInitialization(subjects); step.value = 7; }
   catch (e) { error.value = message(e); confirmed.value = false; verified.value = false; }
+  finally { saving.value = false; }
+}
+async function enterManagement() {
+  if (saving.value) return;
+  saving.value = true; error.value = '';
+  try {
+    const routes = await usePermissionStore().generateRoutes();
+    routes.forEach(route => router.addRoute(route));
+    await router.replace('/svs/runtime');
+  }
+  catch (e) { error.value = message(e); }
   finally { saving.value = false; }
 }
 onMounted(load);
