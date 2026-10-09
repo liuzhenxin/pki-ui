@@ -67,16 +67,7 @@
       <el-pagination v-model:current-page="pageNumber" :total="total" :page-size="20" layout="prev, pager, next, total" @current-change="load" />
     </template>
     <template v-else-if="page === 'certificates'">
-      <div class="toolbar">
-        <el-button v-if="has('svs:security:certificate:manage')" type="primary" @click="certificateDialog = true">导入公开证书</el-button
-        ><span>轮转时导入新证书，再申请切换资源绑定，保留历史记录。</span>
-      </div>
-      <el-table :data="certificateRows"
-        ><el-table-column prop="id" label="证书标识" min-width="210" /><el-table-column prop="subject" label="主体" min-width="220" /><el-table-column
-          prop="keyId"
-          label="KeyId" /><el-table-column prop="status" label="状态" /><el-table-column prop="notAfter" label="有效期" min-width="180"
-      /></el-table>
-      <el-pagination v-model:current-page="pageNumber" :total="total" :page-size="20" layout="prev, pager, next, total" @current-change="load" />
+      <DeviceCertificates :manage="has('svs:security:certificate:manage')" />
     </template>
     <template v-else-if="page === 'runtime'">
       <el-descriptions :column="2" border
@@ -115,16 +106,6 @@
         ><el-button v-if="kind !== 'AUDIT_OPINION'" :loading="saving" type="primary" @click="save(true)">申请双人审批</el-button></template
       >
     </el-dialog>
-    <el-dialog v-model="certificateDialog" title="导入公开证书" width="640px"
-      ><el-form label-width="100px"
-        ><el-form-item label="KeyId"><el-input v-model="certificateKey" /></el-form-item
-        ><el-form-item label="公开证书"
-          ><el-input v-model="certificateText" type="textarea" :rows="8" placeholder="PEM 或 Base64 DER；禁止私钥" /></el-form-item></el-form
-      ><template #footer
-        ><el-button @click="certificateDialog = false">取消</el-button
-        ><el-button type="primary" :loading="saving" @click="importCertificate">导入</el-button></template
-      ></el-dialog
-    >
     <el-drawer v-model="details" title="对象与版本详情" size="60%"
       ><el-descriptions v-for="(item, index) in detailRows" :key="index" :column="1" border
         ><el-descriptions-item v-for="(value, key) in item" :key="key" :label="key">{{ value }}</el-descriptions-item></el-descriptions
@@ -137,6 +118,7 @@ import { computed, onMounted, ref, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import request from '@/utils/request';
 import * as api from '@/api/svs/product';
+import DeviceCertificates from './DeviceCertificates.vue';
 const props = defineProps<{ page: string; title: string; mutable: boolean }>();
 interface Field {
   key: string;
@@ -234,14 +216,11 @@ const directSave = computed(() => ['APPLICATION', 'KEY_REFERENCE', 'AUDIT_OPINIO
 const loading = ref(false),
   saving = ref(false),
   dialog = ref(false),
-  details = ref(false),
-  certificateDialog = ref(false);
+  details = ref(false);
 const error = ref(''),
   reason = ref(''),
   operation = ref(''),
-  result = ref(''),
-  certificateText = ref(''),
-  certificateKey = ref('');
+  result = ref('');
 const pageNumber = ref(1),
   total = ref(0);
 const rows = ref<api.Resource[]>([]),
@@ -249,7 +228,6 @@ const rows = ref<api.Resource[]>([]),
   auditRows = ref<api.AuditRow[]>([]);
 const runtimeData = ref<Record<string, unknown>>({}),
   metricRows = ref<Record<string, unknown>[]>([]),
-  certificateRows = ref<Record<string, unknown>[]>([]),
   detailRows = ref<Record<string, unknown>[]>([]);
 const runtimeLabels: Record<string, string> = {
   state: '设备状态',
@@ -301,10 +279,7 @@ async function load() {
     } else if (props.page === 'runtime') {
       runtimeData.value = await api.runtime();
       if (identity.value.role === 'SYSADMIN') metricRows.value = (await api.metrics()).counts;
-    } else if (props.page === 'certificates') {
-      const data = await request({ url: '/admin/svs/certificates/page', params: { page: pageNumber.value, size: 20 } });
-      certificateRows.value = data.rows;
-      total.value = data.total;
+
     }
   } catch {
     error.value = '加载失败，请检查权限或服务状态后重试。';
@@ -381,21 +356,6 @@ async function downloadAudit() {
 }
 async function downloadBackup() {
   download(new Blob([JSON.stringify(await api.backup(), null, 2)], { type: 'application/json' }), 'svs-public-config.json');
-}
-async function importCertificate() {
-  if (!certificateKey.value || !certificateText.value || certificateText.value.includes('PRIVATE KEY')) {
-    ElMessage.warning('只允许公开证书和 KeyId');
-    return;
-  }
-  saving.value = true;
-  try {
-    await request({ url: '/admin/svs/certificates', method: 'post', data: { keyId: certificateKey.value, certificate: certificateText.value } });
-    certificateDialog.value = false;
-    certificateText.value = '';
-    await load();
-  } finally {
-    saving.value = false;
-  }
 }
 watch(
   () => props.page,
