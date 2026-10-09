@@ -544,7 +544,7 @@ watch(
 async function svsPostLoginPath(): Promise<string | null> {
   if (String(loginForm.value.tenantCode || '') !== SVS_TENANT_CODE && String(loginForm.value.tenantId || '') !== '9') return null;
   const state = await getSvsInitialization();
-  return state.locked ? '/svs/runtime' : SVS_INIT_PATH;
+  return state.locked ? '/svs/home' : SVS_INIT_PATH;
 }
 
 const handleLogin = () => {

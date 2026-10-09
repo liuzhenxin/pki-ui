@@ -43,7 +43,9 @@ const sideTheme = computed(() => settingsStore.sideTheme);
 
 function syncLogoText(tenantId?: string | number | null) {
   const idStr = String(tenantId || '');
-  if (idStr === '1' || route.path.startsWith('/ops')) {
+  if (idStr === '9' || route.path.startsWith('/svs')) {
+    logoText.value = 'SVS';
+  } else if (idStr === '1' || route.path.startsWith('/ops')) {
     logoText.value = 'OPS';
   } else if (idStr === '100' || route.path.startsWith('/license')) {
     logoText.value = 'LIC';
@@ -63,6 +65,12 @@ function syncLogoText(tenantId?: string | number | null) {
 onMounted(() => {
   const tenantId = userStore.tenantId || localStorage.getItem('tenantId');
   syncLogoText(tenantId);
+  if (String(tenantId) === '9' || String(import.meta.env.VITE_APP_TENANT_IDS) === '9') {
+    title.value = '签名验签服务器';
+    name.value = '签名验签服务器';
+    logoText.value = 'SVS';
+    return;
+  }
   if (tenantId) {
     getTenant(tenantId).then((res) => {
       if (res.data) {

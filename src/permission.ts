@@ -95,7 +95,7 @@ const ensureTenantBoundary = async (path: string) => {
   if (getCurrentTenantId() === '9') {
     const state = await getSvsInitialization();
     if (!state.locked && path !== '/svs/init') return '/svs/init';
-    if (state.locked && (path === '/svs/init' || path === '/')) return '/svs/runtime';
+    if (state.locked && (path === '/svs/init' || path === '/')) return '/svs/home';
     return '';
   }
   const userStore = useUserStore();

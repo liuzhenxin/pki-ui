@@ -124,7 +124,7 @@ async function enterManagement() {
   try {
     const routes = await usePermissionStore().generateRoutes();
     routes.forEach(route => router.addRoute(route));
-    await router.replace('/svs/runtime');
+    await router.replace('/svs/home');
   }
   catch (e) { error.value = message(e); }
   finally { saving.value = false; }

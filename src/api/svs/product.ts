@@ -67,3 +67,5 @@ export const exportAudit = (operation: string, result: string): Promise<Blob> =>
 
 export const diagnostics = (id: string): Promise<Record<string, unknown>> =>
   request({ url: `/admin/svs/operations/diagnostics/${encodeURIComponent(id)}` });
+
+export const approval = (id: string): Promise<Approval> => request({ url: `${base}/approvals/${encodeURIComponent(id)}` });

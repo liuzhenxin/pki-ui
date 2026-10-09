@@ -13,7 +13,7 @@ const button = (w: ReturnType<typeof mountWizard>, label: string) => w.findAll('
 describe('SVS initialization wizard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    management.generateRoutes.mockResolvedValue([{ path: '/svs/runtime', name: 'Svsruntime' }]);
+    management.generateRoutes.mockResolvedValue([{ path: '/svs/home', name: 'Svsruntime' }]);
     vi.mocked(api.getSvsInitPlan).mockResolvedValue({ nextStep: 0, keyId: 'sm2-test', keys: ['sm2-test'], hostType: 'STANDALONE', deploymentRevision: 'revision', deployment: { networkReady: 'true', securityReady: 'true' } });
     vi.mocked(api.reviewSvsInitStep).mockResolvedValue({ nextStep: 1, keyId: 'sm2-test', keys: ['sm2-test'], hostType: 'STANDALONE', deploymentRevision: 'revision', deployment: {} }); vi.mocked(api.getSvsInitialization).mockResolvedValue(ready);
     vi.mocked(api.getSvsInitAccounts).mockResolvedValue({ sys: 'SYSADMIN', sec1: 'SECADMIN', sec2: 'SECADMIN', audit: 'AUDITOR' });
@@ -43,8 +43,8 @@ describe('SVS initialization wizard', () => {
     expect(api.completeSvsInitialization).toHaveBeenCalledTimes(1);expect(w.text()).toContain('初始化已完成');
     await button(w, '进入管理台').trigger('click');await flushPromises();
     expect(management.generateRoutes).toHaveBeenCalledTimes(1);
-    expect(management.addRoute).toHaveBeenCalledWith({ path: '/svs/runtime', name: 'Svsruntime' });
-    expect(management.replace).toHaveBeenCalledWith('/svs/runtime');
+    expect(management.addRoute).toHaveBeenCalledWith({ path: '/svs/home', name: 'Svsruntime' });
+    expect(management.replace).toHaveBeenCalledWith('/svs/home');
     expect(management.addRoute.mock.invocationCallOrder[0]).toBeLessThan(management.replace.mock.invocationCallOrder[0]);w.unmount();
   });
   it('does not accept a failed self-test or force completion', async () => {
@@ -67,6 +67,6 @@ describe('SVS initialization wizard', () => {
     const w = mountWizard();await flushPromises();await button(w, '进入管理台').trigger('click');await flushPromises();
     expect(w.text()).toContain('菜单加载失败，请重试');expect(management.replace).not.toHaveBeenCalled();
     await button(w, '进入管理台').trigger('click');await flushPromises();
-    expect(management.replace).toHaveBeenCalledWith('/svs/runtime');w.unmount();
+    expect(management.replace).toHaveBeenCalledWith('/svs/home');w.unmount();
   });
 });

@@ -3,6 +3,7 @@ import { mount, flushPromises } from '@vue/test-utils';
 import ElementPlus from 'element-plus';
 import Product from '@/views/svs/product/index.vue';
 import * as api from '@/api/svs/product';
+vi.mock('vue-router', () => ({ useRoute: () => ({ query: {} }) }));
 vi.mock('@/utils/request', () => ({ default: vi.fn().mockResolvedValue([]) }));
 vi.mock('@/api/svs/product', () => ({ session: vi.fn(), resources: vi.fn(), history: vi.fn(), maintain: vi.fn(), apply: vi.fn(), approvals: vi.fn(), decide: vi.fn(), execute: vi.fn(), runtime: vi.fn(), metrics: vi.fn(), backup: vi.fn(), audit: vi.fn(), exportAudit: vi.fn() }));
 const identity = (role: string, permissions: string[], username = 'current') => ({ role, permissions, username, tenantId: 9 });

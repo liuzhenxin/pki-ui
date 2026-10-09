@@ -115,6 +115,8 @@
 </template>
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
+import { useRoute } from 'vue-router';
+const route = useRoute();
 import { ElMessage, ElMessageBox } from 'element-plus';
 import request from '@/utils/request';
 import * as api from '@/api/svs/product';
@@ -364,7 +366,17 @@ watch(
     void load();
   }
 );
-onMounted(load);
+onMounted(async () => {
+  if (props.page === 'audit') {
+    operation.value = typeof route.query.operation === 'string' ? route.query.operation : '';
+    result.value = typeof route.query.result === 'string' ? route.query.result : '';
+  }
+  await load();
+  if (props.page === 'approvals' && typeof route.query.id === 'string') {
+    try { const requested = await api.approval(route.query.id); if (!approvalRows.value.some(row => row.id === requested.id)) approvalRows.value.unshift(requested); await approvalDetail(requested); }
+    catch { error.value = '无法读取该申请，请检查权限或申请状态。'; }
+  }
+});
 </script>
 <style scoped>
 .svs-page {

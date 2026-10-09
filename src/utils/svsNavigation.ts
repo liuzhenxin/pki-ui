@@ -4,6 +4,7 @@ import { svsInitializationRoute } from '@/utils/svsInitializationRoute';
 import { getSvsInitialization } from '@/api/svs/init';
 import { menus } from '@/api/svs/product';
 const pages = new Set([
+  'home',
   'runtime',
   'applications',
   'backup',
@@ -33,7 +34,7 @@ export async function svsRoutes(): Promise<RouteRecordRaw[]> {
       .map((leaf) => ({
         path: leaf.path,
         name: `Svs${leaf.path.split('/').pop()}`,
-        component: () => import('@/views/svs/product/index.vue'),
+        component: leaf.path === '/svs/home' ? () => import('@/views/svs/home/index.vue') : () => import('@/views/svs/product/index.vue'),
         props: { page: leaf.path.split('/').pop(), title: leaf.title, mutable: leaf.mutable },
         meta: { title: leaf.title }
       }))
