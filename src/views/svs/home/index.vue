@@ -12,7 +12,7 @@
     <template v-if="identity">
       <el-alert
         v-if="identity.role === 'SECADMIN'"
-        title="敏感变更由另一名安全管理员审批，不能审批自己的申请；已批准的申请由申请人执行。"
+        title="安全配置由当前账号按职责直接提交，保存前核对影响范围与变更原因。"
         type="warning"
         :closable="false"
         show-icon
@@ -36,9 +36,6 @@
                   ><el-button link type="primary" :disabled="!allowed(mainPath)" @click="go(mainPath)">查看全部 →</el-button>
                 </div></template
               >
-              <el-radio-group v-if="identity.role === 'SECADMIN'" v-model="approvalTab" size="small" class="tabs"
-                ><el-radio-button value="waiting">待我审批</el-radio-button><el-radio-button value="mine">我的申请</el-radio-button></el-radio-group
-              >
               <div v-if="!ready(mainSection)" class="failure">
                 <span>{{ sectionMessage(mainSection) }}</span
                 ><el-button link type="primary" @click="load">重试</el-button>
@@ -58,18 +55,11 @@
                 <el-table-column label="操作" width="130"
                   ><template #default="{ row }"
                     ><el-button link type="primary" @click="openRow(row)">{{
-                      identity.role === 'SYSADMIN' ? '查看应用' : identity.role === 'SECADMIN' ? '查看变更详情' : '查看审计记录'
+                      identity.role === 'SYSADMIN' ? '查看应用' : identity.role === 'SECADMIN' ? '查看授权' : '查看审计记录'
                     }}</el-button></template
                   ></el-table-column
                 >
               </el-table>
-              <template v-if="identity.role === 'SYSADMIN' && ready('approvals') && executionRows.length"
-                ><h3>我的待执行申请</h3>
-                <div v-for="row in executionRows" :key="row.id" class="status-row">
-                  <span>{{ row.objectId }} · 已批准</span
-                  ><el-button link type="primary" @click="go('/svs/approvals', { id: row.id || '' })">查看并处理</el-button>
-                </div></template
-              >
             </el-card>
             <el-card v-if="identity.role === 'SYSADMIN'" shadow="never" class="panel"
               ><template #header><b>24 小时调用结果</b></template>
@@ -108,9 +98,9 @@
             </el-card>
             <el-card v-else shadow="never" class="panel"
               ><template #header><b>审计关注</b></template>
-              <p>优先核对权限拒绝、公钥错配和敏感配置变更，结合对象版本与审批记录分析。</p>
-              <p class="footnote">失败与拒绝按日志结果字段分别统计；审批活动包括申请、决定、执行。审计意见数量不代表异常闭环。</p>
-              <el-button v-if="allowed('/svs/approvals')" @click="go('/svs/approvals')">追溯审批记录</el-button></el-card
+              <p>优先核对权限拒绝、公钥错配和敏感配置变更，结合对象版本与配置变更记录分析。</p>
+              <p class="footnote">失败与拒绝按日志结果字段分别统计；管理活动包括直接配置变更、证书维护和账号迁移。审计意见数量不代表异常闭环。</p>
+              <el-button v-if="allowed('/svs/approvals')" @click="go('/svs/approvals')">追溯历史审批记录</el-button></el-card
             >
           </div>
           <div>
@@ -139,7 +129,7 @@
           </div>
         </div>
         <p class="footnote">
-          {{ identity.role === 'SECADMIN' ? '待办按当前账号与申请有效期计算' : '统计范围：最近24小时' }} · 数据每60秒刷新，页面隐藏时暂停 ·
+          {{ identity.role === 'SECADMIN' ? '证书及授权按当前有效期计算' : '统计范围：最近24小时' }} · 数据每60秒刷新，页面隐藏时暂停 ·
           {{ identity.username }}
         </p>
       </template>
@@ -158,17 +148,18 @@ const error = ref('');
 const loading = ref(false);
 const paths = ref<string[]>([]);
 const lastSuccess = ref('');
-const approvalTab = ref('waiting');
 let timer: ReturnType<typeof setInterval> | undefined;
 let alive = true;
-const roleName = computed(() => ({ SYSADMIN: '系统管理员', SECADMIN: '安全管理员', AUDITOR: '审计员' })[identity.value?.role || ''] || '身份校验中');
+const roleName = computed(
+  () => ({ SYSADMIN: '系统管理员', SECADMIN: '安全管理员', AUDITOR: '审计管理员' })[identity.value?.role || ''] || '身份校验中'
+);
 const title = computed(() => ({ SYSADMIN: '运行工作台', SECADMIN: '安全工作台', AUDITOR: '审计工作台' })[identity.value?.role || ''] || '首页');
 const description = computed(
   () =>
     ({
       SYSADMIN: '关注服务是否可用，及时定位调用与接入问题。',
       SECADMIN: '处理安全变更与资源配置，关注证书及授权有效期。',
-      AUDITOR: '追溯操作与审批过程，记录异常分析和审计意见。'
+      AUDITOR: '追溯直接操作与历史变更，记录异常分析和审计意见。'
     })[identity.value?.role || ''] || '正在校验平台身份'
 );
 const allowed = (path: string) => paths.value.includes(path);
@@ -196,40 +187,37 @@ const cards = computed(() =>
       ]
     : identity.value?.role === 'SECADMIN'
       ? [
-          card('待我审批', 'approvals', 'pending', '排除本人及已到期申请', 'warn'),
-          card('我的待执行', 'approvals', 'executable', '已批准且当前账号为申请人'),
+          card('密钥引用', 'keys', 'total', '已登记的设备公钥引用'),
+          card('启用接口授权', 'grants', 'total', '已启用授权数量，需关注有效期'),
           card('30 天内到期证书', 'certificates', 'expiring', `已过期：${value('certificates', 'expired')} 张`, 'warn'),
           card('有效签名绑定', 'grants', 'validBindings', '启用绑定、有效证书及设备公钥匹配')
         ]
       : [
           card('24 小时失败事件', 'audit', 'failed', '日志结果为失败', 'warn'),
           card('24 小时拒绝事件', 'audit', 'rejected', '日志结果为拒绝', 'warn'),
-          card('24 小时审批活动', 'audit', 'activities', '申请、决定及执行事件'),
+          card('24 小时管理活动', 'audit', 'activities', '配置、证书维护及迁移事件'),
           card('审计意见', 'opinions', 'total', '已记录意见总数')
         ]
 );
-const mainSection = computed(() =>
-  identity.value?.role === 'SYSADMIN' ? 'applications' : identity.value?.role === 'SECADMIN' ? 'approvals' : 'audit'
-);
+const mainSection = computed(() => (identity.value?.role === 'SYSADMIN' ? 'applications' : identity.value?.role === 'SECADMIN' ? 'grants' : 'audit'));
 const mainPath = computed(() =>
-  identity.value?.role === 'SYSADMIN' ? '/svs/applications' : identity.value?.role === 'SECADMIN' ? '/svs/approvals' : '/svs/audit'
+  identity.value?.role === 'SYSADMIN' ? '/svs/applications' : identity.value?.role === 'SECADMIN' ? '/svs/grants' : '/svs/audit'
 );
 const listTitle = computed(() =>
-  identity.value?.role === 'SYSADMIN' ? '接入应用' : identity.value?.role === 'SECADMIN' ? '安全变更待办' : '最近失败与拒绝事件'
+  identity.value?.role === 'SYSADMIN' ? '接入应用' : identity.value?.role === 'SECADMIN' ? '授权有效期提醒' : '最近失败与拒绝事件'
 );
 const emptyText = computed(() =>
   identity.value?.role === 'SYSADMIN'
     ? '暂无接入应用，可从常用入口登记'
     : identity.value?.role === 'SECADMIN'
-      ? '暂无申请记录'
+      ? '暂无已过期或7天内到期的启用授权'
       : '最近24小时暂无失败或拒绝事件'
 );
 const mainRows = computed(() => {
   if (!ready(mainSection.value)) return [];
   const section = data.value?.sections[mainSection.value]?.data;
-  return identity.value?.role === 'SECADMIN' ? (approvalTab.value === 'waiting' ? section?.waiting : section?.mine) || [] : section?.rows || [];
+  return section?.rows || [];
 });
-const executionRows = computed(() => (ready('approvals') ? data.value?.sections.approvals.data.executionRows || [] : []));
 const certificateRows = computed(() => (ready('certificates') ? data.value?.sections.certificates.data.rows || [] : []));
 const grantRows = computed(() => (ready('grants') ? data.value?.sections.grants.data.rows || [] : []));
 const quickLinks = computed(() =>
@@ -238,18 +226,18 @@ const quickLinks = computed(() =>
         ['接入应用', 'applications'],
         ['运行状态', 'runtime'],
         ['配置备份', 'backup'],
-        ['审批与执行', 'approvals']
+        ['历史审批记录', 'approvals']
       ]
     : identity.value?.role === 'SECADMIN'
       ? [
           ['签名证书 / CSR', 'certificates'],
           ['接口授权', 'grants'],
           ['签名资源绑定', 'bindings'],
-          ['安全审批', 'approvals']
+          ['证书校验策略', 'policies']
         ]
       : [
           ['日志查询 / 导出', 'audit'],
-          ['审批记录', 'approvals'],
+          ['历史审批记录', 'approvals'],
           ['追加审计意见', 'opinions']
         ]
   )
@@ -259,26 +247,17 @@ const quickLinks = computed(() =>
 const date = (v?: string) => (v ? new Date(v).toLocaleString('zh-CN', { hour12: false }) : '—');
 const expiry = (v?: string) => (v && new Date(v).getTime() <= Date.now() ? `已过期 · ${date(v)}` : `到期：${date(v)}`);
 const stateText = (r: home.HomeRow) =>
-  r.state
-    ? { PENDING: '待审批', APPROVED: '已批准', REJECTED: '已拒绝', EXECUTED: '已执行', EXPIRED: '已到期' }[r.state] || r.state
-    : r.result || (r.enabled ? '启用' : '停用');
+  r.result || (r.expiresAt ? (new Date(r.expiresAt).getTime() <= Date.now() ? '已过期' : '即将到期') : r.enabled ? '启用' : '停用');
 const tagType = (r: home.HomeRow): 'success' | 'warning' | 'info' | 'danger' =>
-  ['失败', '拒绝'].includes(r.result || '') ? 'danger' : r.state === 'PENDING' || r.state === 'EXPIRED' ? 'warning' : 'info';
+  ['失败', '拒绝', '已过期'].includes(stateText(r)) ? 'danger' : r.expiresAt ? 'warning' : 'info';
 const rowDescription = (r: home.HomeRow) =>
   identity.value?.role === 'SYSADMIN'
     ? r.id
     : identity.value?.role === 'SECADMIN'
-      ? `申请人 ${r.applicant} · ${date(r.expiresAt)}`
+      ? `应用 ${r.applicationId} · ${expiry(r.expiresAt)}`
       : `${date(r.time)} · ${r.user} · ${r.objectName || ''}`;
 const openRow = (r: home.HomeRow) =>
-  go(
-    mainPath.value,
-    identity.value?.role === 'SECADMIN'
-      ? { id: r.id || '' }
-      : identity.value?.role === 'AUDITOR'
-        ? { result: r.result || '', operation: r.operation || '' }
-        : undefined
-  );
+  go(mainPath.value, identity.value?.role === 'AUDITOR' ? { result: r.result || '', operation: r.operation || '' } : undefined);
 function flatten(list: Menu[]): string[] {
   return list.flatMap((m) => [m.path, ...flatten(m.children)]).filter(Boolean);
 }

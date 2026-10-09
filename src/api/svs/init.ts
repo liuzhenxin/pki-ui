@@ -15,8 +15,12 @@ export const completeSvsInitialization = (subjects: Record<string, string>): Pro
   request({ url: '/admin/svs/init/complete', method: 'post', data: subjects, hideErrorNotify: true } as any);
 
 export type InitRole = 'SYSADMIN' | 'SECADMIN' | 'AUDITOR';
-export interface AccountValidation { ready: boolean; rows: { username: string; role: InitRole; valid: boolean; message: string }[] }
-export const getSvsInitAccounts = (): Promise<Record<string, InitRole>> => request({ url: '/admin/svs/init/accounts', method: 'get', hideErrorNotify: true } as any);
+export interface AccountValidation {
+  ready: boolean;
+  rows: { username: string; role: InitRole; valid: boolean; message: string }[];
+}
+export const getSvsInitAccounts = (): Promise<Record<string, InitRole>> =>
+  request({ url: '/admin/svs/init/accounts', method: 'get', hideErrorNotify: true } as any);
 export const validateSvsInitAccounts = (subjects: Record<string, string>): Promise<AccountValidation> =>
   request({ url: '/admin/svs/init/validate', method: 'post', data: subjects, hideErrorNotify: true } as any);
 

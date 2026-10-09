@@ -6,7 +6,7 @@
       <el-button v-if="manage" @click="openImport()">导入公开证书</el-button>
       <el-button @click="load">刷新证书</el-button>
     </div>
-    <el-alert title="证书公钥必须与设备密钥一致。已绑定证书轮转时，导入新证书后申请双人审批切换绑定。" :closable="false" />
+    <el-alert title="证书公钥必须与设备密钥一致。已绑定证书轮转时，导入新证书后直接切换绑定，核对用途与影响范围。" :closable="false" />
     <el-table :data="rows" empty-text="暂无设备证书，可先生成 CSR 向 CA 申请证书">
       <el-table-column prop="subject" label="主体" min-width="220" />
       <el-table-column prop="serial" label="序列号" min-width="160" />

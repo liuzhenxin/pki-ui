@@ -41,13 +41,9 @@ export const resources = (kind: Kind, page = 1, size = 20): Promise<Page<Resourc
   request({ url: `${base}/resources/${kind}`, params: { page, size } });
 export const history = (kind: Kind, id: string): Promise<Resource[]> =>
   request({ url: `${base}/resources/${kind}/${encodeURIComponent(id)}/history` });
-export const maintain = (data: Resource): Promise<Resource> => request({ url: base + '/resources', method: 'post', data });
-export const apply = (resource: Resource, reason: string): Promise<Approval> =>
-  request({ url: base + '/approvals', method: 'post', data: { resource, reason } });
+export const maintain = (data: Resource, reason: string): Promise<Resource> =>
+  request({ url: base + '/resources', method: 'post', params: { reason }, data });
 export const approvals = (page = 1): Promise<Page<Approval>> => request({ url: base + '/approvals', params: { page, size: 20 } });
-export const decide = (id: string, accepted: boolean): Promise<Approval> =>
-  request({ url: `${base}/approvals/${id}/decision`, method: 'post', data: { accepted } });
-export const execute = (id: string): Promise<Resource> => request({ url: `${base}/approvals/${id}/execute`, method: 'post' });
 export const runtime = (): Promise<Record<string, unknown>> => request({ url: '/admin/svs/runtime' });
 export const metrics = (): Promise<{ counts: Record<string, unknown>[] }> => request({ url: '/admin/svs/operations/metrics' });
 export const backup = (): Promise<Record<string, unknown>> => request({ url: '/admin/svs/operations/backup' });

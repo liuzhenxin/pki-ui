@@ -8,7 +8,7 @@
     <template v-if="kind">
       <div class="toolbar">
         <el-button v-if="canWrite" type="primary" @click="edit()">{{ kind === 'AUDIT_OPINION' ? '追加意见' : '新增' }}</el-button
-        ><span>变更按对象版本校验，敏感变更经另一名安全管理员审批后执行。</span>
+        ><span>变更按当前角色直接执行，并校验对象版本、依赖与变更原因。</span>
       </div>
       <el-table :data="rows" empty-text="暂无记录">
         <el-table-column prop="id" label="标识" min-width="180" />
@@ -32,20 +32,16 @@
       <el-pagination v-model:current-page="pageNumber" :total="total" :page-size="20" layout="prev, pager, next, total" @current-change="load" />
     </template>
     <template v-else-if="page === 'approvals'">
-      <el-table :data="approvalRows" empty-text="暂无审批">
+      <el-alert title="历史审批只读；未完成申请已终止，不能批准或执行。继续变更请重新读取当前配置后提交。" type="info" :closable="false" />
+      <el-table :data="approvalRows" empty-text="暂无历史审批">
         <el-table-column prop="proposed.id" label="对象" min-width="150" /><el-table-column prop="applicant" label="申请人" /><el-table-column
           prop="approver"
           label="审批人"
-        /><el-table-column prop="state" label="状态" /><el-table-column prop="expiresAt" label="截止时间" min-width="210" />
+        /><el-table-column label="状态"
+          ><template #default="{ row }">{{ approvalState(row.state) }}</template></el-table-column
+        ><el-table-column prop="expiresAt" label="截止时间" min-width="210" />
         <el-table-column label="操作" width="260"
-          ><template #default="{ row }"
-            ><el-button link @click="approvalDetail(row)">变更详情</el-button
-            ><el-button v-if="canApprove(row)" link type="primary" @click="decision(row, true)">批准</el-button
-            ><el-button v-if="canApprove(row)" link type="danger" @click="decision(row, false)">拒绝</el-button
-            ><el-button v-if="row.state === 'APPROVED' && row.applicant === identity?.username" link type="primary" @click="run(row)"
-              >执行</el-button
-            ></template
-          ></el-table-column
+          ><template #default="{ row }"><el-button link @click="approvalDetail(row)">变更详情</el-button></template></el-table-column
         > </el-table
       ><el-pagination v-model:current-page="pageNumber" :total="total" :page-size="20" layout="prev, pager, next, total" @current-change="load" />
     </template>
@@ -102,8 +98,7 @@
         <el-form-item label="变更原因"><el-input v-model="reason" type="textarea" maxlength="500" /></el-form-item>
       </el-form>
       <template #footer
-        ><el-button @click="dialog = false">取消</el-button><el-button v-if="directSave" :loading="saving" @click="save(false)">保存</el-button
-        ><el-button v-if="kind !== 'AUDIT_OPINION'" :loading="saving" type="primary" @click="save(true)">申请双人审批</el-button></template
+        ><el-button @click="dialog = false">取消</el-button><el-button :loading="saving" type="primary" @click="save">确认并保存</el-button></template
       >
     </el-dialog>
     <el-drawer v-model="details" title="对象与版本详情" size="60%"
@@ -136,7 +131,7 @@ const configuration: Record<string, { kind: api.Kind; permission: string; fields
     fields: [
       { key: 'name', label: '应用名称' },
       { key: 'description', label: '说明' },
-      { key: 'clientId', label: '平台可信客户端', hint: '关联或变更必须审批' }
+      { key: 'clientId', label: '平台可信客户端', hint: '变更前需停用现有接口授权，再由安全管理员重新授权' }
     ]
   },
   grants: {
@@ -213,8 +208,7 @@ const fields = computed(() => {
 });
 const identity = ref<api.Session>();
 const has = (permission: string) => identity.value?.permissions.includes(permission) === true;
-const canWrite = computed(() => props.mutable && has(configuration[props.page]?.permission || ''));
-const directSave = computed(() => ['APPLICATION', 'KEY_REFERENCE', 'AUDIT_OPINION'].includes(kind.value || ''));
+const canWrite = computed(() => props.page !== 'roles' && props.mutable && has(configuration[props.page]?.permission || ''));
 const loading = ref(false),
   saving = ref(false),
   dialog = ref(false),
@@ -281,7 +275,6 @@ async function load() {
     } else if (props.page === 'runtime') {
       runtimeData.value = await api.runtime();
       if (identity.value.role === 'SYSADMIN') metricRows.value = (await api.metrics()).counts;
-
     }
   } catch {
     error.value = '加载失败，请检查权限或服务状态后重试。';
@@ -289,16 +282,20 @@ async function load() {
     loading.value = false;
   }
 }
-async function save(approval: boolean) {
-  if (!draft.value.id || (approval && !reason.value.trim())) {
-    ElMessage.warning('请填写标识和审批原因');
+async function save() {
+  if (!draft.value.id || !reason.value.trim()) {
+    ElMessage.warning('请填写标识和变更原因');
+    return;
+  }
+  try {
+    await ElMessageBox.confirm(`确认提交 ${draft.value.id} 的配置变更？保存后立即生效。`, '变更确认');
+  } catch {
     return;
   }
   saving.value = true;
   try {
-    if (approval) await api.apply(draft.value, reason.value);
-    else await api.maintain(draft.value);
-    ElMessage.success(approval ? '已提交，等待另一名安全管理员审批' : '保存成功');
+    await api.maintain(draft.value, reason.value.trim());
+    ElMessage.success('保存成功');
     dialog.value = false;
     await load();
   } finally {
@@ -314,6 +311,13 @@ async function showHistory(row: api.Resource) {
   detailRows.value = versions.map((version) => ({ 标识: version.id, 版本: version.version, ...version.fields }));
   details.value = true;
 }
+const approvalState = (state: string) =>
+  (
+    ({ PENDING: '待审批（历史）', APPROVED: '已批准（历史）', CANCELLED: '已终止（迁移）', EXECUTED: '已执行', REJECTED: '已拒绝' }) as Record<
+      string,
+      string
+    >
+  )[state] || state;
 async function approvalDetail(row: api.Approval) {
   const versions = await api.history(row.proposed.kind, row.proposed.id);
   const current = versions.find((version) => version.version === row.proposed.version);
@@ -332,18 +336,6 @@ async function approvalDetail(row: api.Approval) {
     }
   ];
   details.value = true;
-}
-const canApprove = (row: api.Approval) =>
-  row.state === 'PENDING' && row.applicant !== identity.value?.username && has('svs:security:approval:manage');
-async function decision(row: api.Approval, accepted: boolean) {
-  await ElMessageBox.confirm(`${accepted ? '批准' : '拒绝'} ${row.proposed.id} 的变更？请先核对变更详情。`, '审批确认');
-  await api.decide(row.id, accepted);
-  await load();
-}
-async function run(row: api.Approval) {
-  await ElMessageBox.confirm(`执行 ${row.proposed.id} 的已批准变更？`, '执行确认');
-  await api.execute(row.id);
-  await load();
 }
 function download(data: Blob, name: string) {
   const url = URL.createObjectURL(data);
@@ -373,8 +365,13 @@ onMounted(async () => {
   }
   await load();
   if (props.page === 'approvals' && typeof route.query.id === 'string') {
-    try { const requested = await api.approval(route.query.id); if (!approvalRows.value.some(row => row.id === requested.id)) approvalRows.value.unshift(requested); await approvalDetail(requested); }
-    catch { error.value = '无法读取该申请，请检查权限或申请状态。'; }
+    try {
+      const requested = await api.approval(route.query.id);
+      if (!approvalRows.value.some((row) => row.id === requested.id)) approvalRows.value.unshift(requested);
+      await approvalDetail(requested);
+    } catch {
+      error.value = '无法读取该申请，请检查权限或申请状态。';
+    }
   }
 });
 </script>

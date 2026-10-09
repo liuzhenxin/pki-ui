@@ -15,14 +15,9 @@ const fixture = (role: api.HomeRole, username: string): api.HomeSummary => ({
   updatedAt: '2026-10-09T06:00:00Z',
   sections: {
     runtime: section({ deviceState: 'UP' }),
-    approvals: section({
-      pending: 1,
-      executable: 0,
-      waiting: [{ id: 'other', objectId: 'oa', applicant: username === 'secadmin' ? 'secadmin2' : 'secadmin', state: 'PENDING' }],
-      mine: []
-    }),
+    keys: section({ total: 2 }),
     certificates: section({ expiring: 0, expired: 0, rows: [] }),
-    grants: section({ validBindings: 0, rows: [] }),
+    grants: section({ total: 1, validBindings: 0, rows: [{ id: 'grant', applicationId: 'oa', expiresAt: '2026-10-10T00:00:00Z' }] }),
     calls: section({ total: 0, failed: 0, counts: [] }),
     applications: section({ total: 0, rows: [] }),
     audit: section({ failed: 0, rejected: 0, activities: 0, rows: [] }),
@@ -44,25 +39,24 @@ beforeEach(() => {
       mutable: false,
       path: '',
       children: [
-        { title: '审批', mutable: true, path: '/svs/approvals', children: [] },
+        { title: '授权', mutable: true, path: '/svs/grants', children: [] },
         { title: '运行', mutable: false, path: '/svs/runtime', children: [] }
       ]
     }
   ]);
 });
-it('security admins share a home and open approval details without mutations', async () => {
-  for (const user of ['secadmin', 'secadmin2']) {
-    const w = await page('SECADMIN', user);
-    expect(w.text()).toContain('安全工作台');
-    expect(w.text()).toContain(user === 'secadmin' ? 'secadmin2' : 'secadmin');
-    await w
-      .findAll('button')
-      .find((b) => b.text() === '查看变更详情')!
-      .trigger('click');
-    expect(navigation.push).toHaveBeenCalledWith({ path: '/svs/approvals', query: { id: 'other' } });
-    expect(w.text()).not.toContain('签名证书 / CSR →');
-    w.unmount();
-  }
+it('security home shows resources and opens grants without approval actions', async () => {
+  const w = await page('SECADMIN', 'secadmin');
+  expect(w.text()).toContain('安全工作台');
+  expect(w.text()).toContain('密钥引用');
+  expect(w.text()).not.toContain('待我审批');
+  expect(w.text()).not.toContain('我的待执行');
+  await w
+    .findAll('button')
+    .find((b) => b.text() === '查看授权')!
+    .trigger('click');
+  expect(navigation.push).toHaveBeenCalledWith({ path: '/svs/grants', query: undefined });
+  w.unmount();
 });
 it('system and audit roles see their own panels and empty-state messages', async () => {
   const sys = await page('SYSADMIN', 'admin');
@@ -93,14 +87,14 @@ it('failed refresh replaces known values with unknown and preserves last success
 it('partial failures remain unknown while successful sections render', async () => {
   const w = await page();
   const failed = fixture('SECADMIN', 'secadmin');
-  failed.sections.approvals = { ready: false, data: {}, message: '审批读取失败' };
+  failed.sections.grants = { ready: false, data: {}, message: '授权读取失败' };
   vi.mocked(api.summary).mockResolvedValueOnce(failed);
   await w
     .findAll('button')
     .find((b) => b.text() === '刷新数据')!
     .trigger('click');
   await flushPromises();
-  expect(w.text()).toContain('审批读取失败');
+  expect(w.text()).toContain('授权读取失败');
   expect(w.text()).toContain('暂无已过期或30天内到期');
   w.unmount();
 });
