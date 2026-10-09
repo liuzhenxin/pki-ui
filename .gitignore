@@ -31,3 +31,6 @@ pnpm-lock.yaml
 # 编译生成的文件
 auto-imports.d.ts
 components.d.ts
+
+# CSP 最小控制台编译产物
+dist-csp-console/
