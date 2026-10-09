@@ -95,15 +95,17 @@ async function logout() {
   error.value = '';
   try {
     await api('logout', {});
-  } catch {
-    error.value = '本地会话已清理；上游退出状态未确认。';
-  } finally {
     signedIn.value = false;
     initialized.value = null;
     password.value = '';
     history.replaceState(null, '', '/login');
-    busy.value = false;
+    const session = await api('session');
+    csrf.value = session.csrf;
     await reloadChallenge();
+  } catch {
+    error.value = '退出或新会话状态未确认，请刷新页面核查。';
+  } finally {
+    busy.value = false;
   }
 }
 
