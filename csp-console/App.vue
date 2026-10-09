@@ -2,6 +2,8 @@
 import { computed, onMounted, ref } from 'vue';
 import logo from '../src/assets/brand/csp-logo.svg';
 import mark from '../src/assets/brand/csp-mark-inverse.svg';
+import brandMark from '../src/assets/brand/csp-mark.svg';
+import { User, Lock, OfficeBuilding, CircleCheck } from '@element-plus/icons-vue';
 
 const username = ref('');
 const password = ref('');
@@ -128,25 +130,33 @@ onMounted(async () => {
   <a class="skip" href="#main">跳到主要内容</a>
   <div v-if="!signedIn" class="login-layout">
     <aside class="brand-panel">
-      <div class="wordmark"><img :src="mark" alt="CSP" width="48" height="48" /><span>LIUZX · CSP</span></div>
+      <div class="wordmark"><img :src="logo" alt="LiuZX CSP" width="112" /></div>
       <div class="brand-copy">
-        <p class="eyebrow">CRYPTOGRAPHIC SERVICE PLATFORM</p>
-        <h1>统一密码能力。<br />可信资源底座。</h1>
-        <p>连接密码设备与业务应用，建立统一、受控、可追溯的密码服务入口。</p>
-        <div class="capabilities"><span>签名验签</span><span>加解密</span><span>密钥生成</span><span>时间戳</span></div>
+        <div class="brand-illustration" aria-hidden="true">
+          <div class="brand-platform"></div>
+          <div class="brand-emblem"><img :src="brandMark" alt="" width="168" height="168" /></div>
+        </div>
+        <h1>密码服务平台</h1>
+        <p>统一密码能力与设备资源，构建受控、可信的业务服务入口</p>
       </div>
-      <footer>密码服务平台 <span>测试环境 / TENANT 10</span></footer>
+      <footer><span>LIUZX · CSP</span><span>测试环境 · v3.0.0</span></footer>
     </aside>
     <main id="main" class="login-main">
       <div class="login-card">
-        <img class="logo" :src="logo" alt="LiuZX 密码服务平台 CSP" width="240" />
-        <p class="eyebrow">管理控制台</p>
-        <h2>登录密码服务平台</h2>
-        <p class="muted">使用 CSP 账号继续。所有密码操作均由服务端授权。</p>
+        <h2>欢迎回来</h2>
+        <p class="muted form-subtitle">请输入您的账户信息以进入密码服务平台</p>
+        <div class="login-method">
+          <span><User aria-hidden="true" />账号登录</span><small>测试环境</small>
+        </div>
         <div v-if="!secure" class="notice" role="status">当前为 HTTP 测试预览，已禁止发送账号密码。请通过 HTTPS 或 localhost SSH 隧道登录。</div>
         <form @submit.prevent="login">
+          <el-input class="tenant-field" model-value="密码服务平台（CSP）" aria-label="当前系统租户" disabled readonly
+            ><template #prefix><OfficeBuilding aria-hidden="true" class="field-icon" /></template
+          ></el-input>
           <label for="username">账号</label
-          ><el-input id="username" v-model="username" autocomplete="username" maxlength="100" placeholder="请输入账号" :disabled="busy" required />
+          ><el-input id="username" v-model="username" autocomplete="username" maxlength="100" placeholder="请输入账号" :disabled="busy" required
+            ><template #prefix><User aria-hidden="true" class="field-icon" /></template
+          ></el-input>
           <label for="password">密码</label
           ><el-input
             id="password"
@@ -158,19 +168,14 @@ onMounted(async () => {
             placeholder="请输入密码"
             :disabled="busy"
             required
-          />
+            ><template #prefix><Lock aria-hidden="true" class="field-icon" /></template
+          ></el-input>
           <template v-if="captchaEnabled"
             ><label for="captcha">图形验证码</label>
             <div class="captcha-row">
-              <el-input
-                id="captcha"
-                v-model="captcha"
-                autocomplete="off"
-                maxlength="16"
-                placeholder="请输入图中文字"
-                :disabled="busy"
-                required
-              /><button type="button" class="captcha-image" aria-label="刷新图形验证码" :disabled="busy" @click="reloadChallenge">
+              <el-input id="captcha" v-model="captcha" autocomplete="off" maxlength="16" placeholder="请输入图中文字" :disabled="busy" required
+                ><template #prefix><CircleCheck aria-hidden="true" class="field-icon" /></template></el-input
+              ><button type="button" class="captcha-image" aria-label="刷新图形验证码" :disabled="busy" @click="reloadChallenge">
                 <img v-if="image" :src="image" alt="图形验证码，请人工识别" width="130" height="44" /><span v-else>获取验证码</span>
               </button>
             </div></template
@@ -180,9 +185,9 @@ onMounted(async () => {
             >登录</el-button
           >
         </form>
-        <p class="security-note">本平台不提供“记住密码”。请勿向他人提供密码、验证码或令牌。</p>
+        <p class="security-note"><Lock aria-hidden="true" class="field-icon" />不保存密码 · 会话受控</p>
       </div>
-      <footer class="login-footer">LiuZX 密码服务平台 · 最小登录版本</footer>
+      <footer class="login-footer">LiuZX 密码服务平台</footer>
     </main>
   </div>
   <div v-else class="console-layout">

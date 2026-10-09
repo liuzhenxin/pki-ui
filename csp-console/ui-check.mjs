@@ -69,7 +69,7 @@ try {
     await page.getByRole('heading', { name: '运行总览', exact: true }).waitFor();
     assert.equal(new URL(page.url()).pathname, '/csp/overview');
     await page.getByRole('button', { name: '退出登录' }).click();
-    await page.getByRole('heading', { name: '登录密码服务平台' }).waitFor();
+    await page.getByRole('heading', { name: '欢迎回来' }).waitFor();
     assert.deepEqual(errors, []);
     await context.close();
     process.stdout.write(`CSP_UI_MOCK_PASS width=${width} login/error/setup/overview/logout/storage/overflow\n`);
