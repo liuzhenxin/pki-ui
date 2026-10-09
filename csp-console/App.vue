@@ -221,7 +221,6 @@ onMounted(async () => {
           <button type="button" :aria-pressed="loginMode === 'account'" :disabled="busy" @click="switchMode('account')">账号登录</button>
           <button type="button" :aria-pressed="loginMode === 'certificate'" :disabled="busy" @click="switchMode('certificate')">证书登录</button>
         </div>
-        <div v-if="!secure" class="notice" role="status">当前为 HTTP 测试预览，已禁止发送账号密码。请通过 HTTPS 或 localhost SSH 隧道登录。</div>
         <form v-if="loginMode === 'account'" @submit.prevent="login">
           <el-input class="tenant-field" model-value="密码服务平台（CSP）" aria-label="当前系统租户" disabled readonly
             ><template #prefix><OfficeBuilding aria-hidden="true" class="field-icon" /></template
