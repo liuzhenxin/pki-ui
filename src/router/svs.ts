@@ -6,6 +6,7 @@ export { svsInitializationRoute } from '@/utils/svsInitializationRoute';
 
 export const svsConstantRoutes: RouteRecordRaw[] = [
   { path: '/', redirect: '/svs/runtime', hidden: true },
+  { path: '/index', redirect: '/svs/runtime', hidden: true },
   { path: '/login', component: () => import('@/views/login.vue'), hidden: true },
   { ...svsInitializationRoute, hidden: true },
   { path: '/social-callback', component: () => import('@/layout/components/SocialCallback/index.vue'), hidden: true },

@@ -35,3 +35,11 @@ it('registers business routes after initialization in the same router session', 
   (await svsRoutes()).forEach(route => router.addRoute(route));
   expect(router.resolve('/svs/runtime').matched.at(-1)?.name).toBe('Svsruntime');
 });
+
+it('opens the SVS runtime page from the shared layout home link', async () => {
+  const router = createRouter({ history: createMemoryHistory(), routes: svsConstantRoutes });
+  router.addRoute({ path: '/svs/runtime', name: 'Svsruntime', component: { template: '<div>Runtime</div>' } });
+  await router.push('/index');
+  expect(router.currentRoute.value.path).toBe('/svs/runtime');
+  expect(router.currentRoute.value.name).toBe('Svsruntime');
+});
