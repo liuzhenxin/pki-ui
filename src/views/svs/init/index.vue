@@ -23,18 +23,16 @@
       <section v-else-if="step === 1" class="step-content">
 <div class="step-title"><h2>绑定已有平台账号</h2><p>绑定一个系统管理员、两名安全管理员和一个审计员。</p></div>
         <el-alert title="两名安全管理员权限相同，每笔操作由不同账号申请和审批，禁止自审批。" type="info" :closable="false" show-icon />
-        <p>候选账号来自平台当前身份状态。若账号未列出，可填写用户名；请先让该账号登录平台刷新状态，再校验。</p>
+        <p>用户名已固定。请确保四个账号在平台租户 9 中存在并分配对应角色，再进行校验。</p>
         <el-form class="init-form" label-width="140px" @submit.prevent="validate">
           <el-form-item v-for="(label, index) in labels" :key="label" :label="label">
-            <el-select v-model="users[index]" filterable allow-create default-first-option placeholder="选择或填写平台用户名" @change="validation = undefined">
-              <el-option v-for="name in options(index)" :key="name" :label="name" :value="name" />
-            </el-select>
+            <el-input :model-value="users[index]" readonly />
           </el-form-item>
         </el-form>
         <div v-for="row in validation?.rows" :key="row.username" class="check-row">
           <div><strong>{{ row.username }}</strong><p>{{ row.message }}</p></div><el-tag :type="row.valid ? 'success' : 'danger'">{{ row.valid ? '通过' : '未通过' }}</el-tag>
         </div>
-        <el-button :loading="loading" @click="refreshAccounts">刷新候选</el-button>
+
       </section>
       <section v-else-if="step === 2" class="step-content">
         <div class="step-title"><h2>确认初始化</h2><p>平台租户、业务数据库及密码设备检查通过，四个独立账号角色校验通过。</p></div>
@@ -64,14 +62,13 @@
 import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { Refresh, CircleCheckFilled, CircleCloseFilled, WarningFilled } from '@element-plus/icons-vue';
-import { getSvsInitialization, completeSvsInitialization, getSvsInitAccounts, validateSvsInitAccounts, type Initialization, type InitRole, type AccountValidation } from '@/api/svs/init';
+import { getSvsInitialization, completeSvsInitialization, validateSvsInitAccounts, type Initialization, type InitRole, type AccountValidation } from '@/api/svs/init';
 const router = useRouter();
 const state = ref<Initialization>();
 const step = ref(0), loading = ref(false), saving = ref(false), confirmed = ref(false), error = ref('');
-const labels = ['系统管理员', '安全管理员 1', '安全管理员 2', '审计员'];
+const labels = ['系统管理员', '安全管理员（申请）', '安全管理员（审批）', '审计员'];
 const roles: InitRole[] = ['SYSADMIN', 'SECADMIN', 'SECADMIN', 'AUDITOR'];
-const users = ref(['', '', '', '']);
-const candidates = ref<Record<string, InitRole>>({});
+const users = ['admin', 'secadmin', 'secadmin2', 'auditor'] as const;
 const validation = ref<AccountValidation>();
 const environment = computed(() => [
   { name: '平台连接与产品租户', ok: !!state.value?.platformTenantValid, message: state.value?.platformTenantValid ? '平台可访问，租户 9 / svs 校验通过。' : '请检查平台连接及 SVS 产品租户配置，然后重新检查。' },
@@ -80,24 +77,18 @@ const environment = computed(() => [
 ]);
 const environmentReady = computed(() => !!state.value && environment.value.every((check) => check.ok));
 function message(e: any) { return e?.response?.data?.Status?.Msg || e?.response?.data?.msg || e?.message || '操作未完成，请重试或检查服务状态'; }
-function options(index: number) { return Object.keys(candidates.value).filter((name) => candidates.value[name] === roles[index]).sort(); }
-function subjects() { return Object.fromEntries(users.value.map((name, index) => [name.trim(), roles[index]])); }
+
+function subjects() { return Object.fromEntries(users.map((name, index) => [name.trim(), roles[index]])); }
 async function load() {
   loading.value = true; error.value = '';
   try { state.value = await getSvsInitialization(); if (state.value.locked) step.value = 3; }
   catch (e) { state.value = undefined; error.value = message(e); }
   finally { loading.value = false; }
 }
-async function refreshAccounts() {
-  loading.value = true; error.value = '';
-  try { candidates.value = await getSvsInitAccounts(); }
-  catch (e) { error.value = message(e); }
-  finally { loading.value = false; }
-}
-async function openAccounts() { step.value = 1; await refreshAccounts(); }
+function openAccounts() { step.value = 1; }
 async function validate() {
   error.value = ''; validation.value = undefined;
-  const names = users.value.map((name) => name.trim());
+  const names = users.map((name) => name.trim());
   if (names.some((name) => !/^[A-Za-z0-9_-]{1,100}$/.test(name)) || new Set(names).size !== 4) { error.value = '请填写四个不同的平台用户名'; return; }
   saving.value = true;
   try { validation.value = await validateSvsInitAccounts(subjects()); if (validation.value.ready) { confirmed.value = false; step.value = 2; } }

@@ -23,10 +23,9 @@ describe('SVS initialization wizard', () => {
   });
   it('validates independent accounts before confirmation and requires explicit final consent', async () => {
     const w = mountWizard(); await flushPromises();await button(w, '下一步').trigger('click');await flushPromises();
-    (w.vm as any).users = ['sys', 'sec1', 'sec1', 'audit'];await button(w, '校验并继续').trigger('click');await flushPromises();
-    expect(api.validateSvsInitAccounts).not.toHaveBeenCalled();expect(w.text()).toContain('四个不同');
-    (w.vm as any).users = ['sys', 'sec1', 'sec2', 'audit'];await button(w, '校验并继续').trigger('click');await flushPromises();
-    expect(api.validateSvsInitAccounts).toHaveBeenCalledWith({ sys: 'SYSADMIN', sec1: 'SECADMIN', sec2: 'SECADMIN', audit: 'AUDITOR' });
+    expect(w.findAll('input[readonly]').map(input => (input.element as HTMLInputElement).value)).toEqual(['admin', 'secadmin', 'secadmin2', 'auditor']);
+    await button(w, '校验并继续').trigger('click');await flushPromises();
+    expect(api.validateSvsInitAccounts).toHaveBeenCalledWith({ admin: 'SYSADMIN', secadmin: 'SECADMIN', secadmin2: 'SECADMIN', auditor: 'AUDITOR' });
     expect(button(w, '确认并完成初始化').attributes('disabled')).toBeDefined();expect(api.completeSvsInitialization).not.toHaveBeenCalled();
     (w.vm as any).confirmed = true;await flushPromises();await button(w, '确认并完成初始化').trigger('click');await flushPromises();
     expect(api.completeSvsInitialization).toHaveBeenCalledTimes(1);expect(w.text()).toContain('初始化已完成');w.unmount();
