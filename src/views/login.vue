@@ -279,6 +279,7 @@ import defaultLoginBackground from '@/assets/images/login-background.jpg';
 import opsLoginBackground from '@/assets/images/login/tenant-ops.webp';
 import caLoginBackground from '@/assets/images/login/tenant-ca.webp';
 import kmcLoginBackground from '@/assets/images/login/tenant-kmc.webp';
+import svsLoginBackground from '@/assets/images/login/tenant-svs.svg';
 import raLoginBackground from '@/assets/images/login/tenant-ra.webp';
 import ocspLoginBackground from '@/assets/images/login/tenant-ocsp.webp';
 import nasLoginBackground from '@/assets/images/login/tenant-nas.webp';
@@ -460,6 +461,7 @@ const tenantLoginBackgrounds: Record<string, string> = {
   '4': caLoginBackground,
   '5': raLoginBackground,
   '6': ocspLoginBackground,
+  '9': svsLoginBackground,
   '10': nasLoginBackground,
   '100': licenseLoginBackground
 };
@@ -477,6 +479,12 @@ const defaultTenantBrand = {
   subtitle: '面向 CA、RA、KMC、OCSP 的统一安全运营入口'
 };
 const tenantBrandProfiles: Record<string, typeof defaultTenantBrand> = {
+  '9': {
+    className: 'brand-panel--svs',
+    logo: 'SVS',
+    heading: '签名验签服务器',
+    subtitle: '统一签名验签入口，守护文件与报文的真实性和完整性'
+  },
   '1': {
     className: 'brand-panel--ops',
     logo: 'OPS',
@@ -520,6 +528,7 @@ const tenantBrandProfiles: Record<string, typeof defaultTenantBrand> = {
     subtitle: '统一管理产品授权、许可状态与客户交付凭证'
   }
 };
+if (initialTenantId === '9') loginTitle.value = '签名验签服务器';
 const hasTenantLoginBackground = computed(() => Boolean(tenantLoginBackgrounds[String(loginForm.value.tenantId || '')]));
 const tenantBrand = computed(() => tenantBrandProfiles[String(loginForm.value.tenantId || '')] || defaultTenantBrand);
 const loginBackgroundStyle = computed(() => {
@@ -805,6 +814,7 @@ const isPkiTenant = (item: any) => {
 };
 
 const getTenantAppTitle = (tenantName: string, tenantId: string) => {
+  if (tenantId === '9') return '签名验签服务器';
   if (tenantId === '1') {
     return `${tenantName} (平台运维中心)`;
   }
@@ -914,7 +924,7 @@ const refreshRadiusStatus = async (tenantCode?: string) => {
 const getTenantInfo = async (tenantId: string) => {
   const res = await getTenant(tenantId);
   if (res.data && res.data.name) {
-    loginTitle.value = res.data.name;
+    loginTitle.value = String(tenantId) === '9' ? '签名验签服务器' : res.data.name;
     settingsStore.setAppTitle(getTenantAppTitle(res.data.name, String(tenantId)));
   }
 };
@@ -2645,6 +2655,21 @@ onBeforeUnmount(() => {
     right: 44px;
     bottom: 70px;
     opacity: 0.64;
+  }
+}
+
+.brand-panel--svs {
+  .brand-logo {
+    color: #2467bb;
+    border-color: #4b97dc;
+  }
+
+  .brand-visual {
+    background: url('@/assets/images/login/tenant-svs.svg') center / contain no-repeat;
+
+    > span {
+      display: none;
+    }
   }
 }
 
