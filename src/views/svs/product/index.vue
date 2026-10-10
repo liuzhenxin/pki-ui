@@ -5,7 +5,10 @@
       <el-button @click="load">刷新</el-button>
     </div>
     <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon />
-    <template v-if="kind">
+    <template v-if="page === 'bindings'">
+      <SigningBindings ref="bindingPanel" :manage="canWrite" />
+    </template>
+    <template v-else-if="kind">
       <div class="toolbar">
         <el-button v-if="canWrite" type="primary" @click="edit()">{{ kind === 'AUDIT_OPINION' ? '追加意见' : '新增' }}</el-button
         ><span>变更按当前角色直接执行，并校验对象版本、依赖与变更原因。</span>
@@ -116,7 +119,9 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import request from '@/utils/request';
 import * as api from '@/api/svs/product';
 import DeviceCertificates from './DeviceCertificates.vue';
+import SigningBindings from './SigningBindings.vue';
 const props = defineProps<{ page: string; title: string; mutable: boolean }>();
+const bindingPanel = ref<{ load: () => Promise<void> } | null>(null);
 interface Field {
   key: string;
   label: string;
@@ -260,7 +265,8 @@ async function load() {
   error.value = '';
   try {
     identity.value = await api.session();
-    if (kind.value) {
+    if (props.page === 'bindings') await bindingPanel.value?.load();
+    if (kind.value && props.page !== 'bindings') {
       const data = await api.resources(kind.value, pageNumber.value);
       rows.value = data.rows;
       total.value = data.total;
