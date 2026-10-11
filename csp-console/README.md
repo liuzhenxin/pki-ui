@@ -7,6 +7,7 @@
 ./node_modules/.bin/vue-tsc --noEmit -p csp-console/tsconfig.json
 ./node_modules/.bin/eslint csp-console --max-warnings 0
 node csp-console/ui-check.mjs
+node csp-console/http-test-check.mjs
 ```
 
 产物 `dist-csp-console/` 不提交。BFF 源码和容器构建文件在同级 liuzx-csp 的 `scripts/console/`；浏览器不接收 OAuth 客户端秘密或令牌，不使用 localStorage/sessionStorage。
@@ -15,4 +16,6 @@ node csp-console/ui-check.mjs
 
 必须人工明确确认，不自动提交或重试。提交结果不明时只查询状态，当前会话不再次提交；异常需运维核查。完成页显式退出清理 BFF 会话并请求 Auth 撤销，然后重新通过 Auth 登录；不能由 UI 退出成功推断上游撤销缓存全部即时失效。页面无重置按钮，不执行真实首次初始化测试。
 
-HTTP 非 localhost 仅预览，登录禁用。真实测试使用 localhost SSH 隧道或 HTTPS；没有 root 挂载客户端凭据时 BFF 拒绝登录。状态接口由 CSP 服务端验签及授权，前端显示不能作为发布验收证据。
+默认 HTTP 非 localhost 仅预览，登录禁用。用户批准的128测试例外必须同时配置 `CSP_CONSOLE_ENVIRONMENT=test`、`CSP_CONSOLE_HTTP_TEST_ENABLED=true` 及精确 `CSP_CONSOLE_ORIGIN=http://10.10.10.128:9085`，否则开启组合启动失败。前端只接受该精确 origin 的服务端 session 标志，并显示非阻断的“128 HTTP 测试入口”提示；传输未加密，不用于生产。证书登录不享受该HTTP例外。
+
+生产使用 HTTPS；原 localhost SSH 隧道仍可使用。没有 root 挂载客户端凭据时 BFF 拒绝登录。Auth、人工验证码、Host/Origin、CSRF、初始化确认及权限仍必须通过，令牌只存服务端。HTTP浏览器测试拦截所有页面/API请求并使用合成数据，不连接真实128或Auth。状态接口由 CSP 服务端验签及授权，前端显示不能作为发布验收证据。

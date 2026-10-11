@@ -93,6 +93,8 @@ const initializationAttempted = ref(false);
 const completion = ref(false);
 const environmentReady = computed(() => environment.value.length === 2 && environment.value.every((row) => row.ok));
 const secure = location.protocol === 'https:' || ['localhost', '127.0.0.1'].includes(location.hostname);
+const httpTestMode = ref(false);
+const accountTransport = computed(() => secure || httpTestMode.value);
 const stateLabel = computed(() => (initialized.value === null ? '状态未确认' : initialized.value ? '已完成初始化' : '等待初始化'));
 
 async function api(path: string, body?: object) {
@@ -156,7 +158,15 @@ async function readState() {
 }
 
 async function initialize() {
-  if (busy.value || !secure || initialized.value !== false || !environmentReady.value || !confirmed.value || initializationAttempted.value) return;
+  if (
+    busy.value ||
+    !accountTransport.value ||
+    initialized.value !== false ||
+    !environmentReady.value ||
+    !confirmed.value ||
+    initializationAttempted.value
+  )
+    return;
   busy.value = true;
   error.value = '';
   initializationAttempted.value = true;
@@ -174,7 +184,7 @@ async function initialize() {
 }
 
 async function login() {
-  if (busy.value || !secure) return;
+  if (busy.value || !accountTransport.value) return;
   busy.value = true;
   error.value = '';
   try {
@@ -223,6 +233,7 @@ async function logout() {
     const session = await api('session');
     csrf.value = session.csrf;
     certificateEnabled.value = session.certificateLoginEnabled === true;
+    httpTestMode.value = session.httpTestMode === true && location.origin === 'http://10.10.10.128:9085';
     initializationAttempted.value = session.initializationAttempted === true;
     await reloadChallenge();
   } catch {
@@ -237,6 +248,7 @@ onMounted(async () => {
     const session = await api('session');
     csrf.value = session.csrf;
     certificateEnabled.value = session.certificateLoginEnabled === true;
+    httpTestMode.value = session.httpTestMode === true && location.origin === 'http://10.10.10.128:9085';
     initializationAttempted.value = session.initializationAttempted === true;
     if (session.authenticated) {
       signedIn.value = true;
@@ -269,6 +281,7 @@ onMounted(async () => {
       <div class="login-card">
         <h2>欢迎回来</h2>
         <p class="muted form-subtitle">请输入您的账户信息以进入密码服务平台</p>
+        <p v-if="httpTestMode" class="notice" role="status">128 HTTP 测试入口 · 不用于生产，网络传输未加密。</p>
         <div class="login-method">
           <button type="button" :aria-pressed="loginMode === 'account'" :disabled="busy" @click="switchMode('account')">账号登录</button>
           <button type="button" :aria-pressed="loginMode === 'certificate'" :disabled="busy" @click="switchMode('certificate')">证书登录</button>
@@ -305,7 +318,12 @@ onMounted(async () => {
             </div></template
           >
           <p v-if="error" class="error" role="alert">{{ error }}</p>
-          <el-button class="submit" type="primary" native-type="submit" :loading="busy" :disabled="!secure || !csrf || (captchaEnabled && !image)"
+          <el-button
+            class="submit"
+            type="primary"
+            native-type="submit"
+            :loading="busy"
+            :disabled="!accountTransport || !csrf || (captchaEnabled && !image)"
             >登录</el-button
           >
         </form>
@@ -358,6 +376,7 @@ onMounted(async () => {
         ><el-button :disabled="busy" @click="logout">退出登录</el-button>
       </header>
       <main id="main" class="content">
+        <p v-if="httpTestMode" class="notice" role="status">128 HTTP 测试入口 · 不用于生产，网络传输未加密。</p>
         <p class="eyebrow">CSP CONSOLE</p>
         <h1>{{ initialized && !completion ? '运行总览' : 'CSP 初始化向导' }}</h1>
         <p class="muted">
@@ -421,7 +440,7 @@ onMounted(async () => {
             >
             <div class="wizard-actions">
               <el-button :disabled="busy" @click="setupStep = 0">上一步</el-button
-              ><el-button type="primary" :loading="busy" :disabled="busy || !confirmed || !environmentReady || !secure" @click="initialize"
+              ><el-button type="primary" :loading="busy" :disabled="busy || !confirmed || !environmentReady || !accountTransport" @click="initialize"
                 >确认并初始化 CSP</el-button
               >
             </div>
