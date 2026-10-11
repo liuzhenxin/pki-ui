@@ -15,6 +15,8 @@ const pages = new Set([
   'grants',
   'bindings',
   'keys',
+  'device-keys',
+  'key-associations',
   'certificates',
   'trust',
   'policies',

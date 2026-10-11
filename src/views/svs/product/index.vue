@@ -11,6 +11,9 @@
     <template v-else-if="page === 'trust' || page === 'policies'">
       <TrustManagement ref="trustPanel" :mode="page" :manage="canWrite" />
     </template>
+    <template v-else-if="page === 'device-keys' || page === 'keys' || page === 'key-associations'">
+      <DeviceKeys ref="deviceKeysPanel" :mode="page" :manage="has('svs:security:key:manage')" />
+    </template>
     <template v-else-if="kind">
       <div class="toolbar">
         <el-button v-if="canWrite" type="primary" @click="edit()">{{ kind === 'AUDIT_OPINION' ? '追加意见' : '新增' }}</el-button
@@ -123,6 +126,8 @@ import request from '@/utils/request';
 import * as api from '@/api/svs/product';
 import DeviceCertificates from './DeviceCertificates.vue';
 import SigningBindings from './SigningBindings.vue';
+import DeviceKeys from './DeviceKeys.vue';
+const deviceKeysPanel = ref<{ load: () => Promise<void> } | null>(null);
 import TrustManagement from './TrustManagement.vue';
 const trustPanel = ref<{ load: () => Promise<void> } | null>(null);
 const props = defineProps<{ page: string; title: string; mutable: boolean }>();
@@ -272,7 +277,8 @@ async function load() {
     identity.value = await api.session();
     if (props.page === 'bindings') await bindingPanel.value?.load();
     if (props.page === 'trust' || props.page === 'policies') await trustPanel.value?.load();
-    if (kind.value && !['bindings', 'trust', 'policies'].includes(props.page)) {
+    if (['device-keys', 'keys', 'key-associations'].includes(props.page)) await deviceKeysPanel.value?.load();
+    if (kind.value && !['bindings', 'trust', 'policies', 'keys'].includes(props.page)) {
       const data = await api.resources(kind.value, pageNumber.value);
       rows.value = data.rows;
       total.value = data.total;
