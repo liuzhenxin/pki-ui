@@ -7,8 +7,10 @@ import { fileURLToPath } from 'node:url';
 // 全部远程页面/API请求拦截为合成数据；绝不连接128或真实Auth。
 const local = 'http://127.0.0.1:5187';
 const origin = 'http://10.10.10.128:9085';
+process.env.VITE_APP_PRODUCT = 'csp';
+process.env.VITE_APP_TENANT_IDS = '10';
 const server = await preview({
-  configFile: fileURLToPath(new URL('vite.config.ts', import.meta.url)),
+  configFile: fileURLToPath(new URL('../vite.config.csp.ts', import.meta.url)),
   preview: { host: '127.0.0.1', port: 5187, strictPort: true }
 });
 let browser;
@@ -26,6 +28,8 @@ try {
     const errors = [];
     page.on('pageerror', (error) => errors.push(error.message));
     let initialized = false;
+    let authenticated = false;
+    let initializationAttempted = false;
     let submissions = 0;
     let logins = 0;
     await context.route('**/*', async (route) => {
@@ -39,7 +43,7 @@ try {
       const action = url.pathname.split('/').pop();
       let body;
       if (action === 'session')
-        body = { csrf: 'synthetic-csrf', authenticated: false, certificateLoginEnabled: true, httpTestMode: scenario.enabled };
+        body = { csrf: 'synthetic-csrf', authenticated, initializationAttempted, certificateLoginEnabled: true, httpTestMode: scenario.enabled };
       else if (action === 'challenge')
         body = {
           csrf: 'synthetic-csrf',
@@ -49,6 +53,7 @@ try {
       else if (action === 'login') {
         assert.equal(allowed, true);
         logins++;
+        authenticated = true;
         body = { authenticated: true };
       } else if (action === 'state') body = { initialized };
       else if (action === 'environment')
@@ -63,10 +68,14 @@ try {
         assert.deepEqual(JSON.parse(route.request().postData()), { confirm: true });
         assert.equal(route.request().headers()['x-csrf-token'], 'synthetic-csrf');
         initialized = true;
+        initializationAttempted = true;
         submissions++;
         body = { initialized: true, reauthenticationRequired: true };
-      } else if (action === 'logout') body = { authenticated: false };
-      else throw new Error('Unexpected synthetic API action: ' + action);
+      } else if (action === 'logout') {
+        authenticated = false;
+        initializationAttempted = false;
+        body = { authenticated: false };
+      } else throw new Error('Unexpected synthetic API action: ' + action);
       await route.fulfill({ json: body });
     });
     await page.goto(scenario.origin + '/login');

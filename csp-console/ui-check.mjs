@@ -4,8 +4,10 @@ import { preview } from 'vite';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 
+process.env.VITE_APP_PRODUCT = 'csp';
+process.env.VITE_APP_TENANT_IDS = '10';
 const server = await preview({
-  configFile: fileURLToPath(new URL('vite.config.ts', import.meta.url)),
+  configFile: fileURLToPath(new URL('../vite.config.csp.ts', import.meta.url)),
   preview: { host: '127.0.0.1', port: 5185, strictPort: true }
 });
 let browser;
@@ -17,6 +19,9 @@ try {
     let loginCount = 0;
     let failLogin = false;
     let initialized = false;
+    let stateExpired = false;
+    let authenticated = false;
+    let initializationAttempted = false;
     let environmentReady = false;
     let initializeCount = 0;
     let failInitialization = true;
@@ -41,7 +46,7 @@ try {
       assert.equal((route.request().postData() || '').includes('Synthetic-PIN-only'), false);
       let body;
       let status = 200;
-      if (action === 'session') body = { csrf: 'test-csrf', authenticated: false, certificateLoginEnabled: true };
+      if (action === 'session') body = { csrf: 'test-csrf', authenticated, initializationAttempted, certificateLoginEnabled: true };
       else if (action === 'certificate-challenge') body = { challengeId: 'synthetic-challenge', signData: 'dGVzdA', sm2UserId: '1234567812345678' };
       else if (action === 'certificate-login') {
         certificateLoginAttempts++;
@@ -56,8 +61,11 @@ try {
         loginCount++;
         body = failLogin ? { message: '测试登录拒绝' } : { authenticated: true };
         if (failLogin) status = 401;
-      } else if (action === 'state') body = { initialized };
-      else if (action === 'environment')
+        else authenticated = true;
+      } else if (action === 'state') {
+        body = stateExpired ? { message: '会话已过期' } : { initialized };
+        if (stateExpired) status = 401;
+      } else if (action === 'environment')
         body = {
           checks: [
             { name: '平台租户', ok: true },
@@ -66,6 +74,7 @@ try {
         };
       else if (action === 'initialize') {
         initializeCount++;
+        initializationAttempted = true;
         assert.deepEqual(JSON.parse(route.request().postData()), { confirm: true });
         assert.equal(route.request().headers()['x-csrf-token'], 'test-csrf');
         if (failInitialization) {
@@ -75,11 +84,20 @@ try {
           initialized = true;
           body = { initialized: true, reauthenticationRequired: true };
         }
-      } else if (action === 'logout') body = { authenticated: false };
-      else throw new Error('Unexpected API');
+      } else if (action === 'logout') {
+        authenticated = false;
+        initializationAttempted = false;
+        body = { authenticated: false };
+      } else throw new Error('Unexpected API');
       await route.fulfill({ status, json: body });
     });
-    await page.goto('http://127.0.0.1:5185/login');
+    await page.goto('http://127.0.0.1:5185/csp/overview');
+    await expect(page).toHaveURL(/\/login$/);
+    assert.equal(loginCount, 0);
+    await page.evaluate(() => localStorage.setItem('tenantId', '1'));
+    await page.reload();
+    await expect(page).toHaveURL(/\/login$/);
+    await page.evaluate(() => localStorage.clear());
     await page.getByLabel('账号', { exact: true }).fill('synthetic-admin');
     await page.getByLabel('密码', { exact: true }).fill('Synthetic-password-only');
     await page.getByLabel('图形验证码', { exact: true }).fill('test');
@@ -101,6 +119,8 @@ try {
     await page.getByRole('button', { name: '登录', exact: true }).click();
     await page.getByRole('heading', { name: 'CSP 初始化向导' }).waitFor();
     assert.equal(new URL(page.url()).pathname, '/csp/setup');
+    await page.goto('http://127.0.0.1:5185/csp/overview');
+    await expect(page).toHaveURL(/\/csp\/setup$/);
     assert.equal(await page.getByRole('button', { name: '下一步：初始化确认' }).isDisabled(), true);
     environmentReady = true;
     await page.getByRole('button', { name: '重新检测' }).click();
@@ -158,6 +178,20 @@ try {
     await loginAgain();
     await page.getByRole('heading', { name: '运行总览', exact: true }).waitFor();
     assert.equal(new URL(page.url()).pathname, '/csp/overview');
+    await page.goto('http://127.0.0.1:5185/csp/setup');
+    await expect(page).toHaveURL(/\/csp\/overview$/);
+    await page.reload();
+    await expect(page.getByRole('heading', { name: '运行总览', exact: true })).toBeVisible();
+    await page.goto('http://127.0.0.1:5185/csp/not-open');
+    await expect(page.getByRole('heading', { name: '页面未开放', exact: true })).toBeVisible();
+    await page.goBack();
+    await expect(page).toHaveURL(/\/csp\/overview$/);
+    await expect(page.getByRole('heading', { name: '运行总览', exact: true })).toBeVisible();
+    await page.screenshot({ path: `/tmp/csp-shared-overview-${width}.png`, fullPage: true });
+    assert.deepEqual(
+      (await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze()).violations.map((v) => v.id),
+      []
+    );
     await page.getByRole('button', { name: '退出登录' }).click();
     await page.getByRole('heading', { name: '欢迎回来' }).waitFor();
     await page.getByRole('button', { name: '证书登录', exact: true }).click();
@@ -173,12 +207,22 @@ try {
     assert.equal(await page.getByLabel('USB Key PIN', { exact: true }).inputValue(), '');
     assert.equal(pinAttempts, 1);
     assert.equal(certificateLoginAttempts, 0);
+    authenticated = true;
+    initialized = 'unknown';
+    await page.goto('http://127.0.0.1:5185/csp/overview');
+    await expect(page).toHaveURL(/\/csp\/setup$/);
+    await expect(page.getByRole('heading', { name: '需要确认平台状态' })).toBeVisible();
+    assert.equal(await page.getByRole('button', { name: '确认并初始化 CSP' }).count(), 0);
+    stateExpired = true;
+    await page.goto('http://127.0.0.1:5185/csp/overview');
+    await expect(page).toHaveURL(/\/login$/);
+    assert.equal(loginCount, 4);
     assert.equal(await page.evaluate(() => localStorage.length + sessionStorage.length), 0);
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
     assert.deepEqual(errors, []);
     await context.close();
     process.stdout.write(
-      `CSP_UI_MOCK_PASS width=${width} login/error/setup/confirm/ambiguous/no-retry/completion/reauth/overview/logout/storage/overflow/axe\n`
+      `CSP_UI_MOCK_PASS width=${width} login/error/setup/confirm/ambiguous/no-retry/completion/reauth/overview/logout/deep-link/reload/back/unknown-state/session-expiry/tenant-isolation/storage/overflow/axe\n`
     );
   }
 } finally {

@@ -1,0 +1,18 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "strict": true, "strictNullChecks": true, "noImplicitAny": true },
+  "include": [
+    "src/products/csp/**/*",
+    "src/api/csp/**/*",
+    "src/config/csp.ts",
+    "src/store/modules/cspConsole.ts",
+    "src/services/csp/**/*",
+    "src/views/csp/**/*",
+    "src/layout/CspLayout.vue",
+    "src/layout/components/ManagementFrame.vue",
+    "src/router/csp.ts",
+    "vite.config.csp.ts",
+    "vite/csp-brand.ts"
+  ],
+  "exclude": ["node_modules", "dist", "dist-csp", "src/**/__tests__/**"]
+}

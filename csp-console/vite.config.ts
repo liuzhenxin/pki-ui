@@ -17,6 +17,8 @@ for (const [name, digest] of Object.entries(approvedBrand)) {
 export default defineConfig({
   root: fileURLToPath(new URL('.', import.meta.url)),
   plugins: [vue()],
+  resolve: { alias: { '@': fileURLToPath(new URL('../src', import.meta.url)) } },
+  define: { 'import.meta.env.VITE_APP_PRODUCT': JSON.stringify('csp'), 'import.meta.env.VITE_APP_TENANT_IDS': JSON.stringify('10') },
   build: { outDir: '../dist-csp-console', emptyOutDir: true, sourcemap: false },
   server: { host: '127.0.0.1', port: 5185 }
 });

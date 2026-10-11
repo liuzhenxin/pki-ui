@@ -17,6 +17,7 @@
     "build:ocsp": "VITE_APP_VERSION=${VITE_APP_VERSION:-3.0.0} VITE_APP_TENANT_IDS=6 VITE_APP_CLIENT_ID=pki-ocsp-ui vite build --mode production",
     "build:kds": "VITE_APP_VERSION=${VITE_APP_VERSION:-1.2.0} VITE_APP_TENANT_IDS=21 VITE_APP_CLIENT_ID=liuzx-kds-ui vite build --mode production",
     "build:dev": "vite build --mode development",
+    "build:csp": "VITE_APP_PRODUCT=csp VITE_APP_TENANT_IDS=10 vite build --config vite.config.csp.ts --mode production",
     "preview": "vite preview",
     "typecheck:csp": "vue-tsc --noEmit -p tsconfig.csp-tests.json",
     "test:csp:unit": "node scripts/run-csp-suite.mjs unit --",

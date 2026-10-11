@@ -1,27 +1,18 @@
 <template>
-  <div :class="classObj" class="app-wrapper" :style="{ '--current-color': theme }">
-    <div v-if="device === 'mobile' && sidebar.opened" class="drawer-bg" @click="handleClickOutside" />
-    <side-bar v-if="!sidebar.hide" class="sidebar-container" />
-    <div :class="{ hasTagsView: needTagsView, sidebarHide: sidebar.hide }" class="main-container">
-      <!-- <el-scrollbar>
-        <div :class="{ 'fixed-header': fixedHeader }">
-          <navbar ref="navbarRef" @setLayout="setLayout" />
-          <tags-view v-if="needTagsView" />
-        </div>
-        <app-main />
-        <settings ref="settingRef" />
-      </el-scrollbar> -->
-      <div :class="{ 'fixed-header': fixedHeader }">
-        <navbar ref="navbarRef" @set-layout="setLayout" />
-        <tags-view v-if="needTagsView" />
-      </div>
-      <app-main />
-      <settings ref="settingRef" />
-    </div>
-  </div>
+  <ManagementFrame :class="classObj" :style="{ '--current-color': theme }" :has-tags-view="needTagsView" :sidebar-hidden="sidebar.hide">
+    <template #navigation
+      ><div v-if="device === 'mobile' && sidebar.opened" class="drawer-bg" @click="handleClickOutside" />
+      <side-bar v-if="!sidebar.hide" class="sidebar-container"
+    /></template>
+    <template #header
+      ><div :class="{ 'fixed-header': fixedHeader }"><navbar ref="navbarRef" @set-layout="setLayout" /><tags-view v-if="needTagsView" /></div
+    ></template>
+    <app-main /><settings ref="settingRef" />
+  </ManagementFrame>
 </template>
 
 <script setup lang="ts">
+import ManagementFrame from './components/ManagementFrame.vue';
 import SideBar from './components/Sidebar/index.vue';
 import { AppMain, Navbar, Settings, TagsView } from './components';
 import { useAppStore } from '@/store/modules/app';
