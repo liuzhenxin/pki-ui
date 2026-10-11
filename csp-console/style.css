@@ -6,9 +6,12 @@
   line-height: 1.6;
   --navy: #102b3f;
   --muted: #526776;
-  --teal: #087e80;
+  --teal: #076e70;
   --line: #d8dfe2;
   --el-color-primary: var(--teal);
+  --el-color-primary-light-3: #065f61;
+  --el-color-primary-dark-2: #054f51;
+  --el-color-primary-light-9: #eaf5f5;
   --el-border-radius-base: 6px;
 }
 * {
@@ -368,6 +371,100 @@ label {
   align-items: flex-start;
   gap: 32px;
 }
+.setup-steps {
+  list-style: none;
+  display: flex;
+  gap: 24px;
+  padding: 24px;
+  margin: 32px 0 24px;
+  border: 1px solid var(--line);
+  background: white;
+}
+.setup-steps li {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--muted);
+}
+.setup-steps li > span {
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+.setup-steps .current,
+.setup-steps .done,
+.check-ok {
+  color: var(--teal);
+  font-weight: 600;
+}
+.check-failed {
+  color: #a32d2d;
+}
+.wizard-panel {
+  padding: 32px;
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.wizard-heading,
+.wizard-actions {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  justify-content: space-between;
+}
+.environment-list {
+  list-style: none;
+  padding: 0;
+  margin: 24px 0;
+}
+.environment-list li {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  border: 1px solid var(--line);
+  padding: 20px;
+  margin-bottom: 12px;
+  border-radius: 6px;
+}
+.setup-summary {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 16px 24px;
+  margin: 24px 0;
+}
+.setup-summary dt {
+  font-weight: 600;
+}
+.setup-summary dd {
+  margin: 0;
+  color: var(--muted);
+}
+.setup-confirm {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  font-size: 16px;
+  margin: 24px 0;
+  cursor: pointer;
+}
+.setup-confirm input {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  accent-color: var(--teal);
+}
+.wizard-actions {
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
 .status-panel > div {
   flex: 1;
 }
@@ -416,6 +513,23 @@ label {
   }
 }
 @media (max-width: 640px) {
+  .setup-steps {
+    gap: 16px;
+    flex-direction: column;
+  }
+  .wizard-panel {
+    padding: 24px;
+  }
+  .wizard-heading {
+    flex-direction: column;
+  }
+  .setup-summary {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .setup-summary dd {
+    margin-bottom: 12px;
+  }
   .login-layout {
     display: block;
   }
