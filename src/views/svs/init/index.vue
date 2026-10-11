@@ -23,7 +23,7 @@
           <div v-for="check in environment" :key="check.name" class="check-row">
             <div>
               <strong>{{ check.name }}</strong>
-              <p>{{ check.message }}</p>
+              <p v-if="check.message">{{ check.message }}</p>
             </div>
             <el-tag :type="check.ok ? 'success' : 'danger'">{{ check.ok ? '正常' : '异常' }}</el-tag>
           </div>
@@ -176,7 +176,7 @@ const reviewed = ref(false),
   confirmed = ref(false),
   verified = ref(false);
 const environment = computed(() => [
-  { name: '平台连接与产品租户', ok: !!state.value?.platformTenantValid, message: '产品租户须为 9 / svs。' },
+  { name: '平台连接与产品租户', ok: !!state.value?.platformTenantValid, message: '' },
   { name: '业务数据库', ok: !!state.value?.databaseReady, message: '初始化记录必须可正常读取。' },
   { name: '密码设备', ok: !!state.value?.deviceReady, message: state.value?.deviceReady ? '密码设备已就绪。' : '请检查设备连接及服务运行状态。' }
 ]);
