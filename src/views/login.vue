@@ -479,6 +479,12 @@ const defaultTenantBrand = {
   subtitle: '面向 CA、RA、KMC、OCSP 的统一安全运营入口'
 };
 const tenantBrandProfiles: Record<string, typeof defaultTenantBrand> = {
+  '7': {
+    className: 'brand-panel--hsm',
+    logo: 'HSM',
+    heading: '服务器密码机',
+    subtitle: '设备身份认证与受控的密钥生命周期管理'
+  },
   '9': {
     className: 'brand-panel--svs',
     logo: 'SVS',
@@ -528,6 +534,7 @@ const tenantBrandProfiles: Record<string, typeof defaultTenantBrand> = {
     subtitle: '统一管理产品授权、许可状态与客户交付凭证'
   }
 };
+if (initialTenantId === '7') loginTitle.value = '服务器密码机';
 if (initialTenantId === '9') loginTitle.value = '签名验签服务器';
 const hasTenantLoginBackground = computed(() => Boolean(tenantLoginBackgrounds[String(loginForm.value.tenantId || '')]));
 const tenantBrand = computed(() => tenantBrandProfiles[String(loginForm.value.tenantId || '')] || defaultTenantBrand);
@@ -814,6 +821,7 @@ const isPkiTenant = (item: any) => {
 };
 
 const getTenantAppTitle = (tenantName: string, tenantId: string) => {
+  if (tenantId === '7') return '服务器密码机';
   if (tenantId === '9') return '签名验签服务器';
   if (tenantId === '1') {
     return `${tenantName} (平台运维中心)`;
@@ -924,7 +932,7 @@ const refreshRadiusStatus = async (tenantCode?: string) => {
 const getTenantInfo = async (tenantId: string) => {
   const res = await getTenant(tenantId);
   if (res.data && res.data.name) {
-    loginTitle.value = String(tenantId) === '9' ? '签名验签服务器' : res.data.name;
+    loginTitle.value = String(tenantId) === '7' ? '服务器密码机' : String(tenantId) === '9' ? '签名验签服务器' : res.data.name;
     settingsStore.setAppTitle(getTenantAppTitle(res.data.name, String(tenantId)));
   }
 };

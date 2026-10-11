@@ -43,7 +43,9 @@ const sideTheme = computed(() => settingsStore.sideTheme);
 
 function syncLogoText(tenantId?: string | number | null) {
   const idStr = String(tenantId || '');
-  if (idStr === '9' || route.path.startsWith('/svs')) {
+  if (idStr === '7' || route.path.startsWith('/hsm')) {
+    logoText.value = 'HSM';
+  } else if (idStr === '9' || route.path.startsWith('/svs')) {
     logoText.value = 'SVS';
   } else if (idStr === '1' || route.path.startsWith('/ops')) {
     logoText.value = 'OPS';
@@ -65,6 +67,12 @@ function syncLogoText(tenantId?: string | number | null) {
 onMounted(() => {
   const tenantId = userStore.tenantId || localStorage.getItem('tenantId');
   syncLogoText(tenantId);
+  if (String(tenantId) === '7' || String(import.meta.env.VITE_APP_TENANT_IDS) === '7') {
+    title.value = '服务器密码机';
+    name.value = '服务器密码机';
+    logoText.value = 'HSM';
+    return;
+  }
   if (String(tenantId) === '9' || String(import.meta.env.VITE_APP_TENANT_IDS) === '9') {
     title.value = '签名验签服务器';
     name.value = '签名验签服务器';

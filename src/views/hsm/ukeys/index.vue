@@ -1,5 +1,6 @@
 <template>
-  <div class="ukey-page">
+  <div class="hsm-page ukey-page">
+    <HsmPageHeader title="UKey 身份" description="管理密码机主机上的管理员与操作员 UKey，完成任命、登录及遗失替换。" />
     <el-card v-loading="loading">
       <template #header
         ><div class="toolbar">
@@ -134,6 +135,8 @@
 </template>
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
+import HsmPageHeader from '../components/HsmPageHeader.vue';
+import '../styles/product.css';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import {
   challengeUkey,

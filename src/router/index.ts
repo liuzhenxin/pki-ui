@@ -2,6 +2,7 @@ import { createWebHistory, createRouter, RouteRecordRaw } from 'vue-router';
 /* Layout */
 import Layout from '@/layout/index.vue';
 import { svsConstantRoutes, svsInitializationRoute } from './svs';
+import { hsmConstantRoutes } from './hsm';
 
 /**
  * Note: 路由配置项
@@ -26,7 +27,7 @@ import { svsConstantRoutes, svsInitializationRoute } from './svs';
  */
 
 // 公共路由
-export const constantRoutes: RouteRecordRaw[] = import.meta.env.VITE_APP_TENANT_IDS === '9' ? svsConstantRoutes : [
+const platformConstantRoutes: RouteRecordRaw[] = [
   {
     path: '/redirect',
     component: Layout,
@@ -252,16 +253,31 @@ export const constantRoutes: RouteRecordRaw[] = import.meta.env.VITE_APP_TENANT_
 ];
 
 // 动态路由，基于用户权限动态去加载
-export const dynamicRoutes: RouteRecordRaw[] = import.meta.env.VITE_APP_TENANT_IDS === '9' ? [] : [
-  {
-    path: '/ocsp/monitoring',
-    component: Layout,
-    permissions: ['ocsp:monitoring'],
-    children: [
-      { path: '', name: 'OcspMonitoring', component: () => import('@/views/ocsp/monitoring/index.vue'), meta: { title: '运行监控', icon: 'monitor' } }
-    ]
-  }
-];
+export const constantRoutes: RouteRecordRaw[] =
+  import.meta.env.VITE_APP_TENANT_IDS === '7'
+    ? hsmConstantRoutes
+    : import.meta.env.VITE_APP_TENANT_IDS === '9'
+      ? svsConstantRoutes
+      : platformConstantRoutes;
+
+export const dynamicRoutes: RouteRecordRaw[] =
+  import.meta.env.VITE_APP_TENANT_IDS === '9'
+    ? []
+    : [
+        {
+          path: '/ocsp/monitoring',
+          component: Layout,
+          permissions: ['ocsp:monitoring'],
+          children: [
+            {
+              path: '',
+              name: 'OcspMonitoring',
+              component: () => import('@/views/ocsp/monitoring/index.vue'),
+              meta: { title: '运行监控', icon: 'monitor' }
+            }
+          ]
+        }
+      ];
 
 /**
  * 创建路由

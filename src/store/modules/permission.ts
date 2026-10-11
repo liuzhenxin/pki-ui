@@ -11,10 +11,11 @@ import { ref } from 'vue';
 import { createCustomNameComponent } from '@/utils/createCustomNameComponent';
 import { Result } from '@/api/types';
 import { isSvsProduct, svsRoutes } from '@/utils/svsNavigation';
+import { isHsmProduct, buildHsmRoutes } from '@/utils/hsmNavigation';
 import { buildOcspNavigation } from '@/utils/ocspNavigation';
 
 // 匹配views里面所有的.vue文件
-const modules = import.meta.env.VITE_APP_TENANT_IDS === '9' ? {} : import.meta.glob('./../../views/**/*.vue');
+const modules = ['7', '9'].includes(import.meta.env.VITE_APP_TENANT_IDS) ? {} : import.meta.glob('./../../views/**/*.vue');
 export const usePermissionStore = defineStore('permission', () => {
   const routes = ref<RouteRecordRaw[]>([]);
   const addRoutes = ref<RouteRecordRaw[]>([]);
@@ -49,8 +50,8 @@ export const usePermissionStore = defineStore('permission', () => {
     sidebarRouters.value = routes;
   };
   const generateRoutes = async (): Promise<RouteRecordRaw[]> => {
-    if (isSvsProduct()) {
-      const productRoutes = await svsRoutes();
+    if (isSvsProduct() || isHsmProduct()) {
+      const productRoutes = isHsmProduct() ? buildHsmRoutes((permission) => auth.hasPermi(permission)) : await svsRoutes();
       setRoutes(productRoutes);
       setSidebarRouters(productRoutes);
       setDefaultRoutes(productRoutes);
@@ -79,7 +80,7 @@ export const usePermissionStore = defineStore('permission', () => {
   };
 
   const generateInitRoutes = async (): Promise<RouteRecordRaw[]> => {
-    if (isSvsProduct()) return generateRoutes();
+    if (isSvsProduct() || isHsmProduct()) return generateRoutes();
     const res = await getInitRouters({ types: ['M', 'C'] });
     // const { data } = res.data;
     const sdata = removeRetiredKmcRoutes(JSON.parse(JSON.stringify(res.data)));

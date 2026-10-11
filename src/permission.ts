@@ -39,6 +39,7 @@ const getCurrentInitPath = () => {
     return raInitPath;
   }
   if (tenantId === '9') return '/svs/init';
+  if (tenantId === '7') return '/hsm/initialization';
   if (tenantId === '6') {
     return ocspInitPath;
   }
@@ -69,6 +70,7 @@ const getTenantAppTitle = (tenantName: string, tenantId: string, longName = fals
   if (tenantId === '10') {
     return `${tenantName} (${longName ? 'NAS网络存储管理系统' : 'NAS'})`;
   }
+  if (tenantId === '7') return `${tenantName} (${longName ? '服务器密码机' : 'HSM'})`;
   if (tenantId === '9') return `${tenantName} (${longName ? '签名验签服务器' : 'SVS'})`;
   return `${tenantName} (CA)`;
 };
@@ -92,6 +94,8 @@ const syncTenantContext = async () => {
 };
 
 const ensureTenantBoundary = async (path: string) => {
+  // HSM 初始化由独立状态接口管理，平台租户状态不决定设备就绪。
+  if (String(getCurrentTenantId()) === '7') return '';
   if (getCurrentTenantId() === '9') {
     const state = await getSvsInitialization();
     if (!state.locked && path !== '/svs/init') return '/svs/init';
@@ -142,7 +146,7 @@ router.beforeEach(async (to, from, next) => {
         } else {
           isRelogin.show = false;
           const res = await syncTenantContext();
-          const tenantInitialized = isTenantInitialized(res?.data?.status);
+          const tenantInitialized = String(getCurrentTenantId()) === '7' || isTenantInitialized(res?.data?.status);
           if (res?.data && !tenantInitialized) {
             const accessRoutes = await usePermissionStore().generateInitRoutes();
             accessRoutes.forEach((route) => {
