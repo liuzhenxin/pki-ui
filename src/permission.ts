@@ -58,6 +58,9 @@ const getTenantAppTitle = (tenantName: string, tenantId: string, longName = fals
   if (tenantId === '100') {
     return `${tenantName} (${longName ? 'License授权系统' : 'License'})`;
   }
+  if (tenantId === '2') {
+    return `${tenantName} (${longName ? '通用密钥管理系统' : 'KMS'})`;
+  }
   if (tenantId === '3') {
     return `${tenantName} (${longName ? '密钥管理中心' : 'KMC'})`;
   }
@@ -94,6 +97,8 @@ const syncTenantContext = async () => {
 };
 
 const ensureTenantBoundary = async (path: string) => {
+  // KMS 通过独立安装脚本初始化，不使用 CA 的在线初始化流程。
+  if (String(getCurrentTenantId()) === '2') return '';
   // HSM 初始化由独立状态接口管理，平台租户状态不决定设备就绪。
   if (String(getCurrentTenantId()) === '7') return '';
   if (getCurrentTenantId() === '9') {
@@ -146,7 +151,7 @@ router.beforeEach(async (to, from, next) => {
         } else {
           isRelogin.show = false;
           const res = await syncTenantContext();
-          const tenantInitialized = String(getCurrentTenantId()) === '7' || isTenantInitialized(res?.data?.status);
+          const tenantInitialized = ['2', '7'].includes(String(getCurrentTenantId())) || isTenantInitialized(res?.data?.status);
           if (res?.data && !tenantInitialized) {
             const accessRoutes = await usePermissionStore().generateInitRoutes();
             accessRoutes.forEach((route) => {

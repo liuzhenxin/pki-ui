@@ -72,7 +72,7 @@ const platformConstantRoutes: RouteRecordRaw[] = [
     children: [
       {
         path: '/index',
-        component: () => import('@/views/index.vue'),
+        component: () => import('@/views/kms/home.vue'),
         name: 'Index',
         meta: { title: '首页', icon: 'dashboard', affix: true }
       }

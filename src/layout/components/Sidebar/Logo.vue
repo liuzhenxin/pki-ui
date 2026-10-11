@@ -51,6 +51,8 @@ function syncLogoText(tenantId?: string | number | null) {
     logoText.value = 'OPS';
   } else if (idStr === '100' || route.path.startsWith('/license')) {
     logoText.value = 'LIC';
+  } else if (idStr === '2') {
+    logoText.value = 'KMS';
   } else if (idStr === '3') {
     logoText.value = 'KMC';
   } else if (idStr === '10') {
@@ -91,6 +93,8 @@ onMounted(() => {
         } else if (idStr === '100') {
           title.value = 'License授权系统';
           name.value = '授权系统';
+        } else if (idStr === '2') {
+          title.value = 'KMS通用密钥管理系统';
         } else if (idStr === '3') {
           title.value = 'KMC密钥管理中心';
         } else if (idStr === '10') {

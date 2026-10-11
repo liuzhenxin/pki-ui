@@ -305,7 +305,7 @@ service.interceptors.response.use(
       if (!(res.config as any).hideErrorNotify) {
         ElNotification.error({ title: msg });
       }
-      return Promise.reject('error');
+      return Promise.reject(String(res.config?.url || '').startsWith('/kms/v1/') ? new Error(msg) : 'error');
     } else {
       return Promise.resolve(res.data);
     }
@@ -322,6 +322,10 @@ service.interceptors.response.use(
       return Promise.reject(handleSessionExpired());
     }
 
+    // AxiosError 包含请求体；KMS 网络失败不得将密码数据写入控制台。
+    if (String(error.config?.url || '').startsWith('/kms/v1/')) {
+      return Promise.reject(new Error('KMS 请求失败，请检查网络、认证与服务可用性'));
+    }
     console.log(error);
     let { message } = error;
     const responseMsg = error.response?.data?.msg || error.response?.data?.Status?.Msg || error.response?.data?.message;
