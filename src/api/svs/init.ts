@@ -35,3 +35,8 @@ export interface InitPlan {
 export const getSvsInitPlan = (): Promise<InitPlan> => request({ url: '/admin/svs/init/plan', method: 'get', hideErrorNotify: true } as any);
 export const reviewSvsInitStep = (step: number, keyId = '', deploymentRevision = ''): Promise<InitPlan> =>
   request({ url: `/admin/svs/init/steps/${step}`, method: 'post', data: { keyId, deploymentRevision }, hideErrorNotify: true } as any);
+
+export const getSvsInitDeviceKeys = (): Promise<Record<string, string>> =>
+  request({ url: '/admin/svs/init/device-keys', method: 'get', hideErrorNotify: true } as any);
+export const registerSvsInitDeviceKey = (alias: string, fingerprint: string): Promise<{ keyId: string; alias: string; fingerprint: string }> =>
+  request({ url: '/admin/svs/init/device-keys', method: 'post', data: { alias, fingerprint }, hideErrorNotify: true } as any);

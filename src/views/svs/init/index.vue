@@ -57,11 +57,28 @@
           ></el-form>
           <el-alert
             v-if="!plan?.keys.length"
-            title="尚无启用的 SM2 密钥引用，请先由部署人员配置设备密钥引用，再重新检查。"
+            title="尚无启用的 SM2 密钥引用，请在下方选择已有设备密钥并登记。"
             type="warning"
             :closable="false"
             class="notice"
           />
+          <el-divider>登记已有设备密钥</el-divider>
+          <p>选择部署人员已配置的 SM2 密钥，核验公钥后登记引用。初始化完成后由安全管理员维护。</p>
+          <el-button :loading="loading" :disabled="saving" @click="readDeviceKeys">读取设备密钥</el-button>
+          <el-form label-width="140px">
+            <el-form-item label="设备密钥别名">
+              <el-select v-model="deviceAlias" placeholder="选择已有 SM2 密钥" :disabled="saving">
+                <el-option v-for="(_, alias) in deviceKeys" :key="alias" :label="String(alias)" :value="String(alias)" />
+              </el-select>
+            </el-form-item>
+            <el-form-item v-if="deviceAlias" label="公钥指纹（SHA-256）">
+              <span class="device-fingerprint">{{ deviceKeys[deviceAlias] }}</span>
+            </el-form-item>
+          </el-form>
+          <el-button type="primary" :loading="saving" :disabled="loading || !deviceKeys[deviceAlias]" @click="registerDeviceKey">
+            核验并登记引用
+          </el-button>
+          <p v-if="!loading && !Object.keys(deviceKeys).length">未读取到可用 SM2 公钥，请点击读取；仍为空时联系部署人员检查设备配置与连接。</p>
           <p>私钥始终保留在 SDF/HSM 内。本步骤不生成或覆盖密钥；设备证书在初始化后的管理界面维护。</p>
         </section>
         <section v-else-if="step === 3 || step === 4" class="step-content">
@@ -154,6 +171,8 @@ import {
   completeSvsInitialization,
   validateSvsInitAccounts,
   getSvsInitPlan,
+  getSvsInitDeviceKeys,
+  registerSvsInitDeviceKey,
   reviewSvsInitStep,
   type Initialization,
   type AccountValidation,
@@ -172,6 +191,8 @@ const step = ref(0),
   saving = ref(false),
   error = ref(''),
   keyId = ref('');
+const deviceKeys = ref<Record<string, string>>({}),
+  deviceAlias = ref('');
 const reviewed = ref(false),
   confirmed = ref(false),
   verified = ref(false);
@@ -211,6 +232,37 @@ async function refreshPlan() {
     error.value = message(e);
   } finally {
     loading.value = false;
+  }
+}
+async function readDeviceKeys() {
+  loading.value = true;
+  error.value = '';
+  deviceKeys.value = {};
+  deviceAlias.value = '';
+  try {
+    deviceKeys.value = await getSvsInitDeviceKeys();
+  } catch (e) {
+    error.value = message(e);
+  } finally {
+    loading.value = false;
+  }
+}
+async function registerDeviceKey() {
+  if (saving.value || loading.value || !deviceKeys.value[deviceAlias.value]) return;
+  saving.value = true;
+  error.value = '';
+  verified.value = false;
+  confirmed.value = false;
+  try {
+    const registered = await registerSvsInitDeviceKey(deviceAlias.value, deviceKeys.value[deviceAlias.value]);
+    keyId.value = registered.keyId;
+    plan.value = await getSvsInitPlan();
+    deviceKeys.value = {};
+    deviceAlias.value = '';
+  } catch (e) {
+    error.value = message(e);
+  } finally {
+    saving.value = false;
   }
 }
 async function load() {
@@ -559,5 +611,11 @@ onMounted(load);
   .wizard-actions {
     flex-wrap: wrap;
   }
+}
+</style>
+
+<style scoped>
+.device-fingerprint {
+  overflow-wrap: anywhere;
 }
 </style>
