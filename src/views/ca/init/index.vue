@@ -1,5 +1,9 @@
 <template>
-  <div class="app-container">
+  <ApplicationInstallation v-if="authorizationMode === 'ENFORCE'" />
+  <el-card v-else-if="authorizationMode !== 'LEGACY' && authorizationMode !== 'SHADOW'" v-loading="loading"
+    ><el-empty description="无法确认当前安装权限，操作已关闭"
+  /></el-card>
+  <div v-else class="app-container">
     <el-card v-loading="loading">
       <el-steps :active="active" finish-status="success" simple>
         <el-step title="协议" />
@@ -656,6 +660,9 @@
 </template>
 
 <script setup lang="ts">
+import ApplicationInstallation from '@/components/ApplicationInstallation/index.vue';
+import { getApplicationAuthorizationContext } from '@/api/system/applicationAuthorization';
+const authorizationMode = ref('');
 import { ref, computed, reactive, onMounted, onUnmounted, watch, getCurrentInstance, ComponentInternalInstance } from 'vue';
 import { ElMessage, FormInstance, FormRules, UploadInstance, UploadUserFile, UploadProps, UploadRawFile, genFileId } from 'element-plus';
 import { useRouter } from 'vue-router';
@@ -2096,6 +2103,16 @@ const prev = async () => {
 };
 
 onMounted(async () => {
+  try {
+    authorizationMode.value = (await getApplicationAuthorizationContext()).mode;
+  } catch {
+    loading.value = false;
+    return;
+  }
+  if (authorizationMode.value === 'ENFORCE') {
+    loading.value = false;
+    return;
+  }
   // 获取租户信息并恢复初始化步骤
   try {
     const tenantId = userStore.tenantId || localStorage.getItem('tenantId') || '';
