@@ -1,3 +1,17 @@
+export interface SetupView {
+  initialized: boolean;
+  draftVersion: number;
+  step: number;
+  agreed: boolean;
+  attempted: boolean;
+  agreementVersion: string;
+  companyName: string;
+  serviceVersion: string;
+  environment: string;
+  checkedAt: string | null;
+  accounts: { role: 'SYSTEM_ADMIN' | 'SECURITY_ADMIN' | 'AUDIT_ADMIN'; valid: boolean }[];
+}
+export type SetupAction = 'AGREE' | 'CHECK_ENV' | 'VERIFY_ACCOUNTS';
 /** 固定同源BFF契约；浏览器不持有Auth令牌或OAuth客户端秘密。 */
 export interface ConsoleResponses {
   session: { csrf: string; authenticated: boolean; initializationAttempted?: boolean; certificateLoginEnabled?: boolean; httpTestMode?: boolean };
@@ -6,6 +20,9 @@ export interface ConsoleResponses {
   'certificate-challenge': { challengeId: string; signData: string; sm2UserId: string };
   'certificate-login': { authenticated: boolean };
   state: { initialized: boolean };
+  setup: SetupView;
+  'setup-advance': SetupView;
+  'setup-complete': SetupView;
   environment: { checks: { name: string; ok: boolean }[] };
   initialize: { initialized: boolean; reauthenticationRequired: boolean };
   logout: { authenticated: boolean };
@@ -17,11 +34,27 @@ export interface ConsoleCommands {
   'certificate-challenge': { certificate: string };
   'certificate-login': { challengeId: string; signature: string };
   state: undefined;
+  setup: undefined;
+  'setup-advance': { draftVersion: number; action: SetupAction; agreementVersion?: string };
+  'setup-complete': { draftVersion: number; confirm: true };
   environment: undefined;
   initialize: { confirm: true };
   logout: Record<string, never>;
 }
-const endpoints = ['session', 'challenge', 'login', 'certificate-challenge', 'certificate-login', 'state', 'environment', 'initialize', 'logout'];
+const endpoints = [
+  'session',
+  'challenge',
+  'login',
+  'certificate-challenge',
+  'certificate-login',
+  'state',
+  'setup',
+  'setup-advance',
+  'setup-complete',
+  'environment',
+  'initialize',
+  'logout'
+];
 export class ConsoleRequestError extends Error {
   constructor(
     message: string,

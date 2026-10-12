@@ -85,11 +85,14 @@ export const useCspConsoleStore = defineStore('csp-console', () => {
   const initialized = ref<boolean | null>(null);
   const checkedAt = ref('');
   const setupStep = ref(0);
+  const setup = ref<import('@/api/csp/console').SetupView | null>(null);
   const environment = ref<{ name: string; ok: boolean }[]>([]);
   const confirmed = ref(false);
   const initializationAttempted = ref(false);
   const completion = ref(false);
-  const environmentReady = computed(() => environment.value.length === 2 && environment.value.every((row) => row.ok));
+  const environmentReady = computed(
+    () => setup.value !== null && setup.value.step >= 2 && setup.value.accounts.length === 3 && setup.value.accounts.every((row) => row.valid)
+  );
   const secure = computed(() => location.protocol === 'https:' || ['localhost', '127.0.0.1'].includes(location.hostname));
   const httpTestMode = ref(false);
   const accountTransport = computed(() => secure.value || httpTestMode.value);
@@ -113,38 +116,64 @@ export const useCspConsoleStore = defineStore('csp-console', () => {
     await readState();
   }
 
+  function applySetup(data: import('@/api/csp/console').SetupView) {
+    if (
+      typeof data?.initialized !== 'boolean' ||
+      !Number.isSafeInteger(data.draftVersion) ||
+      !Number.isInteger(data.step) ||
+      data.step < 0 ||
+      data.step > 3 ||
+      !Array.isArray(data.accounts)
+    )
+      throw new Error('初始化状态无效，请联系运维核查。');
+    setup.value = data;
+    initialized.value = data.initialized;
+    setupStep.value = data.step;
+    completion.value = data.initialized && (completion.value || initializationAttempted.value || data.attempted);
+    initializationAttempted.value = initializationAttempted.value || data.attempted;
+    checkedAt.value = data.checkedAt ? new Date(data.checkedAt).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }) : '';
+  }
+
   async function readState() {
     busy.value = true;
     error.value = '';
-    environment.value = [];
     confirmed.value = false;
-    setupStep.value = 0;
+    setup.value = null;
     try {
-      const data = await api('state');
-      if (typeof data.initialized !== 'boolean') throw new Error('初始化状态无效，请联系运维核查。');
+      const data = await api('setup');
+      applySetup(data);
       signedIn.value = true;
-      initialized.value = data.initialized;
-      completion.value = data.initialized && initializationAttempted.value;
-      checkedAt.value = new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
-      if (!data.initialized && !initializationAttempted.value) {
-        const result = await api('environment');
-        if (
-          !Array.isArray(result.checks) ||
-          result.checks.length !== 2 ||
-          result.checks.some((row: { name: unknown; ok: unknown }) => typeof row.name !== 'string' || typeof row.ok !== 'boolean')
-        )
-          throw new Error('环境检查结果无效，请联系运维核查。');
-        if (
-          new Set(result.checks.map((row) => row.name)).size !== 2 ||
-          !result.checks.every((row) => ['平台租户', '管理员/审计员'].includes(row.name))
-        )
-          throw new Error('环境检查项目无效。');
-        environment.value = result.checks;
-      }
     } catch (failure) {
       initialized.value = null;
       if (failure instanceof ConsoleRequestError && failure.status === 401) signedIn.value = false;
       error.value = (failure as Error).message;
+    } finally {
+      busy.value = false;
+    }
+  }
+
+  async function advanceSetup(action: import('@/api/csp/console').SetupAction) {
+    if (busy.value || !accountTransport.value || !setup.value || initializationAttempted.value) return;
+    busy.value = true;
+    error.value = '';
+    confirmed.value = false;
+    try {
+      applySetup(
+        await api('setup-advance', {
+          draftVersion: setup.value.draftVersion,
+          action,
+          ...(action === 'AGREE' ? { agreementVersion: setup.value.agreementVersion } : {})
+        })
+      );
+    } catch (failure) {
+      const message = (failure as Error).message;
+      try {
+        applySetup(await api('setup'));
+      } catch {
+        setup.value = null;
+        initialized.value = null;
+      }
+      error.value = message;
     } finally {
       busy.value = false;
     }
@@ -157,19 +186,26 @@ export const useCspConsoleStore = defineStore('csp-console', () => {
       initialized.value !== false ||
       !environmentReady.value ||
       !confirmed.value ||
-      initializationAttempted.value
+      initializationAttempted.value ||
+      !setup.value ||
+      setup.value.step !== 3
     )
       return;
     busy.value = true;
     error.value = '';
     initializationAttempted.value = true;
     try {
-      const result = await api('initialize', { confirm: true });
-      if (result.initialized !== true || result.reauthenticationRequired !== true) throw new Error('初始化回执无效。');
-      initialized.value = true;
+      const result = await api('setup-complete', { draftVersion: setup.value.draftVersion, confirm: true });
+      if (result.initialized !== true) throw new Error('初始化回执无效。');
+      applySetup(result);
       completion.value = true;
-      checkedAt.value = new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
     } catch (failure) {
+      confirmed.value = false;
+      if (failure instanceof ConsoleRequestError && [400, 403, 409, 412].includes(failure.status)) {
+        initializationAttempted.value = false;
+        setup.value = null;
+        initialized.value = null;
+      }
       error.value = `${(failure as Error).message} 请点击“刷新状态”核查；本页不会再次提交。`;
     } finally {
       busy.value = false;
@@ -281,6 +317,8 @@ export const useCspConsoleStore = defineStore('csp-console', () => {
     initialized,
     checkedAt,
     setupStep,
+    setup,
+    advanceSetup,
     environment,
     confirmed,
     initializationAttempted,

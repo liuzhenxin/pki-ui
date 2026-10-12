@@ -3,6 +3,8 @@ import AxeBuilder from '@axe-core/playwright';
 import { preview } from 'vite';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
+import { readFileSync } from 'node:fs';
+const agreementVersion = readFileSync(new URL('../src/products/csp/agreement.ts', import.meta.url),'utf8').match(/public-v1-sha256-[a-f0-9]{64}/)[0];
 
 // 全部远程页面/API请求拦截为合成数据；绝不连接128或真实Auth。
 const local = 'http://127.0.0.1:5187';
@@ -15,7 +17,7 @@ const server = await preview({
 });
 let browser;
 try {
-  browser = await chromium.launch({ headless: true });
+  browser = await chromium.launch({ headless: true, channel: process.env.CSP_BROWSER_CHANNEL || undefined });
   for (const scenario of [
     { origin, enabled: false, width: 1440 },
     { origin: 'http://10.10.10.129:9085', enabled: true, width: 1440 },
@@ -31,6 +33,8 @@ try {
     let authenticated = false;
     let initializationAttempted = false;
     let submissions = 0;
+    let step = 0;
+    let draftVersion = 0;
     let logins = 0;
     await context.route('**/*', async (route) => {
       const url = new URL(route.request().url());
@@ -55,22 +59,16 @@ try {
         logins++;
         authenticated = true;
         body = { authenticated: true };
-      } else if (action === 'state') body = { initialized };
-      else if (action === 'environment')
-        body = {
-          checks: [
-            { name: '平台租户', ok: true },
-            { name: '管理员/审计员', ok: true }
-          ]
-        };
-      else if (action === 'initialize') {
-        assert.equal(allowed, true);
-        assert.deepEqual(JSON.parse(route.request().postData()), { confirm: true });
-        assert.equal(route.request().headers()['x-csrf-token'], 'synthetic-csrf');
-        initialized = true;
-        initializationAttempted = true;
-        submissions++;
-        body = { initialized: true, reauthenticationRequired: true };
+      } else if (['setup','setup-advance','setup-complete'].includes(action)) {
+        if(action==='setup-advance') {
+          const input=JSON.parse(route.request().postData());assert.equal(input.draftVersion,draftVersion);
+          step=input.action==='AGREE'?1:input.action==='CHECK_ENV'?2:3;draftVersion++;
+        } else if(action==='setup-complete') {
+          assert.equal(allowed,true);assert.deepEqual(JSON.parse(route.request().postData()),{draftVersion,confirm:true});
+          initialized=true;initializationAttempted=true;submissions++;
+        }
+        body={initialized,draftVersion,step,agreed:step>0,attempted:initializationAttempted,agreementVersion,companyName:'测试权利主体',serviceVersion:'v2',environment:'test',checkedAt:step>=2?new Date().toISOString():null,
+          accounts:step===0?[]:['SYSTEM_ADMIN','SECURITY_ADMIN','AUDIT_ADMIN'].map(role=>({role,valid:true}))};
       } else if (action === 'logout') {
         authenticated = false;
         initializationAttempted = false;
@@ -90,7 +88,7 @@ try {
     } else {
       await expect(login).toBeEnabled();
       await expect(page.getByText('128 HTTP 测试入口', { exact: false })).toBeVisible();
-      await page.screenshot({ path: `/tmp/csp-http-test-login-${scenario.width}.png`, fullPage: true });
+      if (process.env.CSP_UI_SCREENSHOTS === 'true') await page.screenshot({ path: `/tmp/csp-http-test-login-${scenario.width}.png`, fullPage: true });
       assert.deepEqual(
         (await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze()).violations.map((v) => v.id),
         []
@@ -98,15 +96,18 @@ try {
       await login.click();
       await page.getByRole('heading', { name: 'CSP 初始化向导' }).waitFor();
       await expect(page.getByText('128 HTTP 测试入口', { exact: false })).toBeVisible();
-      await page.screenshot({ path: `/tmp/csp-http-test-setup-${scenario.width}.png`, fullPage: true });
+      if (process.env.CSP_UI_SCREENSHOTS === 'true') await page.screenshot({ path: `/tmp/csp-http-test-setup-${scenario.width}.png`, fullPage: true });
       assert.deepEqual(
         (await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze()).violations.map((v) => v.id),
         []
       );
-      await page.getByRole('button', { name: '下一步：初始化确认' }).click();
       await page.getByRole('checkbox').check();
-      await page.getByRole('button', { name: '确认并初始化 CSP' }).dblclick();
-      await page.getByRole('heading', { name: '初始化已完成，请重新登录' }).waitFor();
+      await page.getByRole('button', { name: '同意并继续' }).click();
+      await page.getByRole('button', { name: '检测并继续' }).click();
+      await page.getByRole('button', { name: '核验并继续' }).click();
+      await page.getByRole('checkbox').check();
+      await page.getByRole('button', { name: '确认并完成初始化' }).dblclick();
+      await page.getByRole('heading', { name: '初始化成功，请重新登录' }).waitFor();
       assert.equal(submissions, 1);
       assert.equal(logins, 1);
       await page.getByRole('button', { name: '退出并重新登录' }).click();
