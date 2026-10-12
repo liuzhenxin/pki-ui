@@ -25,4 +25,10 @@
 
 ## 验证
 
-`npx vitest run --config vitest.kms.config.ts`；定向 ESLint；使用上述构建命令。真实平台登录、网关转发、资源范围授权与 HSM 运算需要部署环境联调。本次不添加审计查询、Provider 切换或在线初始化接口。
+`npx vitest run --config vitest.kms.config.ts`；定向 ESLint；使用上述构建命令。真实平台登录、网关转发、资源范围授权与 HSM 运算需要部署环境联调。本次不添加审计查询或Provider切换。
+
+## 九步初始化
+
+新增`/kms/init`和`/kms/v1/initialization`，复用公共协议，服务器返回当前步骤、检查及版本。第8步仅自测，第9步显式确认，完成后写入口锁定。草稿权威不存浏览器；失败必要项和陈旧提交不能继续。未完成/状态不可读时路由保持在初始化页，REST/KMIP另有服务器门禁。三账号、真实HSM和正式HTTPS需目标环境联调，当前128不自动升级。
+
+新增页面、接口和导航测试已纳入`vitest.kms.config.ts`。`tsconfig.kms.json`用于定向检查；共享代码的类型错误需独立处理，不应将构建成功等同于全仓类型检查成功。

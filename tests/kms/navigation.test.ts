@@ -1,6 +1,8 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 const state = vi.hoisted(() => ({
   token: 'test-token',
+  initialized: true,
+  initializationUnavailable: false,
   user: {
     tenantId: '2',
     permissions: [] as string[],
@@ -20,6 +22,12 @@ vi.mock('@/store/modules/user', () => ({ useUserStore: () => state.user }));
 vi.mock('@/store/modules/settings', () => ({ useSettingsStore: () => state.settings }));
 vi.mock('@/store/modules/permission', () => ({ usePermissionStore: () => state.permission }));
 vi.mock('@/api/system/tenant', () => ({ getTenant: async () => ({ data: { name: '产品', status: 0 } }) }));
+vi.mock('@/api/kms/initialization', () => ({
+  getKmsInitialization: vi.fn(async () => {
+    if (state.initializationUnavailable) throw new Error('unavailable');
+    return { locked: state.initialized };
+  })
+}));
 vi.mock('@/api/svs/init', () => ({ getSvsInitialization: vi.fn() }));
 vi.mock('nprogress', () => ({ default: { configure: vi.fn(), start: vi.fn(), done: vi.fn() } }));
 import '@/permission';
@@ -28,6 +36,8 @@ const route = { path: '/index', fullPath: '/index', params: {}, query: {}, hash:
 beforeEach(() => {
   vi.clearAllMocks();
   state.token = 'test-token';
+  state.initialized = true;
+  state.initializationUnavailable = false;
   state.user.tenantId = '2';
   state.user.permissions = [];
   state.user.tenantInitStatus = undefined;
@@ -63,4 +73,28 @@ it('allows an authenticated KMS tenant to revisit the console without CA initial
   const next = vi.fn();
   await guard(route, route, next);
   expect(next).toHaveBeenCalledWith();
+});
+
+it('redirects uninitialized KMS to its own nine-step route on first login', async () => {
+  state.initialized = false;
+  const next = vi.fn();
+  await guard(route, route, next);
+  expect(next).toHaveBeenCalledWith(expect.objectContaining({ path: '/kms/init' }));
+  expect(state.permission.generateRoutes).not.toHaveBeenCalled();
+});
+it('fails closed when initialization status cannot be read and keeps the wizard reachable', async () => {
+  state.initializationUnavailable = true;
+  state.user.permissions = ['kms:initialize'];
+  const next = vi.fn();
+  await guard(route, route, next);
+  expect(next).toHaveBeenCalledWith(expect.objectContaining({ path: '/kms/init' }));
+  next.mockClear();
+  await guard({ ...route, path: '/kms/init' }, route, next);
+  expect(next).toHaveBeenCalledWith();
+});
+it('returns initialized KMS from the wizard to the management home', async () => {
+  state.user.permissions = ['kms:initialize'];
+  const next = vi.fn();
+  await guard({ ...route, path: '/kms/init' }, route, next);
+  expect(next).toHaveBeenCalledWith(expect.objectContaining({ path: '/index' }));
 });

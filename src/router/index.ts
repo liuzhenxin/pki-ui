@@ -1,3 +1,4 @@
+import { kmsInitializationRoute } from '@/utils/kmsInitializationRoute';
 import { createWebHistory, createRouter, RouteRecordRaw } from 'vue-router';
 /* Layout */
 import Layout from '@/layout/index.vue';
@@ -50,6 +51,7 @@ const platformConstantRoutes: RouteRecordRaw[] = [
     hidden: true
   },
   { ...svsInitializationRoute, hidden: true },
+  { ...kmsInitializationRoute, hidden: true },
   {
     path: '/register',
     component: () => import('@/views/register.vue'),

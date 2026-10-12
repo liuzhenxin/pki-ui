@@ -1,3 +1,5 @@
+import { getKmsInitialization } from '@/api/kms/initialization';
+import { kmsInitializationRedirect } from '@/utils/kmsInitializationRoute';
 import { getSvsInitialization } from '@/api/svs/init';
 import { to as tos } from 'await-to-js';
 import router from './router';
@@ -29,6 +31,7 @@ const getCurrentTenantId = () => useUserStore().tenantId || localStorage.getItem
 
 const getCurrentInitPath = () => {
   const tenantId = String(getCurrentTenantId());
+  if (tenantId === '2') return '/kms/init';
   if (tenantId === '100') {
     return licenseInitPath;
   }
@@ -47,7 +50,7 @@ const getCurrentInitPath = () => {
 };
 
 const isInitRoute = (path: string) =>
-  path === '/svs/init' || path === caInitPath || path === licenseInitPath || path === kmcInitPath || path === raInitPath || path === ocspInitPath || path.includes('/setup');
+  path === '/kms/init' || path === '/svs/init' || path === caInitPath || path === licenseInitPath || path === kmcInitPath || path === raInitPath || path === ocspInitPath || path.includes('/setup');
 
 const isTenantInitialized = (status: unknown) => Number(status) === -1;
 
@@ -97,8 +100,10 @@ const syncTenantContext = async () => {
 };
 
 const ensureTenantBoundary = async (path: string) => {
-  // KMS 通过独立安装脚本初始化，不使用 CA 的在线初始化流程。
-  if (String(getCurrentTenantId()) === '2') return '';
+  if (String(getCurrentTenantId()) === '2') {
+    try { return kmsInitializationRedirect((await getKmsInitialization()).locked, path); }
+    catch { return path === '/kms/init' ? '' : '/kms/init'; }
+  }
   // HSM 初始化由独立状态接口管理，平台租户状态不决定设备就绪。
   if (String(getCurrentTenantId()) === '7') return '';
   if (getCurrentTenantId() === '9') {
@@ -151,7 +156,9 @@ router.beforeEach(async (to, from, next) => {
         } else {
           isRelogin.show = false;
           const res = await syncTenantContext();
-          const tenantInitialized = ['2', '7'].includes(String(getCurrentTenantId())) || isTenantInitialized(res?.data?.status);
+          const kmsTenant = String(getCurrentTenantId()) === '2';
+          const kmsBoundary = kmsTenant ? await ensureTenantBoundary(to.path) : '';
+          const tenantInitialized = kmsTenant ? kmsBoundary !== '/kms/init' && (to.path !== '/kms/init' || kmsBoundary === '/index') : String(getCurrentTenantId()) === '7' || isTenantInitialized(res?.data?.status);
           if (res?.data && !tenantInitialized) {
             const accessRoutes = await usePermissionStore().generateInitRoutes();
             accessRoutes.forEach((route) => {
@@ -160,7 +167,7 @@ router.beforeEach(async (to, from, next) => {
               }
             });
             const targetInitPath = getCurrentInitPath();
-            const targetPath = isInitRoute(to.path) ? to.path : targetInitPath;
+            const targetPath = kmsTenant ? '/kms/init' : isInitRoute(to.path) ? to.path : targetInitPath;
             next({ path: targetPath, replace: true, params: to.params, query: targetPath === targetInitPath ? {} : to.query, hash: to.hash });
           } else {
             const accessRoutes = await usePermissionStore().generateRoutes();
@@ -169,7 +176,7 @@ router.beforeEach(async (to, from, next) => {
                 router.addRoute(route);
               }
             });
-            const targetPath = isInitRoute(to.path) ? '/' : to.path;
+            const targetPath = kmsTenant && kmsBoundary ? kmsBoundary : isInitRoute(to.path) ? '/' : to.path;
             next({ path: targetPath, replace: true, params: to.params, query: to.query, hash: to.hash });
           }
         }
