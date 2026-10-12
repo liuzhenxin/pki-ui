@@ -17,6 +17,11 @@ vi.mock('@/api/svs/init', () => ({
 const ready = { locked: false, platformTenantValid: true, deviceReady: true, databaseReady: true, canInitialize: true, tenantId: 9, code: 'svs' };
 const mountWizard = () => mount(Init, { global: { plugins: [ElementPlus] } });
 const button = (w: ReturnType<typeof mountWizard>, label: string) => w.findAll('button').find((b) => b.text() === label)!;
+async function acceptAgreement(w: ReturnType<typeof mountWizard>) {
+  await w.find('input[type="checkbox"]').setValue(true);
+  await button(w, '下一步').trigger('click');
+  await flushPromises();
+}
 describe('SVS initialization wizard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -46,6 +51,7 @@ describe('SVS initialization wizard', () => {
     vi.mocked(api.getSvsInitialization).mockResolvedValue({ ...ready, deviceReady: false });
     const w = mountWizard();
     await flushPromises();
+    await acceptAgreement(w);
     expect(button(w, '下一步').attributes('disabled')).toBeDefined();
     expect(w.text()).toContain('请检查设备连接');
     expect(api.completeSvsInitialization).not.toHaveBeenCalled();
@@ -54,6 +60,13 @@ describe('SVS initialization wizard', () => {
   it('validates independent accounts before confirmation and requires explicit final consent', async () => {
     const w = mountWizard();
     await flushPromises();
+    expect(button(w, '下一步').attributes('disabled')).toBeDefined();
+    expect(w.text()).toContain('我已阅读并同意用户协议');
+    expect(w.findAll('.el-step')).toHaveLength(9);
+    await acceptAgreement(w);
+    expect(api.reviewSvsInitStep).not.toHaveBeenCalled();
+    expect(w.text()).not.toContain('产品租户');
+    expect(w.text()).not.toContain('租户 9');
     await button(w, '下一步').trigger('click');
     await flushPromises();
     await button(w, '下一步').trigger('click');
@@ -83,6 +96,7 @@ describe('SVS initialization wizard', () => {
     await button(w, '确认并完成初始化').trigger('click');
     await flushPromises();
     expect(api.completeSvsInitialization).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(api.reviewSvsInitStep).mock.calls.map(([step]) => step)).toEqual([0, 1, 2, 3, 4, 5, 6]);
     expect(w.text()).toContain('初始化已完成');
     await button(w, '进入管理台').trigger('click');
     await flushPromises();
@@ -104,11 +118,53 @@ describe('SVS initialization wizard', () => {
     vi.mocked(api.reviewSvsInitStep).mockRejectedValue(new Error('设备签名验签自测未通过'));
     const w = mountWizard();
     await flushPromises();
+    await acceptAgreement(w);
+    await button(w, '下一步').trigger('click');
+    await flushPromises();
     await button(w, '执行签名验签自测').trigger('click');
     await flushPromises();
     expect(w.text()).toContain('设备签名验签自测未通过');
     expect(button(w, '确认并完成初始化').attributes('disabled')).toBeDefined();
     expect(api.completeSvsInitialization).not.toHaveBeenCalled();
+    w.unmount();
+  });
+  it('rechecks failed accounts and keeps agreement when navigating back', async () => {
+    vi.mocked(api.validateSvsInitAccounts).mockResolvedValueOnce({ ready: false, rows: [] });
+    const w = mountWizard();
+    await flushPromises();
+    await acceptAgreement(w);
+    expect(button(w, '下一步').attributes('disabled')).toBeDefined();
+    expect(w.text()).toContain('3 项正常，1 项异常');
+    await button(w, '重新检测').trigger('click');
+    await flushPromises();
+    expect(w.text()).toContain('环境检查全部通过');
+    expect(button(w, '下一步').attributes('disabled')).toBeUndefined();
+    await button(w, '上一步').trigger('click');
+    expect((w.find('input[type="checkbox"]').element as HTMLInputElement).checked).toBe(true);
+    w.unmount();
+    const fresh = mountWizard();
+    await flushPromises();
+    expect(button(fresh, '下一步').attributes('disabled')).toBeDefined();
+    fresh.unmount();
+  });
+  it('requires agreement and environment inspection before restoring a draft without rewinding it', async () => {
+    vi.mocked(api.getSvsInitPlan).mockResolvedValue({
+      nextStep: 4,
+      keyId: 'sm2-test',
+      keys: ['sm2-test'],
+      hostType: 'STANDALONE',
+      deploymentRevision: 'revision',
+      deployment: {}
+    });
+    const w = mountWizard();
+    await flushPromises();
+    expect(w.text()).toContain('欢迎使用 SVS');
+    await acceptAgreement(w);
+    expect(w.find('h2').text()).toBe('环境检查');
+    await button(w, '下一步').trigger('click');
+    await flushPromises();
+    expect(w.find('h2').text()).toBe('安全策略');
+    expect(api.reviewSvsInitStep).not.toHaveBeenCalled();
     w.unmount();
   });
   it('restores completion for a locked product and shows specific loading errors', async () => {

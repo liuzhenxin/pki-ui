@@ -7,26 +7,59 @@
           <h1>SVS 初始化向导</h1>
         </div>
       </div>
-      <el-steps :active="step" finish-status="success" class="init-steps" align-center>
+      <el-steps :active="step + 1" finish-status="success" class="init-steps" align-center>
         <el-step v-for="title in titles" :key="title" :title="title" />
       </el-steps>
       <div class="wizard-content">
         <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon class="notice" />
-        <section v-if="step === 0" class="step-content">
+        <section v-if="step === -1" class="step-content">
+          <div class="step-title">
+            <h2>欢迎使用 SVS</h2>
+            <p>请阅读并确认用户协议后继续初始化。</p>
+          </div>
+          <div class="agreement-text" tabindex="0" aria-label="SVS 用户协议">
+            <Agreement tenant-code="svs" tenant-name="签名验签服务器" />
+          </div>
+          <el-checkbox v-model="agreed" class="agreement-footer">我已阅读并同意用户协议</el-checkbox>
+        </section>
+        <section v-else-if="step === 0" class="step-content env-step">
           <div class="step-header">
             <div>
-              <h2>前置检查</h2>
-              <p>确认平台租户、业务数据库及密码设备已经准备完成。</p>
+              <h2>环境检查</h2>
+              <p>确认初始化所需的平台、业务数据库、管理员账号及密码设备已经准备完成。</p>
             </div>
-            <el-button :icon="Refresh" :loading="loading" @click="load">重新检查</el-button>
-          </div>
-          <div v-for="check in environment" :key="check.name" class="check-row">
-            <div>
-              <strong>{{ check.name }}</strong>
-              <p v-if="check.message">{{ check.message }}</p>
+            <div class="header-actions">
+              <el-button :disabled="loading || saving" @click="showEnvHelp = true">检查说明</el-button>
+              <el-button :icon="Refresh" :loading="loading" :disabled="saving" @click="load">重新检测</el-button>
             </div>
-            <el-tag :type="check.ok ? 'success' : 'danger'">{{ check.ok ? '正常' : '异常' }}</el-tag>
           </div>
+          <el-drawer v-model="showEnvHelp" title="SVS 环境检查说明" size="min(450px, 100vw)">
+            <p>初始化前确认平台连接、业务数据库、三个固定管理员账号和密码设备已就绪，避免产生不完整配置。</p>
+            <p>检查失败时请根据提示处理后重新检测。此页面不创建账号、不修改口令或设备配置。</p>
+            <p>设备密钥选择及真实签名验签自测将在后续步骤完成。</p>
+          </el-drawer>
+          <div v-if="state && !loading" class="env-summary" role="status">
+            <div class="env-summary-card" :class="allEnvOk ? 'env-summary-ok' : 'env-summary-fail'">
+              <div class="env-summary-text">
+                <div class="env-summary-title">{{ allEnvOk ? '环境检查全部通过' : '环境检查存在异常' }}</div>
+                <div class="env-summary-desc">
+                  共 {{ environment.length }} 项检测，{{ okCount }} 项正常，{{ environment.length - okCount }} 项异常
+                </div>
+              </div>
+            </div>
+          </div>
+          <div v-if="state" class="env-cards">
+            <div v-for="check in environment" :key="check.name" class="env-card" :class="check.ok ? 'env-card-ok' : 'env-card-fail'">
+              <div class="env-card-body">
+                <div class="env-card-header">
+                  <strong class="env-card-name">{{ check.name }}</strong>
+                  <el-tag :type="check.ok ? 'success' : 'danger'">{{ check.ok ? '正常' : '异常' }}</el-tag>
+                </div>
+                <p class="env-card-message">{{ check.message }}</p>
+              </div>
+            </div>
+          </div>
+          <el-empty v-else-if="!loading" description="暂无环境检查结果，请重新检测" />
           <el-alert
             v-if="state && !state.canInitialize"
             title="请使用具有初始化权限的系统管理员操作。"
@@ -84,7 +117,7 @@
         <section v-else-if="step === 3 || step === 4" class="step-content">
           <div class="step-header">
             <div>
-              <h2>{{ titles[step] }}</h2>
+              <h2>{{ titles[step + 1] }}</h2>
               <p>读取现有部署参数进行核验。</p>
             </div>
             <el-button :loading="loading" @click="refreshPlan">重新读取</el-button>
@@ -105,7 +138,7 @@
         <section v-else-if="step === 5" class="step-content">
           <div class="step-title">
             <h2>管理员绑定</h2>
-            <p>固定绑定三个独立平台账号，请确认租户 9 的账号和角色已就绪。</p>
+            <p>固定绑定三个独立平台账号，请确认账号和角色已就绪。</p>
           </div>
           <el-alert title="三个固定账号职责独立；各角色按权限直接执行，操作全程留痕。" type="info" :closable="false" show-icon />
           <el-form class="init-form" label-width="170px"
@@ -149,7 +182,7 @@
         </section>
       </div>
       <div class="wizard-actions">
-        <el-button :disabled="step === 0 || step === 7 || loading || saving" @click="back">上一步</el-button>
+        <el-button :disabled="step === -1 || step === 7 || loading || saving" @click="back">上一步</el-button>
         <el-button v-if="step < 6" type="primary" :loading="saving" :disabled="!canContinue" @click="next">{{
           step === 5 ? '校验并继续' : '下一步'
         }}</el-button>
@@ -166,6 +199,7 @@ import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { usePermissionStore } from '@/store/modules/permission';
 import { Refresh } from '@element-plus/icons-vue';
+import Agreement from '@/components/Agreement/index.vue';
 import {
   getSvsInitialization,
   completeSvsInitialization,
@@ -179,14 +213,15 @@ import {
   type InitPlan
 } from '@/api/svs/init';
 const router = useRouter();
-const titles = ['前置检查', '主机类型', '设备初始化', '网络与服务配置', '安全策略', '管理员绑定', '初始化验证', '完成'];
+const titles = ['协议', '环境检查', '主机类型', '设备初始化', '网络与服务配置', '安全策略', '管理员绑定', '初始化验证', '完成'];
 const labels = ['系统管理员', '安全管理员', '审计管理员'];
 const users = ['admin', 'secadmin', 'auditor'] as const;
 const subjects = { admin: 'SYSADMIN', secadmin: 'SECADMIN', auditor: 'AUDITOR' };
 const state = ref<Initialization>(),
   plan = ref<InitPlan>(),
   validation = ref<AccountValidation>();
-const step = ref(0),
+// The agreement is page-only; business steps retain the existing server indices 0–6.
+const step = ref(-1),
   loading = ref(false),
   saving = ref(false),
   error = ref(''),
@@ -196,18 +231,35 @@ const deviceKeys = ref<Record<string, string>>({}),
 const reviewed = ref(false),
   confirmed = ref(false),
   verified = ref(false);
+const agreed = ref(false),
+  showEnvHelp = ref(false),
+  resumeStep = ref(0);
 const environment = computed(() => [
-  { name: '平台连接与产品租户', ok: !!state.value?.platformTenantValid, message: '' },
+  {
+    name: '平台连接',
+    ok: !!state.value?.platformTenantValid,
+    message: state.value?.platformTenantValid ? '平台连接与应用配置核验通过。' : '平台连接或应用配置异常，请联系部署人员检查。'
+  },
   { name: '业务数据库', ok: !!state.value?.databaseReady, message: '初始化记录必须可正常读取。' },
+  {
+    name: '管理员账号',
+    ok: !!validation.value?.ready,
+    message: validation.value?.ready ? '三个固定管理员账号与角色已就绪。' : '请确认 admin、secadmin、auditor 账号及对应角色已就绪后重新检测。'
+  },
   { name: '密码设备', ok: !!state.value?.deviceReady, message: state.value?.deviceReady ? '密码设备已就绪。' : '请检查设备连接及服务运行状态。' }
 ]);
-const canContinue = computed(
-  () =>
-    !!state.value?.canInitialize &&
-    !loading.value &&
-    environment.value.every((c) => c.ok) &&
-    (step.value !== 2 || !!keyId.value) &&
-    (![3, 4].includes(step.value) || reviewed.value)
+const okCount = computed(() => environment.value.filter((check) => check.ok).length);
+const allEnvOk = computed(() => !!state.value && environment.value.every((check) => check.ok));
+const canContinue = computed(() =>
+  step.value === -1
+    ? agreed.value && !loading.value && !saving.value
+    : agreed.value &&
+      !!state.value?.canInitialize &&
+      !loading.value &&
+      !saving.value &&
+      allEnvOk.value &&
+      (step.value !== 2 || !!keyId.value) &&
+      (![3, 4].includes(step.value) || reviewed.value)
 );
 const networkFields = ['服务监听地址', '服务监听端口', '后端通信', '管理端口', '网关、DNS、NTP及VLAN', '已启用网卡地址'];
 const deploymentRows = computed(() =>
@@ -268,15 +320,17 @@ async function registerDeviceKey() {
 async function load() {
   loading.value = true;
   error.value = '';
+  validation.value = undefined;
+  verified.value = false;
+  confirmed.value = false;
   try {
     state.value = await getSvsInitialization();
     if (state.value.locked) step.value = 7;
     else if (state.value.canInitialize) {
       plan.value = await getSvsInitPlan();
       keyId.value = plan.value.keyId;
-      step.value = Math.min(plan.value.nextStep, 6);
-      verified.value = false;
-      confirmed.value = false;
+      resumeStep.value = Math.min(plan.value.nextStep, 6);
+      validation.value = await validateSvsInitAccounts(subjects);
     }
   } catch (e) {
     state.value = undefined;
@@ -295,6 +349,17 @@ function back() {
 }
 async function next() {
   if (!canContinue.value || saving.value) return;
+  if (step.value === -1) {
+    step.value = 0;
+    if (!state.value) await load();
+    return;
+  }
+  // A resumed draft has already passed preflight; inspecting it must not rewind the server draft.
+  if (step.value === 0 && resumeStep.value > 0) {
+    step.value = resumeStep.value;
+    resumeStep.value = 0;
+    return;
+  }
   saving.value = true;
   error.value = '';
   try {
@@ -397,6 +462,19 @@ onMounted(load);
 
 .init-steps {
   margin-top: 18px;
+}
+
+.agreement-text {
+  max-height: 420px;
+  overflow-y: auto;
+  padding: 20px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+  background: var(--el-fill-color-lighter);
+}
+
+.agreement-footer {
+  margin-top: 20px;
 }
 
 .wizard-content {
@@ -594,6 +672,14 @@ onMounted(load);
   margin: 6px 0;
 }
 @media (max-width: 768px) {
+  .init-steps {
+    flex-wrap: wrap;
+    gap: 12px 0;
+  }
+  .init-steps :deep(.el-step) {
+    flex-basis: 33.333% !important;
+    min-width: 0;
+  }
   .svs-init-page {
     padding: 12px;
   }
