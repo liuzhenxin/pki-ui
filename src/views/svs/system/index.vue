@@ -11,6 +11,14 @@
     <el-skeleton v-if="loading && !loaded" :rows="8" animated />
     <template v-else-if="page === 'device'">
       <el-card shadow="never" class="panel">
+        <template #header><b>SVS 一体机信息</b></template>
+        <el-descriptions :column="columns" border>
+          <el-descriptions-item v-for="(label, key) in productLabels" :key="key" :label="label">{{
+            info?.product?.[key]?.trim() || (key === 'softwareVersion' ? '未获取' : '未配置')
+          }}</el-descriptions-item>
+        </el-descriptions>
+      </el-card>
+      <el-card shadow="never" class="panel">
         <template #header><b>服务器信息</b></template>
         <el-descriptions :column="columns" border>
           <el-descriptions-item v-for="(label, key) in serverLabels" :key="key" :label="label">{{ text(info?.server[key]) }}</el-descriptions-item>
@@ -93,18 +101,23 @@ const loading = ref(false),
   error = ref('');
 const narrow = ref(false);
 const columns = computed(() => (narrow.value ? 1 : 2));
-const serverLabels = {
-  productName: '产品名称',
-  manufacturer: '设备厂商',
-  serialNumber: '设备编号',
-  model: '主机型号',
-  architecture: '处理器架构',
-  operatingSystem: '操作系统',
+const productLabels = {
+  name: '产品名称',
+  manufacturer: '产品厂商',
+  model: '产品型号',
+  serialNumber: '产品编号',
   softwareVersion: '产品软件版本'
+} as const;
+const serverLabels = {
+  manufacturer: '服务器厂商',
+  serialNumber: '服务器序列号',
+  model: '服务器型号',
+  architecture: '处理器架构',
+  operatingSystem: '操作系统及版本'
 } as const;
 const deviceLabels = {
   manufacturer: '设备厂商',
-  serialNumber: '设备编号',
+  serialNumber: '设备序列号',
   model: '设备型号',
   hardwareVersion: '硬件版本',
   firmwareVersion: '固件版本',
@@ -114,8 +127,8 @@ const networkFields = ['服务监听地址', '服务监听端口', '后端通信
 const steps = ['前置检查', '主机类型', '设备初始化', '网络与服务配置', '安全策略', '管理员绑定', '初始化验证', '完成'];
 const state = computed(() => (error.value ? 'UNKNOWN' : info.value?.device.state || 'UNKNOWN'));
 const stateText = computed(() => ({ UP: '可用', DEGRADED: '降级', DOWN: '不可用', STARTING: '启动中', FAILED: '故障' })[state.value] || '未知');
-const text = (value?: string) => (error.value ? '未获取' : value?.trim() || '未获取');
-const date = (value?: string | null) => (value && !error.value ? new Date(value).toLocaleString('zh-CN', { hour12: false }) : '未获取');
+const text = (value?: string) => value?.trim() || '未获取';
+const date = (value?: string | null) => (value ? new Date(value).toLocaleString('zh-CN', { hour12: false }) : '未获取');
 let alive = true;
 let requestId = 0;
 async function load() {
@@ -124,7 +137,7 @@ async function load() {
   const activePage = props.page;
   loading.value = true;
   error.value = '';
-  info.value = undefined;
+  if (activePage !== 'device') info.value = undefined;
   plan.value = undefined;
   initialization.value = undefined;
   try {
@@ -140,7 +153,9 @@ async function load() {
       initialization.value = init;
     }
   } catch {
-    if (alive && currentRequest === requestId) error.value = '信息读取失败，当前状态未知，请重试';
+    if (alive && currentRequest === requestId)
+      error.value =
+        activePage === 'device' && info.value ? '刷新失败，以下为上次成功读取的信息，当前状态未知，请重试' : '信息读取失败，当前状态未知，请重试';
   } finally {
     if (alive && currentRequest === requestId) {
       loaded.value = true;
@@ -153,6 +168,7 @@ watch(
   () => {
     loading.value = false;
     loaded.value = false;
+    info.value = undefined;
     load();
   }
 );

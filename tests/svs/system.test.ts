@@ -30,13 +30,14 @@ it('device information preserves unknown fields and degraded status', async () =
   expect(w.text()).not.toContain('海光');
   w.unmount();
 });
-it('failed refresh removes prior device values', async () => {
+it('failed refresh preserves prior metadata and marks current state unknown', async () => {
   const w = await render('device');
   vi.mocked(deviceInformation).mockRejectedValue(new Error('internal path'));
   await w.get('button').trigger('click');
   await flushPromises();
   expect(w.text()).toContain('当前状态未知');
-  expect(w.text()).not.toContain('x86_64');
+  expect(w.text()).toContain('x86_64');
+  expect(w.text()).toContain('上次成功读取');
   expect(w.text()).not.toContain('internal path');
   w.unmount();
 });
@@ -63,5 +64,16 @@ it('changing the route page reloads network data instead of retaining device dat
   expect(getSvsInitPlan).toHaveBeenCalledOnce();
   expect(w.text()).toContain('9088');
   expect(w.text()).not.toContain('x86_64');
+  w.unmount();
+});
+
+it('shows factory identity separately from host identity', async () => {
+  vi.mocked(deviceInformation).mockResolvedValue({
+    product: { name: '签名验签服务器', manufacturer: '出厂厂商', model: '交付型号', serialNumber: '整机编号', softwareVersion: '1.0' },
+    server: { serialNumber: '服务器序列号值' },
+    device: { serialNumber: '密码设备序列号值', state: 'UP' }
+  } as any);
+  const w = await render('device');
+  for (const value of ['SVS 一体机信息', '出厂厂商', '交付型号', '整机编号', '服务器序列号值', '密码设备序列号值']) expect(w.text()).toContain(value);
   w.unmount();
 });

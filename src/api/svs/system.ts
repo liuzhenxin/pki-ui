@@ -1,5 +1,12 @@
 import request from '@/utils/request';
 export interface DeviceInformation {
+  product: {
+    name: string;
+    manufacturer: string;
+    model: string;
+    serialNumber: string;
+    softwareVersion: string;
+  };
   server: {
     productName: string;
     manufacturer: string;
