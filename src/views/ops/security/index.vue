@@ -148,6 +148,7 @@
 import type { FormInstance, FormRules } from 'element-plus';
 import { getRadiusConfig, saveRadiusConfig, testRadiusAuthentication } from '@/api/ops';
 import type { RadiusConfig } from '@/api/ops/types';
+import { configPayload } from '@/utils/configPayload';
 import SyslogConfigPane from './SyslogConfigPane.vue';
 import MenuDisplayConfigPane from './MenuDisplayConfigPane.vue';
 import AccessControlPane from './AccessControlPane.vue';
@@ -156,7 +157,7 @@ const defaultConfig = (): RadiusConfig => ({
   enabled: false,
   scopes: ['ALL'],
   primary: { host: '', port: 1812, secret: '' },
-  nasIdentifier: 'liuzx-pki',
+  nasIdentifier: 'pki',
   authMethod: 'PAP',
   timeoutMillis: 3000,
   retries: 1,
@@ -255,7 +256,7 @@ const runTest = async () => {
   await testFormRef.value?.validate();
   testing.value = true;
   try {
-    await testRadiusAuthentication({ config: JSON.parse(JSON.stringify(form)), ...testForm });
+    await testRadiusAuthentication({ config: configPayload(form), ...testForm });
     form.tested = true;
     form.lastTestTime = new Date().toISOString();
     testedSnapshot.value = configFingerprint();
@@ -276,7 +277,7 @@ const save = async () => {
   }
   saving.value = true;
   try {
-    await saveRadiusConfig(JSON.parse(JSON.stringify(form)));
+    await saveRadiusConfig(configPayload(form));
     ElMessage.success(form.enabled ? 'RADIUS 已启用' : '安全配置已保存');
     await load();
   } finally {

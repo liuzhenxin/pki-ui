@@ -84,7 +84,15 @@
           <el-table-column label="操作" fixed="right" width="260" class-name="small-padding fixed-width">
             <template #default="scope">
               <el-button link type="primary" icon="Edit" @click="handleUpdate(scope.row)" v-hasPermi="['ra:audit:manager']">修改</el-button>
-              <el-button v-if="!scope.row.certSn" link type="success" icon="Document" @click="handleIssueCert(scope.row)" v-hasPermi="['ra:audit:manager']">签发证书</el-button>
+              <el-button
+                v-if="!scope.row.certSn"
+                link
+                type="success"
+                icon="Document"
+                @click="handleIssueCert(scope.row)"
+                v-hasPermi="['ra:audit:manager']"
+                >签发证书</el-button
+              >
               <el-button link type="primary" icon="Delete" @click="handleDelete(scope.row)" v-hasPermi="['ra:audit:manager']">删除</el-button>
               <el-button link type="primary" icon="Key" @click="handleResetPwd(scope.row)" v-hasPermi="['ra:audit:manager']">重置密码</el-button>
             </template>

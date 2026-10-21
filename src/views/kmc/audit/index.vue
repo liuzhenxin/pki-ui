@@ -37,7 +37,14 @@
         <el-table-column label="用户名称" align="center" prop="username" :show-overflow-tooltip="true" />
         <el-table-column label="状态" align="center" width="80">
           <template #default="scope">
-            <el-switch v-model="scope.row.status" :active-value="0" :inactive-value="1" active-color="#13ce66" inactive-color="#ff4949" @change="(val) => handleStatusChange(scope.row, val)" />
+            <el-switch
+              v-model="scope.row.status"
+              :active-value="0"
+              :inactive-value="1"
+              active-color="#13ce66"
+              inactive-color="#ff4949"
+              @change="(val) => handleStatusChange(scope.row, val)"
+            />
           </template>
         </el-table-column>
         <el-table-column label="操作" fixed="right" width="300" class-name="small-padding fixed-width">
@@ -52,7 +59,12 @@
       <pagination v-show="total > 0" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" :total="total" @pagination="getList" />
     </el-card>
 
-    <SecurityConfirm v-model="securityConfirm.visible" :title="securityConfirm.title" :action="securityConfirm.action" @confirm="securityConfirm.onConfirm" />
+    <SecurityConfirm
+      v-model="securityConfirm.visible"
+      :title="securityConfirm.title"
+      :action="securityConfirm.action"
+      @confirm="securityConfirm.onConfirm"
+    />
 
     <el-dialog ref="formDialogRef" v-model="dialog.visible" :title="dialog.title" width="600px" append-to-body @close="closeDialog">
       <el-form ref="userFormRef" :model="form" :rules="rules" label-width="80px">

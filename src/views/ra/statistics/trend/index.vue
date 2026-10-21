@@ -163,10 +163,7 @@ function renderCompareChart() {
     legend: { top: 0 },
     xAxis: { type: 'category', data: dates() },
     yAxis: { type: 'value', minInterval: 1 },
-    series: [
-      { name: '申请', type: 'bar', barMaxWidth: 22, data: values(statistics.applyTrend) },
-      buildLine('签发', statistics.certIssueTrend)
-    ]
+    series: [{ name: '申请', type: 'bar', barMaxWidth: 22, data: values(statistics.applyTrend) }, buildLine('签发', statistics.certIssueTrend)]
   });
 }
 

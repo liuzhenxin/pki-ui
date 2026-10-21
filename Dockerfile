@@ -1,14 +1,13 @@
 # ============================================
 # Stage 1: 构建阶段
 # ============================================
-FROM node:18-alpine AS builder
+FROM node:22-alpine AS builder
 
 WORKDIR /app
 
 # A UI image must select the tenant/client it serves. Leaving this unset would
 # silently consume a developer's .env.production.local override (for example OPS).
 ARG BUILD_TARGET
-ARG NGINX_CONF=deploy/pki-ui-ra/nginx.conf
 
 # 安装 yarn
 RUN corepack enable && corepack prepare yarn@1.22.19 --activate
@@ -31,7 +30,7 @@ RUN case "$BUILD_TARGET" in \
 # ============================================
 # Stage 2: 运行阶段
 # ============================================
-FROM nginx:alpine
+FROM nginx:1.28.3-alpine
 
 # 时区设置
 RUN apk add --no-cache tzdata && \
@@ -42,9 +41,8 @@ RUN apk add --no-cache tzdata && \
 # 复制构建产物
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-# 复制面向部署目标的 server 配置。默认使用 RA 配置；其他项目须在构建时
-# 显式传入 NGINX_CONF，避免把完整 nginx.conf 错复制为 conf.d 片段。
-COPY ${NGINX_CONF} /etc/nginx/conf.d/default.conf
+# 使用官方镜像的 envsubst 模板，在容器启动时注入网关地址。
+COPY docker/default.conf.template /etc/nginx/templates/default.conf.template
 
 # 健康检查
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \

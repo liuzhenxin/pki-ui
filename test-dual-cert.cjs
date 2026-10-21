@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 // CA Dual Certificate Test Script
 // Usage: node test-dual-cert.js
 const http = require('http');
@@ -11,16 +12,21 @@ function post(path, headers, body) {
     const url = new URL(BASE + path);
     const data = typeof body === 'string' ? body : JSON.stringify(body);
     const options = {
-      hostname: url.hostname, port: url.port, path: url.pathname,
+      hostname: url.hostname,
+      port: url.port,
+      path: url.pathname,
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data), ...headers }
     };
-    const req = http.request(options, res => {
+    const req = http.request(options, (res) => {
       let chunks = [];
-      res.on('data', c => chunks.push(c));
+      res.on('data', (c) => chunks.push(c));
       res.on('end', () => {
-        try { resolve(JSON.parse(Buffer.concat(chunks).toString())); }
-        catch(e) { resolve(Buffer.concat(chunks).toString()); }
+        try {
+          resolve(JSON.parse(Buffer.concat(chunks).toString()));
+        } catch (e) {
+          resolve(Buffer.concat(chunks).toString());
+        }
       });
     });
     req.on('error', reject);
@@ -34,16 +40,21 @@ async function postForm(path, headers, formData) {
     const url = new URL(BASE + path);
     const body = new URLSearchParams(formData).toString();
     const options = {
-      hostname: url.hostname, port: url.port, path: url.pathname,
+      hostname: url.hostname,
+      port: url.port,
+      path: url.pathname,
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Content-Length': Buffer.byteLength(body), ...headers }
     };
-    const req = http.request(options, res => {
+    const req = http.request(options, (res) => {
       let chunks = [];
-      res.on('data', c => chunks.push(c));
+      res.on('data', (c) => chunks.push(c));
       res.on('end', () => {
-        try { resolve(JSON.parse(Buffer.concat(chunks).toString())); }
-        catch(e) { resolve(Buffer.concat(chunks).toString()); }
+        try {
+          resolve(JSON.parse(Buffer.concat(chunks).toString()));
+        } catch (e) {
+          resolve(Buffer.concat(chunks).toString());
+        }
       });
     });
     req.on('error', reject);
@@ -56,16 +67,21 @@ async function get(path, token) {
   return new Promise((resolve, reject) => {
     const url = new URL(BASE + path);
     const options = {
-      hostname: url.hostname, port: url.port, path: url.pathname,
+      hostname: url.hostname,
+      port: url.port,
+      path: url.pathname,
       method: 'GET',
       headers: token ? { 'Authorization': `Bearer ${token}` } : { 'isToken': 'false' }
     };
-    const req = http.request(options, res => {
+    const req = http.request(options, (res) => {
       let chunks = [];
-      res.on('data', c => chunks.push(c));
+      res.on('data', (c) => chunks.push(c));
       res.on('end', () => {
-        try { resolve(JSON.parse(Buffer.concat(chunks).toString())); }
-        catch(e) { resolve(Buffer.concat(chunks).toString()); }
+        try {
+          resolve(JSON.parse(Buffer.concat(chunks).toString()));
+        } catch (e) {
+          resolve(Buffer.concat(chunks).toString());
+        }
       });
     });
     req.on('error', reject);
@@ -103,10 +119,12 @@ async function main() {
   let token = null;
 
   for (const code of captchaCodes) {
-    const result = await postForm('/auth/v1/oauth2/token',
+    const result = await postForm(
+      '/auth/v1/oauth2/token',
       { 'Authorization': BASIC_AUTH },
       {
-        username, password,
+        username,
+        password,
         clientId: CLIENT_ID,
         grant_type: 'username_password',
         uuid,
@@ -125,9 +143,10 @@ async function main() {
     console.log('   Login FAILED - captcha required. Please enter captcha code:');
     // For manual mode: prompt user to enter captcha
     const readline = require('readline').createInterface({ input: process.stdin, output: process.stdout });
-    const code = await new Promise(resolve => readline.question('Captcha code: ', resolve));
+    const code = await new Promise((resolve) => readline.question('Captcha code: ', resolve));
     readline.close();
-    const result = await postForm('/auth/v1/oauth2/token',
+    const result = await postForm(
+      '/auth/v1/oauth2/token',
       { 'Authorization': BASIC_AUTH },
       { username, password, clientId: CLIENT_ID, grant_type: 'username_password', uuid, code, tenant_code: '' }
     );
@@ -179,7 +198,7 @@ async function main() {
   console.log('\n5. Testing profile list with dual cert categories...');
   const profiles = await post('/ca/v1/profiles/list', authHeader, {});
   if (profiles.data) {
-    const dualProfiles = profiles.data.filter(p => p.profileCategory === 'DUAL_SIGN' || p.profileCategory === 'DUAL_ENC');
+    const dualProfiles = profiles.data.filter((p) => p.profileCategory === 'DUAL_SIGN' || p.profileCategory === 'DUAL_ENC');
     console.log(`   Total profiles: ${profiles.data.length}, Dual-cert profiles: ${dualProfiles.length}`);
     for (const p of dualProfiles.slice(0, 4)) {
       console.log(`   - ID=${p.id} Name=${p.name} Category=${p.profileCategory} PairedId=${p.pairedProfileId}`);

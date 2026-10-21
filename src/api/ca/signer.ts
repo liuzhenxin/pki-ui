@@ -20,6 +20,7 @@ const normalizeSigner = (item: any = {}) => {
     signerType: item.signerType || item.type || 'PKCS12',
     keyIndex: item.keyIndex || conf.keyIndex || 1,
     keySize: item.keySize || conf.keySize || conf.keyLength,
+    publicKey: item.publicKey || conf.publicKey,
     certConfigured: item.certConfigured ?? Boolean(item.cert)
   };
 };
@@ -55,7 +56,7 @@ const toSignerCmd = (data: any = {}) => ({
       ...parseConf(data.conf),
       algo: data.algo,
       keyIndex: data.keyIndex,
-      keySize: data.algo === 'RSA' ? data.keySize : undefined
+      keySize: data.algo === 'RSA' && (data.type || data.signerType) !== 'SDF' ? data.keySize : undefined
     })
   }
 });

@@ -450,7 +450,7 @@ let algoChart: echarts.ECharts | null = null;
 
 const isInitialized = ref(false);
 const loadingStatus = ref(true);
-const systemVersion = ref<string>(import.meta.env.VITE_APP_VERSION || '3.5.5');
+const systemVersion = ref<string>(import.meta.env.VITE_APP_VERSION || '未知');
 const systemInfo = reactive({
   profileCount: 0,
   rootCount: 0,

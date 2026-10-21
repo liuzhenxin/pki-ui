@@ -96,6 +96,15 @@ export function disableRootCa(id: string | number): Promise<Result<any>> {
   }) as any;
 }
 
+// 关联证书发布者（替换该根CA的发布者绑定）
+export function saveRootPublishers(id: string | number, publisherIds: (string | number)[]): Promise<Result<any>> {
+  return request({
+    url: `/ca/v1/roots/${id}/publishers`,
+    method: 'put',
+    data: publisherIds || []
+  }) as any;
+}
+
 // 注销根证书
 export function revokeRootCa(id: string | number, reason: string): Promise<Result<any>> {
   return request({

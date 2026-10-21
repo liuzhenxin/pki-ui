@@ -55,7 +55,7 @@ export interface RaRootImportPreview {
 
 export function listRaRootCa(query: any): Promise<Result<RaCertificatePage<RaRootCertificate>>> {
   return request({
-    url: '/ra2-liuzx/v1/roots/page',
+    url: '/ra/v1/fawvw/roots/page',
     method: 'post',
     data: query
   });
@@ -63,7 +63,7 @@ export function listRaRootCa(query: any): Promise<Result<RaCertificatePage<RaRoo
 
 export function listRaIntermediateCertificates(query: any): Promise<Result<RaCertificatePage<RaIntermediateCertificate>>> {
   return request({
-    url: '/ra/v1/roots/intermediates/page',
+    url: '/ra/v1/fawvw/roots/intermediates/page',
     method: 'post',
     data: query
   });
@@ -71,7 +71,7 @@ export function listRaIntermediateCertificates(query: any): Promise<Result<RaCer
 
 export function getRaRootCa(id: string | number): Promise<Result<RaRootCertificate>> {
   return request({
-    url: `/ra2-liuzx/v1/roots/${id}`,
+    url: `/ra/v1/fawvw/roots/${id}`,
     method: 'get'
   });
 }
@@ -88,9 +88,9 @@ function rootImportRequest(url: string, formData: FormData): Promise<Result<RaRo
 }
 
 export function previewRaRootImport(formData: FormData): Promise<Result<RaRootImportPreview>> {
-  return rootImportRequest('/ra/v1/roots/import/preview', formData);
+  return rootImportRequest('/ra/v1/fawvw/roots/import/preview', formData);
 }
 
 export function importRaRootCertificate(formData: FormData): Promise<Result<RaRootImportPreview>> {
-  return rootImportRequest('/ra/v1/roots/import', formData);
+  return rootImportRequest('/ra/v1/fawvw/roots/import', formData);
 }

@@ -1,5 +1,6 @@
 <template>
   <div class="app-container ocsp-page">
+    <RetentionPanel />
     <el-card shadow="hover" class="mb16">
       <el-form :inline="true" :model="query">
         <el-form-item label="时间">
@@ -94,6 +95,7 @@
 import { onMounted, reactive, ref } from 'vue';
 import { ElMessage } from 'element-plus';
 import { exportOcspRequestLogs, getOcspRequestLog, pageOcspRequestLogs } from '@/api/ocsp/log';
+import RetentionPanel from '@/views/ocsp/components/RetentionPanel.vue';
 import type { OcspRequestLog, OcspRequestLogPageQry } from '@/api/ocsp/types';
 
 const loading = ref(false);

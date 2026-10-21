@@ -110,6 +110,7 @@
 import type { FormInstance, FormRules } from 'element-plus';
 import { getSyslogConfig, getSyslogStatus, saveSyslogConfig, testSyslogConfig } from '@/api/ops';
 import type { SyslogConfig, SyslogStatus } from '@/api/ops/types';
+import { configPayload } from '@/utils/configPayload';
 import ServerForm from './SyslogServerForm.vue';
 
 const defaults = (): SyslogConfig => ({
@@ -170,7 +171,7 @@ const test = async () => {
   await validate();
   testing.value = true;
   try {
-    await testSyslogConfig(JSON.parse(JSON.stringify(form)));
+    await testSyslogConfig(configPayload(form));
     form.tested = true;
     form.lastTestTime = new Date().toISOString();
     testedSnapshot.value = fingerprint();
@@ -185,7 +186,7 @@ const save = async () => {
   if (form.enabled && !form.tested) return ElMessage.warning('启用 Syslog 前必须发送测试消息');
   saving.value = true;
   try {
-    await saveSyslogConfig(JSON.parse(JSON.stringify(form)));
+    await saveSyslogConfig(configPayload(form));
     ElMessage.success('Syslog 配置已保存');
     await load();
   } finally {

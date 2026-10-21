@@ -21,6 +21,22 @@
         <el-form-item label="响应者缓存 TTL(秒)">
           <el-input-number v-model="form.responderTtlSeconds" :min="1" controls-position="right" />
         </el-form-item>
+        <el-divider content-position="left">已签名响应缓存（默认关闭）</el-divider>
+        <el-alert title="仅缓存无 Nonce、单条目且满足安全策略的响应；Canary 和协商请求会绕过。" type="info" :closable="false" class="mb16" />
+        <el-form-item label="响应缓存"><el-switch v-model="form.responseCacheEnabled" /></el-form-item>
+        <el-form-item label="响应缓存 TTL(秒)"
+          ><el-input-number v-model="form.responseCacheTtlSeconds" :min="1" controls-position="right"
+        /></el-form-item>
+        <el-form-item label="响应缓存最大条目"
+          ><el-input-number v-model="form.responseCacheMaximumSize" :min="100" :step="100" controls-position="right"
+        /></el-form-item>
+        <el-descriptions v-if="cacheStatus" :column="4" border class="mb16"
+          ><el-descriptions-item label="当前条目">{{ cacheStatus.size || 0 }}</el-descriptions-item
+          ><el-descriptions-item label="命中">{{ cacheStatus.hits || 0 }}</el-descriptions-item
+          ><el-descriptions-item label="未命中">{{ cacheStatus.misses || 0 }}</el-descriptions-item
+          ><el-descriptions-item label="绕过">{{ cacheStatus.bypasses || 0 }}</el-descriptions-item></el-descriptions
+        >
+        <el-divider content-position="left">环境参数</el-divider>
         <el-form-item label="缓存最大条目">
           <el-input-number v-model="form.maximumSize" :min="100" :step="100" controls-position="right" />
         </el-form-item>
@@ -41,15 +57,20 @@
 import { onMounted, reactive, ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { clearOcspCache, getOcspRuntimeConfig, saveOcspRuntimeConfig } from '@/api/ocsp/config';
-import type { OcspRuntimeConfig } from '@/api/ocsp/types';
+import { getOcspResponseCacheStatus } from '@/api/ocsp/operations';
+import type { OcspResponseCacheStatus, OcspRuntimeConfig } from '@/api/ocsp/types';
 
 const loading = ref(false);
 const saving = ref(false);
+const cacheStatus = ref<OcspResponseCacheStatus>();
 const form = reactive<OcspRuntimeConfig>({
   cacheEnabled: true,
   ttlSeconds: 60,
   responderTtlSeconds: 60,
   maximumSize: 10000,
+  responseCacheEnabled: false,
+  responseCacheTtlSeconds: 300,
+  responseCacheMaximumSize: 10000,
   protocolPort: '6960',
   keystorePath: ''
 });
@@ -58,6 +79,7 @@ const load = async () => {
   loading.value = true;
   try {
     Object.assign(form, await getOcspRuntimeConfig());
+    cacheStatus.value = await getOcspResponseCacheStatus();
   } finally {
     loading.value = false;
   }
@@ -74,8 +96,9 @@ const save = async () => {
 };
 
 const clearCache = async () => {
-  await ElMessageBox.confirm('清空 Caffeine 状态缓存与响应者缓存？不影响协议正确性。', '清空缓存', { type: 'warning' });
+  await ElMessageBox.confirm('清空状态、响应者和已签名响应缓存？不会删除配置，但会短暂增加实时查询/签名负载。', '清空缓存', { type: 'warning' });
   await clearOcspCache();
+  cacheStatus.value = await getOcspResponseCacheStatus();
   ElMessage.success('缓存已清空');
 };
 

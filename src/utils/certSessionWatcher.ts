@@ -64,8 +64,7 @@ async function watchProvider(provider: string) {
         void onRemoved();
         break;
       }
-    }
-    catch {
+    } catch {
       console.warn('[certSession] waitForDevEvent error, retry');
       if (!started) break;
       await sleep(2000);
@@ -85,8 +84,7 @@ async function providerLoop() {
           void watchProvider(provider);
         }
       });
-    }
-    catch {
+    } catch {
       console.warn('[certSession] SKF 不可用(未启动?)，3s 后重试');
       /* SKF 未启动时静默，拔插检测不可用但不打扰用户 */
     }

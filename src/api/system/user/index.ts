@@ -207,7 +207,7 @@ export const updateUserPwd = (oldPassword: string, newPassword: string) => {
       isEncrypt: true,
       repeatSubmit: false
     },
-    data: { co: data }
+    data
   });
 };
 
@@ -333,7 +333,7 @@ export const modifyUserPwd = (data: ModifyPwdForm) => {
       isEncrypt: true,
       repeatSubmit: false
     },
-    data: { co: data }
+    data
   });
 };
 

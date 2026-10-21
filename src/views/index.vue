@@ -22,36 +22,11 @@
           <span>系统信息</span>
         </div>
       </template>
-      <div class="ops-system-layout">
-        <section class="ops-info-section">
-          <div class="ops-section-title">
-            <el-icon><Monitor /></el-icon>
-            <span>运行信息</span>
-          </div>
-          <div class="ops-info-grid">
-            <div v-for="item in opsSystemItems" :key="item.label" class="ops-info-item">
-              <span>{{ item.label }}</span>
-              <strong>{{ item.value }}</strong>
-            </div>
-          </div>
-        </section>
-        <section class="ops-info-section">
-          <div class="ops-section-title">
-            <el-icon><Connection /></el-icon>
-            <span>版本信息</span>
-          </div>
-          <div class="ops-version-list">
-            <div v-for="item in opsVersionItems" :key="item.label" class="ops-version-item">
-              <div class="ops-version-icon">
-                <el-icon><component :is="item.icon" /></el-icon>
-              </div>
-              <div>
-                <span>{{ item.label }}</span>
-                <strong>{{ item.value }}</strong>
-              </div>
-            </div>
-          </div>
-        </section>
+      <div class="ops-info-grid ops-unified-info-grid">
+        <div v-for="item in opsInfoItems" :key="item.label" class="ops-info-item">
+          <span>{{ item.label }}</span>
+          <strong>{{ item.value }}</strong>
+        </div>
       </div>
     </el-card>
 
@@ -572,8 +547,8 @@
                   <el-icon><Monitor /></el-icon>
                 </div>
                 <div class="info">
-                  <span class="label">系统版本</span>
-                  <span class="value">{{ systemVersion }}</span>
+                  <span class="label">前端版本</span>
+                  <span class="value">{{ frontendVersion }}</span>
                 </div>
               </div>
               <div class="version-item">
@@ -582,7 +557,7 @@
                 </div>
                 <div class="info">
                   <span class="label">密码服务</span>
-                  <span class="value">{{ kmcDashboardStats?.systemHealth?.cryptoProvider || '国密算法 (SM2/SM3/SM4)' }}</span>
+                  <span class="value">{{ kmcCryptoServiceName }}</span>
                 </div>
               </div>
               <div class="version-item">
@@ -698,15 +673,17 @@ let historyKeyChart: echarts.ECharts | null = null;
 
 const tenantInfo = ref<any>(null);
 const kmcDashboardStats = ref<any>({});
-const systemVersion = ref<string>(import.meta.env.VITE_APP_VERSION || '3.5.5');
+// 前端版本（＝前端镜像版本）：构建时按租户注入，见 package.json 的 build:<tenant> 里的 VITE_APP_VERSION，
+// 与镜像 tag 的版本号对齐；未注入时显示“未知”，不拿平台版本号冒充（原实现回退 3.5.5 会误导）。
+const frontendVersion = computed(() => String(import.meta.env.VITE_APP_VERSION || '未知'));
 const currentTenantId = computed(() => userStore.tenantId || localStorage.getItem('tenantId'));
 const isOps = computed(() => String(currentTenantId.value) === '1');
 const isKMC = computed(() => String(currentTenantId.value) === '3');
 const isNAS = computed(() => String(currentTenantId.value) === '10');
 const isCA = computed(() => String(currentTenantId.value) === '4');
-const isRA = computed(() => ['5', '51'].includes(String(currentTenantId.value)));
+const isRA = computed(() => String(currentTenantId.value) === '5');
 const isLicense = computed(() => String(currentTenantId.value) === '2');
-const opsVersion = computed(() => import.meta.env.VITE_APP_VERSION || '4.1.2');
+const opsVersion = computed(() => import.meta.env.VITE_APP_VERSION || '3.0.3');
 
 const systemTitle = computed(() => {
   if (tenantInfo.value && tenantInfo.value.name) {
@@ -741,19 +718,16 @@ const systemDesc = computed(() => {
 
 const opsSystemItems = computed(() => [
   { label: '系统名称', value: '平台运维中心' },
-  { label: '租户代码', value: 'ops' },
-  { label: '租户 ID', value: '1' },
+  { label: '应用代码', value: 'ops' },
+  { label: '应用 ID', value: '1' },
   { label: '接口代理', value: import.meta.env.VITE_APP_OPS_API || '/ops-api' },
   { label: '服务端口', value: '18080 / 5050' },
   { label: '数据来源', value: 'Agent + docker ps' }
 ]);
 
-const opsVersionItems = computed(() => [
-  { label: '前端版本', value: opsVersion.value, icon: 'Monitor' },
-  { label: '后端镜像', value: `liuzx-ops:${opsVersion.value}`, icon: 'Box' },
-  { label: '采集端', value: 'liuzx-ops-agent', icon: 'Cpu' },
-  { label: '采集模式', value: '轻量 Agent 主动上报', icon: 'Connection' }
-]);
+const opsVersionItems = computed(() => [{ label: '版本', value: opsVersion.value, icon: 'Monitor' }]);
+
+const opsInfoItems = computed(() => [...opsSystemItems.value, ...opsVersionItems.value]);
 
 const licenseList = ref<LicenseVO[]>([]);
 const backendLicenseProducts = ref<ProductVO[]>([]);
@@ -1014,6 +988,24 @@ const normalizeDistribution = (value: Record<string, unknown> | undefined) => {
   }
   return Object.fromEntries(Object.entries(value).map(([key, count]) => [key, Number(count || 0)]));
 };
+
+const kmcCryptoServiceName = computed(() => {
+  const systemHealth = kmcDashboardStats.value?.systemHealth;
+  const status = String(systemHealth?.cryptoProviderStatus || '').toUpperCase();
+  const provider = String(systemHealth?.cryptoProvider || '').toUpperCase();
+  const vendor = String(systemHealth?.cryptoVendor || '').trim();
+
+  if (status === 'SOFTWARE' || provider === 'SOFTWARE' || provider === 'BC') {
+    return '软件密码服务 / Bouncy Castle';
+  }
+
+  if (status === 'HARDWARE' || provider === 'SDF' || provider === 'LIUZX') {
+    const vendorName = ['DYSX', 'SHUDUN', '大有数信', '数盾'].includes(vendor.toUpperCase()) ? '大有数信' : vendor;
+    return `SDF / ${vendorName && vendorName !== '-' ? vendorName : '密码机'}`;
+  }
+
+  return '未检测';
+});
 
 const createChartOption = (distribution: Record<string, number>) => {
   const labels = keyDistributionLabels.value.length > 0 ? keyDistributionLabels.value : ['暂无数据'];

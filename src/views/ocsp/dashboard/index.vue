@@ -79,6 +79,7 @@
         </el-card>
       </el-col>
     </el-row>
+    <MonitoringPanel />
   </div>
 </template>
 
@@ -88,6 +89,7 @@ import { useRouter } from 'vue-router';
 import * as echarts from 'echarts';
 import { Connection, Refresh, TrendCharts, Warning, CircleCheck } from '@element-plus/icons-vue';
 import { getOcspDashboardSummary } from '@/api/ocsp/dashboard';
+import MonitoringPanel from '@/views/ocsp/components/MonitoringPanel.vue';
 import type { OcspDashboardSummary, OcspResponder } from '@/api/ocsp/types';
 import { checkPermi } from '@/utils/permission';
 

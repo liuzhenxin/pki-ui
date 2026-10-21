@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 /**
  * 清除 USB Key 中所有证书（容器），为后期重新签发证书做准备。
  *

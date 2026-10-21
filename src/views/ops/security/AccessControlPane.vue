@@ -133,14 +133,16 @@ const save = async () => {
   };
   const alreadyListed =
     currentIp.inAllowList ||
-    payload.entries.some((item) => item.cidr === currentIp.clientIp || item.cidr === `${currentIp.clientIp}/32` || item.cidr === `${currentIp.clientIp}/128`);
+    payload.entries.some(
+      (item) => item.cidr === currentIp.clientIp || item.cidr === `${currentIp.clientIp}/32` || item.cidr === `${currentIp.clientIp}/128`
+    );
   if (form.enabled && currentIp.clientIp && !alreadyListed) {
     try {
-      await ElMessageBox.confirm(
-        `当前客户端 IP ${currentIp.clientIp} 不在名单中，保存后你将无法继续访问。是否自动加入并保存？`,
-        '确认保存',
-        { type: 'warning', confirmButtonText: '自动加入并保存', cancelButtonText: '取消' }
-      );
+      await ElMessageBox.confirm(`当前客户端 IP ${currentIp.clientIp} 不在名单中，保存后你将无法继续访问。是否自动加入并保存？`, '确认保存', {
+        type: 'warning',
+        confirmButtonText: '自动加入并保存',
+        cancelButtonText: '取消'
+      });
       payload = {
         ...payload,
         entries: [...payload.entries, { cidr: currentIp.clientIp, remark: '保存时自动加入' }]

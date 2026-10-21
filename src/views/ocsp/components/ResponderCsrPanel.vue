@@ -46,12 +46,7 @@
           </div>
         </el-form-item>
         <el-form-item label="签发证书">
-          <el-input
-            v-model="issuedPem"
-            type="textarea"
-            :rows="6"
-            placeholder="粘贴 CA 签发的 OCSP 响应者证书 PEM"
-          />
+          <el-input v-model="issuedPem" type="textarea" :rows="6" placeholder="粘贴 CA 签发的 OCSP 响应者证书 PEM" />
         </el-form-item>
         <el-form-item label="证书链">
           <el-input v-model="chainPem" type="textarea" :rows="4" placeholder="可选：中间 CA 与根 CA PEM" />

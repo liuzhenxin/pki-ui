@@ -65,4 +65,3 @@ export function initOcspResponder(data: OcspInitResponderPayload): Promise<Resul
     data
   });
 }
-

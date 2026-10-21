@@ -86,7 +86,9 @@
                 <el-tag v-else-if="versionOf(row).status === 'NOT_FOUND'" type="info">仓库无版本</el-tag>
                 <el-tag v-else-if="versionOf(row).updateAvailable" type="warning">{{ versionOf(row).latestReleaseTag }}</el-tag>
                 <span v-else>{{ versionOf(row).latestReleaseTag || '-' }}</span>
-                <div v-if="versionOf(row).latestReleaseDigest" class="ver-digest" :title="versionOf(row).latestReleaseDigest">digest: {{ shortDigest(versionOf(row).latestReleaseDigest) }}</div>
+                <div v-if="versionOf(row).latestReleaseDigest" class="ver-digest" :title="versionOf(row).latestReleaseDigest">
+                  digest: {{ shortDigest(versionOf(row).latestReleaseDigest) }}
+                </div>
               </template>
             </el-table-column>
             <el-table-column label="运行" width="82" align="center">
@@ -157,15 +159,17 @@
             ></el-table-column
           >
           <el-table-column label="当前镜像版本" prop="image" min-width="220" show-overflow-tooltip />
-          <el-table-column label="最新正式版本" width="150"
-            ><template #default="{ row }"
-              ><el-tag v-if="versionOf(row).status === 'ERROR'" type="danger">扫描失败</el-tag
-              ><el-tag v-else-if="versionOf(row).status === 'NOT_FOUND'" type="info">仓库无版本</el-tag
-              ><el-tag v-else-if="versionOf(row).updateAvailable" type="warning">{{ versionOf(row).latestReleaseTag }}</el-tag
-              ><span v-else>{{ versionOf(row).latestReleaseTag || '-' }}</span>
-              ><div v-if="versionOf(row).latestReleaseDigest" class="ver-digest" :title="versionOf(row).latestReleaseDigest">digest: {{ shortDigest(versionOf(row).latestReleaseDigest) }}</div></template
-            ></el-table-column
-          >
+          <el-table-column label="最新正式版本" width="150">
+            <template #default="{ row }">
+              <el-tag v-if="versionOf(row).status === 'ERROR'" type="danger">扫描失败</el-tag>
+              <el-tag v-else-if="versionOf(row).status === 'NOT_FOUND'" type="info">仓库无版本</el-tag>
+              <el-tag v-else-if="versionOf(row).updateAvailable" type="warning">{{ versionOf(row).latestReleaseTag }}</el-tag>
+              <span v-else>{{ versionOf(row).latestReleaseTag || '-' }}</span>
+              <div v-if="versionOf(row).latestReleaseDigest" class="ver-digest" :title="versionOf(row).latestReleaseDigest">
+                digest: {{ shortDigest(versionOf(row).latestReleaseDigest) }}
+              </div>
+            </template>
+          </el-table-column>
           <el-table-column label="镜像摘要" width="145"
             ><template #default="{ row }"
               ><code>{{ shortDigest(row.imageDigest) }}</code></template
@@ -284,17 +288,22 @@
       >
     </el-dialog>
 
-    <el-dialog v-model="progressVisible" title="操作进度" width="620px" :close-on-click-modal="false">
-      <el-steps direction="vertical" :active="operationStep" :process-status="operation?.status === 'FAILED' ? 'error' : 'process'">
-        <el-step v-for="step in progressSteps" :key="step" :title="step" />
-      </el-steps>
-      <el-alert v-if="operation?.errorMessage" :title="operation.errorMessage" type="error" :closable="false" />
-      <template #footer
-        ><el-button :disabled="operation?.status === 'RUNNING' || operation?.status === 'PENDING'" @click="progressVisible = false"
-          >关闭</el-button
-        ></template
-      >
-    </el-dialog>
+    <OpsTaskProgressDrawer
+      v-model="progressVisible"
+      :operation="operation"
+      :steps="progressSteps"
+      :active-step="operationStep"
+      :logs="operationLogs"
+      :logs-loading="operationLogsLoading"
+      :can-retry="canRetryOperation"
+      :can-view-logs="canViewOperationLogs"
+      :can-view-detail="true"
+      @refresh="pollOperation"
+      @refresh-logs="refreshOperationLogs"
+      @retry="retryOperation"
+      @open-logs="openOperationLogs"
+      @open-detail="openOperationDetail"
+    />
   </div>
 </template>
 
@@ -312,6 +321,8 @@ import {
 } from '@/api/ops';
 import type { OpsContainer, OpsContainerAction, OpsContainerLogs, OpsContainerVersion, OpsOperation, OpsServer } from '@/api/ops/types';
 import { collectContainers, dateTimeText } from '@/views/ops/utils';
+import OpsTaskProgressDrawer from '@/views/ops/components/OpsTaskProgressDrawer.vue';
+import { checkPermi } from '@/utils/permission';
 
 interface Row extends OpsContainer {
   serverCode: string;
@@ -327,6 +338,8 @@ const operations = ref<OpsOperation[]>([]);
 const selected = ref<Row>();
 const logs = ref<OpsContainerLogs>();
 const operation = ref<OpsOperation>();
+const operationLogs = ref<OpsContainerLogs>();
+const operationLogsLoading = ref(false);
 const detailVisible = ref(false);
 const logsVisible = ref(false);
 const upgradeVisible = ref(false);
@@ -479,6 +492,17 @@ const targetImage = computed(() => {
   if (!row || !v.latestReleaseTag) return '';
   return `${row.image.slice(0, row.image.lastIndexOf(':'))}:${v.latestReleaseTag}`;
 });
+const actionPermiMap: Record<OpsContainerAction, string> = {
+  START: 'ops:container:start',
+  STOP: 'ops:container:stop',
+  RESTART: 'ops:container:restart',
+  UPGRADE: 'ops:container:upgrade'
+};
+const canViewOperationLogs = computed(() => checkPermi(['ops:container:logs']));
+const canRetryOperation = computed(() => {
+  const action = operation.value?.operationType;
+  return Boolean(action && checkPermi([actionPermiMap[action]]));
+});
 const handleQuery = () => {
   page.value.pageNum = 1;
 };
@@ -544,13 +568,53 @@ const submitAction = async (row: Row, action: OpsContainerAction) => {
   });
   upgradeVisible.value = false;
   progressVisible.value = true;
+  await refreshOperationLogs();
   pollOperation();
+};
+const findOperationRow = () => {
+  const current = operation.value;
+  if (!current) return undefined;
+  return containers.value.find((row) => row.serverCode === current.serverCode && row.name === current.containerName);
+};
+const refreshOperationLogs = async () => {
+  if (!operation.value) return;
+  operationLogsLoading.value = true;
+  try {
+    operationLogs.value = await getOpsContainerLogs(operation.value.serverCode, operation.value.containerName, 200);
+  } finally {
+    operationLogsLoading.value = false;
+  }
+};
+const openOperationLogs = async () => {
+  if (!canViewOperationLogs.value) return;
+  const row = findOperationRow();
+  if (!row) return;
+  await openLogs(row);
+};
+const openOperationDetail = () => {
+  const row = findOperationRow();
+  if (!row) return;
+  openDetail(row);
+};
+const retryOperation = async () => {
+  const current = operation.value;
+  const row = findOperationRow();
+  if (!current || !row || !canRetryOperation.value) return;
+  await ElMessageBox.confirm(
+    `确认重试${{ START: '启动', STOP: '停止', RESTART: '重启', UPGRADE: '升级' }[current.operationType]}容器 ${row.name}？`,
+    '重试确认',
+    {
+      type: 'warning'
+    }
+  );
+  await submitAction(row, current.operationType);
 };
 const pollOperation = async () => {
   if (!operation.value) return;
   operation.value = await getOpsOperation(operation.value.operationNo);
   if (['PENDING', 'RUNNING'].includes(operation.value.status)) pollTimer = setTimeout(pollOperation, 1500);
   else {
+    await refreshOperationLogs();
     await loadData();
     ElMessage[operation.value.status === 'SUCCESS' ? 'success' : 'error'](operation.value.status === 'SUCCESS' ? '操作成功' : '操作失败');
   }

@@ -12,6 +12,7 @@ import { encrypt, decrypt } from '@/utils/jsencrypt';
 import router from '@/router';
 
 const encryptHeader = 'encrypt-key';
+const oauthBasicAuthorization = import.meta.env.VITE_APP_OAUTH_BASIC_AUTH || 'Basic OTVUeFNzVFBGQTN0RjEyVEJTTW1VVkswZGE6RnBId0lmdzR3WTkyZE8=';
 let downloadLoadingInstance: LoadingInstance;
 // 是否显示重新登录（路由守卫拉用户信息时也会置位，不能再用来阻止跳转登录页）
 export const isRelogin = { show: false };
@@ -232,7 +233,7 @@ service.interceptors.response.use(
     }
     if (code === 401) {
       // 如果本身就是刷新令牌的请求返回了 401，说明 refresh_token 也过期了
-      if (isRefreshTokenRequest(config)) {
+      if (isRefreshTokenRequest(config) || config?._retry) {
         return Promise.reject(handleSessionExpired());
       }
 
@@ -250,12 +251,13 @@ service.interceptors.response.use(
       }
 
       isRefreshing = true;
+      config._retry = true;
       return service({
         url: '/auth/v1/oauth2/token',
         headers: {
           isToken: false,
           repeatSubmit: false,
-          Authorization: 'Basic OTVUeFNzVFBGQTN0RjEyVEJTTW1VVkswZGE6RnBId0lmdzR3WTkyZE8=',
+          Authorization: oauthBasicAuthorization,
           'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
         },
         transformRequest: (params: any = {}) =>

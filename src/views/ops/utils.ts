@@ -44,11 +44,15 @@ export const dateTimeText = (value?: string) => {
 };
 
 export const flattenComponents = (overview?: OpsOverview) => {
-  return (overview?.layers || []).flatMap((layer) => layer.components.map((component) => ({ ...component, layerName: layer.name, layerOrder: layer.order })));
+  return (overview?.layers || []).flatMap((layer) =>
+    layer.components.map((component) => ({ ...component, layerName: layer.name, layerOrder: layer.order }))
+  );
 };
 
 export const collectContainers = (servers: OpsServer[], fallback: OpsContainer[] = []) => {
-  const fromServers = servers.flatMap((server) => server.containers.map((container) => ({ ...container, serverCode: server.code, serverName: server.name, serverHost: server.host })));
+  const fromServers = servers.flatMap((server) =>
+    server.containers.map((container) => ({ ...container, serverCode: server.code, serverName: server.name, serverHost: server.host }))
+  );
   if (fromServers.length > 0) {
     return fromServers;
   }

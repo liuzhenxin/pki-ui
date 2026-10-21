@@ -115,12 +115,7 @@
           <template #header>
             <div class="card-header">
               <span>系统健康事件</span>
-              <el-button
-                v-if="systemHealth.cryptoProviderStatus !== 'SOFTWARE'"
-                link
-                type="primary"
-                @click="deviceDrawerVisible = true"
-              >
+              <el-button v-if="systemHealth.cryptoProviderStatus !== 'SOFTWARE'" link type="primary" @click="deviceDrawerVisible = true">
                 数盾设备详情
               </el-button>
             </div>

@@ -65,37 +65,37 @@ function withPage(query: RaCaInstanceQuery) {
 }
 
 export function pageRaCaInstance(query: RaCaInstanceQuery): Promise<Result<any>> {
-  return request({ url: '/ra2-liuzx/v1/ca-instances/page', method: 'post', data: withPage(query) }) as any;
+  return request({ url: '/ra/v1/ca-instances/page', method: 'post', data: withPage(query) }) as any;
 }
 
 export function getRaCaInstance(id: number | string): Promise<Result<RaCaInstance>> {
-  return request({ url: `/ra2-liuzx/v1/ca-instances/${id}`, method: 'get' }) as any;
+  return request({ url: `/ra/v1/ca-instances/${id}`, method: 'get' }) as any;
 }
 
 export function saveRaCaInstance(data: RaCaInstance): Promise<Result<number | string>> {
-  return request({ url: '/ra2-liuzx/v1/ca-instances', method: 'post', data }) as any;
+  return request({ url: '/ra/v1/ca-instances', method: 'post', data }) as any;
 }
 
 export function modifyRaCaInstance(data: RaCaInstance): Promise<Result<void>> {
-  return request({ url: '/ra2-liuzx/v1/ca-instances', method: 'put', data }) as any;
+  return request({ url: '/ra/v1/ca-instances', method: 'put', data }) as any;
 }
 
 export function removeRaCaInstance(id: number | string): Promise<Result<void>> {
-  return request({ url: `/ra2-liuzx/v1/ca-instances/${id}`, method: 'delete' }) as any;
+  return request({ url: `/ra/v1/ca-instances/${id}`, method: 'delete' }) as any;
 }
 
 export function updateRaCaInstanceStatus(id: number | string, status: RaCaStatus): Promise<Result<void>> {
-  return request({ url: `/ra2-liuzx/v1/ca-instances/${id}/status`, method: 'put', data: { status } }) as any;
+  return request({ url: `/ra/v1/ca-instances/${id}/status`, method: 'put', data: { status } }) as any;
 }
 
 export function setDefaultRaCaInstance(id: number | string): Promise<Result<void>> {
-  return request({ url: `/ra2-liuzx/v1/ca-instances/${id}/default`, method: 'put' }) as any;
+  return request({ url: `/ra/v1/ca-instances/${id}/default`, method: 'put' }) as any;
 }
 
 export function testRaCaConnection(id: number | string): Promise<Result<RaCaConnectionTest>> {
-  return request({ url: `/ra2-liuzx/v1/ca-instances/${id}/test`, method: 'post' }) as any;
+  return request({ url: `/ra/v1/ca-instances/${id}/test`, method: 'post' }) as any;
 }
 
 export function syncRaCaInstance(id: number | string): Promise<Result<RaCaSyncResult>> {
-  return request({ url: '/ra2-liuzx/v1/init/sync-ca', method: 'post', data: { caInstanceId: id } }) as any;
+  return request({ url: '/ra/v1/init/sync-ca', method: 'post', data: { caInstanceId: id } }) as any;
 }

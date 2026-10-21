@@ -14,6 +14,14 @@ export interface OcspResponder {
   responseValidity?: number;
   includeCerts?: boolean;
   nonceEnabled?: boolean;
+  protocolExtensionPolicy?: {
+    archiveCutoffEnabled?: boolean;
+    archiveCutoff?: string;
+    crlReferenceEnabled?: boolean;
+    crlUrl?: string;
+    crlNumber?: string;
+    preferredSignatureEnabled?: boolean;
+  };
   updateTime?: string;
 }
 
@@ -148,6 +156,9 @@ export interface OcspRuntimeConfig {
   ttlSeconds?: number;
   responderTtlSeconds?: number;
   maximumSize?: number;
+  responseCacheEnabled?: boolean;
+  responseCacheTtlSeconds?: number;
+  responseCacheMaximumSize?: number;
   protocolPort?: string;
   keystorePath?: string;
 }
@@ -156,4 +167,135 @@ export interface OcspProbe {
   ok: boolean;
   sourceType?: string;
   message?: string;
+}
+
+export interface OcspRoutingPreviewCmd {
+  caId: number;
+  issuerHashAlgorithm?: 'SHA1' | 'SHA256';
+  issuerNameHash?: string;
+  issuerKeyHash?: string;
+  clientIp?: string;
+}
+
+export interface OcspRoutingPreview {
+  caId: number;
+  authorityMode?: string;
+  candidateId?: number;
+  candidateVersion?: number;
+  candidateSourceVersion?: number;
+  sourceType?: string;
+  sourceRevision?: string;
+  sourcePublished?: boolean;
+  sourceEnabled?: boolean;
+  sourceValidationOk?: boolean;
+  sourceFailureCode?: string;
+  responderId?: number;
+  responderName?: string;
+  responderStatus?: string;
+  algorithm?: string;
+  provider?: string;
+  selfTestOk?: boolean;
+  rejectionCode?: string;
+  safeMessage?: string;
+  wouldActivate: boolean;
+}
+
+export interface OcspConfigHistory {
+  id: number;
+  targetType?: string;
+  targetKey?: string;
+  action?: string;
+  revision: number;
+  beforeJson?: string;
+  afterJson?: string;
+  validationEvidence?: string;
+  reason?: string;
+  actorUserId?: number;
+  createTime?: string;
+  rollbackOf?: number;
+  rolledBackBy?: number[];
+}
+
+export interface OcspConfigHistoryQry {
+  pageNum?: number;
+  pageSize?: number;
+  targetType?: string;
+  targetKey?: string;
+  action?: string;
+  createTimeFrom?: string;
+  createTimeTo?: string;
+}
+
+export interface OcspCanaryScope {
+  percent?: number;
+  type?: string;
+  value?: string;
+}
+
+export interface OcspCanaryCandidate {
+  id: number;
+  version: number;
+  caId: number;
+  responderId?: number;
+  candidateVersion?: number;
+  canaryEnabled?: boolean;
+  canaryScope?: OcspCanaryScope;
+  healthStatus?: string;
+  validationEvidence?: string;
+  reason?: string;
+  source?: OcspStatusSource;
+  updateTime?: string;
+}
+
+export interface OcspMonitoringSummary {
+  openAlertCount: number;
+  worstSeverity?: string;
+  sourceAlertCount: number;
+  signerAlertCount: number;
+  sloAlertCount: number;
+  syntheticAlertCount: number;
+}
+
+export interface OcspAlert {
+  id: number;
+  componentType?: string;
+  componentKey?: string;
+  code?: string;
+  severity?: string;
+  status?: string;
+  safeMessage?: string;
+  evidence?: string;
+  occurrenceCount?: number;
+  firstSeenTime?: string;
+  lastSeenTime?: string;
+  clearedTime?: string;
+  updateTime?: string;
+}
+
+export interface OcspRetentionStatus {
+  enabled?: boolean;
+  retentionDays?: number;
+  batchSize?: number;
+  totalRows?: number;
+  expiredRows?: number;
+  oldestRequestTime?: string;
+}
+
+export interface OcspRetentionResult {
+  deletedTotal?: number;
+  batches?: number;
+  lockAcquired?: boolean;
+  startedAt?: string;
+  finishedAt?: string;
+}
+
+export interface OcspResponseCacheStatus {
+  enabled?: boolean;
+  ttlSeconds?: number;
+  maximumSize?: number;
+  hits?: number;
+  misses?: number;
+  bypasses?: number;
+  invalidations?: number;
+  size?: number;
 }
