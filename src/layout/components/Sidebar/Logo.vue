@@ -59,6 +59,8 @@ function syncLogoText(tenantId?: string | number | null) {
     logoText.value = 'NAS';
   } else if (idStr === '5') {
     logoText.value = 'RA';
+  } else if (idStr === '21' || route.path.startsWith('/kds')) {
+    logoText.value = 'KDS';
   } else if (idStr === '4' || !idStr) {
     logoText.value = 'CA';
   } else {

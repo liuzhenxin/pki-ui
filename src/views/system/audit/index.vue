@@ -29,6 +29,11 @@
             <span class="ml-2">校验记录数：{{ verifyResult.checkedCount ?? 0 }}</span>
             <span class="ml-2">断裂记录数：{{ verifyResult.brokenCount ?? 0 }}</span>
           </p>
+          <template v-if="verifyResult.legacyCheckedCount != null && verifyResult.v2CheckedCount != null">
+            <p class="mt-1">历史日志：{{ verifyResult.legacyCheckedCount }} 条，异常 {{ verifyResult.legacyBrokenCount ?? 0 }} 项</p>
+            <p class="mt-1">新链日志：{{ verifyResult.v2CheckedCount }} 条，异常 {{ verifyResult.v2BrokenCount ?? 0 }} 项</p>
+            <p v-if="verifyResult.v2CheckedCount === 0" class="mt-1">暂无新链日志。</p>
+          </template>
           <template v-if="!verifyResult.valid && verifyResult.firstBrokenId != null">
             <p class="mt-1">首个断裂记录 ID：{{ verifyResult.firstBrokenId }}</p>
             <p class="break-all">预期哈希：{{ verifyResult.firstBrokenExpectedHash }}</p>

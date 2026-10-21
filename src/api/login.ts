@@ -162,7 +162,7 @@ export function logout() {
 /**
  * 根据UUID获取验证码
  */
-export function getCodeImg(uuid: string | number, tenantCode?: string): Promise<string> {
+export function getCodeImg(uuid: string | number, tenantCode?: string): Promise<Result<string>> {
   return request({
     url: '/auth/v1/username-password/captchas' + '/' + uuid,
     headers: {
@@ -189,7 +189,7 @@ export function getLoginHints(tenantCode?: string): Promise<Result<{ captchaEnab
 /**
  * 获取密钥
  */
-export function getSecrets(): Promise<SecretsResult> {
+export function getSecrets(): Promise<Result<SecretsResult>> {
   return request({
     url: '/auth/v1/secrets',
     headers: {
@@ -225,7 +225,7 @@ export function getInfo(): Promise<Result<UserInfo>> {
 }
 
 // 获取租户列表
-export function getTenantList(isToken: boolean): Promise<TenantInfo> {
+export function getTenantList(isToken: boolean): Promise<Result<TenantInfo>> {
   return request({
     url: '/admin/v1/tenants/list',
     method: 'post',

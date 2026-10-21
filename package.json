@@ -9,13 +9,13 @@
   "scripts": {
     "dev": "vite serve --mode development",
     "build:prod": "node -e \"console.error('Choose a target: yarn build:ops | yarn build:ca | yarn build:kmc | yarn build:ra | yarn build:ocsp'); process.exit(1)\"",
-    "build:ops": "VITE_APP_VERSION=${VITE_APP_VERSION:-3.0.8} VITE_APP_TENANT_IDS=1 VITE_APP_CLIENT_ID=95TxSsTPFA3tF12TBSMmUVK0da vite build --mode production",
-    "build:ca": "VITE_APP_VERSION=${VITE_APP_VERSION:-3.0.22} VITE_APP_TENANT_IDS=4 VITE_APP_CLIENT_ID=liuzx-ca-ui vite build --mode production",
+    "build:ops": "VITE_APP_VERSION=${VITE_APP_VERSION:-3.0.11} VITE_APP_TENANT_IDS=1 VITE_APP_CLIENT_ID=95TxSsTPFA3tF12TBSMmUVK0da vite build --mode production",
+    "build:ca": "VITE_APP_VERSION=${VITE_APP_VERSION:-3.0.27} VITE_APP_TENANT_IDS=4 VITE_APP_CLIENT_ID=pki-ca-ui vite build --mode production",
     "build:kms": "VITE_APP_VERSION=${VITE_APP_VERSION:-3.0.0} VITE_APP_TENANT_IDS=2 VITE_APP_CLIENT_ID=${KMS_PLATFORM_CLIENT_ID:?Configure the registered KMS platform client} vite build --mode production",
-    "build:kmc": "VITE_APP_VERSION=${VITE_APP_VERSION:-3.0.3} VITE_APP_TENANT_IDS=3 VITE_APP_CLIENT_ID=liuzx-kmc-ui vite build --mode production",
-    "build:ra": "VITE_APP_VERSION=${VITE_APP_VERSION:-3.0.6} VITE_APP_TENANT_IDS=5 VITE_APP_CLIENT_ID=liuzx-ra-ui vite build --mode production",
-    "build:ocsp": "VITE_APP_VERSION=${VITE_APP_VERSION:-3.0.0} VITE_APP_TENANT_IDS=6 VITE_APP_CLIENT_ID=pki-ocsp-ui vite build --mode production",
-    "build:kds": "VITE_APP_VERSION=${VITE_APP_VERSION:-1.2.0} VITE_APP_TENANT_IDS=21 VITE_APP_CLIENT_ID=liuzx-kds-ui vite build --mode production",
+    "build:kmc": "VITE_APP_VERSION=${VITE_APP_VERSION:-3.0.5} VITE_APP_TENANT_IDS=3 VITE_APP_CLIENT_ID=pki-kmc-ui vite build --mode production",
+    "build:ra": "VITE_APP_VERSION=${VITE_APP_VERSION:-3.0.6} VITE_APP_TENANT_IDS=5 VITE_APP_CLIENT_ID=pki-ra-ui vite build --mode production",
+    "build:ocsp": "VITE_APP_VERSION=${VITE_APP_VERSION:-3.0.2} VITE_APP_TENANT_IDS=6 VITE_APP_CLIENT_ID=pki-ocsp-ui vite build --mode production",
+    "build:kds": "VITE_APP_VERSION=${VITE_APP_VERSION:-1.2.0} VITE_APP_TENANT_IDS=21 VITE_APP_CLIENT_ID=pki-kds-ui vite build --mode production",
     "build:dev": "vite build --mode development",
     "build:csp": "VITE_APP_PRODUCT=csp VITE_APP_TENANT_IDS=10 vite build --config vite.config.csp.ts --mode production",
     "preview": "vite preview",
@@ -33,7 +33,8 @@
     "build:portal": "VITE_APP_CLIENT_ID=95TxSsTPFA3tF12TBSMmUVK0da vite build --mode portal",
     "build:hsm": "VITE_APP_TITLE=服务器密码机 VITE_APP_LOGO_TITLE=服务器密码机 VITE_APP_VERSION=${VITE_APP_VERSION:-1.0.0} VITE_APP_TENANT_IDS=7 VITE_APP_CLIENT_ID=${HSM_PLATFORM_CLIENT_ID:?Configure the registered HSM platform client} vite build --mode production",
     "build:svs": "VITE_APP_VERSION=${VITE_APP_VERSION:-1.0.0} VITE_APP_TENANT_IDS=9 VITE_APP_CLIENT_ID=${SVS_PLATFORM_CLIENT_ID:?Configure the registered platform client} vite build --mode production",
-    "typecheck:svs": "vue-tsc --noEmit -p tsconfig.svs.json"
+    "typecheck:svs": "vue-tsc --noEmit -p tsconfig.svs.json",
+    "typecheck:kmc": "vue-tsc --noEmit -p tsconfig.kmc.json"
   },
   "repository": {
     "type": "git",

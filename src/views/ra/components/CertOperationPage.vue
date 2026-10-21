@@ -103,7 +103,12 @@
             </el-form-item>
           </template>
           <el-form-item v-if="action === 'reissue'" label="CSR">
-            <el-input v-model="form.csr" type="textarea" :rows="5" placeholder="请输入补办证书使用的 CSR" />
+            <el-input
+              v-model="form.csr"
+              type="textarea"
+              :rows="5"
+              placeholder="可选。SM2 双证请填写签名证书 CSR，也可留空并在签发时用 USB Key 或文件生成"
+            />
           </el-form-item>
         </el-form>
         <template #footer>
@@ -128,7 +133,7 @@ const props = defineProps<{
 const actionMeta = {
   reissue: {
     title: '证书补办',
-    subtitle: '为已签发证书提交补办申请，补办申请进入证书业务审核流程。',
+    subtitle: '补办成功后旧证书自动按 superseded 吊销；双证书一对一起处理。签名 CSR 可留到签发时再提供，加密证书由 KMC 重新生成。',
     icon: 'Key',
     statusOptions: [
       { label: '有效', value: 'valid' },

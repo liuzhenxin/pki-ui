@@ -22,9 +22,7 @@ import type {
   RadiusStatus,
   RadiusTestRequest,
   SyslogConfig,
-  SyslogStatus,
-  AccessControlConfig,
-  AccessControlCurrentIp
+  SyslogStatus
 } from './types';
 import type { Result } from '@/api/types';
 

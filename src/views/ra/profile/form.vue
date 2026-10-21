@@ -651,11 +651,7 @@ function extendedKeyUsageOptionsForExtension(index: number) {
 }
 
 function subjectAltNameModeOptionsForExtension(index: number) {
-  return optionsWithSelectedOutside(
-    availableSubjectAltNameModeOptions.value,
-    subjectAltNameModeOptions,
-    selectedSubjectAltNameModes.value[index]
-  );
+  return optionsWithSelectedOutside(availableSubjectAltNameModeOptions.value, subjectAltNameModeOptions, selectedSubjectAltNameModes.value[index]);
 }
 
 function parseValidityDays(validity?: string) {
@@ -1784,14 +1780,16 @@ onMounted(() => {
                                   "
                                 >
                                   {{ opt.label }}
-                                  <el-tag v-if="opt.outsideSuggestion" type="warning" size="small" effect="plain" style="margin-left: 6px">可取消</el-tag>
+                                  <el-tag v-if="opt.outsideSuggestion" type="warning" size="small" effect="plain" style="margin-left: 6px"
+                                    >可取消</el-tag
+                                  >
                                 </el-checkbox>
                               </el-col>
                               <el-col :span="8">
                                 <el-checkbox
                                   :model-value="isKeyUsageRequired(index, opt.value)"
                                   :disabled="!selectedKeyUsages[index]?.includes(opt.value)"
-                                  @change="handleKeyUsageRequiredChange(index, opt.value, $event)"
+                                  @change="handleKeyUsageRequiredChange(index, opt.value, Boolean($event))"
                                   size="small"
                                 >
                                   强制包含
@@ -1834,14 +1832,16 @@ onMounted(() => {
                                   "
                                 >
                                   {{ opt.label }}
-                                  <el-tag v-if="opt.outsideSuggestion" type="warning" size="small" effect="plain" style="margin-left: 6px">可取消</el-tag>
+                                  <el-tag v-if="opt.outsideSuggestion" type="warning" size="small" effect="plain" style="margin-left: 6px"
+                                    >可取消</el-tag
+                                  >
                                 </el-checkbox>
                               </el-col>
                               <el-col :span="8">
                                 <el-checkbox
                                   :model-value="isExtendedKeyUsageRequired(index, opt.value)"
                                   :disabled="!selectedExtendedKeyUsages[index]?.includes(opt.value)"
-                                  @change="handleExtendedKeyUsageRequiredChange(index, opt.value, $event)"
+                                  @change="handleExtendedKeyUsageRequiredChange(index, opt.value, Boolean($event))"
                                   size="small"
                                 >
                                   强制包含
@@ -1857,12 +1857,17 @@ onMounted(() => {
                     <template v-if="ext.type === 'SubjectAlternativeName'">
                       <el-divider content-position="left" style="margin: 15px 0">主体备用名称配置</el-divider>
                       <div class="keyusages-checkbox-list">
-                        <el-checkbox-group v-model="selectedSubjectAltNameModes[index]" @change="handleSubjectAltNameModeGroupChange(index, $event)">
+                        <el-checkbox-group
+                          v-model="selectedSubjectAltNameModes[index]"
+                          @change="handleSubjectAltNameModeGroupChange(index, $event.map(String))"
+                        >
                           <div class="keyusage-grid">
                             <div v-for="opt in subjectAltNameModeOptionsForExtension(index)" :key="opt.value" class="keyusage-checkbox-item">
                               <el-checkbox :value="opt.value">
                                 {{ opt.label }}
-                                <el-tag v-if="opt.outsideSuggestion" type="warning" size="small" effect="plain" style="margin-left: 6px">可取消</el-tag>
+                                <el-tag v-if="opt.outsideSuggestion" type="warning" size="small" effect="plain" style="margin-left: 6px"
+                                  >可取消</el-tag
+                                >
                               </el-checkbox>
                             </div>
                           </div>

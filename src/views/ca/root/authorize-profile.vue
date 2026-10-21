@@ -201,7 +201,7 @@ async function handleViewProfile(profile: any) {
         category: profileData.type || conf.certLevel || '证书模板',
         details: profileData.description || conf.description || ''
       },
-      certLevel: conf.certLevel || profileData.type || profileData.certLevel || '',
+      certLevel: conf.certLevel || profileData.type || '',
       maxSize: conf.maxSize || '-',
       validity: conf.validity || '-',
       notBeforeTime: conf.notBeforeTime || '-',

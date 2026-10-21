@@ -76,7 +76,7 @@ const recoverForm = reactive({ archiveKeyId: '', judgeId: '' });
 const submitRequest = async () => {
   loading.value = true;
   try {
-    const judgeId = unwrapKmcData(await submitKeyRecovery(submitForm.archiveKeyId));
+    const judgeId = unwrapKmcData(await submitKeyRecovery({ targetType: 'ARCHIVE_KEY', targetId: submitForm.archiveKeyId }));
     statusForm.judgeId = String(judgeId ?? '');
     recoverForm.archiveKeyId = submitForm.archiveKeyId;
     recoverForm.judgeId = statusForm.judgeId;

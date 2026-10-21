@@ -3,6 +3,7 @@ import { RoleVO } from '@/api/system/role/types';
 import request from '@/utils/request';
 import { AxiosPromise } from 'axios';
 import { UserForm, UserQuery, UserVO, UserInfoVO, ModifyPwdForm } from './types';
+import type { Result } from '@/api/types';
 import { parseStrEmpty } from '@/utils/ruoyi';
 
 const RA_AUTH_ROLE_OPTIONS = [
@@ -16,8 +17,13 @@ const RA_AUTH_ROLE_IDS = new Set(RA_AUTH_ROLE_OPTIONS.map((role) => role.roleId)
  * 查询用户列表
  * @param query
  */
-export const listUser = (query: UserQuery): AxiosPromise<UserVO[]> => {
-  return request({
+export interface UserPage {
+  rows?: UserVO[];
+  records?: UserVO[];
+  total?: number;
+}
+export const listUser = (query: UserQuery): Promise<Result<UserPage> & UserPage> => {
+  return request<UserPage, Result<UserPage> & UserPage>({
     url: '/admin/v1/users/page',
     method: 'post',
     data: {
@@ -49,6 +55,30 @@ export const getUser = (userId?: string | number): AxiosPromise<UserInfoVO> => {
   });
 };
 
+const toUserCommand = (data: UserForm) => {
+  const allowedFields = [
+    'id',
+    'username',
+    'password',
+    'superAdmin',
+    'mail',
+    'mobile',
+    'status',
+    'userCategory',
+    'avatar',
+    'deptId',
+    'roleIds',
+    'certSn',
+    'cert'
+  ] as const;
+
+  return Object.fromEntries(
+    allowedFields
+      .filter((field) => data[field] !== undefined)
+      .map((field) => [field, data[field]])
+  );
+};
+
 /**
  * 新增用户
  */
@@ -56,7 +86,7 @@ export const addUser = (data: UserForm) => {
   return request({
     url: '/admin/v1/users',
     method: 'post',
-    data: { co: data }
+    data: { co: toUserCommand(data) }
   });
 };
 
@@ -67,7 +97,7 @@ export const updateUser = (data: UserForm) => {
   return request({
     url: '/admin/v1/users',
     method: 'put',
-    data: { co: data }
+    data: { co: toUserCommand(data) }
   });
 };
 
@@ -177,14 +207,14 @@ export const getUserProfile = (): AxiosPromise<UserInfoVO> => {
  * 修改用户个人信息
  * @param data 用户信息
  */
-export const updateUserProfile = (data: UserForm) => {
+export const updateUserProfile = (data: { mobile?: string; mail?: string; phonenumber?: string; email?: string }) => {
   return request({
     url: '/admin/v1/users/profile',
     method: 'put',
     data: {
       co: {
-        mobile: data.phonenumber || data.mobile,
-        mail: data.email || data.mail
+        mobile: data.phonenumber ?? data.mobile,
+        mail: data.email ?? data.mail
       }
     }
   });

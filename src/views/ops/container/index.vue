@@ -349,7 +349,21 @@ const query = ref({ serverCode: '', running: '', health: '', updateOnly: false, 
 const page = ref({ pageNum: 1, pageSize: 10 });
 let pollTimer: ReturnType<typeof setTimeout> | undefined;
 const keyOf = (row: Row) => `${row.serverCode}/${row.name}`;
-const versionOf = (row?: Row) => (row ? versions.value[keyOf(row)] : undefined) || ({} as OpsContainerVersion);
+const imageTagOf = (image: string) => {
+  const lastSlash = image.lastIndexOf('/');
+  const lastColon = image.lastIndexOf(':');
+  return lastColon > lastSlash ? image.slice(lastColon + 1) : '';
+};
+const versionFromRow = (row: Row): OpsContainerVersion => ({
+  repository: '',
+  currentTag: imageTagOf(row.image),
+  currentDigest: row.imageDigest,
+  latestReleaseTag: row.latestReleaseTag,
+  latestReleaseDigest: row.latestReleaseDigest,
+  status: row.latestReleaseTag ? 'AVAILABLE' : '',
+  updateAvailable: row.updateAvailable
+});
+const versionOf = (row?: Row) => (row ? versions.value[keyOf(row)] || versionFromRow(row) : ({} as OpsContainerVersion));
 const manageable = (row: Row) => row.manageable === true;
 const canUpgrade = (row: Row) => manageable(row) && row.health !== 'none' && row.health !== 'unknown' && versionOf(row).updateAvailable;
 const disabledReason = (row: Row) =>
@@ -528,7 +542,11 @@ const checkUpdates = async () => {
     const result = await checkOpsContainerUpdates();
     const next: Record<string, OpsContainerVersion> = {};
     containers.value.forEach((row) => {
-      const match = result.find((v) => row.image.includes(`/${v.repository}:`) || row.image.startsWith(`${v.repository}:`));
+      const candidates = result.filter((v) => row.image.includes(`/${v.repository}:`) || row.image.startsWith(`${v.repository}:`));
+      const match =
+        candidates.find((v) => Boolean(row.imageDigest) && v.currentDigest === row.imageDigest) ||
+        candidates.find((v) => v.currentTag === imageTagOf(row.image)) ||
+        candidates[0];
       if (match) next[keyOf(row)] = match;
     });
     versions.value = next;

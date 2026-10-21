@@ -293,7 +293,7 @@
             <template #header>
               <div class="card-header">
                 <el-icon><Connection /></el-icon>
-                <span>接入状态</span>
+                <span>初始化配置概况</span>
               </div>
             </template>
             <div class="ra-status-list">
@@ -325,7 +325,98 @@
       </el-row>
     </div>
 
-    <el-row v-if="!isLicense && !isNAS && !isCA && !isRA && !isOps && !isOCSP" :gutter="20" class="main-content">
+    <div v-if="isKds" class="ra-dashboard">
+      <el-row :gutter="16" class="ra-metrics">
+        <el-col v-for="item in kdsMetrics" :key="item.label" :xs="12" :sm="12" :md="6">
+          <div class="ra-metric">
+            <div class="metric-icon" :class="item.type">
+              <el-icon><component :is="item.icon" /></el-icon>
+            </div>
+            <div class="metric-content">
+              <span>{{ item.label }}</span>
+              <strong>{{ item.value }}</strong>
+            </div>
+          </div>
+        </el-col>
+      </el-row>
+
+      <el-row :gutter="20" class="main-content">
+        <el-col :xs="24" :lg="16">
+          <el-card class="box-card ra-workbench" shadow="hover">
+            <template #header>
+              <div class="card-header">
+                <el-icon><Menu /></el-icon>
+                <span>密钥分发工作台</span>
+              </div>
+            </template>
+            <div class="ra-flow">
+              <div v-for="step in kdsFlowSteps" :key="step.title" class="ra-flow-step">
+                <div class="flow-icon">
+                  <el-icon><component :is="step.icon" /></el-icon>
+                </div>
+                <div class="flow-copy">
+                  <b>{{ step.title }}</b>
+                  <p>{{ step.desc }}</p>
+                </div>
+              </div>
+            </div>
+          </el-card>
+
+          <el-card class="box-card ra-action-card" shadow="hover">
+            <template #header>
+              <div class="card-header">
+                <el-icon><Operation /></el-icon>
+                <span>进入功能</span>
+              </div>
+            </template>
+            <div class="ra-actions">
+              <button v-for="action in filteredKdsActions" :key="action.title" type="button" class="ra-action" @click="goTarget(action.path)">
+                <el-icon><component :is="action.icon" /></el-icon>
+                <span>{{ action.title }}</span>
+                <small>{{ action.desc }}</small>
+              </button>
+            </div>
+          </el-card>
+        </el-col>
+
+        <el-col :xs="24" :lg="8">
+          <el-card class="box-card ra-status-card" shadow="hover">
+            <template #header>
+              <div class="card-header">
+                <el-icon><Connection /></el-icon>
+                <span>使用边界</span>
+              </div>
+            </template>
+            <div class="ra-status-list">
+              <div v-for="item in kdsBoundaryItems" :key="item.label" class="ra-status-item">
+                <div>
+                  <span>{{ item.label }}</span>
+                  <p>{{ item.desc }}</p>
+                </div>
+                <el-tag :type="item.type" effect="plain">{{ item.status }}</el-tag>
+              </div>
+            </div>
+          </el-card>
+
+          <el-card class="box-card ra-compliance-card" shadow="hover">
+            <template #header>
+              <div class="card-header">
+                <el-icon><Stamp /></el-icon>
+                <span>操作约束</span>
+              </div>
+            </template>
+            <ul class="ra-compliance-list">
+              <li v-for="item in kdsConstraintItems" :key="item">
+                <el-icon><SuccessFilled /></el-icon>
+                <span>{{ item }}</span>
+              </li>
+            </ul>
+          </el-card>
+        </el-col>
+      </el-row>
+    </div>
+
+    <el-row v-if="!isLicense && !isNAS && !isCA && !isRA && !isOps && !isKds && !isOCSP" :gutter="20" class="main-content">
       <!-- 左侧：核心功能 -->
       <el-col :xs="24" :sm="24" :lg="16">
         <el-card class="box-card feature-card" shadow="hover">
@@ -510,7 +601,7 @@
     </el-row>
 
     <!-- 系统信息 (全宽) -->
-    <el-card v-if="!isLicense && !isNAS && !isCA && !isRA && !isOps && !isOCSP" class="box-card update-log" shadow="hover">
+    <el-card v-if="!isLicense && !isNAS && !isCA && !isRA && !isOps && !isKds && !isOCSP" class="box-card update-log" shadow="hover">
       <template #header>
         <div class="card-header">
           <el-icon><InfoFilled /></el-icon>
@@ -651,7 +742,9 @@
 
 <script setup name="Index" lang="ts">
 import { useRouter } from 'vue-router';
-import { nextTick, onMounted, ref, onUnmounted, computed } from 'vue';
+import { nextTick, onMounted, onActivated, ref, onUnmounted, computed } from 'vue';
+import { getAdminCertOptions, getInitStatus, unwrapRaData, type RaInitStatus, type RaAdminCertOptions } from '@/api/ra/init';
+import { pageRaWorkflowTodo } from '@/api/ra/workflowTask';
 import * as echarts from 'echarts';
 import { useUserStore } from '@/store/modules/user';
 import { getTenant } from '@/api/system/tenant';
@@ -686,6 +779,7 @@ const isNAS = computed(() => String(currentTenantId.value) === '10');
 const isCA = computed(() => String(currentTenantId.value) === '4');
 const isRA = computed(() => String(currentTenantId.value) === '5');
 const isOCSP = computed(() => String(currentTenantId.value) === '6');
+const isKds = computed(() => String(currentTenantId.value) === '21');
 const isLicense = computed(() => String(currentTenantId.value) === '2');
 const opsVersion = computed(() => import.meta.env.VITE_APP_VERSION || '3.0.3');
 
@@ -697,6 +791,7 @@ const systemTitle = computed(() => {
   if (isKMC.value) return 'PKI-Cloud-KMC密钥管理中心';
   if (isNAS.value) return 'PKI-Cloud-NAS网络存储管理系统';
   if (isRA.value) return 'PKI-Cloud-RA注册认证中心';
+  if (isKds.value) return '密钥分发与终端接入系统';
   if (isLicense.value) return 'License 授权中心';
   return 'PKI-Cloud-CA证书认证系统';
 });
@@ -716,6 +811,9 @@ const systemDesc = computed(() => {
   }
   if (isRA.value) {
     return '面向证书用户注册、资料核验、证书申请审批与签发联动，承接 CA 授权模板并形成可审计的注册认证业务闭环。';
+  }
+  if (isKds.value) {
+    return '向已注册终端交付密钥与密码参数。页面只展示元数据和状态，私钥与签名留在服务边界内。';
   }
   return '提供数字证书的全生命周期管理服务，包括证书申请、签发、查询、吊销、更新等，构建可信的网络安全基础环境。';
 });
@@ -852,12 +950,48 @@ const licenseRiskItems = computed(() => [
   }
 ]);
 
-const raMetrics = [
-  { label: '待审核申请', value: '0', icon: 'DocumentChecked', type: 'warning' },
-  { label: '授权模板', value: '就绪', icon: 'Collection', type: 'success' },
-  { label: 'RA 身份证书', value: '有效', icon: 'Medal', type: 'primary' },
-  { label: '审计状态', value: '开启', icon: 'View', type: 'info' }
-];
+const raInitStatus = ref<RaInitStatus>();
+const raCertOptions = ref<RaAdminCertOptions>();
+const raTodoCount = ref<number>();
+const raHomeLoaded = ref(false);
+const raCanReview = computed(() => userStore.permissions.some((permission) => ['ra:workflow:todo', '*:*:*'].includes(permission)));
+const raUnknown = computed(() => (raHomeLoaded.value ? '读取失败' : '加载中'));
+const raMetrics = computed(() => [
+  { label: '待办审核', value: raCanReview.value ? (raTodoCount.value ?? raUnknown.value) : '无审核权限', icon: 'DocumentChecked', type: 'warning' },
+  { label: '管理员授权模板', value: raCertOptions.value?.profileCount ?? raUnknown.value, icon: 'Collection', type: 'success' },
+  {
+    label: 'RA 身份证书配置',
+    value: raInitStatus.value ? (raInitStatus.value.identityCertCount ? '已配置' : '未配置') : raUnknown.value,
+    icon: 'Medal',
+    type: 'primary'
+  },
+  { label: '管理员授权根证书', value: raCertOptions.value?.roots.length ?? raUnknown.value, icon: 'View', type: 'info' }
+]);
+
+async function fetchRaHomeData() {
+  raHomeLoaded.value = false;
+  raInitStatus.value = undefined;
+  raCertOptions.value = undefined;
+  raTodoCount.value = undefined;
+  const requests = [
+    getInitStatus().then((res) => {
+      raInitStatus.value = unwrapRaData<RaInitStatus>(res);
+    }),
+    getAdminCertOptions().then((res) => {
+      raCertOptions.value = unwrapRaData<RaAdminCertOptions>(res);
+    })
+  ];
+  if (raCanReview.value) {
+    requests.push(
+      pageRaWorkflowTodo({ pageNum: 1, pageSize: 1 }).then((res) => {
+        const page = unwrapRaData<{ total: number }>(res);
+        raTodoCount.value = page.total;
+      })
+    );
+  }
+  await Promise.allSettled(requests);
+  raHomeLoaded.value = true;
+}
 
 const raFlowSteps = [
   {
@@ -919,12 +1053,67 @@ const hasPermission = (permission: string) => {
 };
 const filteredRaActions = computed(() => raActions.filter((action) => hasPermission(action.permission)));
 
-const raStatusItems = [
-  { label: 'CA 授权关系', desc: '根证书与证书模板由 CA 授权同步', status: '已接入', type: 'success' as const },
-  { label: '证书申请流程', desc: '注册、审核、签发、交付分阶段留痕', status: '启用', type: 'success' as const },
-  { label: 'USBKey 写入', desc: '管理员和审计员证书支持本地介质写入', status: '可用', type: 'info' as const },
-  { label: '审计留痕', desc: '关键操作进入统一审计日志', status: '开启', type: 'warning' as const }
+const kdsMetrics = [
+  { label: '运营', value: '状态与告警', icon: 'Monitor', type: 'primary' },
+  { label: '设备与密钥', value: '仅元数据', icon: 'Key', type: 'success' },
+  { label: '恢复 / 销毁', value: '需确认词', icon: 'Warning', type: 'warning' },
+  { label: '审计', value: '可追溯', icon: 'Document', type: 'info' }
 ];
+
+const kdsFlowSteps = [
+  { title: '确认服务可用', desc: '先看运营状态，确认缓存、数据库和时钟正常，再处理设备与密钥。', icon: 'Monitor' },
+  { title: '核对注册设备', desc: '按序列号查看 KMS 与 MMJ 的角色、状态和证书有效期。', icon: 'List' },
+  { title: '管理密钥与 S 盒', desc: '只展示引用和版本。激活待生效版本、回滚通道都要核对确认词。', icon: 'Key' },
+  { title: '审计与应急', desc: '校验审计链、登记证据。恢复输入 RESTORE，销毁输入 DESTROY。', icon: 'Finished' }
+];
+
+const kdsActions = [
+  { title: '运营状态', desc: '实例、依赖健康、维护态和销毁态', path: '/kds/ops/status', icon: 'Monitor', permission: 'kds:ops:view' },
+  { title: '告警', desc: '查看脱敏渠道并发送测试告警', path: '/kds/ops/alerts', icon: 'Bell', permission: 'kds:ops:view' },
+  { title: '设备', desc: '分页查看已注册设备并打开详情', path: '/kds/device', icon: 'List', permission: 'kds:device:list' },
+  { title: '密钥', desc: '按 MMJ 序列号查看通道与版本', path: '/kds/key', icon: 'Key', permission: 'kds:key:view' },
+  { title: 'S 盒', desc: '查看版本历史、激活或回滚上一版本', path: '/kds/sbox', icon: 'SetUp', permission: 'kds:sbox:manage' },
+  { title: '恢复', desc: '用受控归档创建恢复任务', path: '/kds/restore', icon: 'Refresh', permission: 'kds:restore:manage' },
+  { title: '销毁', desc: '应急销毁后进入只读安全态', path: '/kds/destruction', icon: 'Warning', permission: 'kds:destruction:execute' },
+  { title: '审计', desc: '导出审计、校验审计链并登记证据', path: '/kds/audit', icon: 'Document', permission: 'kds:audit:view' }
+];
+
+const filteredKdsActions = computed(() => kdsActions.filter((action) => hasPermission(action.permission)));
+
+const kdsBoundaryItems = [
+  { label: '调用路径', desc: '浏览器只访问管理代理，不直接调用设备协议端口', status: '代理', type: 'success' as const },
+  { label: '密钥材料', desc: '列表和详情不返回私钥、PIN 或包装密文', status: '隐藏', type: 'info' as const },
+  { label: '写操作', desc: '设备注册和密钥下发仍由 KMS 按协议调用', status: '协议', type: 'warning' as const }
+];
+
+const kdsConstraintItems = [
+  '通道回滚只能回到上一版本，不能指定任意版本',
+  '恢复确认词是 RESTORE，销毁确认词是 DESTROY',
+  '审计导出和审计链校验使用 AUDITOR 身份签名',
+  '进入销毁态后，只保留销毁重试和状态查询'
+];
+
+const raStatusItems = computed(() => [
+  { label: '根证书配置', desc: '当前租户存储的根证书配置记录', status: raInitStatus.value?.rootCount ?? raUnknown.value, type: 'info' as const },
+  {
+    label: '模板配置',
+    desc: '当前租户存储的全部模板配置记录，包含未授权模板',
+    status: raInitStatus.value?.profileCount ?? raUnknown.value,
+    type: 'info' as const
+  },
+  {
+    label: '根证书模板关联',
+    desc: '当前租户存储的授权关联配置记录',
+    status: raInitStatus.value?.relationCount ?? raUnknown.value,
+    type: 'info' as const
+  },
+  {
+    label: '管理员证书配置',
+    desc: '当前租户管理员与审计员的证书配置数量',
+    status: raInitStatus.value?.accountCertCount ?? raUnknown.value,
+    type: 'info' as const
+  }
+]);
 
 const raComplianceItems = [
   'RA 不保存 CA 私钥，只承接授权签发能力',
@@ -1089,6 +1278,9 @@ const initCharts = () => {
 
 onMounted(async () => {
   fetchTenantInfo();
+  if (isRA.value) {
+    await fetchRaHomeData();
+  }
   await fetchLicenseHomeData();
   if (isKMC.value && userStore.permissions.includes('kmc:dashboard:view')) {
     await fetchKmcDashboardStats();
@@ -1096,6 +1288,12 @@ onMounted(async () => {
     initCharts();
   }
   window.addEventListener('resize', handleResize);
+});
+
+onActivated(() => {
+  if (isRA.value && raHomeLoaded.value) {
+    void fetchRaHomeData();
+  }
 });
 
 onUnmounted(() => {

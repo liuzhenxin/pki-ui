@@ -10,7 +10,7 @@
             type="datetimerange"
             start-placeholder="开始"
             end-placeholder="结束"
-            value-format="YYYY-MM-DDTHH:mm:ss"
+            value-format="YYYY-MM-DD HH:mm:ss"
           />
         </el-form-item>
         <el-form-item label="序列号">

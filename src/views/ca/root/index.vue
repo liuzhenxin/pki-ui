@@ -67,7 +67,7 @@
           <el-button link type="success" icon="Stamp" @click="handleAuthorizeProfile(scope.row)" v-hasPermi="['ca:root:authorize']"
             >授权模板</el-button
           >
-          <el-button link type="primary" icon="Setting" @click="handleCrlConfig(scope.row)" v-hasPermi="['ca:root:crl-config']">CRL配置</el-button>
+          <el-button link type="primary" icon="Setting" @click="handleCrlConfig(scope.row)" v-hasPermi="['ca:root:crl-config']">URI/CRL配置</el-button>
           <el-button link type="primary" icon="Link" @click="handleBindPublishers(scope.row)" v-hasPermi="['ca:publisher:save']"
             >关联发布者</el-button
           >
@@ -187,6 +187,10 @@
               </el-tab-pane>
 
               <el-tab-pane label="URI配置">
+                <el-form-item label="CPS URI" prop="cpsUri">
+                  <el-input v-model="selfForm.cpsUri" clearable placeholder="例如：http://ca.faw-vw.com/cps.html" />
+                </el-form-item>
+
                 <el-form-item v-for="(item, index) in selfForm.cacertUris" :key="'cacert-' + index" :label="index === 0 ? 'CA证书URI' : ' '">
                   <div style="display: flex; width: 100%">
                     <el-input v-model="item.value" style="flex: 1; margin-right: 10px" />
@@ -402,7 +406,7 @@
         <div class="crl-config-header">
           <div>
             <div class="crl-config-title">{{ crlConfigDialog.title }}</div>
-            <div class="crl-config-subtitle">直接在根证书列表下方维护签发策略、发布地址和手动签发操作。</div>
+            <div class="crl-config-subtitle">维护证书 URI、CRL 签发策略和手动发布操作；修改仅影响后续签发的证书。</div>
           </div>
           <div class="crl-config-actions">
             <el-tag :type="crlConfigForm.schedulerRunning ? 'success' : 'info'" effect="light">
@@ -458,7 +462,21 @@
               </el-col>
             </el-row>
           </el-tab-pane>
-          <el-tab-pane label="发布地址">
+          <el-tab-pane label="URI配置">
+            <el-form-item v-for="(item, index) in crlConfigForm.caCertUris" :key="'cfg-ca-' + index" :label="index === 0 ? 'CA证书 URI' : ' '">
+              <div class="uri-row">
+                <el-input v-model="item.value" placeholder="例如：https://crl.example.com/ca/issuer.cer" />
+                <el-button v-if="index === 0" @click="addCrlConfigUri('caCertUris')" type="primary" :icon="Plus" circle size="small" />
+                <el-button v-if="index !== 0" @click="removeCrlConfigUri('caCertUris', index)" type="danger" :icon="Minus" circle size="small" />
+              </div>
+            </el-form-item>
+            <el-form-item v-for="(item, index) in crlConfigForm.ocspUris" :key="'cfg-ocsp-' + index" :label="index === 0 ? 'OCSP URI' : ' '">
+              <div class="uri-row">
+                <el-input v-model="item.value" placeholder="例如：https://ocsp.example.com/" />
+                <el-button v-if="index === 0" @click="addCrlConfigUri('ocspUris')" type="primary" :icon="Plus" circle size="small" />
+                <el-button v-if="index !== 0" @click="removeCrlConfigUri('ocspUris', index)" type="danger" :icon="Minus" circle size="small" />
+              </div>
+            </el-form-item>
             <el-form-item v-for="(item, index) in crlConfigForm.crlUris" :key="'cfg-crl-' + index" :label="index === 0 ? '全量CRL URI' : ' '">
               <div class="uri-row">
                 <el-input v-model="item.value" />
@@ -586,7 +604,7 @@ const securityConfirm = reactive({
 
 const crlConfigDialog = reactive({
   visible: false,
-  title: 'CRL配置',
+  title: 'URI/CRL配置',
   rootId: undefined as string | number | undefined
 });
 
@@ -600,6 +618,8 @@ const crlConfigForm = reactive({
   overlapUnit: 'h',
   intervalTime: '00:00',
   nextCrlNumber: 1,
+  caCertUris: [{ value: '' }],
+  ocspUris: [{ value: '' }],
   crlUris: [{ value: '' }],
   deltaCrlUris: [{ value: '' }],
   schedulerRunning: false,
@@ -666,6 +686,7 @@ const data = reactive({
     crlIntervalTime: '00:00',
     nextCrlNo: 1,
     // URI配置
+    cpsUri: 'http://ca.faw-vw.com/cps.html',
     cacertUris: [{ value: 'https://myorg.org/rootca1.der' }],
     crlUris: [{ value: 'https://localhost:8081/dummy/crl/?type=crl&name=rootca1' }],
     deltaCrlUris: [{ value: '' }],
@@ -1398,12 +1419,15 @@ async function onSubProfileChange(profileId: any) {
               break;
             }
           }
-          items.push({
-            type: compType,
-            value: rdn.value || '',
-            minOccurs: rdn.minOccurs,
-            maxOccurs: rdn.maxOccurs
-          });
+          const count = rdn.maxOccurs ?? Math.max(1, rdn.minOccurs ?? 1);
+          for (let i = 0; i < count; i++) {
+            items.push({
+              type: compType,
+              value: rdn.value || '',
+              minOccurs: rdn.minOccurs,
+              maxOccurs: rdn.maxOccurs
+            });
+          }
         });
         onlineSubForm.value.subjectItems = sortSubjectItems(items);
       }
@@ -1484,7 +1508,7 @@ async function onProfileChange(profileId: any) {
             }
           }
 
-          const count = Math.max(1, rdn.minOccurs === undefined ? 1 : rdn.minOccurs);
+          const count = rdn.maxOccurs ?? Math.max(1, rdn.minOccurs ?? 1);
           for (let i = 0; i < count; i++) {
             items.push({
               type: compType,
@@ -1496,11 +1520,12 @@ async function onProfileChange(profileId: any) {
         });
         selfForm.value.subjectItems = sortSubjectItems(items);
       } else {
-        // 如果没有subject配置，使用默认的主题项
         selfForm.value.subjectItems = sortSubjectItems([
-          { type: 'country', value: 'CN', minOccurs: 1, maxOccurs: 1 },
-          { type: 'organization', value: '业务部门', minOccurs: 1, maxOccurs: 1 },
-          { type: 'organizationalUnit', value: '业务管理员', minOccurs: 0, maxOccurs: 1 },
+          { type: 'country', value: '', minOccurs: 0, maxOccurs: 1 },
+          { type: 'organization', value: '', minOccurs: 0, maxOccurs: 1 },
+          { type: 'organizationalUnit', value: '', minOccurs: 0, maxOccurs: 1 },
+          { type: 'domainComponent', value: '', minOccurs: 0, maxOccurs: 2 },
+          { type: 'domainComponent', value: '', minOccurs: 0, maxOccurs: 2 },
           { type: 'commonName', value: 'DemoCA', minOccurs: 1, maxOccurs: 1 }
         ]);
       }
@@ -1555,9 +1580,11 @@ async function onProfileChange(profileId: any) {
 
     // 使用默认的主题项
     selfForm.value.subjectItems = sortSubjectItems([
-      { type: 'country', value: 'CN', minOccurs: 1, maxOccurs: 1 },
-      { type: 'organization', value: '业务部门', minOccurs: 1, maxOccurs: 1 },
-      { type: 'organizationalUnit', value: '业务管理员', minOccurs: 0, maxOccurs: 1 },
+      { type: 'country', value: '', minOccurs: 0, maxOccurs: 1 },
+      { type: 'organization', value: '', minOccurs: 0, maxOccurs: 1 },
+      { type: 'organizationalUnit', value: '', minOccurs: 0, maxOccurs: 1 },
+      { type: 'domainComponent', value: '', minOccurs: 0, maxOccurs: 2 },
+      { type: 'domainComponent', value: '', minOccurs: 0, maxOccurs: 2 },
       { type: 'commonName', value: 'DemoCA', minOccurs: 1, maxOccurs: 1 }
     ]);
   }
@@ -1589,6 +1616,7 @@ function reset() {
     crlOverlapUnit: 'h',
     crlIntervalTime: '00:00',
     nextCrlNo: 1,
+    cpsUri: 'http://ca.faw-vw.com/cps.html',
     cacertUris: [{ value: 'https://myorg.org/rootca1.der' }],
     crlUris: [{ value: 'https://localhost:8081/dummy/crl/?type=crl&name=rootca1' }],
     deltaCrlUris: [{ value: '' }],
@@ -1661,7 +1689,7 @@ function submitForm() {
           const reqData = {
             name: selfForm.value.name,
             signerId: selfForm.value.signerId,
-            rootcaProfile: selfForm.value.rootcaProfileName,
+            rootcaProfile: selfForm.value.rootcaProfileName || 'RootCA证书模板',
             subject: selfForm.value.subjectItems
               .filter((item: any) => item.value)
               .map((item: any) => {
@@ -1681,6 +1709,7 @@ function submitForm() {
             snLen: selfForm.value.snSize,
             nextCrlNumber: selfForm.value.nextCrlNo,
             crlControl: crlControlArr.join(','),
+            cpsUri: selfForm.value.cpsUri?.trim() || undefined,
             caCertUris: selfForm.value.cacertUris.map((u: any) => u.value).filter((v: any) => v),
             crlUris: selfForm.value.crlUris.map((u: any) => u.value).filter((v: any) => v),
             deltaCrlUris: selfForm.value.deltaCrlUris.map((u: any) => u.value).filter((v: any) => v),
@@ -1781,6 +1810,8 @@ function applyCrlConfig(data: any) {
   crlConfigForm.overlapUnit = overlap.unit;
   crlConfigForm.intervalTime = config?.intervalTime || '00:00';
   crlConfigForm.nextCrlNumber = toNumberValue(config?.nextCrlNumber, 1);
+  crlConfigForm.caCertUris = (config?.caCertUris && config.caCertUris.length > 0 ? config.caCertUris : ['']).map((value: string) => ({ value }));
+  crlConfigForm.ocspUris = (config?.ocspUris && config.ocspUris.length > 0 ? config.ocspUris : ['']).map((value: string) => ({ value }));
   crlConfigForm.crlUris = (config?.crlUris && config.crlUris.length > 0 ? config.crlUris : ['']).map((value: string) => ({ value }));
   crlConfigForm.deltaCrlUris = (config?.deltaCrlUris && config.deltaCrlUris.length > 0 ? config.deltaCrlUris : ['']).map((value: string) => ({
     value
@@ -1816,7 +1847,7 @@ function addCrlOperationRecord(record: any) {
 
 async function handleCrlConfig(row: any) {
   crlConfigDialog.rootId = row.id;
-  crlConfigDialog.title = `CRL配置 - ${row.name}`;
+  crlConfigDialog.title = `URI/CRL配置 - ${row.name}`;
   crlConfigForm.publisherId = undefined;
   crlOperationRecords.value = [];
   try {
@@ -1857,8 +1888,10 @@ function buildCrlConfigPayload() {
     overlap: formatDuration(crlConfigForm.overlapValue, crlConfigForm.overlapUnit),
     intervalTime: crlConfigForm.intervalTime,
     nextCrlNumber: crlConfigForm.nextCrlNumber,
-    crlUris: crlConfigForm.crlUris.map((u: any) => u.value).filter((v: any) => v),
-    deltaCrlUris: crlConfigForm.deltaCrlUris.map((u: any) => u.value).filter((v: any) => v)
+    caCertUris: crlConfigForm.caCertUris.map((u: any) => u.value.trim()).filter((v: any) => v),
+    ocspUris: crlConfigForm.ocspUris.map((u: any) => u.value.trim()).filter((v: any) => v),
+    crlUris: crlConfigForm.crlUris.map((u: any) => u.value.trim()).filter((v: any) => v),
+    deltaCrlUris: crlConfigForm.deltaCrlUris.map((u: any) => u.value.trim()).filter((v: any) => v)
   };
 }
 
@@ -1867,7 +1900,7 @@ async function submitCrlConfig() {
   try {
     const res = await saveRootCrlConfig(crlConfigDialog.rootId, buildCrlConfigPayload());
     applyCrlConfig(res);
-    ElMessage.success('CRL配置已保存');
+    ElMessage.success('URI/CRL配置已保存');
     getList();
   } catch (error: any) {
     ElMessage.error(error.response?.data?.msg || error.message || '保存CRL配置失败');
@@ -1947,11 +1980,11 @@ async function stopCrlScheduler() {
   }
 }
 
-const addCrlConfigUri = (field: 'crlUris' | 'deltaCrlUris') => {
+const addCrlConfigUri = (field: 'caCertUris' | 'ocspUris' | 'crlUris' | 'deltaCrlUris') => {
   crlConfigForm[field].push({ value: '' });
 };
 
-const removeCrlConfigUri = (field: 'crlUris' | 'deltaCrlUris', index: number) => {
+const removeCrlConfigUri = (field: 'caCertUris' | 'ocspUris' | 'crlUris' | 'deltaCrlUris', index: number) => {
   crlConfigForm[field].splice(index, 1);
 };
 

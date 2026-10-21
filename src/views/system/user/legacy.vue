@@ -24,14 +24,11 @@
           <div v-show="showSearch" class="mb-[10px]">
             <el-card shadow="hover">
               <el-form ref="queryFormRef" :model="queryParams" :inline="true">
-                <el-form-item label="用户名称" prop="userName">
-                  <el-input v-model="queryParams.userName" placeholder="请输入用户名称" clearable @keyup.enter="handleQuery" />
+                <el-form-item label="用户名称" prop="username">
+                  <el-input v-model="queryParams.username" placeholder="请输入用户名称" clearable @keyup.enter="handleQuery" />
                 </el-form-item>
-                <el-form-item label="用户昵称" prop="nickName">
-                  <el-input v-model="queryParams.nickName" placeholder="请输入用户昵称" clearable @keyup.enter="handleQuery" />
-                </el-form-item>
-                <el-form-item label="手机号码" prop="phonenumber">
-                  <el-input v-model="queryParams.phonenumber" placeholder="请输入手机号码" clearable @keyup.enter="handleQuery" />
+                <el-form-item label="手机号码" prop="mobile">
+                  <el-input v-model="queryParams.mobile" placeholder="请输入手机号码" clearable @keyup.enter="handleQuery" />
                 </el-form-item>
 
                 <el-form-item label="状态" prop="status">
@@ -98,10 +95,10 @@
           <el-table v-loading="loading" border :data="userList" @selection-change="handleSelectionChange">
             <el-table-column type="selection" width="50" align="center" />
             <el-table-column v-if="columns[0].visible" key="userId" label="用户编号" align="center" prop="userId" />
-            <el-table-column v-if="columns[1].visible" key="userName" label="用户名称" align="center" prop="userName" :show-overflow-tooltip="true" />
+            <el-table-column v-if="columns[1].visible" key="userName" label="用户名称" align="center" prop="username" :show-overflow-tooltip="true" />
             <el-table-column v-if="columns[2].visible" key="nickName" label="用户昵称" align="center" prop="nickName" :show-overflow-tooltip="true" />
             <el-table-column v-if="columns[3].visible" key="deptName" label="部门" align="center" prop="deptName" :show-overflow-tooltip="true" />
-            <el-table-column v-if="columns[4].visible" key="phonenumber" label="手机号码" align="center" prop="phonenumber" width="120" />
+            <el-table-column v-if="columns[4].visible" key="phonenumber" label="手机号码" align="center" prop="mobile" width="120" />
             <el-table-column v-if="columns[5].visible" key="status" label="状态" align="center">
               <template #default="scope">
                 <el-switch v-model="scope.row.status" active-value="0" inactive-value="1" @change="handleStatusChange(scope.row)"></el-switch>
@@ -116,14 +113,14 @@
 
             <el-table-column label="操作" fixed="right" width="220" class-name="small-padding fixed-width">
               <template #default="scope">
-                <el-tooltip v-if="scope.row.userId !== 1" content="修改" placement="top">
+                <el-tooltip v-if="scope.row.id !== 1" content="修改" placement="top">
                   <el-button v-hasPermi="['system:user:edit']" link type="primary" icon="Edit" @click="handleUpdate(scope.row)"></el-button>
                 </el-tooltip>
-                <el-tooltip v-if="scope.row.userId !== 1" content="删除" placement="top">
+                <el-tooltip v-if="scope.row.id !== 1" content="删除" placement="top">
                   <el-button v-hasPermi="['system:user:remove']" link type="primary" icon="Delete" @click="handleDelete(scope.row)"></el-button>
                 </el-tooltip>
 
-                <el-tooltip v-if="scope.row.userId !== 1" content="重置密码" placement="top">
+                <el-tooltip v-if="scope.row.id !== 1" content="重置密码" placement="top">
                   <el-button v-hasPermi="['system:user:resetPwd']" link type="primary" icon="Key" @click="handleResetPwd(scope.row)"></el-button>
                 </el-tooltip>
 
@@ -137,7 +134,7 @@
                   ></el-button>
                 </el-tooltip>
 
-                <el-tooltip v-if="scope.row.userId !== 1" content="分配角色" placement="top">
+                <el-tooltip v-if="scope.row.id !== 1" content="分配角色" placement="top">
                   <el-button v-hasPermi="['system:user:edit']" link type="primary" icon="CircleCheck" @click="handleAuthRole(scope.row)"></el-button>
                 </el-tooltip>
               </template>
@@ -180,20 +177,20 @@
         </el-row>
         <el-row>
           <el-col :span="12">
-            <el-form-item label="手机号码" prop="phonenumber">
-              <el-input v-model="form.phonenumber" placeholder="请输入手机号码" maxlength="11" />
+            <el-form-item label="手机号码" prop="mobile">
+              <el-input v-model="form.mobile" placeholder="请输入手机号码" maxlength="11" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="邮箱" prop="email">
-              <el-input v-model="form.email" placeholder="请输入邮箱" maxlength="50" />
+            <el-form-item label="邮箱" prop="mail">
+              <el-input v-model="form.mail" placeholder="请输入邮箱" maxlength="50" />
             </el-form-item>
           </el-col>
         </el-row>
         <el-row>
           <el-col :span="12">
-            <el-form-item v-if="form.userId == undefined" label="用户名称" prop="userName">
-              <el-input v-model="form.userName" placeholder="请输入用户名称" maxlength="30" />
+            <el-form-item v-if="form.userId == undefined" label="用户名称" prop="username">
+              <el-input v-model="form.username" placeholder="请输入用户名称" maxlength="30" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
@@ -320,7 +317,7 @@ const ids = ref<Array<number | string>>([]);
 const single = ref(true);
 const multiple = ref(true);
 const total = ref(0);
-const dateRange = ref<[DateModelType, DateModelType]>(['', '']);
+const dateRange = ref<[string, string]>(['', '']);
 const deptName = ref('');
 const deptOptions = ref<DeptTreeVO[]>([]);
 const enabledDeptOptions = ref<DeptTreeVO[]>([]);
@@ -367,11 +364,10 @@ const dialog = reactive<DialogOption>({
 const initFormData: UserForm = {
   userId: undefined,
   deptId: undefined,
-  userName: '',
-  nickName: undefined,
+  username: '',
   password: '',
-  phonenumber: undefined,
-  email: undefined,
+  mobile: undefined,
+  mail: undefined,
   sex: undefined,
   status: '0',
   remark: '',
@@ -384,14 +380,14 @@ const initData: PageData<UserForm, UserQuery> = {
   queryParams: {
     pageNum: 1,
     pageSize: 10,
-    userName: '',
-    phonenumber: '',
+    username: '',
+    mobile: '',
     status: '',
     deptId: '',
     roleId: ''
   },
   rules: {
-    userName: [
+    username: [
       { required: true, message: '用户名称不能为空', trigger: 'blur' },
       {
         min: 2,
@@ -411,14 +407,14 @@ const initData: PageData<UserForm, UserQuery> = {
       },
       { pattern: /^[^<>"'|\\]+$/, message: '不能包含非法字符：< > " \' \\ |', trigger: 'blur' }
     ],
-    email: [
+    mail: [
       {
         type: 'email',
         message: '请输入正确的邮箱地址',
         trigger: ['blur', 'change']
       }
     ],
-    phonenumber: [
+    mobile: [
       {
         pattern: /^1[3456789][0-9]\d{8}$/,
         message: '请输入正确的手机号码',
@@ -499,7 +495,7 @@ const resetQuery = () => {
 
 /** 删除按钮操作 */
 const handleDelete = async (row?: UserVO) => {
-  const userIds = row?.userId || ids.value;
+  const userIds = row?.id || ids.value;
   const [err] = await to(proxy?.$modal.confirm('是否确认删除用户编号为"' + userIds + '"的数据项？') as any);
   if (!err) {
     await api.delUser(userIds);
@@ -513,7 +509,7 @@ const handleStatusChange = async (row: UserVO) => {
   const text = row.status === '0' ? '启用' : '停用';
   try {
     await proxy?.$modal.confirm('确认要"' + text + '""' + row.userName + '"用户吗?');
-    await api.changeUserStatus(row.userId, row.status);
+    await api.changeUserStatus(row.id, String(row.status));
     proxy?.$modal.msgSuccess(text + '成功');
   } catch (err) {
     row.status = row.status === '0' ? '1' : '0';
@@ -521,7 +517,7 @@ const handleStatusChange = async (row: UserVO) => {
 };
 /** 跳转角色分配 */
 const handleAuthRole = (row: UserVO) => {
-  const userId = row.userId;
+  const userId = row.id;
   router.push('/system/user-auth/role/' + userId);
 };
 
@@ -542,20 +538,20 @@ const handleResetPwd = async (row: UserVO) => {
     })
   );
   if (!err && res) {
-    await api.resetUserPwd(row.userId, res.value);
+    await api.resetUserPwd(row.id, res.value);
     proxy?.$modal.msgSuccess('修改成功，新密码是：' + res.value);
   }
 };
 
 const handleUnlockLogin = async (row: UserVO) => {
-  const userId = row.userId || (row as any).id;
+  const userId = row.id || (row as any).id;
   await api.unlockLogin(userId);
   proxy?.$modal.msgSuccess('已清除登录锁定');
 };
 
 /** 选择条数  */
 const handleSelectionChange = (selection: UserVO[]) => {
-  ids.value = selection.map((item) => item.userId);
+  ids.value = selection.map((item) => item.id);
   single.value = selection.length != 1;
   multiple.value = !selection.length;
 };
@@ -625,7 +621,7 @@ const handleAdd = async () => {
 /** 修改按钮操作 */
 const handleUpdate = async (row?: UserForm) => {
   reset();
-  const userId = row?.userId || ids.value[0];
+  const userId = row?.id || ids.value[0];
   const { data } = await api.getUser(userId);
   dialog.visible = true;
   dialog.title = '修改用户';

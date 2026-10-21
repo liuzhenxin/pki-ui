@@ -56,7 +56,7 @@
       </el-table-column>
       <el-table-column label="操作" align="center" width="130" fixed="right">
         <template #default="{ row }">
-          <el-tooltip :content="isExecuteType(row.businessType) ? '执行' : '签发'" placement="top">
+          <el-tooltip :content="isReissueRevocationPending(row) ? '继续吊销旧证' : isExecuteType(row.businessType) ? '执行' : '签发'" placement="top">
             <el-button link type="primary" :icon="isExecuteType(row.businessType) ? 'VideoPlay' : 'Stamp'" @click="handleIssue(row)" />
           </el-tooltip>
           <el-tooltip content="详情" placement="top">
@@ -122,8 +122,7 @@
               <div class="section-title">签发参数</div>
               <el-alert v-if="dualCertInfo?.certMode === 'dual' && isPostQuantumDual" class="dual-cert-alert" type="info" :closable="false" show-icon>
                 <template #title>
-                  抗量子双证书{{ isCertUpdate ? '更新' : '签发' }}：ML-DSA 签名密钥由客户端生成并提交 CSR；ML-KEM 加密私钥由 KMC 永久托管，不支持
-                  USBKey
+                  抗量子双证书{{ dualIssueVerb }}：ML-DSA 签名密钥由客户端生成并提交 CSR；ML-KEM 加密私钥由 KMC 永久托管，不支持 USBKey
                 </template>
               </el-alert>
               <el-alert
@@ -134,9 +133,8 @@
                 show-icon
               >
                 <template #title>
-                  双证书{{ isCertUpdate ? '更新（换密钥）' : '签发' }}：签名模板「{{ dualCertInfo.signProfileName }}」+ 加密模板「{{
-                    dualCertInfo.encryptProfileName
-                  }}」 — 签名侧提交新 CSR，加密侧默认 KMC 换钥
+                  双证书{{ dualIssueVerb }}：签名模板「{{ dualCertInfo.signProfileName }}」+ 加密模板「{{ dualCertInfo.encryptProfileName }}」 —
+                  签名侧提交新 CSR，{{ dualEncHint }}
                 </template>
               </el-alert>
               <el-alert
@@ -146,7 +144,7 @@
                 :closable="false"
                 show-icon
               >
-                <template #title>双证书{{ isCertUpdate ? '更新' : '签发' }}异常：当前根证书算法不支持双证书。</template>
+                <template #title>双证书{{ dualIssueVerb }}异常：当前根证书算法不支持双证书。</template>
               </el-alert>
               <el-alert v-else-if="isRsaKmcEncryption" class="dual-cert-alert" type="success" :closable="false" show-icon>
                 <template #title>{{
@@ -239,15 +237,25 @@
                     </template>
                     <template v-else-if="ext.kind === 'keyUsage'">
                       <el-checkbox-group v-model="ext.usages" class="key-usage-checkbox-group">
-                        <el-checkbox v-for="usage in keyUsageOptions" :key="usage.value" :value="usage.value">
-                          {{ usage.label }}
+                        <el-checkbox
+                          v-for="usage in keyUsageOptions.filter((item) => ext.allowedUsages.includes(item.value))"
+                          :key="usage.value"
+                          :value="usage.value"
+                          :disabled="ext.requiredUsages.includes(usage.value)"
+                        >
+                          {{ usage.label }}{{ ext.requiredUsages.includes(usage.value) ? '（模板必选）' : '' }}
                         </el-checkbox>
                       </el-checkbox-group>
                     </template>
                     <template v-else-if="ext.kind === 'extendedKeyUsage'">
                       <el-checkbox-group v-model="ext.usages" class="key-usage-checkbox-group">
-                        <el-checkbox v-for="usage in extendedKeyUsageOptions" :key="usage.value" :value="usage.value">
-                          {{ usage.label }}
+                        <el-checkbox
+                          v-for="usage in extendedKeyUsageOptions.filter((item) => ext.allowedUsages.includes(item.value))"
+                          :key="usage.value"
+                          :value="usage.value"
+                          :disabled="ext.requiredUsages.includes(usage.value)"
+                        >
+                          {{ usage.label }}{{ ext.requiredUsages.includes(usage.value) ? '（模板必选）' : '' }}
                         </el-checkbox>
                       </el-checkbox-group>
                     </template>
@@ -422,7 +430,7 @@
         <el-descriptions-item label="证书主题" :span="2">{{ issueResult.subject || '-' }}</el-descriptions-item>
       </el-descriptions>
       <div v-if="issueResult.storageType === 'USB_KEY' || issueResult.encStorageType === 'USB_KEY'" class="renewal-result-storage">
-        <el-alert title="续期证书已写入 USBKey" type="success" show-icon :closable="false" />
+        <el-alert :title="`${issueResultLabel}证书已写入 USBKey`" type="success" show-icon :closable="false" />
         <el-descriptions :column="2" border size="small" class="mt-4">
           <template v-if="issueResult.storageType === 'USB_KEY'">
             <el-descriptions-item label="签名证书应用">{{ issueResultStorageInfo.application || '-' }}</el-descriptions-item>
@@ -437,7 +445,11 @@
       <el-alert
         v-if="issueResult.storageType === 'CLIENT' || issueResult.encStorageType === 'CLIENT'"
         class="renewal-result-storage"
-        title="续期证书已自动下载；原私钥仍由客户端持有。"
+        :title="
+          issueResultType === 'cert_renewal'
+            ? '续期证书已发起下载；原私钥仍由客户端持有。'
+            : `${issueResultLabel}证书已生成，可点击下载证书；对应私钥由客户端持有。`
+        "
         type="success"
         show-icon
         :closable="false"
@@ -445,7 +457,11 @@
       <el-alert
         v-if="issueResult.storageType === 'RA' || issueResult.encStorageType === 'RA'"
         class="renewal-result-storage"
-        :title="renewalRaDownloadStatus === 'success' ? '续期证书保持 RA 私钥托管，PKCS#12 已自动下载。' : '续期证书保持 RA 私钥托管。'"
+        :title="
+          issueResultType === 'cert_renewal' && renewalRaDownloadStatus === 'success'
+            ? '续期证书保持 RA 私钥托管，PKCS#12 已发起下载。'
+            : `${issueResultLabel}证书使用 RA 私钥托管。`
+        "
         :type="renewalRaDownloadStatus === 'error' ? 'warning' : 'success'"
         show-icon
         :closable="false"
@@ -516,6 +532,7 @@ import {
 import { downloadRaPkcs12 } from '@/api/ra/cert';
 import CertSubject, { typeMapping, sortSubjectItems } from '@/components/CertSubject/index.vue';
 import { parseJson } from '@/utils/json';
+import { resolveTemplateUsages } from '@/utils/raCertUsage';
 import SKFClient from '@/api/skf/skf_api';
 
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
@@ -540,6 +557,10 @@ const renewalPin = ref('');
 const renewalStep = ref('');
 const renewalPkcs12Password = ref('');
 const renewalPkcs12ConfirmPassword = ref('');
+const issueResultType = ref('cert_apply');
+const issueResultLabel = computed(
+  () => ({ cert_apply: '签发', cert_renewal: '续期', cert_update: '更新', cert_reissue: '补办' })[issueResultType.value] || '签发'
+);
 const renewalRaDownloadStatus = ref<'idle' | 'success' | 'error'>('idle');
 const renewalClientConfirmed = ref(false);
 const renewalCheckLoading = ref(false);
@@ -625,6 +646,9 @@ const isPostQuantumDual = computed(() => {
   return text.includes('ML-DSA') || text.includes('MLDSA') || text.includes('ML-KEM') || text.includes('MLKEM');
 });
 const isCertUpdate = computed(() => current.value.businessType === 'cert_update');
+const isCertReissue = computed(() => current.value.businessType === 'cert_reissue');
+const dualIssueVerb = computed(() => (isCertUpdate.value ? '更新（换密钥）' : isCertReissue.value ? '补办' : '签发'));
+const dualEncHint = computed(() => (isCertUpdate.value ? '加密侧默认 KMC 换钥' : '加密侧由 KMC 生成'));
 const updateConf = computed<any>(() => parseJson(String(current.value.conf || '{}')) || {});
 const isPostQuantumUpdate = computed(() => {
   const kind = String(updateConf.value.updateKind || '');
@@ -632,7 +656,8 @@ const isPostQuantumUpdate = computed(() => {
 });
 const supportsDualRoot = computed(() => {
   const rootName = (current.value.rootName || '').toUpperCase();
-  return isPostQuantumDual.value || rootName.includes('SM2') || rootName.includes('ML-DSA') || rootName.includes('MLDSA');
+  const algorithm = String(parseJson(String(current.value.conf || '{}'))?.rootAlgorithm || '').toUpperCase();
+  return isPostQuantumDual.value || algorithm === 'SM2' || rootName.includes('SM2') || rootName.includes('ML-DSA') || rootName.includes('MLDSA');
 });
 const isRsaKmcEncryption = computed(() => {
   if (dualCertInfo.value?.certMode === 'dual') {
@@ -831,7 +856,30 @@ async function handleExecute(row: RaCertIssue) {
   }
 }
 
+function isReissueRevocationPending(row: RaCertIssue) {
+  return row.businessType === 'cert_reissue' && row.issueStatusName === '新证已生成，待吊销旧证';
+}
+
 async function handleIssue(row: RaCertIssue) {
+  if (isReissueRevocationPending(row)) {
+    try {
+      await proxy?.$modal.confirm('新证书已生成。本次只继续吊销旧证书，不会再次签发；完成后可从证书列表下载新证书。');
+    } catch {
+      return;
+    }
+    loading.value = true;
+    try {
+      const response = await issueRaCert('cert_reissue', row.businessId, {});
+      issueResultType.value = 'cert_reissue';
+      renewalRaDownloadStatus.value = 'idle';
+      issueResult.value = response.data || {};
+      issueResultOpen.value = true;
+      proxy?.$modal.msgSuccess('补办完成，旧证书已吊销');
+    } finally {
+      await getList();
+    }
+    return;
+  }
   if (isExecuteType(row.businessType)) {
     await handleExecute(row);
     return;
@@ -944,6 +992,7 @@ async function submitRenewal() {
     renewalStep.value = '续期证书分发处理完成，正在确认结果...';
     await confirmRaRenewalDistribution(renewalId, true, '续期证书已完成分发');
     renewalOpen.value = false;
+    issueResultType.value = 'cert_renewal';
     issueResult.value = result;
     issueResultOpen.value = true;
     const clientDownloaded = downloadRenewedClientCertificates(result);
@@ -1244,11 +1293,30 @@ function submitIssue() {
         }
       }
       issueStep.value = '证书签发成功，正在刷新待签发列表...';
+      issueResultType.value = current.value.businessType;
+      renewalRaDownloadStatus.value = 'idle';
       issueResult.value = res.data || {};
-      proxy?.$modal.msgSuccess(`签发成功，证书序列号：${res.data?.serialNumber || '-'}`);
+      const doneLabel = isCertReissue.value ? '补办' : isCertUpdate.value ? '更新' : '签发';
+      proxy?.$modal.msgSuccess(`${doneLabel}成功，证书序列号：${res.data?.serialNumber || '-'}`);
       issueOpen.value = false;
       issueResultOpen.value = true;
       await getList();
+    } catch (error) {
+      if (current.value.businessType === 'cert_reissue') {
+        try {
+          await getList();
+          const pending = rows.value.find(
+            (row) => row.businessType === 'cert_reissue' && String(row.businessId) === String(current.value.businessId)
+          );
+          if (pending && isReissueRevocationPending(pending)) {
+            current.value = pending;
+            issueOpen.value = false;
+          }
+        } catch {
+          // 刷新失败时保留表单，避免将未知签发状态当作已保存新证。
+        }
+      }
+      throw error;
     } finally {
       submitLoading.value = false;
       issueStep.value = '';
@@ -1404,6 +1472,7 @@ function buildIssueExtensionItems(extensions: any[]) {
         };
       }
       if (key === 'keyusage') {
+        const rule = resolveTemplateUsages(ext?.keyUsage || ext, normalizeKeyUsageValues);
         return {
           key: `${meta.oid || meta.description || 'keyUsage'}-${index}`,
           kind: 'keyUsage',
@@ -1412,10 +1481,12 @@ function buildIssueExtensionItems(extensions: any[]) {
           description: meta.description,
           critical: !!ext.critical,
           required: ext.inRequest === 'required' || !!ext.required,
-          usages: normalizeKeyUsageValues(ext?.keyUsage?.usages || ext?.usages || [])
+          ...rule,
+          usages: [...rule.requiredUsages]
         };
       }
       if (key === 'extendedkeyusage') {
+        const rule = resolveTemplateUsages(ext?.extendedKeyUsage || ext, normalizeExtendedKeyUsageValues);
         return {
           key: `${meta.oid || meta.description || 'extendedKeyUsage'}-${index}`,
           kind: 'extendedKeyUsage',
@@ -1424,7 +1495,8 @@ function buildIssueExtensionItems(extensions: any[]) {
           description: meta.description,
           critical: !!ext.critical,
           required: ext.inRequest === 'required' || !!ext.required,
-          usages: normalizeExtendedKeyUsageValues(ext?.extendedKeyUsage?.usages || ext?.usages || [])
+          ...rule,
+          usages: [...rule.requiredUsages]
         };
       }
       return {
@@ -1524,7 +1596,9 @@ function buildIssueExtensionsPayload() {
         };
       }
       if (ext.kind === 'keyUsage') {
-        const usages = normalizeKeyUsageValues(ext.usages || []);
+        const usages = normalizeKeyUsageValues([...(ext.requiredUsages || []), ...(ext.usages || [])]).filter((usage) =>
+          ext.allowedUsages.includes(usage)
+        );
         if (!usages.length) return null;
         return {
           type: { oid: ext.oid, description: ext.description },
@@ -1533,7 +1607,9 @@ function buildIssueExtensionsPayload() {
         };
       }
       if (ext.kind === 'extendedKeyUsage') {
-        const usages = normalizeExtendedKeyUsageValues(ext.usages || []);
+        const usages = normalizeExtendedKeyUsageValues([...(ext.requiredUsages || []), ...(ext.usages || [])]).filter((usage) =>
+          ext.allowedUsages.includes(usage)
+        );
         if (!usages.length) return null;
         return {
           type: { oid: ext.oid, description: ext.description },
@@ -1566,12 +1642,17 @@ function validateIssueExtensions() {
         return false;
       }
     } else if (ext.kind === 'keyUsage') {
-      if (!normalizeKeyUsageValues(ext.usages || []).length) {
+      if (
+        !normalizeKeyUsageValues([...(ext.requiredUsages || []), ...(ext.usages || [])]).filter((usage) => ext.allowedUsages.includes(usage)).length
+      ) {
         ElMessage.warning(`请选择${ext.label}`);
         return false;
       }
     } else if (ext.kind === 'extendedKeyUsage') {
-      if (!normalizeExtendedKeyUsageValues(ext.usages || []).length) {
+      if (
+        !normalizeExtendedKeyUsageValues([...(ext.requiredUsages || []), ...(ext.usages || [])]).filter((usage) => ext.allowedUsages.includes(usage))
+          .length
+      ) {
         ElMessage.warning(`请选择${ext.label}`);
         return false;
       }

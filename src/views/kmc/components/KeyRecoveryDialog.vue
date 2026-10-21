@@ -1029,7 +1029,7 @@ const handleExecuteRecovery = async () => {
       if (Array.isArray(containers) && containers.includes(form.containerName)) {
         form.containerName = uniqueUsbContainerName(containers);
       }
-      const csr = await withTimeout(
+      const csr = await withTimeout<{ pem: string }>(
         skf.createPKCS10(
           form.providerAlias,
           form.deviceName,

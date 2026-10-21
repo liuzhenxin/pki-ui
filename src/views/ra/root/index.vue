@@ -233,9 +233,8 @@
             <el-form-item label="证书名称" prop="name">
               <el-input v-model="importForm.name" placeholder="请输入证书名称" />
             </el-form-item>
-            <el-form-item label="CSR生成">
-              <el-button type="primary" @click="handleGenerateCSR">生成 CSR</el-button>
-              <el-input v-if="importForm.csr" v-model="importForm.csr" type="textarea" :rows="4" readonly style="margin-top: 10px" />
+            <el-form-item label="CSR来源">
+              <span>请在 CA 或密钥设备中生成真实 CSR，完成签发后上传证书。</span>
             </el-form-item>
             <el-form-item label="上传证书" prop="certFile">
               <el-upload
@@ -365,7 +364,7 @@ const profileDetailDialog = reactive({
 });
 
 const queryForm = ref<FormInstance>();
-const expandedRootIds = ref<Array<string | number>>([]);
+const expandedRootIds = ref<string[]>([]);
 
 const data = reactive({
   queryParams: {
@@ -442,7 +441,7 @@ const parentCas = ref([]);
 const subCaProfiles = ref([]);
 const subAvailableAlgos = ref(['RSA2048', 'SM2']);
 
-const onlineSubRules = {
+const onlineSubRules: ElFormRules = {
   parentCaId: [{ required: true, message: '请选择父级CA', trigger: 'change' }],
   profileId: [{ required: true, message: '请选择证书模板', trigger: 'change' }],
   validity: [
@@ -451,7 +450,7 @@ const onlineSubRules = {
   ]
 };
 
-const selfRules = {
+const selfRules: ElFormRules = {
   name: [{ required: true, message: '请输入证书名称', trigger: 'blur' }],
   signerId: [{ required: true, message: '请选择签名者', trigger: 'change' }],
   profileId: [{ required: true, message: '请选择证书模板', trigger: 'change' }],
@@ -977,14 +976,6 @@ function cancel() {
   reset();
 }
 
-/** 生成CSR */
-function handleGenerateCSR() {
-  // 这里应该调用后端API生成CSR
-  // 模拟生成
-  importForm.value.csr = '-----BEGIN CERTIFICATE REQUEST-----\nMIIC...';
-  ElMessage.success('CSR 生成成功');
-}
-
 /** 文件上传变更 */
 const handleFileChange: UploadProps['onChange'] = (file) => {
   importForm.value.certFile = file.raw as File;
@@ -1170,7 +1161,7 @@ async function handleDisable(row: any) {
 /** 吊销按钮操作 */
 async function handleRevoke(row: any) {
   try {
-    const { value: reason } = await proxy?.$modal.prompt('请输入吊销原因', '吊销根证书', {
+    const { value: reason } = await ElMessageBox.prompt('请输入吊销原因', '吊销根证书', {
       confirmButtonText: '确定',
       cancelButtonText: '取消',
       inputPlaceholder: '请输入吊销原因 (例如: keyCompromise, superseded)',

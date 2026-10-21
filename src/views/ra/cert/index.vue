@@ -50,7 +50,7 @@
           <el-tooltip content="查看详情" placement="top">
             <el-button link type="primary" icon="View" @click="handleDetail(row)" />
           </el-tooltip>
-          <el-tooltip v-if="row.keySource === 'KMC'" content="RSA密钥恢复" placement="top">
+          <el-tooltip v-if="row.keySource === 'KMC'" content="密钥恢复" placement="top">
             <el-button link type="primary" icon="Key" @click="openRecover(row)" />
           </el-tooltip>
           <el-dropdown trigger="click" @command="(format: string) => handleDownload(format, row)">
@@ -132,12 +132,18 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="recoverOpen" title="RSA密钥恢复" width="560px" append-to-body @closed="resetRecoverForm">
+    <el-dialog
+      v-model="recoverOpen"
+      :title="recoverAlgorithm === 'SM2' ? 'SM2密钥恢复' : 'RSA密钥恢复'"
+      width="560px"
+      append-to-body
+      @closed="resetRecoverForm"
+    >
       <el-alert
         type="info"
         :closable="false"
         show-icon
-        title="恢复会从KMC取出原RSA加密私钥。USBKey写入SKF导入信封；签发到文件则下载PKCS#12，序列号与有效期不变。"
+        :title="`恢复会通过 CMP 从 CA 取回原 ${recoverAlgorithm} 加密私钥。USB Key 写入导入信封；签发到文件则下载 PKCS#12。序列号与有效期不变。`"
       />
       <el-form ref="recoverFormRef" :model="recoverForm" :rules="recoverRules" label-width="110px" class="pkcs12-form">
         <el-form-item label="证书序列号">
@@ -203,6 +209,7 @@ import {
   RaKmcKeyStatus
 } from '@/api/ra/cert';
 import SKFClient from '@/api/skf/skf_api';
+import { certificateDownloadBlob } from '@/utils/raCertificateDownload';
 
 const rows = ref<RaCertSummary[]>([]);
 const loading = ref(false);
@@ -218,6 +225,7 @@ const pkcs12FormRef = ref<FormInstance>();
 const pkcs12Form = reactive({ password: '', confirmPassword: '' });
 const kmcKeyStatus = ref<RaKmcKeyStatus | null>(null);
 const recoverOpen = ref(false);
+const recoverAlgorithm = ref<'RSA' | 'SM2'>('RSA');
 const recoverLoading = ref(false);
 const recoveringCert = ref<RaCertSummary>();
 const recoverFormRef = ref<FormInstance>();
@@ -412,7 +420,7 @@ async function handleDownload(format: string, row: RaCertSummary) {
       cer: 'application/pkix-cert',
       p7b: 'application/x-pkcs7-certificates'
     };
-    saveBlob(toBlob(response, mimeTypes[format]), `${row.serialNumber}.${format}`);
+    saveBlob(await certificateDownloadBlob(response, mimeTypes[format]), `${row.serialNumber}.${format}`);
   } catch {
     ElMessage.error('证书下载失败');
   }
@@ -423,7 +431,7 @@ async function submitPkcs12Export() {
   pkcs12Loading.value = true;
   try {
     const response = await downloadRaPkcs12(selectedCert.value.id, pkcs12Form.password);
-    saveBlob(toBlob(response, 'application/x-pkcs12'), `${selectedCert.value.serialNumber}.p12`);
+    saveBlob(await certificateDownloadBlob(response, 'application/x-pkcs12'), `${selectedCert.value.serialNumber}.p12`);
     pkcs12Open.value = false;
     ElMessage.success('PKCS#12 下载已开始');
   } catch {
@@ -431,11 +439,6 @@ async function submitPkcs12Export() {
   } finally {
     pkcs12Loading.value = false;
   }
-}
-
-function toBlob(response: any, mimeType: string) {
-  const value = response?.data instanceof Blob ? response.data : response;
-  return value instanceof Blob ? value : new Blob([value], { type: mimeType });
 }
 
 function saveBlob(blob: Blob, fileName: string) {
@@ -477,12 +480,15 @@ function pemToBase64(pem: string) {
 }
 
 async function openRecover(row: RaCertSummary) {
-  // 非 RSA（SM2 等）KMC 加密证书：RSA 密钥协议无法恢复，引导走 KMP
+  recoverAlgorithm.value = 'RSA';
   if (String(row.keySource || '').toUpperCase() === 'KMC') {
     try {
       const status = unwrapData<RaKmcKeyStatus>(await queryRaKmcKeyStatus(row.id));
-      if (status?.algorithm && status.algorithm.toUpperCase() !== 'RSA') {
-        ElMessage.warning(`该证书为 ${status.algorithm} 加密证书，密钥恢复请到 KMC/CA 侧执行 KMP 密钥恢复`);
+      const algorithm = String(status?.algorithm || '').toUpperCase();
+      if (algorithm === 'SM2' || algorithm.includes('1.2.156.10197.1.301')) {
+        recoverAlgorithm.value = 'SM2';
+      } else if (algorithm && algorithm !== 'RSA') {
+        ElMessage.warning(`该证书为 ${status?.algorithm} 加密证书，密钥恢复仅支持 RSA 与 SM2`);
         return;
       }
     } catch {
@@ -574,8 +580,9 @@ async function submitRecover() {
       }
       const bytes = Uint8Array.from(atob(res.fileBase64), (char) => char.charCodeAt(0));
       saveBlob(new Blob([bytes], { type: 'application/x-pkcs12' }), res.fileName || `${recoveringCert.value.serialNumber}.p12`);
-      ElMessage.success('RSA密钥已恢复并开始下载PKCS#12');
+      ElMessage.success(`${recoverAlgorithm.value}密钥已恢复并开始下载PKCS#12`);
     } else {
+      const sm2 = recoverAlgorithm.value === 'SM2';
       const skf = await getSkfClient();
       const appPath = `${recoverForm.provider}/${recoverForm.device}/${recoverForm.appName}`;
       await skf.checkPIN(appPath, recoverForm.pin);
@@ -584,8 +591,8 @@ async function submitRecover() {
         recoverForm.device,
         recoverForm.appName,
         recoveringCert.value.subject,
-        'RSA',
-        2048,
+        sm2 ? 'SM2' : 'RSA',
+        sm2 ? 256 : 2048,
         recoverForm.containerName
       );
       const wrappingCsrBase64 = pemToBase64(wrapP10Res?.pem || wrapP10Res?.csr || wrapP10Res);
@@ -595,27 +602,27 @@ async function submitRecover() {
           wrappingCsrBase64
         })
       );
-      if (!res?.encryptionPrivateKey || !res?.wrapKey) {
-        throw new Error('CA未返回可写入 USBKey 的 RSA 加密私钥材料');
+      if (!res?.encryptionPrivateKey || (!sm2 && !res?.wrapKey)) {
+        throw new Error(`CA未返回可写入 USBKey 的 ${sm2 ? 'SM2' : 'RSA'} 加密私钥材料`);
       }
       await skf.importKeyPair(
         recoverForm.provider,
         recoverForm.device,
         recoverForm.appName,
         recoverForm.containerName,
-        'RSA',
+        sm2 ? 'SM2' : 'RSA',
         res.encryptionPrivateKey,
-        res.wrapKey,
-        res.symmetricMode || 'ECB'
+        sm2 ? '' : res.wrapKey,
+        sm2 ? 'ECB' : res.symmetricMode || 'ECB'
       );
       if (res.cert) {
         await skf.importCertificate(recoverForm.provider, recoverForm.device, recoverForm.appName, recoverForm.containerName, false, res.cert);
       }
-      ElMessage.success('RSA密钥已恢复并写入 USB Key');
+      ElMessage.success(`${sm2 ? 'SM2' : 'RSA'}密钥已恢复并写入 USB Key`);
     }
     recoverOpen.value = false;
   } catch (error: any) {
-    ElMessage.error('RSA密钥恢复失败: ' + (error?.message || error?.msg || '未知错误'));
+    ElMessage.error(`${recoverAlgorithm.value === 'SM2' ? 'SM2' : 'RSA'}密钥恢复失败: ` + (error?.message || error?.msg || '未知错误'));
   } finally {
     recoverLoading.value = false;
   }

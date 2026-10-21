@@ -1,6 +1,8 @@
 # KDS 管理后台模块
 
 > 由 Phase 12 交付。所有请求经平台 BFF `/platform/kds/**`，前端不接触私钥、PIN、Token 或签名材料。
+> 操作手册：`liuzx-kds/doc/UI-OPERATOR-MANUAL.md`。
+> 服务接口：`liuzx-kds/doc/API.md`。
 > 契约见 `liuzx-kds/doc/contracts/KDS-BFF-CONTRACT.md`。
 
 ## 页面

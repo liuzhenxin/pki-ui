@@ -13,6 +13,10 @@ export interface AuditVerifyResult {
   tenantId?: string | number;
   checkedCount?: number;
   brokenCount?: number;
+  legacyCheckedCount?: number;
+  legacyBrokenCount?: number;
+  v2CheckedCount?: number;
+  v2BrokenCount?: number;
   valid?: boolean;
   firstBrokenId?: number;
   firstBrokenExpectedHash?: string;

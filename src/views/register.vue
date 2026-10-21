@@ -79,8 +79,8 @@
 </template>
 
 <script setup lang="ts">
-import { getCodeImg, register } from '@/api/login';
-import { RegisterForm } from '@/api/types';
+import { getCodeImg, register, getTenantList } from '@/api/login';
+import { RegisterForm, TenantVO } from '@/api/types';
 import { to } from 'await-to-js';
 import { useI18n } from 'vue-i18n';
 
@@ -157,7 +157,6 @@ const handleRegister = () => {
       if (!err) {
         const username = registerForm.value.username;
         await ElMessageBox.alert('<span style="color: red; ">' + t('register.registerSuccess', { username }) + '</font>', '系统提示', {
-          app: undefined,
           dangerouslyUseHTMLString: true,
           type: 'success'
         });
@@ -173,13 +172,10 @@ const handleRegister = () => {
 };
 
 const getCode = async () => {
-  const res = await getCodeImg();
-  const { data } = res;
-  captchaEnabled.value = data.captchaEnabled === undefined ? true : data.captchaEnabled;
-  if (captchaEnabled.value) {
-    codeUrl.value = 'data:image/gif;base64,' + data.img;
-    registerForm.value.uuid = data.uuid;
-  }
+  const uuid = crypto.randomUUID();
+  const res = await getCodeImg(uuid);
+  codeUrl.value = res.data;
+  registerForm.value.uuid = uuid;
 };
 
 const initTenantList = async () => {

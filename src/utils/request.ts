@@ -109,7 +109,7 @@ service.interceptors.request.use(
     }
     // 对应国际化资源文件后缀
     config.headers['Content-Language'] = getLanguage();
-    const language = getLanguage();
+    const language: string = getLanguage();
     if (language === 'zh_CN' || language === 'zh-CN') {
       config.headers['Language'] = 'zh-CN';
     } else if (language === 'en_US' || language === 'en-US') {
@@ -227,6 +227,10 @@ service.interceptors.response.use(
     // 二进制数据则直接返回
     if (res.request.responseType === 'blob' || res.request.responseType === 'arraybuffer') {
       return res.data;
+    }
+    // KDS 信封使用 9000 表示成功，不能按平台 code===200 拦截。
+    if (String(res.config?.url || '').includes('/platform/kds/')) {
+      return Promise.resolve(res.data);
     }
     if (res.data.code === 'Unauthorized' || res.data.code === 'Bad credentials' || res.data.code === 'oauth2_token_error') {
       code = 401;

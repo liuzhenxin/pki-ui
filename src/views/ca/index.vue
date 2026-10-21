@@ -613,7 +613,7 @@ const fetchSystemInfo = async () => {
   }
   try {
     const res = await getInitStatus();
-    const data = res?.data || {};
+    const data = res.data;
     systemInfo.profileCount = data.profileCount || 0;
     systemInfo.rootCount = data.rootCount || 0;
     systemInfo.signerCount = data.signerCount || 0;
@@ -832,7 +832,7 @@ const updateAlgoDistribution = () => {
   }, {});
   algoDistribution.value = Object.entries(counts).map(([name, value]) => ({
     name,
-    value,
+    value: Number(value),
     itemStyle: { color: colors[name] || colors['其他'] }
   }));
 };

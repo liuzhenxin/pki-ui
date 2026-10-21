@@ -201,7 +201,7 @@ const single = ref(true);
 const multiple = ref(true);
 const total = ref(0);
 const title = ref('');
-const dateRange = ref<[Date, Date]>();
+const dateRange = ref<Array<Date | string>>();
 const isDataLoaded = ref(false);
 const KMC_BIZ_DEPT_ID = 301;
 const KMC_OPERATOR_ROLE_ID = '304';
@@ -323,7 +323,7 @@ function handleStatusChange(row: any, newStatus: number) {
   proxy?.$modal
     .confirm('确认要"' + text + '" "' + row.username + '"用户吗?')
     .then(function () {
-      return changeStatus(row.id, newStatus);
+      return changeStatus(row.id, String(newStatus));
     })
     .then(() => {
       proxy?.$modal.msgSuccess(text + '成功');
@@ -334,14 +334,13 @@ function handleStatusChange(row: any, newStatus: number) {
 }
 
 function handleResetPwd(row: any) {
-  proxy
-    ?.$prompt('请输入"' + row.username + '"的新密码', '提示', {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      closeOnClickModal: false,
-      inputPattern: /^.{6,30}$/,
-      inputErrorMessage: '用户密码长度必须介于 6 和 30 之间'
-    })
+  ElMessageBox.prompt('请输入"' + row.username + '"的新密码', '提示', {
+    confirmButtonText: '确定',
+    cancelButtonText: '取消',
+    closeOnClickModal: false,
+    inputPattern: /^.{6,30}$/,
+    inputErrorMessage: '用户密码长度必须介于 6 和 30 之间'
+  })
     .then(({ value }) => {
       resetUserPwd(row.id, value).then(() => {
         proxy?.$modal.msgSuccess('修改成功，新密码是：' + value);
@@ -415,7 +414,7 @@ function handleUpdate(row: any) {
 }
 
 function submitForm() {
-  proxy?.$refs['userRef'].validate(async (valid: any) => {
+  (proxy?.$refs['userRef'] as ElFormInstance | undefined)?.validate(async (valid: any) => {
     if (!valid) {
       return;
     }
@@ -471,7 +470,7 @@ const readFileContent = async (file: File): Promise<string | null> => {
         }
 
         try {
-          const derBuffer = forge.util.createBuffer(content, 'binary');
+          const derBuffer = forge.util.createBuffer(content, 'raw');
           const asn1 = forge.asn1.fromDer(derBuffer);
           const cert = forge.pki.certificateFromAsn1(asn1);
           resolve(forge.pki.certificateToPem(cert));

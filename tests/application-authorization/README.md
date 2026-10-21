@@ -9,3 +9,5 @@
 默认使用 Playwright 安装的 Chromium。已有本机 Chrome 时可设置 `PLAYWRIGHT_CHROMIUM_EXECUTABLE` 指向其可执行文件。输出位于 `/tmp/authz-p6-ui-browser-results`；移动端截图 `/tmp/authz-p6-ui-mobile.png`。不访问预生产，不包含真实凭据。
 
 2026-10-12 本地结果：21项单元和12项浏览器测试通过，KMC/CA/OCSP在902文件固定快照构建通过。源码范围定向ESLint通过，全项目类型/lint门禁仍未通过；真实网关/后端/硬件联合验收未完成。公共平台候选4.2.11-authz.1未远程发布，P6完整后端验证因Docker不响应而待恢复；不能作为产品发布许可。
+
+发布检查（2026-10-15）：先执行目标产品构建生成 auto-import/components 声明，再执行 `npm run typecheck:kmc`。该配置沿用原 KMC 发布入口及其传递共享依赖范围，不等于整个多产品仓库检查。原186条诊断已修复至0；新增6项接口/环境检查测试，总计27项单元和16项浏览器组件测试通过。完整仓库 `vue-tsc --noEmit` 的其他产品诊断单独记录，不据此宣称全仓通过。

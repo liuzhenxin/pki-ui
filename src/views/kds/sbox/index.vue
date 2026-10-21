@@ -1,13 +1,14 @@
 <template>
-  <div class="kds-sbox">
-    <el-card v-loading="loading">
-      <template #header><span>S 盒版本管理</span></template>
-      <el-form inline>
+  <div class="app-container kds-page kds-sbox">
+    <KdsPageHeader title="S 盒版本管理" description="查看设备 S 盒版本历史，并在明确确认后执行激活或通道回滚。" />
+    <el-card v-loading="loading" shadow="hover" class="kds-panel">
+      <template #header><div class="kds-panel__header"><span>版本与通道</span></div></template>
+      <el-form inline class="kds-filter-form">
         <el-form-item label="设备序列号">
           <el-input v-model="deviceSn" placeholder="MMJ 设备序列号" style="width: 260px" />
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" @click="load">查询</el-button>
+          <el-button type="primary" icon="Search" :loading="loading" @click="load">查询</el-button>
         </el-form-item>
       </el-form>
       <el-alert v-if="error" type="error" :closable="false" show-icon :title="error" class="mb" />
@@ -62,6 +63,7 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { activateSBox, getChannelStatus, getSBoxHistory, rollbackChannel } from '@/api/kds/device';
 import { toKdsError } from '@/api/kds/client';
 import type { ChannelStatus, SBoxVersionView } from '@/types/kds';
+import KdsPageHeader from '@/views/kds/components/KdsPageHeader.vue';
 
 const deviceSn = ref('');
 const versions = ref<SBoxVersionView[]>([]);
@@ -142,9 +144,6 @@ async function onRollback(channelName: string) {
 }
 </script>
 <style scoped>
-.kds-sbox {
-  padding: 20px;
-}
 .mb {
   margin-bottom: 12px;
 }
@@ -156,3 +155,4 @@ async function onRollback(channelName: string) {
   margin-bottom: 8px;
 }
 </style>
+<style src="../styles/page.css"></style>

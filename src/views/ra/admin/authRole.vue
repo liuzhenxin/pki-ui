@@ -10,8 +10,8 @@
             </el-form-item>
           </el-col>
           <el-col :span="2.5">
-            <el-form-item label="登录账号" prop="userName">
-              <el-input v-model="form.userName" disabled />
+            <el-form-item label="登录账号" prop="username">
+              <el-input v-model="form.username" disabled />
             </el-form-item>
           </el-col>
         </el-row>
@@ -127,8 +127,7 @@ const roles = ref<RoleVO[]>([]);
 const rootOptions = ref<RaUserCertScopeRoot[]>([]);
 const activeRootId = ref<string | number | undefined>(undefined);
 const form = ref<Partial<UserForm>>({
-  nickName: undefined,
-  userName: '',
+  username: '',
   userId: undefined
 });
 
@@ -169,7 +168,7 @@ const close = () => {
     redirectedFrom: undefined,
     path: backPath
   };
-  proxy?.$tab.closeOpenPage(obj);
+  proxy?.$tab.closeOpenPage({ path: obj.path || '/', query: obj.query });
 };
 /** 提交按钮 */
 const submitForm = async () => {

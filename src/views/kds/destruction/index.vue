@@ -1,7 +1,10 @@
 <template>
-  <div class="kds-destruction">
-    <el-card v-loading="loading">
-      <template #header><span>应急销毁</span></template>
+  <div class="app-container kds-page kds-destruction">
+    <KdsPageHeader title="应急销毁" description="仅在已确认的安全事件中执行不可逆销毁，并跟踪每个受控步骤的结果。">
+      <template #actions><el-button icon="Refresh" :loading="loading" @click="refresh">刷新状态</el-button></template>
+    </KdsPageHeader>
+    <el-card v-loading="loading" shadow="hover" class="kds-panel destruction-panel">
+      <template #header><div class="kds-panel__header"><span>销毁控制</span><el-tag type="danger" effect="dark">高风险操作</el-tag></div></template>
       <el-alert v-if="error" type="error" :closable="false" show-icon :title="error" class="mb" />
       <el-alert type="error" :closable="false" show-icon title="销毁不可逆：将失效 HSM 密钥与引用并进入只读安全态。仅在确认事件下执行。" class="mb" />
 
@@ -31,8 +34,7 @@
           <el-input v-model="confirmWord" placeholder="输入 DESTROY 以确认" />
         </el-form-item>
         <el-form-item>
-          <el-button v-hasPermi="['kds:destruction:execute']" type="danger" :loading="submitting" @click="execute"> 执行应急销毁 </el-button>
-          <el-button :loading="loading" @click="refresh">刷新状态</el-button>
+          <el-button v-hasPermi="['kds:destruction:execute']" type="danger" icon="Delete" :loading="submitting" @click="execute">执行应急销毁</el-button>
         </el-form-item>
       </el-form>
     </el-card>
@@ -44,6 +46,7 @@ import { ElMessage } from 'element-plus';
 import { executeDestruction, getDestructionStatus } from '@/api/kds/ops';
 import { toKdsError } from '@/api/kds/client';
 import type { DestructionStatus } from '@/types/kds';
+import KdsPageHeader from '@/views/kds/components/KdsPageHeader.vue';
 
 const status = ref<DestructionStatus>();
 const loading = ref(false);
@@ -87,9 +90,6 @@ async function execute() {
 onMounted(refresh);
 </script>
 <style scoped>
-.kds-destruction {
-  padding: 20px;
-}
 .mb {
   margin-bottom: 12px;
 }
@@ -100,3 +100,4 @@ onMounted(refresh);
   margin-top: 12px;
 }
 </style>
+<style src="../styles/page.css"></style>

@@ -22,7 +22,7 @@
       <right-toolbar v-model:showSearch="showSearch" @queryTable="getList" />
     </el-row>
 
-    <el-table v-loading="loading" :data="taskList" border>
+    <el-table v-loading="loading" :data="taskList" :empty-text="loading ? '正在加载审核任务' : '暂无待办任务'" border>
       <el-table-column label="任务编号" prop="id" align="center" width="160" />
       <el-table-column label="业务类型" prop="businessTypeName" min-width="120" />
       <el-table-column label="申请用户" prop="userName" min-width="150" show-overflow-tooltip>
@@ -105,7 +105,7 @@ import { FormInstance, FormRules } from 'element-plus';
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
 
 const taskList = ref<RaWorkflowTask[]>([]);
-const loading = ref(false);
+const loading = ref(true);
 const submitLoading = ref(false);
 const showSearch = ref(true);
 const total = ref(0);

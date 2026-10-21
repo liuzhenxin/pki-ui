@@ -532,8 +532,17 @@ const tenantBrandProfiles: Record<string, typeof defaultTenantBrand> = {
     logo: 'LIC',
     heading: 'License 授权系统',
     subtitle: '统一管理产品授权、许可状态与客户交付凭证'
+  },
+  '21': {
+    className: 'brand-panel--kds',
+    logo: 'KDS',
+    heading: '密钥分发与终端接入系统',
+    subtitle: '向已注册终端交付密钥与密码参数，并保留可追溯的分发记录'
   }
 };
+if (tenantBrandProfiles[initialTenantId]) {
+  loginTitle.value = tenantBrandProfiles[initialTenantId].heading;
+}
 if (initialTenantId === '7') loginTitle.value = '服务器密码机';
 if (initialTenantId === '9') loginTitle.value = '签名验签服务器';
 const hasTenantLoginBackground = computed(() => Boolean(tenantLoginBackgrounds[String(loginForm.value.tenantId || '')]));
@@ -840,6 +849,9 @@ const getTenantAppTitle = (tenantName: string, tenantId: string) => {
   }
   if (tenantId === '10') {
     return `${tenantName} (NAS网络存储管理系统)`;
+  }
+  if (tenantId === '21') {
+    return `${tenantName} (密钥分发与终端接入系统)`;
   }
   return `${tenantName} (CA)`;
 };
@@ -2663,6 +2675,43 @@ onBeforeUnmount(() => {
     right: 44px;
     bottom: 70px;
     opacity: 0.64;
+  }
+}
+
+.brand-panel--kds {
+  background:
+    radial-gradient(circle at 72% 24%, rgba(14, 165, 164, 0.18), transparent 31%), linear-gradient(135deg, #f4fffd 0%, #e7f6f4 48%, #d7e8f2 100%);
+
+  .brand-logo {
+    width: 40px;
+    flex: 0 0 40px;
+    color: #0f766e;
+    border-color: #14b8a6;
+    font-size: 10px;
+  }
+
+  .visual-base {
+    background: linear-gradient(145deg, #0f766e, #155e75);
+  }
+
+  .visual-key {
+    right: 42px;
+    bottom: 78px;
+    width: 118px;
+    background: linear-gradient(90deg, #5eead4, #0f766e);
+    transform: rotate(-16deg);
+    opacity: 1;
+  }
+
+  .visual-key::before {
+    border-color: #0f766e;
+  }
+
+  .visual-platform,
+  .visual-shield,
+  .visual-cert-a,
+  .visual-cert-b {
+    display: none;
   }
 }
 

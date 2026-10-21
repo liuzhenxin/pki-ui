@@ -1,7 +1,8 @@
 <template>
-  <div class="kds-restore">
-    <el-card v-loading="loading">
-      <template #header><span>数据恢复任务</span></template>
+  <div class="app-container kds-page kds-restore">
+    <KdsPageHeader title="数据恢复任务" description="在维护模式下从受控归档创建恢复任务，并跟踪导入、回滚和完成状态。" />
+    <el-card v-loading="loading" shadow="hover" class="kds-panel">
+      <template #header><div class="kds-panel__header"><span>创建恢复任务</span><el-tag type="warning" effect="plain">敏感操作</el-tag></div></template>
       <el-alert v-if="error" type="error" :closable="false" show-icon :title="error" class="mb" />
       <el-alert type="warning" :closable="false" show-icon title="恢复会在维护模式下执行全量导入；失败整体回滚，不可降级。" class="mb" />
 
@@ -22,7 +23,7 @@
           <el-input v-model="confirmWord" placeholder="输入 RESTORE 以确认" />
         </el-form-item>
         <el-form-item>
-          <el-button v-hasPermi="['kds:restore:manage']" type="primary" :loading="submitting" @click="submit"> 创建恢复任务 </el-button>
+          <el-button v-hasPermi="['kds:restore:manage']" type="primary" icon="Upload" :loading="submitting" @click="submit">创建恢复任务</el-button>
         </el-form-item>
       </el-form>
 
@@ -33,7 +34,7 @@
           <el-input v-model="taskId" placeholder="恢复任务 ID" style="width: 320px" />
         </el-form-item>
         <el-form-item>
-          <el-button :loading="loading" @click="pollStatus">查询状态</el-button>
+          <el-button icon="Search" :loading="loading" @click="pollStatus">查询状态</el-button>
         </el-form-item>
       </el-form>
 
@@ -60,6 +61,7 @@ import { ElMessage } from 'element-plus';
 import { createRestore, getRestoreStatus } from '@/api/kds/restore';
 import { toKdsError } from '@/api/kds/client';
 import type { RestoreStatus } from '@/types/kds';
+import KdsPageHeader from '@/views/kds/components/KdsPageHeader.vue';
 
 const form = reactive({ deviceSn: '', backupRef: '', confirmationToken: '', idempotencyKey: '' });
 const confirmWord = ref('');
@@ -111,9 +113,6 @@ async function pollStatus() {
 }
 </script>
 <style scoped>
-.kds-restore {
-  padding: 20px;
-}
 .mb {
   margin-bottom: 12px;
 }
@@ -124,3 +123,4 @@ async function pollStatus() {
   max-width: 640px;
 }
 </style>
+<style src="../styles/page.css"></style>

@@ -78,6 +78,9 @@ const getTenantAppTitle = (tenantName: string, tenantId: string, longName = fals
   }
   if (tenantId === '7') return `${tenantName} (${longName ? '服务器密码机' : 'HSM'})`;
   if (tenantId === '9') return `${tenantName} (${longName ? '签名验签服务器' : 'SVS'})`;
+  if (tenantId === '21') {
+    return `${tenantName} (${longName ? '密钥分发与终端接入系统' : 'KDS'})`;
+  }
   return `${tenantName} (CA)`;
 };
 
@@ -100,12 +103,12 @@ const syncTenantContext = async () => {
 };
 
 const ensureTenantBoundary = async (path: string) => {
+  // HSM 初始化由独立状态接口管理，平台租户状态不决定设备就绪。
+  if (String(getCurrentTenantId()) === '7') return '';
   if (String(getCurrentTenantId()) === '2') {
     try { return kmsInitializationRedirect((await getKmsInitialization()).locked, path); }
     catch { return path === '/kms/init' ? '' : '/kms/init'; }
   }
-  // HSM 初始化由独立状态接口管理，平台租户状态不决定设备就绪。
-  if (String(getCurrentTenantId()) === '7') return '';
   if (getCurrentTenantId() === '9') {
     const state = await getSvsInitialization();
     if (!state.locked && path !== '/svs/init') return '/svs/init';

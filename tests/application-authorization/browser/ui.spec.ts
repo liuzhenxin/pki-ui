@@ -195,3 +195,35 @@ test('certificate selection is cleared when binding dialog is reopened', async (
   await expect(dialog.getByRole('button', { name: '确认', exact: true })).toBeDisabled();
   expect(calls.writes).toEqual([]);
 });
+
+test('KMC auditor entry uses governed user management in ENFORCE', async ({ page }) => {
+  const calls = await fixture(page);
+  await page.goto('/?surface=kmc-audit');
+  await expect(page.getByText('FixtureUser', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '新增用户', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '新增审计员', exact: true })).toHaveCount(0);
+  expect(calls.writes).toEqual([]);
+});
+test('KMC auditor entry closes when authorization context fails', async ({ page }) => {
+  const calls = await fixture(page, { failContext: true });
+  await page.goto('/?surface=kmc-audit');
+  await expect(page.getByText('无法确认当前管理权限，操作已关闭')).toBeVisible();
+  await expect(page.getByRole('button', { name: '新增审计员', exact: true })).toHaveCount(0);
+  expect(calls.writes).toEqual([]);
+});
+
+test('CA auditor entry uses governed user management in ENFORCE', async ({ page }) => {
+  const calls = await fixture(page);
+  await page.goto('/?surface=ca-audit');
+  await expect(page.getByText('FixtureUser', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '新增用户', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '新增审计员', exact: true })).toHaveCount(0);
+  expect(calls.writes).toEqual([]);
+});
+test('CA auditor entry closes when authorization context fails', async ({ page }) => {
+  const calls = await fixture(page, { failContext: true });
+  await page.goto('/?surface=ca-audit');
+  await expect(page.getByText('无法确认当前管理权限，操作已关闭')).toBeVisible();
+  await expect(page.getByRole('button', { name: '新增审计员', exact: true })).toHaveCount(0);
+  expect(calls.writes).toEqual([]);
+});

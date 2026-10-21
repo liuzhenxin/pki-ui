@@ -65,10 +65,19 @@
           <right-toolbar v-model:showSearch="showSearch" @queryTable="getList" :columns="columns"></right-toolbar>
         </el-row>
 
-        <el-table v-loading="loading" :data="userList" @selection-change="handleSelectionChange">
+        <el-table v-loading="loading" :data="userList" border @selection-change="handleSelectionChange">
           <el-table-column type="selection" width="50" align="center" />
           <el-table-column label="用户编号" align="center" key="id" prop="id" v-if="columns[0].visible" />
-          <el-table-column label="用户名称" align="center" key="username" prop="username" v-if="columns[1].visible" :show-overflow-tooltip="true" />
+          <el-table-column
+            label="用户名称"
+            align="center"
+            key="username"
+            prop="username"
+            v-if="columns[1].visible"
+            width="220"
+            :resizable="true"
+            :show-overflow-tooltip="true"
+          />
           <el-table-column label="邮箱" align="center" key="mail" prop="mail" v-if="columns[2].visible" :show-overflow-tooltip="true" />
           <el-table-column label="手机号码" align="center" key="mobile" prop="mobile" v-if="columns[3].visible" width="120" />
           <el-table-column label="状态" align="center" key="status" v-if="columns[4].visible">
@@ -340,7 +349,7 @@ import {
 } from '@/api/ra/adminUser';
 import { getToken } from '@/utils/auth';
 import { UserForm, UserQuery, UserVO } from '@/api/system/user/types';
-import { FormInstance, FormRules } from 'element-plus';
+import { ElMessageBox, FormInstance, FormRules } from 'element-plus';
 import X509Cert from '@/components/X509Cert/index.vue';
 import { listDeptSelectTree } from '@/api/ra/dept';
 import { RaDeptTreeOption } from '@/api/ra/dept/types';
@@ -360,7 +369,7 @@ const single = ref(true);
 const multiple = ref(true);
 const total = ref(0);
 const title = ref('');
-const dateRange = ref<[Date, Date]>();
+const dateRange = ref<Array<Date | string>>();
 const initPassword = ref<string | undefined>(undefined);
 const isDataLoaded = ref(false);
 const raBizRoleOptions = [
@@ -444,7 +453,7 @@ const upload = reactive({
 });
 
 const columns = ref([
-  { key: 0, label: `用户编号`, visible: true },
+  { key: 0, label: `用户编号`, visible: false },
   { key: 1, label: `用户名称`, visible: true },
   { key: 2, label: `邮箱`, visible: true },
   { key: 3, label: `手机号码`, visible: true },
@@ -555,7 +564,7 @@ function handleCertRootChange() {
 }
 
 async function loadDeptOptions() {
-  const res = await listDeptSelectTree({});
+  const res = await listDeptSelectTree({ pageNum: 1, pageSize: 1000 });
   deptOptions.value = normalizeDeptTree((res.data || []) as RaDeptTreeOption[]);
 }
 
@@ -663,7 +672,7 @@ function handleStatusChange(row: any, newStatus: number) {
   proxy?.$modal
     .confirm('确认要"' + text + '" "' + row.username + '"用户吗?')
     .then(function () {
-      return changeStatus(row.id, newStatus);
+      return changeStatus(row.id, String(newStatus));
     })
     .then(() => {
       proxy?.$modal.msgSuccess(text + '成功');
@@ -689,17 +698,17 @@ function handleCommand(command: string, row: any) {
 
 /** 重置密码按钮操作 */
 function handleResetPwd(row: any) {
-  proxy
-    ?.$prompt('请输入"' + row.username + '"的新密码', '提示', {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      closeOnClickModal: false,
-      inputPattern: /^.{6,30}$/,
-      inputErrorMessage: '用户密码长度必须介于 6 和 30 之间'
-    })
+  ElMessageBox.prompt('请输入"' + row.username + '"的新密码', '提示', {
+    confirmButtonText: '确定',
+    cancelButtonText: '取消',
+    closeOnClickModal: false,
+    inputType: 'password',
+    inputPattern: /^.{6,30}$/,
+    inputErrorMessage: '用户密码长度必须介于 6 和 30 之间'
+  })
     .then(({ value }) => {
-      resetUserPwd(row.id, value).then(() => {
-        proxy?.$modal.msgSuccess('修改成功，新密码是：' + value);
+      return resetUserPwd(row.id, value).then(() => {
+        proxy?.$modal.msgSuccess('密码重置成功');
       });
     })
     .catch(() => {});
@@ -753,8 +762,8 @@ const handleFileUploadProgress = (event: any, file: any, fileList: any) => {
 const handleFileSuccess = (response: any, file: any, fileList: any) => {
   upload.open = false;
   upload.isUploading = false;
-  proxy?.$refs['uploadRef'].clearFiles();
-  proxy?.$alert("<div style='overflow: auto;overflow-x: hidden;max-height: 70vh;padding: 10px 20px 0;'>" + response.msg + '</div>', '导入结果', {
+  (proxy?.$refs['uploadRef'] as ElUploadInstance | undefined)?.clearFiles();
+  ElMessageBox.alert("<div style='overflow: auto;overflow-x: hidden;max-height: 70vh;padding: 10px 20px 0;'>" + response.msg + '</div>', '导入结果', {
     dangerouslyUseHTMLString: true
   });
   getList();
@@ -762,7 +771,7 @@ const handleFileSuccess = (response: any, file: any, fileList: any) => {
 
 /** 提交上传文件 */
 function submitFileForm() {
-  proxy?.$refs['uploadRef'].submit();
+  (proxy?.$refs['uploadRef'] as ElUploadInstance | undefined)?.submit();
 }
 
 /** 重置操作表单 */
@@ -823,7 +832,7 @@ async function handleUpdate(row: any) {
 
 /** 提交按钮 */
 function submitForm() {
-  proxy?.$refs['userRef'].validate(async (valid: any) => {
+  (proxy?.$refs['userRef'] as ElFormInstance | undefined)?.validate(async (valid: any) => {
     if (valid) {
       form.value.roleIds = (form.value.roleIds || []).map((roleId: any) => String(roleId));
       normalizeUserForm();

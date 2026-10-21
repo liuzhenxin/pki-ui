@@ -233,7 +233,7 @@ const statCards = computed(() => [
     unit: '个',
     desc: `正常策略占比 ${normalPoolPercent.value}%`,
     percent: normalPoolPercent.value,
-    progressStatus: lowPoolCount.value > 0 ? 'exception' : 'success',
+    progressStatus: lowPoolCount.value > 0 ? ('exception' as const) : ('success' as const),
     icon: TrendCharts,
     iconClass: 'bg-green'
   },
@@ -255,7 +255,7 @@ const statCards = computed(() => [
   }
 ]);
 
-const healthEvents = computed(() => [
+const healthEvents = computed<Array<{ label: string; type: ElTagType; content: string }>>(() => [
   {
     label: systemHealth.value.cryptoProviderStatus === 'SOFTWARE' ? '软件密钥' : 'HSM',
     type: systemHealth.value.hsmStatus === 'UP' ? 'success' : systemHealth.value.hsmStatus === 'DEGRADED' ? 'warning' : 'danger',

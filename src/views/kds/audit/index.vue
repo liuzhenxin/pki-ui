@@ -1,12 +1,13 @@
 <template>
-  <div class="kds-audit">
-    <el-card v-loading="loading">
-      <template #header><span>审计与证据</span></template>
+  <div class="app-container kds-page kds-audit">
+    <KdsPageHeader title="审计与证据" description="校验审计链完整性、导出受控审计记录并登记外部证据摘要。" />
+    <el-card v-loading="loading" shadow="hover" class="kds-panel">
+      <template #header><div class="kds-panel__header"><span>审计链与证据注册表</span></div></template>
       <el-alert v-if="error" type="error" :closable="false" show-icon :title="error" class="mb" />
 
       <div class="section">
         <div class="section-title">审计链</div>
-        <el-form inline>
+        <el-form inline class="kds-filter-form">
           <el-form-item label="开始时间">
             <el-date-picker v-model="range.start" type="datetime" placeholder="开始时间" />
           </el-form-item>
@@ -14,8 +15,8 @@
             <el-date-picker v-model="range.end" type="datetime" placeholder="结束时间" />
           </el-form-item>
           <el-form-item>
-            <el-button v-hasPermi="['kds:audit:export']" type="primary" :loading="loading" @click="onExport"> 导出审计 </el-button>
-            <el-button v-hasPermi="['kds:audit:view']" :loading="loading" @click="onVerify">校验审计链</el-button>
+            <el-button v-hasPermi="['kds:audit:export']" type="primary" icon="Download" :loading="loading" @click="onExport">导出审计</el-button>
+            <el-button v-hasPermi="['kds:audit:view']" icon="CircleCheck" :loading="loading" @click="onVerify">校验审计链</el-button>
           </el-form-item>
         </el-form>
         <el-descriptions v-if="verification" :column="3" border class="mt">
@@ -29,7 +30,7 @@
 
       <div class="section">
         <div class="section-title">证据注册表</div>
-        <el-form v-hasPermi="['kds:evidence:manage']" inline>
+        <el-form v-hasPermi="['kds:evidence:manage']" inline class="kds-filter-form">
           <el-form-item label="类型">
             <el-input v-model="evidence.type" placeholder="如 DRILL" style="width: 160px" />
           </el-form-item>
@@ -40,16 +41,16 @@
             <el-input v-model="evidence.environment" placeholder="如 onsite" style="width: 140px" />
           </el-form-item>
           <el-form-item>
-            <el-button type="primary" :loading="loading" @click="onRegister">登记证据</el-button>
+            <el-button type="primary" icon="Plus" :loading="loading" @click="onRegister">登记证据</el-button>
           </el-form-item>
         </el-form>
 
-        <el-form inline class="mt">
+        <el-form inline class="mt kds-filter-form">
           <el-form-item label="类型过滤">
             <el-input v-model="queryType" placeholder="留空为全部" style="width: 200px" />
           </el-form-item>
           <el-form-item>
-            <el-button :loading="loading" @click="onQuery">查询证据</el-button>
+            <el-button icon="Search" :loading="loading" @click="onQuery">查询证据</el-button>
           </el-form-item>
         </el-form>
 
@@ -75,6 +76,7 @@ import { exportAudit, verifyAudit } from '@/api/kds/audit';
 import { queryEvidence, registerEvidence } from '@/api/kds/ops';
 import { toKdsError } from '@/api/kds/client';
 import type { EvidenceSummary } from '@/types/kds';
+import KdsPageHeader from '@/views/kds/components/KdsPageHeader.vue';
 
 const range = reactive<{ start?: Date; end?: Date }>({});
 const evidence = reactive<{ type: string; reference: string; environment: string }>({
@@ -162,9 +164,6 @@ async function onQuery() {
 }
 </script>
 <style scoped>
-.kds-audit {
-  padding: 20px;
-}
 .mb {
   margin-bottom: 12px;
 }
@@ -176,3 +175,4 @@ async function onQuery() {
   margin-bottom: 8px;
 }
 </style>
+<style src="../styles/page.css"></style>
