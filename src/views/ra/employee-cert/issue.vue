@@ -160,7 +160,7 @@
             <el-table-column label="创建时间" width="166" align="center">
               <template #default="{ row }">{{ formatDate(row.createTime) }}</template>
             </el-table-column>
-            <el-table-column label="操作" width="180" align="center" fixed="right">
+            <el-table-column label="操作" width="260" align="center" fixed="right">
               <template #default="{ row }">
                 <el-button link type="primary" icon="View" @click="openTask(row)">详情</el-button>
                 <el-button
@@ -173,6 +173,16 @@
                 >
                   执行签发
                 </el-button>
+                <el-button
+                  v-if="row.successCount > 0"
+                  v-hasPermi="['ra:employee-cert:distribute']"
+                  link
+                  type="success"
+                  icon="Promotion"
+                  :loading="distributingTask"
+                  @click="distributeTask(row)"
+                  >批量分发</el-button
+                >
               </template>
             </el-table-column>
           </el-table>
@@ -200,11 +210,13 @@
         <el-table-column label="域账号" prop="domainAccount" width="120" />
         <el-table-column label="序列号" prop="serialNumber" min-width="170" show-overflow-tooltip />
         <el-table-column label="签发状态" prop="issueStatus" width="110" />
+        <el-table-column label="签发说明" prop="issueMessage" min-width="220" show-overflow-tooltip />
         <el-table-column label="分发状态" width="100" align="center">
           <template #default="{ row }">
             <el-tag :type="row.distributionStatus === 'SENT' ? 'success' : 'warning'" effect="plain">{{ row.distributionStatusName }}</el-tag>
           </template>
         </el-table-column>
+        <el-table-column label="分发说明" prop="distributionMessage" min-width="220" show-overflow-tooltip />
       </el-table>
     </el-drawer>
 
@@ -270,6 +282,7 @@
 
 <script setup name="RaEmployeeCertIssue" lang="ts">
 import FileSaver from 'file-saver';
+import { onUnmounted } from 'vue';
 import {
   createEmployeeCertTask,
   downloadEmployeeCertAccountTemplate,
@@ -280,6 +293,7 @@ import {
   EmployeeCertTaskDetail,
   getEmployeeCertTask,
   issueEmployeeCertTask,
+  distributeEmployeeCertTask,
   importEmployeeCertAccounts,
   listEmployeeEmailCertProfiles,
   listEmployeeCertKeys,
@@ -290,6 +304,9 @@ import {
 } from '@/api/ra/employeeCert';
 
 const activeTab = ref('create');
+const distributingTask = ref(false);
+let distributionTimer: ReturnType<typeof setTimeout> | undefined;
+let distributionVersion = 0;
 const selectionMode = ref<'ACCOUNT' | 'FILE'>('ACCOUNT');
 const form = reactive({
   accounts: '',
@@ -450,8 +467,39 @@ function taskStatusType(status?: string) {
 }
 
 async function openTask(row: EmployeeCertTask) {
+  distributionVersion++;
+  if (distributionTimer) clearTimeout(distributionTimer);
   taskDetail.value = unwrapData<EmployeeCertTaskDetail>(await getEmployeeCertTask(row.taskNo));
   taskOpen.value = true;
+  watchTaskDistribution(row.taskNo);
+}
+
+function watchTaskDistribution(taskNo: string) {
+  if (!(taskDetail.value.certs || []).some((row) => row.distributionStatus === 'SENDING')) return;
+  const version = distributionVersion;
+  distributionTimer = setTimeout(async () => {
+    if (version !== distributionVersion || !taskOpen.value) return;
+    try {
+      const latest = unwrapData<EmployeeCertTaskDetail>(await getEmployeeCertTask(taskNo));
+      if (version !== distributionVersion || !taskOpen.value) return;
+      taskDetail.value = latest;
+      watchTaskDistribution(taskNo);
+    } catch {
+      ElMessage.warning('分发进度查询失败，请重新打开任务详情');
+    }
+  }, 3000);
+}
+
+async function distributeTask(row: EmployeeCertTask) {
+  await ElMessageBox.confirm('分发该任务中已签发、未完成分发的证书？已受理的渠道不会重复发送。', '批量分发', { type: 'warning' });
+  distributingTask.value = true;
+  try {
+    await distributeEmployeeCertTask(row.taskNo);
+    ElMessage.info('分发任务已提交');
+    await openTask(row);
+  } finally {
+    distributingTask.value = false;
+  }
 }
 
 async function issueTask(row: EmployeeCertTask) {
@@ -522,6 +570,10 @@ function formatDate(value?: string) {
 
 onMounted(async () => {
   await Promise.all([loadTasks(), loadEmailProfiles()]);
+});
+onUnmounted(() => {
+  distributionVersion++;
+  if (distributionTimer) clearTimeout(distributionTimer);
 });
 </script>
 

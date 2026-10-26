@@ -86,9 +86,9 @@
 
           <el-row :gutter="10" class="mb8 toolbar-row">
             <el-col :span="1.5">
-              <el-button v-hasPermi="['ra:employee:sync']" type="primary" plain icon="Refresh" :loading="syncing" @click="handleSync"
-                >立即同步</el-button
-              >
+              <el-button v-hasPermi="['ra:employee:sync']" type="primary" plain icon="Refresh" :loading="syncing" @click="handleSync">{{
+                syncing ? '同步中' : '立即同步'
+              }}</el-button>
             </el-col>
             <el-col :span="1.5">
               <el-button v-hasPermi="['ra:employee:config']" plain icon="Setting" @click="openConfig">同步配置</el-button>
@@ -274,7 +274,7 @@
 </template>
 
 <script setup name="RaEmployee" lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 import {
   FawvwEmployee,
@@ -287,6 +287,7 @@ import {
   getFawvwEmployeeSummary,
   getFawvwOrgTree,
   getFawvwSyncConfig,
+  getFawvwSyncTask,
   pageFawvwEmployees,
   pageFawvwInvalidEmployees,
   pageFawvwSyncLogs,
@@ -298,6 +299,9 @@ const ALL_ORG_ID = '__ALL__';
 
 const loading = ref(false);
 const syncing = ref(false);
+let syncPollTimer: ReturnType<typeof setTimeout> | undefined;
+let syncPollVersion = 0;
+let pageDisposed = false;
 const savingConfig = ref(false);
 const logsLoading = ref(false);
 const showSearch = ref(true);
@@ -443,19 +447,61 @@ const openDetail = (row: FawvwEmployee) => {
   });
 };
 
-const handleSync = () => {
+const stopSyncPolling = () => {
+  syncPollVersion++;
+  if (syncPollTimer) clearTimeout(syncPollTimer);
+};
+
+const watchSyncTask = (taskNo: string) => {
+  stopSyncPolling();
+  const version = syncPollVersion;
   syncing.value = true;
-  syncFawvwEmployees()
-    .then((response) => {
-      const log = unwrap(response) as FawvwSyncLog;
-      ElMessage.success(`同步完成：${log?.totalEmployees || 0} 名员工`);
+  const poll = async () => {
+    try {
+      const log = unwrap(await getFawvwSyncTask(taskNo)) as FawvwSyncLog;
+      if (pageDisposed || version !== syncPollVersion) return;
+      if (log.status === 'RUNNING') {
+        syncPollTimer = setTimeout(poll, 5000);
+        return;
+      }
+      syncing.value = false;
+      if (log.status === 'SUCCESS') {
+        if (log.errorMessage) ElMessage.warning(log.errorMessage);
+        else ElMessage.success(`同步完成：${log.totalEmployees || 0} 名员工`);
+      } else {
+        ElMessage.error(log.errorMessage || '同步失败，请查看同步记录');
+      }
       loadSummary();
       loadOrgTree();
       loadEmployees();
-    })
-    .finally(() => {
+      if (logsOpen.value) loadLogs();
+    } catch {
+      if (pageDisposed || version !== syncPollVersion) return;
       syncing.value = false;
-    });
+      ElMessage.warning('查询同步状态失败，后台任务可能仍在执行，请查看同步记录');
+    }
+  };
+  void poll();
+};
+
+const handleSync = async () => {
+  if (syncing.value) return;
+  syncing.value = true;
+  try {
+    const log = unwrap(await syncFawvwEmployees()) as FawvwSyncLog;
+    if (!pageDisposed) {
+      ElMessage.info('同步任务已提交');
+      watchSyncTask(log.taskNo);
+    }
+  } catch {
+    syncing.value = false;
+  }
+};
+
+const resumeSync = async () => {
+  const page = unwrap(await pageFawvwSyncLogs({ pageNum: 1, pageSize: 1, status: 'RUNNING' }));
+  const running = (page?.records || page?.rows || [])[0] as FawvwSyncLog | undefined;
+  if (running && !pageDisposed && !syncing.value) watchSyncTask(running.taskNo);
 };
 
 const openConfig = () => {
@@ -530,6 +576,12 @@ onMounted(() => {
   loadSyncConfig();
   loadOrgTree();
   loadEmployees();
+  void resumeSync().catch(() => {});
+});
+
+onUnmounted(() => {
+  pageDisposed = true;
+  stopSyncPolling();
 });
 </script>
 

@@ -1,6 +1,5 @@
 <template>
   <div class="app-container employee-cert-page">
-    <input ref="packageInputRef" class="hidden-file" type="file" accept=".zip" @change="handlePackageFile" />
     <el-card shadow="never" class="query-card">
       <el-form :model="queryParams" inline>
         <el-form-item label="序列号">
@@ -15,7 +14,7 @@
         <el-form-item label="证书类型">
           <el-select v-model="queryParams.certTypeCode" clearable placeholder="全部" style="width: 150px">
             <el-option label="签名证书" value="SIGN" />
-            <el-option label="邮件加密证书" value="EMAIL_ENCRYPTION" />
+            <el-option label="邮件加密证书" value="EMAIL" />
             <el-option label="WiFi证书" value="WIFI" />
           </el-select>
         </el-form-item>
@@ -24,6 +23,7 @@
             <el-option label="待分发" value="PENDING" />
             <el-option label="已分发" value="SENT" />
             <el-option label="发送失败" value="FAILED" />
+            <el-option label="发送中" value="SENDING" />
           </el-select>
         </el-form-item>
         <el-form-item>
@@ -79,12 +79,11 @@
               v-if="row.issueStatus === 'ISSUED'"
               v-hasPermi="['ra:employee-cert:distribute']"
               link
-              icon="Upload"
-              @click="choosePackage(row)"
+              type="success"
+              icon="Promotion"
+              :disabled="row.distributionStatus === 'SENDING' || submittingDistribution"
+              @click="distribute(row)"
             >
-              上传分发包
-            </el-button>
-            <el-button v-hasPermi="['ra:employee-cert:distribute']" link type="success" icon="Promotion" @click="distribute(row)">
               {{ row.distributionStatus === 'SENT' ? '重发' : '分发' }}
             </el-button>
           </template>
@@ -144,7 +143,13 @@
           <el-input v-model="templateForm.title" />
         </el-form-item>
         <el-form-item label="消息类型">
-          <el-input v-model="templateForm.messageType" placeholder="如 MIXED / markdown" style="width: 180px" />
+          <el-select v-model="templateForm.messageType" style="width: 200px">
+            <el-option v-if="templateForm.channel === 'EMAIL'" label="HTML及附件（MIXED）" value="MIXED" />
+            <template v-else>
+              <el-option label="Markdown" value="markdown" />
+              <el-option label="纯文本" value="text" />
+            </template>
+          </el-select>
         </el-form-item>
         <el-form-item label="内容">
           <el-input v-model="templateForm.content" type="textarea" :rows="8" />
@@ -156,13 +161,7 @@
     </el-dialog>
 
     <el-dialog v-model="distributionConfigOpen" title="员工证书分发配置" width="720px" append-to-body>
-      <el-alert
-        class="mb12"
-        type="warning"
-        :closable="false"
-        show-icon
-        title="Secret Key 仅允许写入，不会回显；留空保存将保留已有 Secret。"
-      />
+      <el-alert class="mb12" type="warning" :closable="false" show-icon title="Secret Key 仅允许写入，不会回显；留空保存将保留已有 Secret。" />
       <el-form :model="distributionConfig" label-width="150px">
         <el-form-item label="邮件服务地址">
           <el-input v-model="distributionConfig.emailServerUrl" placeholder="https://api.example.com/cmp/mail/v2/send" />
@@ -185,12 +184,18 @@
         <el-form-item label="发件邮箱">
           <el-input v-model="distributionConfig.emailAccount" placeholder="例如 cybersec@faw-vw.com" />
         </el-form-item>
+        <el-form-item label="邮件服务器标识">
+          <el-input v-model="distributionConfig.smtpServer" placeholder="CC" />
+        </el-form-item>
         <el-form-item label="钉钉应用标识">
           <el-input v-model="distributionConfig.dingtalkApp" placeholder="例如 FawVW" />
         </el-form-item>
         <el-form-item label="附件最大大小">
           <el-input-number v-model="distributionConfig.attachmentMaxSizeMb" :min="1" :max="100" />
           <span class="unit-label">MB</span>
+        </el-form-item>
+        <el-form-item label="安装指引（HTML）">
+          <el-input v-model="distributionConfig.guideHtml" type="textarea" :rows="8" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -202,6 +207,7 @@
 </template>
 
 <script setup name="RaEmployeeCert" lang="ts">
+import { ref, reactive, onMounted, onUnmounted } from 'vue';
 import FileSaver from 'file-saver';
 import {
   distributeEmployeeCert,
@@ -214,8 +220,7 @@ import {
   listEmployeeCertTemplates,
   pageEmployeeCerts,
   saveEmployeeCertDistributionConfig,
-  saveEmployeeCertTemplate,
-  uploadEmployeeCertDistributionPackage
+  saveEmployeeCertTemplate
 } from '@/api/ra/employeeCert';
 
 const loading = ref(false);
@@ -257,8 +262,25 @@ const distributionConfig = reactive<EmployeeCertDistributionConfig>({
   attachmentMaxSizeMb: 10,
   secretKeyConfigured: false
 });
-const packageInputRef = ref<HTMLInputElement>();
-const packageCert = ref<EmployeeCert>();
+const submittingDistribution = ref(false);
+let distributionTimer: ReturnType<typeof setTimeout> | undefined;
+let pageDisposed = false;
+
+function watchDistribution() {
+  if (distributionTimer || pageDisposed) return;
+  distributionTimer = setTimeout(async () => {
+    distributionTimer = undefined;
+    try {
+      const page = unwrapData<any>(await pageEmployeeCerts({ pageNum: 1, pageSize: 1, distributionStatus: 'SENDING' }));
+      if (pageDisposed) return;
+      await loadList();
+      if (detailOpen.value && detail.value.cert?.id) detail.value = unwrapData<any>(await getEmployeeCert(detail.value.cert.id));
+      if (Number(page?.total || 0) > 0) watchDistribution();
+    } catch {
+      if (!pageDisposed) ElMessage.warning('分发进度查询失败，请刷新查看渠道结果');
+    }
+  }, 3000);
+}
 
 function unwrapData<T>(res: any): T {
   const body = res?.data ?? res;
@@ -271,6 +293,7 @@ async function loadList() {
     const page = unwrapData<any>(await pageEmployeeCerts(queryParams));
     rows.value = page?.rows || page?.records || [];
     total.value = Number(page?.total || 0);
+    if (rows.value.some((row) => row.distributionStatus === 'SENDING')) watchDistribution();
   } finally {
     loading.value = false;
   }
@@ -299,32 +322,19 @@ async function distribute(row: EmployeeCert) {
   await ElMessageBox.confirm(`确认${row.distributionStatus === 'SENT' ? '重新' : ''}分发 ${row.employeeName} 的证书？`, '分发确认', {
     type: 'warning'
   });
-  await distributeEmployeeCert(row.id);
-  ElMessage.success('分发完成');
-  loadList();
-}
-
-function choosePackage(row: EmployeeCert) {
-  packageCert.value = row;
-  packageInputRef.value?.click();
-}
-
-async function handlePackageFile(event: Event) {
-  const input = event.target as HTMLInputElement;
-  const file = input.files?.[0];
-  input.value = '';
-  if (!file || !packageCert.value?.id) return;
-  if (!file.name.toLowerCase().endsWith('.zip') || file.size > 10 * 1024 * 1024) {
-    ElMessage.error('仅允许上传不超过10MB的ZIP压缩包');
-    return;
+  submittingDistribution.value = true;
+  try {
+    await distributeEmployeeCert(row.id);
+    ElMessage.info('分发任务已提交');
+    await loadList();
+    watchDistribution();
+  } finally {
+    submittingDistribution.value = false;
   }
-  await uploadEmployeeCertDistributionPackage(packageCert.value.id, file);
-  ElMessage.success('证书分发压缩包已归档');
-  await loadList();
 }
 
 function handleExport() {
-  const header = ['序列号', '主题', '姓名', '域账号', '科室', '职位', '证书类型', '密码', '生效时间', '到期时间', '分发状态'];
+  const header = ['序列号', '主题', '姓名', '域账号', '科室', '职位', '证书类型', '生效时间', '到期时间', '分发状态'];
   const lines = rows.value.map((row) =>
     [
       row.serialNumber,
@@ -334,7 +344,6 @@ function handleExport() {
       row.departmentName,
       row.jobName,
       row.certTypeName,
-      row.certPassword,
       formatDate(row.notBefore),
       formatDate(row.notAfter),
       row.distributionStatusName
@@ -398,7 +407,9 @@ async function saveDistributionConfig() {
         secretKey: distributionConfig.secretKey,
         emailAccount: distributionConfig.emailAccount,
         dingtalkApp: distributionConfig.dingtalkApp,
-        attachmentMaxSizeMb: distributionConfig.attachmentMaxSizeMb
+        attachmentMaxSizeMb: distributionConfig.attachmentMaxSizeMb,
+        smtpServer: distributionConfig.smtpServer,
+        guideHtml: distributionConfig.guideHtml
       })
     );
     Object.assign(distributionConfig, saved, { secretKey: '' });
@@ -420,7 +431,7 @@ function distributionTag(status?: string) {
 }
 
 function channelName(status?: string) {
-  return status === 'SENT' ? '成功' : status === 'FAILED' ? '失败' : '待发';
+  return status === 'SENT' ? '已受理' : status === 'FAILED' ? '失败' : '待发';
 }
 
 function csvCell(value: any) {
@@ -433,6 +444,10 @@ function formatDate(value?: string) {
 }
 
 onMounted(loadList);
+onUnmounted(() => {
+  pageDisposed = true;
+  if (distributionTimer) clearTimeout(distributionTimer);
+});
 </script>
 
 <style scoped>

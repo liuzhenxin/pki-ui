@@ -2,6 +2,11 @@
   <div class="app-container fawvw-ca-cert-page">
     <el-card shadow="never" class="query-card">
       <el-form :model="queryParams" inline>
+        <el-form-item label="所属根证书">
+          <el-select v-model="queryParams.rootId" clearable filterable placeholder="全部根证书" style="width: 240px" @change="handleQuery">
+            <el-option v-for="root in rootOptions" :key="root.id" :value="root.id" :label="`${root.displayName} · ${root.fingerprint.slice(-17)}`" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="关键词">
           <el-input v-model="queryParams.keyword" clearable placeholder="名称、主题、序列号、指纹" style="width: 230px" @keyup.enter="handleQuery" />
         </el-form-item>
@@ -53,6 +58,11 @@
 
       <el-table v-loading="loading" :data="rows" border stripe empty-text="暂无根证书或中间证书记录">
         <el-table-column label="证书名称" prop="displayName" min-width="190" show-overflow-tooltip />
+        <el-table-column label="所属根证书" min-width="180" show-overflow-tooltip>
+          <template #default="{ row }"
+            ><el-button link type="primary" @click="openChain(row)">{{ rootName(row) }}</el-button></template
+          >
+        </el-table-column>
         <el-table-column label="类型" width="100" align="center">
           <template #default="{ row }"
             ><el-tag :type="row.certificateType === 'ROOT' ? 'danger' : 'warning'" effect="plain">{{
@@ -80,17 +90,48 @@
             }}</el-tag></template
           ></el-table-column
         >
-        <el-table-column label="操作" fixed="right" width="112" align="center">
+        <el-table-column label="操作" fixed="right" width="245" align="center">
           <template #default="{ row }">
             <el-tooltip content="详情" placement="top"><el-button link type="primary" icon="View" @click="openDetail(row)" /></el-tooltip>
             <el-tooltip content="维护" placement="top"
               ><el-button v-hasPermi="['ra:fawvw-ca-cert:edit']" link type="primary" icon="Edit" @click="openEdit(row)"
             /></el-tooltip>
+            <el-tooltip content="证书链" placement="top"><el-button link type="primary" icon="Connection" @click="openChain(row)" /></el-tooltip>
+            <el-dropdown @command="(format: 'cer' | 'p7b') => downloadCertificate(row, format)">
+              <el-button link type="primary" icon="Download" aria-label="下载证书" />
+              <template #dropdown
+                ><el-dropdown-menu>
+                  <el-dropdown-item command="cer">单张证书 CER</el-dropdown-item>
+                  <el-dropdown-item command="p7b">证书链 P7B</el-dropdown-item>
+                </el-dropdown-menu></template
+              >
+            </el-dropdown>
+            <el-tooltip v-if="row.sourceType === 'IMPORTED' && !row.sourceRootId" content="移除导入证书" placement="top">
+              <el-button v-hasPermi="['ra:fawvw-ca-cert:edit']" link type="danger" icon="Delete" @click="removeCertificate(row)" />
+            </el-tooltip>
           </template>
         </el-table-column>
       </el-table>
       <pagination v-show="total > 0" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" :total="total" @pagination="loadList" />
     </el-card>
+
+    <el-drawer v-model="chainOpen" title="证书链" size="min(900px, 95vw)" append-to-body>
+      <el-table :data="chainRows" row-key="id" default-expand-all border>
+        <el-table-column label="证书名称" prop="displayName" min-width="220" show-overflow-tooltip />
+        <el-table-column label="类型" width="100"
+          ><template #default="{ row }">{{ row.certificateType === 'ROOT' ? '根证书' : '中间证书' }}</template></el-table-column
+        >
+        <el-table-column label="到期时间" width="170"
+          ><template #default="{ row }">{{ dateTime(row.notAfter) }}</template></el-table-column
+        >
+        <el-table-column label="链路校验" min-width="180"
+          ><template #default="{ row }">
+            <el-tag :type="row.linked ? 'success' : 'danger'">{{ row.linked ? '签名匹配' : '链路异常' }}</el-tag>
+            <span v-if="row.warning"> {{ row.warning }}</span>
+          </template></el-table-column
+        >
+      </el-table>
+    </el-drawer>
 
     <el-dialog v-model="importOpen" title="导入根证书及中间证书链" width="650px" append-to-body @closed="resetImport">
       <el-alert
@@ -169,6 +210,8 @@
 
 <script setup name="FawvwCaCert" lang="ts">
 import { ElMessage, ElMessageBox } from 'element-plus';
+import { ref, reactive, onMounted } from 'vue';
+import { saveAs } from 'file-saver';
 import {
   FawvwCaCertificate,
   FawvwCaCertQuery,
@@ -178,6 +221,66 @@ import {
   syncFawvwCaCertificates,
   updateFawvwCaCertificate
 } from '@/api/ra/fawvwCaCert';
+import { getFawvwCaRoots, getFawvwCaChain, removeFawvwCaCertificate, downloadFawvwCaCertificate, type FawvwCaChainEntry } from '@/api/ra/fawvwCaCert';
+
+const rootOptions = ref<{ id: string | number; displayName: string; fingerprint: string }[]>([]);
+type ChainNode = FawvwCaCertificate & { linked: boolean; warning: string; children: ChainNode[] };
+const chainRows = ref<ChainNode[]>([]);
+const chainOpen = ref(false);
+
+function rootName(row: FawvwCaCertificate) {
+  const id = row.certificateType === 'ROOT' ? row.id : row.parentId;
+  const root = rootOptions.value.find((item) => String(item.id) === String(id));
+  return root ? `${root.displayName} · ${root.fingerprint.slice(-17)}` : '所属根缺失';
+}
+
+async function openChain(row: FawvwCaCertificate) {
+  const entries = unwrap<FawvwCaChainEntry[]>(await getFawvwCaChain(row.id));
+  const nodes = new Map(
+    entries.map((entry) => [
+      String(entry.certificate.id),
+      { ...entry.certificate, linked: entry.linked, warning: entry.warning, children: [] as ChainNode[] }
+    ])
+  );
+  const top: ChainNode[] = [];
+  for (const entry of entries) {
+    const node = nodes.get(String(entry.certificate.id))!;
+    const parent = entry.linked && entry.issuerId != null ? nodes.get(String(entry.issuerId)) : undefined;
+    if (parent) parent.children.push(node);
+    else top.push(node);
+  }
+  chainRows.value = top;
+  chainOpen.value = true;
+}
+
+async function downloadCertificate(row: FawvwCaCertificate, format: 'cer' | 'p7b') {
+  const blob = (await downloadFawvwCaCertificate(row.id, format)) as unknown as Blob;
+  if (blob.type.includes('json')) {
+    const error = JSON.parse(await blob.text());
+    ElMessage.error(error.msg || error.message || '证书下载失败');
+    return;
+  }
+  saveAs(blob, `ca-${row.id}.${format}`);
+}
+
+async function removeCertificate(row: FawvwCaCertificate) {
+  const message =
+    row.certificateType === 'ROOT'
+      ? '移除该导入根证书及其全部导入中间证书？仅移除本台账，不撤销证书，也不修改admin根证书。'
+      : '移除该导入中间证书？不会撤销证书或修改admin根证书。';
+  await ElMessageBox.confirm(message, '移除导入证书', { type: 'warning' });
+  await removeFawvwCaCertificate(row.id);
+  ElMessage.success('已移除');
+  detailOpen.value = false;
+  chainOpen.value = false;
+  await loadRoots();
+  handleQuery();
+}
+
+async function loadRoots() {
+  rootOptions.value = unwrap<any[]>(await getFawvwCaRoots());
+  if (queryParams.rootId != null && !rootOptions.value.some((root) => String(root.id) === String(queryParams.rootId))) queryParams.rootId = undefined;
+}
 
 const rows = ref<FawvwCaCertificate[]>([]);
 const loading = ref(false);
@@ -233,7 +336,8 @@ function resetQuery() {
     keyword: '',
     certificateType: '',
     validityStatus: '',
-    managementStatus: ''
+    managementStatus: '',
+    rootId: undefined
   });
   loadList();
 }
@@ -245,9 +349,13 @@ function resetImport() {
 async function handleSync() {
   await ElMessageBox.confirm('同步仅读取当前 RA 的根证书和证书链，不会修改 CA 管理数据。确认同步？', '同步当前RA证书', { type: 'warning' });
   const result = unwrap<any>(await syncFawvwCaCertificates());
-  ElMessage.success(
-    `同步完成：根证书 ${result.rootCount || 0} 个，中间证书 ${result.intermediateCount || 0} 个${result.invalidCount ? `，${result.invalidCount} 条证书链解析失败` : ''}`
-  );
+  await loadRoots();
+  const summary = `同步完成：根证书 ${result.rootCount || 0} 个，中间证书 ${result.intermediateCount || 0} 个`;
+  if (result.invalidCount) {
+    ElMessage.warning(`${summary}，${result.invalidCount} 条未同步；${(result.warnings || []).join('；')}`);
+  } else {
+    ElMessage.success(summary);
+  }
   loadList();
 }
 
@@ -262,6 +370,7 @@ async function handleImport() {
   importing.value = true;
   try {
     const result = unwrap<any>(await importFawvwCaCertificate(data));
+    await loadRoots();
     ElMessage.success(`导入成功，已关联 ${result.intermediateCount || 0} 张中间证书`);
     importOpen.value = false;
     loadList();
@@ -286,6 +395,7 @@ async function saveEdit() {
   saving.value = true;
   try {
     await updateFawvwCaCertificate(editForm as any);
+    await loadRoots();
     ElMessage.success('证书管理信息已保存');
     editOpen.value = false;
     loadList();
@@ -300,7 +410,10 @@ function validityTag(status?: string) {
   return ({ VALID: 'success', EXPIRING: 'warning', EXPIRED: 'danger', NOT_YET_VALID: 'info' } as Record<string, string>)[status || ''] || 'info';
 }
 
-onMounted(loadList);
+onMounted(async () => {
+  await loadRoots();
+  await loadList();
+});
 </script>
 
 <style scoped lang="scss">

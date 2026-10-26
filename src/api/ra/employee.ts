@@ -164,6 +164,13 @@ export function syncFawvwEmployees(): Promise<Result<FawvwSyncLog>> {
   }) as any;
 }
 
+export function getFawvwSyncTask(taskNo: string): Promise<Result<FawvwSyncLog>> {
+  return request({
+    url: `/ra/v1/employees/sync-tasks/${encodeURIComponent(taskNo)}`,
+    method: 'get'
+  }) as any;
+}
+
 export function pageFawvwSyncLogs(query: { pageNum: number; pageSize: number; status?: string }): Promise<Result<any>> {
   return request({
     url: '/ra/v1/employees/sync-tasks/page',

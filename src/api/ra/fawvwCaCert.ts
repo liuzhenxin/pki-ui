@@ -11,6 +11,7 @@ export interface FawvwCaCertQuery {
   certificateType?: FawvwCaCertificateType | '';
   validityStatus?: FawvwCaValidityStatus | '';
   managementStatus?: 'ACTIVE' | 'DISABLED' | '';
+  rootId?: string | number;
 }
 
 export interface FawvwCaCertificate {
@@ -56,7 +57,32 @@ export function getFawvwCaCertificate(id: string | number): Promise<Result<Fawvw
   return request({ url: `/ra/v1/fawvw-ca-certificates/${id}`, method: 'get' }) as any;
 }
 
-export function syncFawvwCaCertificates(): Promise<Result<{ rootCount: number; intermediateCount: number; invalidCount: number }>> {
+export interface FawvwCaChainEntry {
+  certificate: FawvwCaCertificate;
+  issuerId?: string | number;
+  linked: boolean;
+  warning: string;
+}
+
+export function getFawvwCaRoots() {
+  return request({ url: '/ra/v1/fawvw-ca-certificates/roots', method: 'get' });
+}
+
+export function getFawvwCaChain(id: string | number) {
+  return request({ url: `/ra/v1/fawvw-ca-certificates/${id}/chain`, method: 'get' });
+}
+
+export function removeFawvwCaCertificate(id: string | number) {
+  return request({ url: `/ra/v1/fawvw-ca-certificates/${id}`, method: 'delete' });
+}
+
+export function downloadFawvwCaCertificate(id: string | number, format: 'cer' | 'p7b') {
+  return request({ url: `/ra/v1/fawvw-ca-certificates/${id}/download/${format}`, method: 'get', responseType: 'blob' });
+}
+
+export function syncFawvwCaCertificates(): Promise<
+  Result<{ rootCount: number; intermediateCount: number; invalidCount: number; warnings?: string[] }>
+> {
   return request({ url: '/ra/v1/fawvw-ca-certificates/sync', method: 'post' }) as any;
 }
 
