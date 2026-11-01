@@ -91,12 +91,14 @@ export const useCspConsoleStore = defineStore('csp-console', () => {
   const initializationAttempted = ref(false);
   const completion = ref(false);
   const environmentReady = computed(
-    () => setup.value !== null && setup.value.step >= 2 && setup.value.accounts.length === 3 && setup.value.accounts.every((row) => row.valid)
+    () => setup.value !== null && setup.value.step >= 1 && setup.value.checks.length === 9 && setup.value.checks.every((row) => row.ready)
   );
   const secure = computed(() => location.protocol === 'https:' || ['localhost', '127.0.0.1'].includes(location.hostname));
   const httpTestMode = ref(false);
   const accountTransport = computed(() => secure.value || httpTestMode.value);
-  const stateLabel = computed(() => (initialized.value === null ? '状态未确认' : initialized.value ? '已完成初始化' : '等待初始化'));
+  const stateLabel = computed(() =>
+    initialized.value === null ? '状态未确认' : initialized.value ? '已完成服务启用验收' : '等待资源接入与服务启用'
+  );
 
   function api<K extends keyof ConsoleResponses>(path: K, body?: ConsoleCommands[K]): Promise<ConsoleResponses[K]> {
     return consoleRequest(path, csrf.value, body);
@@ -118,19 +120,22 @@ export const useCspConsoleStore = defineStore('csp-console', () => {
 
   function applySetup(data: import('@/api/csp/console').SetupView) {
     if (
-      typeof data?.initialized !== 'boolean' ||
+      data?.workflow !== 'SERVICE_ACTIVATION_V3' ||
+      typeof data.initialized !== 'boolean' ||
       !Number.isSafeInteger(data.draftVersion) ||
       !Number.isInteger(data.step) ||
       data.step < 0 ||
       data.step > 3 ||
-      !Array.isArray(data.accounts)
+      !Array.isArray(data.checks) ||
+      data.checks.length !== 9 ||
+      !Array.isArray(data.enabledCapabilities)
     )
-      throw new Error('初始化状态无效，请联系运维核查。');
+      throw new Error('服务启用状态无效，请联系运维核查。');
     setup.value = data;
     initialized.value = data.initialized;
     setupStep.value = data.step;
     completion.value = data.initialized && (completion.value || initializationAttempted.value || data.attempted);
-    initializationAttempted.value = initializationAttempted.value || data.attempted;
+    initializationAttempted.value = data.attempted;
     checkedAt.value = data.checkedAt ? new Date(data.checkedAt).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }) : '';
   }
 
@@ -161,8 +166,7 @@ export const useCspConsoleStore = defineStore('csp-console', () => {
       applySetup(
         await api('setup-advance', {
           draftVersion: setup.value.draftVersion,
-          action,
-          ...(action === 'AGREE' ? { agreementVersion: setup.value.agreementVersion } : {})
+          action
         })
       );
     } catch (failure) {
@@ -196,7 +200,7 @@ export const useCspConsoleStore = defineStore('csp-console', () => {
     initializationAttempted.value = true;
     try {
       const result = await api('setup-complete', { draftVersion: setup.value.draftVersion, confirm: true });
-      if (result.initialized !== true) throw new Error('初始化回执无效。');
+      if (result.initialized !== true) throw new Error('服务启用回执无效。');
       applySetup(result);
       completion.value = true;
     } catch (failure) {

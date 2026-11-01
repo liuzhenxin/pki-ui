@@ -41,9 +41,9 @@ async function logout() {
         >
         <nav aria-label="控制台导航">
           <el-menu :default-active="route.path" router background-color="transparent" text-color="#e2e8f0" active-text-color="#176ac3">
-            <el-menu-item :index="destination" :aria-label="destination === '/csp/overview' ? '运行总览' : '初始化引导'"
+            <el-menu-item :index="destination" :aria-label="destination === '/csp/overview' ? '运行总览' : '资源接入与服务启用'"
               ><el-icon><Monitor v-if="destination === '/csp/overview'" /><Setting v-else /></el-icon
-              ><span>{{ destination === '/csp/overview' ? '运行总览' : '初始化引导' }}</span></el-menu-item
+              ><span>{{ destination === '/csp/overview' ? '运行总览' : '资源接入与服务启用' }}</span></el-menu-item
             >
           </el-menu>
         </nav>

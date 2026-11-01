@@ -15,7 +15,7 @@ export function createCspRouter(pinia: Pinia, history: RouterHistory = createWeb
         component: () => import('@/layout/CspLayout.vue'),
         meta: { title: '密码服务平台' },
         children: [
-          { path: 'setup', component: () => import('@/views/csp/setup/index.vue'), meta: { title: '初始化引导' } },
+          { path: 'setup', component: () => import('@/views/csp/setup/index.vue'), meta: { title: '资源接入与服务启用' } },
           { path: 'overview', component: () => import('@/views/csp/overview/index.vue'), meta: { title: '运行总览' } }
         ]
       },

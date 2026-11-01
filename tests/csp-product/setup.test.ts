@@ -1,23 +1,27 @@
-import { createHash } from 'node:crypto';
-import agreementSource from '@/components/Agreement/index.vue?raw';
-import { CSP_AGREEMENT_VERSION } from '@/products/csp/agreement';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 import { useCspConsoleStore } from '@/store/modules/cspConsole';
 import type { SetupView } from '@/api/csp/console';
 
 const view: SetupView = {
+  workflow: 'SERVICE_ACTIVATION_V3',
   initialized: false,
   draftVersion: 3,
   step: 3,
-  agreed: true,
   attempted: false,
-  agreementVersion: 'test',
-  companyName: 'Company',
-  serviceVersion: 'v2',
+  serviceVersion: 'v3',
   environment: 'test',
   checkedAt: new Date().toISOString(),
-  accounts: ['SYSTEM_ADMIN', 'SECURITY_ADMIN', 'AUDIT_ADMIN'].map((role) => ({ role, valid: true })) as SetupView['accounts']
+  checks: [
+    ...['PLATFORM_SCHEMA', 'HARDWARE_PROTECTION', 'EXECUTION_ENTRY'].map((code) => ({ group: 'ENVIRONMENT' as const, code, ready: true })),
+    ...['SDF_RANDOM_RESOURCE', 'SDF_SM3_RESOURCE'].map((code) => ({ group: 'RESOURCES' as const, code, ready: true })),
+    ...['APPLICATION_MAPPING', 'RANDOM_AUTHORIZATION', 'SM3_AUTHORIZATION', 'FOUR_DIMENSION_QUOTAS'].map((code) => ({
+      group: 'POLICY' as const,
+      code,
+      ready: true
+    }))
+  ],
+  enabledCapabilities: []
 };
 afterEach(() => vi.unstubAllGlobals());
 function storeWith(responses: { data: unknown; status?: number }[]) {
@@ -28,9 +32,11 @@ function storeWith(responses: { data: unknown; status?: number }[]) {
   vi.stubGlobal('fetch', fetcher);
   return { store: useCspConsoleStore(), fetcher };
 }
-describe('四步初始化持久状态', () => {
-  it('公共协议源文件与同意版本摘要一致', () => {
-    expect(CSP_AGREEMENT_VERSION).toBe('public-v1-sha256-' + createHash('sha256').update(agreementSource).digest('hex'));
+describe('资源接入与服务启用持久状态', () => {
+  it('拒绝旧安装回执冒充服务启用', async () => {
+    const { store } = storeWith([{ data: { ...view, workflow: 'LEGACY_SETUP', initialized: true } }]);
+    await store.refresh();
+    expect(store.initialized).toBeNull();
   });
   it('刷新恢复服务端进度，最终确认需要重新勾选', async () => {
     const { store } = storeWith([{ data: view }]);
@@ -60,16 +66,22 @@ describe('四步初始化持久状态', () => {
     expect(fetcher.mock.calls.map((call) => call[0])).toEqual(['/console-api/setup', '/console-api/setup-complete', '/console-api/setup']);
     expect(store.initializationAttempted).toBe(true);
   });
-  it('结果未知时，即使当前查询尚无持久尝试，也不在本会话再次提交', async () => {
-    const { store, fetcher } = storeWith([{ data: view }, { data: { message: '结果未知' }, status: 502 }, { data: view }]);
+  it('非破坏性自检结果未知后先查询，服务端确认可重试才允许手动提交', async () => {
+    const { store, fetcher } = storeWith([
+      { data: view },
+      { data: { message: '结果未知' }, status: 502 },
+      { data: view },
+      { data: { ...view, initialized: true, enabledCapabilities: ['RANDOM'] } }
+    ]);
     await store.refresh();
     store.confirmed = true;
     await store.initialize();
     await store.refresh();
     store.confirmed = true;
     await store.initialize();
-    expect(store.initializationAttempted).toBe(true);
-    expect(fetcher).toHaveBeenCalledTimes(3);
+    expect(store.initializationAttempted).toBe(false);
+    expect(store.initialized).toBe(true);
+    expect(fetcher).toHaveBeenCalledTimes(4);
   });
   it('明确拒绝后先刷新并核验持久状态，再恢复环境检查', async () => {
     const { store, fetcher } = storeWith([{ data: view }, { data: { message: '核验过期' }, status: 412 }, { data: { ...view, step: 1 } }]);
@@ -98,5 +110,19 @@ describe('四步初始化持久状态', () => {
     await store.initialize();
     expect(store.initialized).toBeNull();
     expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+  it('缺少资源或策略检查时不能启用', async () => {
+    const { store, fetcher } = storeWith([{ data: { ...view, checks: view.checks.map((row) => ({ ...row, ready: row.group !== 'RESOURCES' })) } }]);
+    await store.refresh();
+    store.confirmed = true;
+    await store.initialize();
+    expect(store.environmentReady).toBe(false);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+  it('资源核验仅发送固定动作和CAS版本', async () => {
+    const { store, fetcher } = storeWith([{ data: { ...view, step: 1 } }, { data: { ...view, step: 2, draftVersion: 4 } }]);
+    await store.refresh();
+    await store.advanceSetup('CHECK_RESOURCES');
+    expect(JSON.parse(fetcher.mock.calls[1][1].body)).toEqual({ draftVersion: 3, action: 'CHECK_RESOURCES' });
   });
 });

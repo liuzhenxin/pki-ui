@@ -1,17 +1,16 @@
 export interface SetupView {
+  workflow: 'SERVICE_ACTIVATION_V3';
   initialized: boolean;
   draftVersion: number;
   step: number;
-  agreed: boolean;
   attempted: boolean;
-  agreementVersion: string;
-  companyName: string;
   serviceVersion: string;
   environment: string;
   checkedAt: string | null;
-  accounts: { role: 'SYSTEM_ADMIN' | 'SECURITY_ADMIN' | 'AUDIT_ADMIN'; valid: boolean }[];
+  checks: { group: 'ENVIRONMENT' | 'RESOURCES' | 'POLICY'; code: string; ready: boolean }[];
+  enabledCapabilities: 'RANDOM'[];
 }
-export type SetupAction = 'AGREE' | 'CHECK_ENV' | 'VERIFY_ACCOUNTS';
+export type SetupAction = 'CHECK_ENV' | 'CHECK_RESOURCES' | 'CHECK_POLICY';
 /** 固定同源BFF契约；浏览器不持有Auth令牌或OAuth客户端秘密。 */
 export interface ConsoleResponses {
   session: { csrf: string; authenticated: boolean; initializationAttempted?: boolean; certificateLoginEnabled?: boolean; httpTestMode?: boolean };
@@ -35,7 +34,7 @@ export interface ConsoleCommands {
   'certificate-login': { challengeId: string; signature: string };
   state: undefined;
   setup: undefined;
-  'setup-advance': { draftVersion: number; action: SetupAction; agreementVersion?: string };
+  'setup-advance': { draftVersion: number; action: SetupAction };
   'setup-complete': { draftVersion: number; confirm: true };
   environment: undefined;
   initialize: { confirm: true };
