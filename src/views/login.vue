@@ -304,7 +304,7 @@ const initialTenantId = configuredTenantIds.length && !configuredTenantIds.inclu
 const loginForm = ref<LoginData>({
   tenantId: initialTenantId,
   tenantCode: localStorage.getItem('tenantCode') || '',
-  username: localStorage.getItem('username') || 'admin',
+  username: localStorage.getItem('username') || '',
   password: '',
   radiusPassword: '',
   rememberMe: localStorage.getItem('rememberMe') === 'true',

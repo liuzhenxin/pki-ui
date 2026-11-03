@@ -19,9 +19,11 @@ const loadSetup = (file: string, api: Record<string, unknown>) => {
     if (name === '@/utils/ocspSignerPolicy') return { signerPolicyLabel };
     if (name === '@/utils/ocspPresentation') return presentation;
     if (name === 'vue-router') return { useRouter: () => ({}), useRoute: () => ({ query: {} }) };
-    if (name === 'element-plus') return { ElMessage: { warning: vi.fn(), error: vi.fn(), success: vi.fn() } };
+    if (name === 'element-plus')
+      return { ElMessage: { warning: vi.fn(), error: vi.fn(), success: vi.fn() }, ElMessageBox: { confirm: vi.fn().mockResolvedValue(true) } };
     if (name === '@/utils/ocspIdentifier') return { normalizeOcspCaId, normalizeOptionalOcspId };
-    if (name === '@/api/ocsp/common') return { assertSafeSignerCert: () => {}, assertSafeSignerConf: () => {} };
+    if (name === '@/api/ocsp/common')
+      return { assertSafeSignerCert: () => {}, assertSafeSignerConf: () => {}, unwrapOcspData: (value: unknown) => value };
     if (name === '@/store/modules/user') return { useUserStore: () => ({ setTenantInitStatus: vi.fn() }) };
     if (name.startsWith('@/api/ocsp/')) return api;
     return { default: {} };
@@ -47,6 +49,50 @@ describe('real signer diagnostic handler', () => {
   });
 });
 describe('real OCSP ID submission handlers', () => {
+  it('offers registered service CA IDs when creating a responder without defaulting to CA 1', async () => {
+    const listServiceCaDrafts = vi.fn().mockResolvedValue([{ caId: largeId }, { caId: '42' }, { caId: largeId }]);
+    const page = loadSetup('views/ocsp/responder/index.vue', { listServiceCaDrafts });
+    await page.openEdit();
+    expect(page.form.caId).toBe('');
+    expect(page.caOptions.value).toEqual([largeId, '42']);
+    expect(page.editVisible.value).toBe(true);
+  });
+
+  it('retains the existing CA for an older responder when editing', async () => {
+    const listServiceCaDrafts = vi.fn().mockResolvedValue([]);
+    const getOcspResponder = vi.fn().mockResolvedValue({ id: '7', caId: largeId, signerType: 'SOFTWARE' });
+    const page = loadSetup('views/ocsp/responder/index.vue', { listServiceCaDrafts, getOcspResponder });
+    await page.openEdit({ id: '7' });
+    expect(page.form.caId).toBe(largeId);
+    expect(page.caOptions.value).toContain(largeId);
+  });
+  it('loads service CA drafts without requesting legacy sources', async () => {
+    const listServiceCaDrafts = vi.fn().mockResolvedValue([{ caId: largeId, version: 1 }]);
+    const listOcspCaStatusSources = vi.fn();
+    const page = loadSetup('views/ocsp/ca-source/index.vue', { listServiceCaDrafts, listOcspCaStatusSources });
+    await page.refresh();
+    expect(page.managedRows.value[0].caId).toBe(largeId);
+    expect(listServiceCaDrafts).toHaveBeenCalledOnce();
+    expect(listOcspCaStatusSources).not.toHaveBeenCalled();
+    page.openWizard(largeId);
+    expect(page.wizardCaId.value).toBe(largeId);
+    expect(page.wizardVisible.value).toBe(true);
+    const source = readFileSync(new URL('../../src/views/ocsp/ca-source/index.vue', import.meta.url), 'utf8');
+    expect(source).not.toContain('旧数据源');
+  });
+  it('clears stale service CA drafts when refresh fails', async () => {
+    const listServiceCaDrafts = vi
+      .fn()
+      .mockResolvedValueOnce([{ caId: largeId, version: 1 }])
+      .mockRejectedValueOnce(new Error('unavailable'));
+    const page = loadSetup('views/ocsp/ca-source/index.vue', { listServiceCaDrafts });
+    await page.refresh();
+    expect(page.managedRows.value).toHaveLength(1);
+    await page.refresh();
+    expect(page.managedRows.value).toEqual([]);
+    expect(page.managedError.value).toBe(true);
+    expect(page.managedLoading.value).toBe(false);
+  });
   it('keeps log CA/responder IDs as text and omits cleared filters', async () => {
     const pageOcspRequestLogs = vi.fn().mockResolvedValue({ records: [], total: 0 });
     const page = loadSetup('views/ocsp/log/index.vue', { pageOcspRequestLogs });
@@ -65,17 +111,21 @@ describe('real OCSP ID submission handlers', () => {
     expect(pageOcspRequestLogs).toHaveBeenCalledTimes(2);
   });
 
-  it('submits the full initialization CA ID and blocks invalid IDs', async () => {
-    const initOcspResponder = vi.fn().mockResolvedValue({});
-    const page = loadSetup('views/ocsp/init/index.vue', { initOcspResponder });
-    page.formRef.value = { validate: vi.fn().mockResolvedValue(true) };
-    page.form.signerCert = 'public certificate placeholder';
-    page.form.caId = largeId;
-    await page.submitInit();
-    expect(initOcspResponder.mock.calls[0][0].caId).toBe(largeId);
-    page.form.caId = '0';
-    await page.submitInit();
-    expect(initOcspResponder).toHaveBeenCalledTimes(1);
+  it('completes system initialization only after both environment checks pass', async () => {
+    const completeOcspInitialization = vi.fn().mockRejectedValueOnce(new Error('unavailable')).mockResolvedValueOnce({ initialized: true });
+    const page = loadSetup('views/ocsp/init/index.vue', { completeOcspInitialization });
+    page.activeStep.value = 1;
+    await page.complete();
+    expect(completeOcspInitialization).not.toHaveBeenCalled();
+    page.envRows.value = [
+      { name: 'OCSP业务库', ok: true },
+      { name: '平台租户', ok: true }
+    ];
+    await page.complete();
+    expect(page.activeStep.value).toBe(1);
+    await page.complete();
+    expect(page.activeStep.value).toBe(2);
+    expect(completeOcspInitialization).toHaveBeenCalledTimes(2);
   });
 
   it('previews the full routing CA ID and blocks overflowing IDs', async () => {
@@ -94,6 +144,42 @@ describe('real OCSP ID submission handlers', () => {
 });
 
 describe('OCSP loading failures and recovery', () => {
+  it('registers issuer certificates for the selected CA and rejects private keys and unsafe IDs', async () => {
+    const listOcspIssuerCerts = vi.fn().mockResolvedValue([{ id: '9007199254740999', caId: largeId, hashAlgorithm: 'SHA1' }]);
+    const saveOcspIssuerCert = vi.fn().mockResolvedValue([]);
+    const removeOcspIssuerCert = vi.fn().mockResolvedValue(true);
+    const page = loadSetup('views/ocsp/components/IssuerCertPanel.vue', { listOcspIssuerCerts, saveOcspIssuerCert, removeOcspIssuerCert });
+    page.caId.value = largeId;
+    await page.load();
+    expect(listOcspIssuerCerts).toHaveBeenCalledWith(largeId);
+    page.certificatePem.value = '-----BEGIN PRIVATE KEY-----';
+    await page.enroll();
+    expect(saveOcspIssuerCert).not.toHaveBeenCalled();
+    page.certificatePem.value = '-----BEGIN CERTIFICATE-----\npublic\n-----END CERTIFICATE-----';
+    await page.enroll();
+    expect(saveOcspIssuerCert).toHaveBeenCalledWith(largeId, expect.stringContaining('BEGIN CERTIFICATE'));
+    await page.remove({ id: 9007199254740992, caId: largeId, hashAlgorithm: 'SHA1' });
+    expect(removeOcspIssuerCert).not.toHaveBeenCalled();
+    await page.remove({ id: '9007199254740999', caId: largeId, hashAlgorithm: 'SHA1' });
+    expect(removeOcspIssuerCert).toHaveBeenCalledWith('9007199254740999');
+  });
+  it('clears issuer records on CA change and does not show old results after a failed read', async () => {
+    const listOcspIssuerCerts = vi
+      .fn()
+      .mockResolvedValueOnce([{ id: '1', caId: largeId }])
+      .mockRejectedValueOnce(new Error('unavailable'));
+    const page = loadSetup('views/ocsp/components/IssuerCertPanel.vue', { listOcspIssuerCerts });
+    page.caId.value = largeId;
+    await page.load();
+    expect(page.rows.value).toHaveLength(1);
+    page.caId.value = '42';
+    page.clearResults();
+    expect(page.queriedCaId.value).toBe('');
+    expect(page.rows.value).toEqual([]);
+    await page.load();
+    expect(page.loadError.value).toBe(true);
+    expect(page.queriedCaId.value).toBe('');
+  });
   it('distinguishes log request failure from a successful empty result', async () => {
     const pageOcspRequestLogs = vi.fn().mockRejectedValueOnce(new Error('unavailable')).mockResolvedValueOnce({ records: [], total: 0 });
     const page = loadSetup('views/ocsp/log/index.vue', { pageOcspRequestLogs });

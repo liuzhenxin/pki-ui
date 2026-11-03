@@ -58,6 +58,10 @@ export function getOcspInitStatus(): Promise<Result<any>> {
   });
 }
 
+export function completeOcspInitialization(): Promise<Result<any>> {
+  return request({ url: '/ocsp/v1/init/complete', method: 'post' });
+}
+
 export function initOcspResponder(data: OcspInitResponderPayload): Promise<Result<any>> {
   return request({
     url: '/ocsp/v1/init/responder',

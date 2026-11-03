@@ -32,6 +32,13 @@ describe('OCSP navigation permission and URL boundaries', () => {
     const output = buildOcspNavigation([{ path: '/ocsp', children: [route('ocsp/responder/index', 'responders')] }] as RouteRecordRaw[], false);
     expect(output.map((item) => item.meta?.title)).toEqual(['响应者管理']);
   });
+  it('removes the user management menu and route while preserving other settings', () => {
+    const output = buildOcspNavigation(fixture(), false);
+    const leaves = output.flatMap((item) => item.children || [item]);
+    expect(leaves.find((item) => item.name === 'users')).toBeUndefined();
+    expect(leaves.find((item) => item.name === 'runtime')?.hidden).not.toBe(true);
+    expect(buildOcspNavigation([{ path: '/security', children: [route('ocsp/user/index', 'users')] }] as RouteRecordRaw[], false)).toEqual([]);
+  });
   it('exposes monitoring only with its permission', () => {
     expect(buildOcspNavigation(fixture(), false).some((item) => item.path === '/ocsp/monitoring')).toBe(false);
     expect(buildOcspNavigation(fixture(), true).some((item) => item.path === '/ocsp/monitoring')).toBe(true);

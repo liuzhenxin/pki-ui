@@ -9,7 +9,8 @@ import { parseStrEmpty } from '@/utils/ruoyi';
 const RA_AUTH_ROLE_OPTIONS = [
   { roleId: '503', roleName: '录入员', roleSort: 503 },
   { roleId: '504', roleName: '审核员', roleSort: 504 },
-  { roleId: '505', roleName: '制证员', roleSort: 505 }
+  { roleId: '505', roleName: '制证员', roleSort: 505 },
+  { roleId: '507', roleName: '机构（部门）管理员', roleSort: 507 }
 ];
 const RA_AUTH_ROLE_IDS = new Set(RA_AUTH_ROLE_OPTIONS.map((role) => role.roleId));
 

@@ -8,17 +8,21 @@ const definitions: Record<string, { title: string; icon: string; order: number; 
   'ocsp/log/index': { title: '请求日志', icon: 'log', order: 5 },
   'ocsp/status/index': { title: '诊断工具', icon: 'search', order: 6 },
   'ocsp/config/index': { title: '运行参数', icon: 'edit', order: 7, group: '系统设置' },
-  'ocsp/user/index': { title: '用户管理', icon: 'peoples', order: 8, group: '系统设置' },
   'ocsp/init/index': { title: '安装向导', icon: 'guide', order: 9, group: '系统设置' }
 };
 
 /** Reorganize only server-authorized OCSP entries; retain their absolute URLs and hidden flags. */
 export const buildOcspNavigation = (routes: RouteRecordRaw[], monitoringAllowed: boolean): RouteRecordRaw[] => {
   const entries: Array<{ route: RouteRecordRaw; order: number; group?: string }> = [];
+  let removedUserManagement = false;
   const walk = (items: RouteRecordRaw[], base = '', ancestorHidden = false): RouteRecordRaw[] =>
     items.flatMap((item) => {
       const path = item.path.startsWith('/') ? item.path : `${base}/${item.path}`.replace(/\/+/g, '/');
       const component = String(item.component ?? '');
+      if (component === 'ocsp/user/index') {
+        removedUserManagement = true;
+        return [];
+      }
       const definition = definitions[component];
       if (definition && !item.children?.length) {
         entries.push({
@@ -32,7 +36,7 @@ export const buildOcspNavigation = (routes: RouteRecordRaw[], monitoringAllowed:
       return children.length ? [{ ...item, children }] : [];
     });
   const remaining = walk(routes);
-  if (!entries.length) return routes;
+  if (!entries.length) return removedUserManagement ? remaining : routes;
   entries.sort((a, b) => a.order - b.order);
   const result: RouteRecordRaw[] = [];
   const groupRoutes = new Map<string, RouteRecordRaw>();

@@ -73,7 +73,10 @@
           <el-input v-model="form.name" />
         </el-form-item>
         <el-form-item label="CA ID" prop="caId">
-          <el-input v-model="form.caId" inputmode="numeric" placeholder="完整 CA ID" />
+          <el-select v-model="form.caId" filterable :loading="caLoading" placeholder="选择已登记的服务 CA" class="w-full">
+            <el-option v-for="caId in caOptions" :key="caId" :label="`CA ${caId}`" :value="caId" />
+          </el-select>
+          <div>请先在“按 CA 配置”中保存签发者证书，创建服务 CA 草稿。</div>
         </el-form-item>
         <el-form-item label="签名者类型" prop="signerType">
           <el-segmented v-model="form.signerType" :options="['SOFTWARE', 'HSM']" />
@@ -145,6 +148,7 @@ import { responderStatusLabel, signerTypeLabel } from '@/utils/ocspPresentation'
 import ResponderCsrPanel from '@/views/ocsp/components/ResponderCsrPanel.vue';
 import { assertSafeSignerCert, assertSafeSignerConf } from '@/api/ocsp/common';
 import { createOcspResponder, getOcspResponder, pageOcspResponders, updateOcspResponder, updateOcspResponderStatus } from '@/api/ocsp/responder';
+import { listServiceCaDrafts } from '@/api/ocsp/serviceCa';
 import type { OcspResponder } from '@/api/ocsp/types';
 
 const route = useRoute();
@@ -166,6 +170,8 @@ const saving = ref(false);
 const rows = ref<OcspResponder[]>([]);
 const total = ref(0);
 const editVisible = ref(false);
+const caLoading = ref(false);
+const caOptions = ref<string[]>([]);
 const certVisible = ref(false);
 const certPem = ref('');
 const formRef = ref<FormInstance>();
@@ -174,7 +180,7 @@ const softwareSignerConf = '{\n  "keyAlias": "ocsp-responder-key",\n  "algorithm
 const query = reactive({ pageNum: 1, pageSize: 10, name: '', status: '' });
 const form = reactive<OcspResponder>({
   name: '',
-  caId: 1,
+  caId: '',
   signerType: 'SOFTWARE',
   signerConf: softwareSignerConf,
   signerCert: '',
@@ -190,7 +196,7 @@ const form = reactive<OcspResponder>({
 
 const rules: FormRules = {
   name: [{ required: true, message: '请输入响应者名称', trigger: 'blur' }],
-  caId: [{ required: true, message: '请输入 CA ID', trigger: 'change' }],
+  caId: [{ required: true, message: '请选择服务 CA', trigger: 'change' }],
   signerType: [{ required: true, message: '请选择签名者类型', trigger: 'change' }],
   signerConf: [{ required: true, message: '请输入签名配置', trigger: 'blur' }],
   signerCert: [
@@ -255,7 +261,7 @@ const openEdit = async (row?: OcspResponder) => {
     Object.assign(form, {
       id: undefined,
       name: '',
-      caId: 1,
+      caId: '',
       signerType: 'SOFTWARE',
       signerConf: softwareSignerConf,
       signerCert: '',
@@ -271,6 +277,21 @@ const openEdit = async (row?: OcspResponder) => {
     certSource.value = 'CSR';
   }
   editVisible.value = true;
+  caLoading.value = true;
+  caOptions.value = [];
+  try {
+    const drafts = await listServiceCaDrafts();
+    caOptions.value = [...new Set(drafts.map((draft) => normalizeOcspCaId(draft.caId)))];
+  } catch {
+    ElMessage.error('服务 CA 列表加载失败，请检查权限或稍后重试');
+  } finally {
+    if (row && form.caId) {
+      const existing = normalizeOcspCaId(form.caId);
+      form.caId = existing;
+      if (!caOptions.value.includes(existing)) caOptions.value.push(existing);
+    }
+    caLoading.value = false;
+  }
 };
 
 const handleCertificateImported = () => {

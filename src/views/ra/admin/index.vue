@@ -375,7 +375,8 @@ const isDataLoaded = ref(false);
 const raBizRoleOptions = [
   { label: '录入员', value: '503' },
   { label: '审核员', value: '504' },
-  { label: '制证员', value: '505' }
+  { label: '制证员', value: '505' },
+  { label: '机构（部门）管理员', value: '507' }
 ];
 const RA_BIZ_ROLE_IDS = raBizRoleOptions.map((role) => role.value);
 const RA_DEFAULT_BIZ_ROLE_IDS = ['503'];
@@ -520,8 +521,7 @@ function buildDefaultSubjectItems(row: any) {
     { type: 'country', value: 'CN' },
     { type: 'organization', value: '注册认证中心' },
     { type: 'organizationalUnit', value: '业务管理员' },
-    { type: 'commonName', value: row.username || '' },
-    { type: 'emailAddress', value: row.mail || '' }
+    { type: 'commonName', value: row.username || '' }
   ]);
 }
 
@@ -983,7 +983,16 @@ async function submitCertForm() {
       await skf.checkPIN(`${certForm.provider}/${certForm.device}/${certForm.appName}`, certForm.pin);
 
       ElMessage.info('正在从 USB KEY 生成 CSR...');
-      const csrRes = await skf.createPKCS10(certForm.provider, certForm.device, certForm.appName, subject, 'SM2', 256, certForm.containerName);
+      const csrRes = await skf.createPKCS10(
+        certForm.provider,
+        certForm.device,
+        certForm.appName,
+        subject,
+        'SM2',
+        256,
+        certForm.containerName,
+        certForm.pin
+      );
 
       ElMessage.info('正在请求 CA 签发证书...');
       const issueRes = await issueAdminAccountCert({
@@ -1000,7 +1009,15 @@ async function submitCertForm() {
       }
 
       ElMessage.info('正在将证书写入 USB KEY...');
-      await skf.importCertificate(certForm.provider, certForm.device, certForm.appName, csrRes.container, true, issuedCertPem);
+      await skf.importCertificate(
+        certForm.provider,
+        certForm.device,
+        certForm.appName,
+        csrRes.container,
+        true,
+        issuedCertPem,
+        certForm.pin
+      );
 
       ElMessage.info('正在更新业务管理员证书信息...');
       const userDataRes = await getUser(certForm.userId);

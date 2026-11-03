@@ -15,7 +15,8 @@
 
     <OcspHome v-if="isOCSP" />
 
-    <OpsOverview v-if="isOps" />
+    <OpsOverview v-if="isOps && canViewOpsOverview" />
+    <OpsAudit v-else-if="isOps && canViewOpsAudit" />
 
     <el-card v-if="isOps" class="box-card ops-system-card" shadow="hover">
       <template #header>
@@ -610,7 +611,7 @@
       </template>
       <div class="body">
         <el-row :gutter="20">
-          <el-col :xs="24" :sm="24" :md="8">
+          <el-col v-if="!isKMC" :xs="24" :sm="24" :md="8">
             <div class="contact-info-box">
               <div class="contact-item">
                 <div class="icon-box">
@@ -632,8 +633,8 @@
               </div>
             </div>
           </el-col>
-          <el-col v-if="isKMC" :xs="24" :sm="24" :md="16">
-            <h4 style="margin: 0 0 15px 0; font-size: 16px; color: #303133; font-weight: 600">版本信息</h4>
+          <el-col v-if="isKMC" :span="24">
+            <h4 style="margin: 0 0 15px 0; font-size: 16px; color: #303133; font-weight: 600">版本与运行状态</h4>
             <div class="version-info-box">
               <div class="version-item">
                 <div class="icon-box">
@@ -755,6 +756,7 @@ import { LicenseVO, ProductVO } from '@/api/license/license/types';
 import NASDashboard from '@/views/nas/index.vue';
 import CADashboard from '@/views/ca/index.vue';
 import OpsOverview from '@/views/ops/overview/index.vue';
+import OpsAudit from '@/views/ops/audit/index.vue';
 import OcspHome from '@/views/ocsp/home/index.vue';
 
 const router = useRouter();
@@ -774,6 +776,8 @@ const kmcDashboardStats = ref<any>({});
 const frontendVersion = computed(() => String(import.meta.env.VITE_APP_VERSION || '未知'));
 const currentTenantId = computed(() => userStore.tenantId || localStorage.getItem('tenantId'));
 const isOps = computed(() => String(currentTenantId.value) === '1');
+const canViewOpsOverview = computed(() => userStore.permissions.some((permission) => ['ops:overview', '*:*:*'].includes(permission)));
+const canViewOpsAudit = computed(() => userStore.permissions.some((permission) => ['ops:audit:page', '*:*:*'].includes(permission)));
 const isKMC = computed(() => String(currentTenantId.value) === '3');
 const isNAS = computed(() => String(currentTenantId.value) === '10');
 const isCA = computed(() => String(currentTenantId.value) === '4');
@@ -1186,15 +1190,13 @@ const kmcCryptoServiceName = computed(() => {
   const systemHealth = kmcDashboardStats.value?.systemHealth;
   const status = String(systemHealth?.cryptoProviderStatus || '').toUpperCase();
   const provider = String(systemHealth?.cryptoProvider || '').toUpperCase();
-  const vendor = String(systemHealth?.cryptoVendor || '').trim();
 
   if (status === 'SOFTWARE' || provider === 'SOFTWARE' || provider === 'BC') {
     return '软件密码服务 / Bouncy Castle';
   }
 
   if (status === 'HARDWARE' || provider === 'SDF' || provider === 'LIUZX') {
-    const vendorName = ['DYSX', 'SHUDUN', '大有数信', '数盾'].includes(vendor.toUpperCase()) ? '大有数信' : vendor;
-    return `SDF / ${vendorName && vendorName !== '-' ? vendorName : '密码机'}`;
+    return 'SDF';
   }
 
   return '未检测';
@@ -1986,7 +1988,7 @@ const handleResize = () => {
 
   .compliance-card {
     background: #fff;
-    height: 100%;
+    height: auto;
 
     .compliance-list {
       list-style-type: none;
@@ -2353,13 +2355,13 @@ const handleResize = () => {
       background-color: #f8f9fa;
       padding: 20px 25px;
       border-radius: 8px;
-      height: 100%;
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
       gap: 16px;
       align-content: start;
 
       .version-item {
+        min-width: 0;
         display: flex;
         align-items: center;
 

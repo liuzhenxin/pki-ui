@@ -118,6 +118,8 @@ export interface OcspStatusSource {
   type: 'DB' | 'LDAP' | string;
   /** 按 CA 配置时必填（CA 与数据源 1:1）；为空表示平台默认数据源 */
   caId?: number | string;
+  sourceCaId?: string;
+  responderId?: number | string;
   name?: string;
   enabled?: boolean;
   db?: {
