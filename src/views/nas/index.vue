@@ -372,7 +372,7 @@ function formatNumber(value: number) {
 }
 
 function getStatusTag(status?: string) {
-  const tags: Record<string, string> = {
+  const tags: Record<string, ElTagType> = {
     PENDING: 'info',
     STARTING: 'warning',
     RUNNING: 'primary',
@@ -391,7 +391,7 @@ function getProgressStatus(status?: string) {
   return '';
 }
 
-function getTimelineType(status?: string) {
+function getTimelineType(status?: string): ElTagType {
   if (status === 'FAILED') return 'danger';
   if (status === 'COMPLETED_WITH_FAILURES' || status === 'STOPPING' || status === 'STARTING') return 'warning';
   if (status === 'COMPLETED') return 'success';

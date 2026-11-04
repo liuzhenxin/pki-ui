@@ -210,8 +210,11 @@ export default class SKFClient {
    * @param {string} containerName Container name
    * @returns {Promise<boolean>} True if successful
    */
-  async deleteContainer(provider, deviceName, appName, containerName) {
-    return this.call('DeleteContainer', [provider, deviceName, appName, containerName]);
+  async deleteContainer(provider, deviceName, appName, containerName, pin = null) {
+    const params = pin
+      ? [provider, deviceName, appName, containerName, pin]
+      : [provider, deviceName, appName, containerName];
+    return this.call('DeleteContainer', params);
   }
 
   /**
@@ -246,8 +249,11 @@ export default class SKFClient {
    * @param {string} certData PEM or Base64 encoded certificate
    * @returns {Promise<boolean>} True if successful
    */
-  async importCertificate(provider, deviceName, appName, containerName, isSignCert, certData) {
-    return this.call('ImportCertificate', [provider, deviceName, appName, containerName, isSignCert, certData]);
+  async importCertificate(provider, deviceName, appName, containerName, isSignCert, certData, pin = null) {
+    const params = pin
+      ? [provider, deviceName, appName, containerName, isSignCert, certData, pin]
+      : [provider, deviceName, appName, containerName, isSignCert, certData];
+    return this.call('ImportCertificate', params);
   }
 
   /**
@@ -357,9 +363,13 @@ export default class SKFClient {
    * @param {string} [keyType="SM2"] Key type: "SM2" or "RSA"
    * @param {number} [keyLength=256] Key length in bits
    * @param {string} [containerName=""] Optional container name
+   * @param {string} [pin] Optional one-shot PIN, verified on the same native application handle
    * @returns {Promise<{pem:string, container:string, keyType:string, keyLength:number}>}
    */
-  async createPKCS10(providerName, deviceName, appName, subject, keyType = 'SM2', keyLength = 256, containerName = '') {
-    return this.call('CreatePKCS10', [providerName, deviceName, appName, subject, keyType, keyLength, containerName]);
+  async createPKCS10(providerName, deviceName, appName, subject, keyType = 'SM2', keyLength = 256, containerName = '', pin = null) {
+    const params = pin
+      ? [providerName, deviceName, appName, subject, keyType, keyLength, containerName, pin]
+      : [providerName, deviceName, appName, subject, keyType, keyLength, containerName];
+    return this.call('CreatePKCS10', params);
   }
 }

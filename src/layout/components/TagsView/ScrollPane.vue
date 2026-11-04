@@ -11,13 +11,13 @@ import { useTagsViewStore } from '@/store/modules/tagsView';
 const tagAndTagSpacing = ref(4);
 
 const scrollContainerRef = ref<ElScrollbarInstance>();
-const scrollWrapper = computed(() => scrollContainerRef.value?.$refs.wrapRef);
+const scrollWrapper = computed(() => scrollContainerRef.value?.wrapRef);
 
 onMounted(() => {
   scrollWrapper.value?.addEventListener('scroll', emitScroll, true);
 });
 onBeforeUnmount(() => {
-  scrollWrapper.value?.removeEventListener('scroll', emitScroll);
+  scrollWrapper.value?.removeEventListener('scroll', emitScroll, true);
 });
 
 const handleScroll = (e: WheelEvent) => {

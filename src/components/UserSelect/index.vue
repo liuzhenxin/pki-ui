@@ -25,11 +25,11 @@
             <div v-show="showSearch" class="mb-[10px]">
               <el-card shadow="hover">
                 <el-form ref="queryFormRef" :model="queryParams" :inline="true">
-                  <el-form-item label="用户名称" prop="userName">
-                    <el-input v-model="queryParams.userName" placeholder="请输入用户名称" clearable @keyup.enter="handleQuery" />
+                  <el-form-item label="用户名称" prop="username">
+                    <el-input v-model="queryParams.username" placeholder="请输入用户名称" clearable @keyup.enter="handleQuery" />
                   </el-form-item>
-                  <el-form-item label="手机号码" prop="phonenumber">
-                    <el-input v-model="queryParams.phonenumber" placeholder="请输入手机号码" clearable @keyup.enter="handleQuery" />
+                  <el-form-item label="手机号码" prop="mobile">
+                    <el-input v-model="queryParams.mobile" placeholder="请输入手机号码" clearable @keyup.enter="handleQuery" />
                   </el-form-item>
                   <el-form-item>
                     <el-button type="primary" icon="Search" @click="handleQuery">搜索</el-button>
@@ -42,7 +42,7 @@
 
           <el-card shadow="hover">
             <template v-if="prop.multiple" #header>
-              <el-tag v-for="user in selectUserList" :key="user.userId" closable style="margin: 2px" @close="handleCloseTag(user)">
+              <el-tag v-for="user in selectUserList" :key="user.id" closable style="margin: 2px" @close="handleCloseTag(user)">
                 {{ user.nickName }}
               </el-tag>
             </template>
@@ -141,8 +141,8 @@ const userDialog = useDialog({
 const queryParams = ref<UserQuery>({
   pageNum: 1,
   pageSize: 10,
-  userName: '',
-  phonenumber: '',
+  username: '',
+  mobile: '',
   status: '',
   deptId: '',
   roleId: '',
@@ -208,7 +208,7 @@ const getList = async () => {
 const pageList = async () => {
   await getList();
   const users = userList.value.filter((item) => {
-    return selectUserList.value.some((user) => user.userId === item.userId);
+    return selectUserList.value.some((user) => user.id === item.id);
   });
   await tableRef.value.setCheckboxRow(users, true);
 };
@@ -244,7 +244,7 @@ const handleCheckboxChange = (checked) => {
     selectUserList.value.push(row);
   } else {
     selectUserList.value = selectUserList.value.filter((item) => {
-      return item.userId !== row.userId;
+      return item.id !== row.id;
     });
   }
 };
@@ -252,21 +252,21 @@ const handleCheckboxAll = (checked) => {
   const rows = userList.value;
   if (checked.checked) {
     rows.forEach((row) => {
-      if (!selectUserList.value.some((item) => item.userId === row.userId)) {
+      if (!selectUserList.value.some((item) => item.id === row.id)) {
         selectUserList.value.push(row);
       }
     });
   } else {
     selectUserList.value = selectUserList.value.filter((item) => {
-      return !rows.some((row) => row.userId === item.userId);
+      return !rows.some((row) => row.id === item.id);
     });
   }
 };
 
 const handleCloseTag = (user: UserVO) => {
-  const userId = user.userId;
+  const userId = user.id;
   // 使用split删除用户
-  const index = selectUserList.value.findIndex((item) => item.userId === userId);
+  const index = selectUserList.value.findIndex((item) => item.id === userId);
   const rows = selectUserList.value[index];
   tableRef.value?.setCheckboxRow(rows, false);
   selectUserList.value.splice(index, 1);
@@ -277,7 +277,7 @@ const initSelectUser = async () => {
     const { data } = await api.optionSelect(defaultSelectUserIds.value);
     selectUserList.value = data;
     const users = userList.value.filter((item) => {
-      return defaultSelectUserIds.value.includes(String(item.userId));
+      return defaultSelectUserIds.value.includes(String(item.id));
     });
     await nextTick(() => {
       tableRef.value.setCheckboxRow(users, true);

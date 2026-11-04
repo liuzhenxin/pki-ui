@@ -812,7 +812,8 @@ const generateAndWriteAdminCert = async () => {
       subject,
       'SM2',
       256,
-      adminForm.adminContainerName
+      adminForm.adminContainerName,
+      adminForm.adminPin
     );
     const issueRes = await issueAdminAccountCert({
       rootId: adminForm.certRootId,
@@ -857,7 +858,8 @@ const generateAndWriteAuditorCert = async () => {
       subject,
       'SM2',
       256,
-      adminForm.auditorContainerName
+      adminForm.auditorContainerName,
+      adminForm.auditorPin
     );
     const issueRes = await issueAdminAccountCert({
       rootId: adminForm.certRootId,

@@ -38,8 +38,8 @@ export function listInitProfiles(): Promise<Result<any[]>> {
 
 // 初始化管理员
 export function initAdmin(data: {
-  admin: { username: string; password: string };
-  auditor: { username: string; password: string };
+  admin: { username: string; password: string; certPem: string };
+  auditor: { username: string; password: string; certPem: string };
 }): Promise<Result<any>> {
   return request({
     url: '/ca/v1/init/admin',

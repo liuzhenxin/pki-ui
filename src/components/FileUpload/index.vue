@@ -92,6 +92,8 @@ watch(
       let list: any[] = [];
       if (Array.isArray(val)) {
         list = val;
+      } else if (typeof val === 'object') {
+        list = [val];
       } else {
         const res = await listByIds(val);
         list = res.data.map((oss) => {

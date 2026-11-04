@@ -1,0 +1,55 @@
+import { beforeEach, expect, it, vi } from 'vitest';
+import { mount, flushPromises } from '@vue/test-utils';
+import ElementPlus from 'element-plus';
+import DeviceCertificates from '@/views/svs/product/DeviceCertificates.vue';
+import * as api from '@/api/svs/certificates';
+vi.mock('@/api/svs/certificates', () => ({ list: vi.fn(), keys: vi.fn(), csr: vi.fn(), details: vi.fn(), upload: vi.fn() }));
+const keyId = 'abcdefghijklmnopqrstuvwxyz012345';
+const mountPage = (manage = true) => mount(DeviceCertificates, { props: { manage }, global: { plugins: [ElementPlus] } });
+const button = (w: ReturnType<typeof mountPage>, name: string) => w.findAll('button').find((b) => b.text() === name)!;
+beforeEach(() => {
+  vi.clearAllMocks();
+  vi.mocked(api.list).mockResolvedValue({ rows: [], total: 0, page: 1, size: 20 });
+  vi.mocked(api.keys).mockResolvedValue([{ keyId, alias: 'signing-sm2', algorithm: 'SM2', fingerprint: 'a'.repeat(64) }]);
+});
+it('generates CSR using an existing device key and retains the returned public request', async () => {
+  vi.mocked(api.csr).mockResolvedValue({ csr: '-----BEGIN CERTIFICATE REQUEST-----\npublic\n-----END CERTIFICATE REQUEST-----' });
+  const w = mountPage();
+  await flushPromises();
+  await button(w, '生成证书请求 CSR').trigger('click');
+  await flushPromises();
+  (w.vm as any).subject = 'CN=svs-device,O=Example,C=CN';
+  await flushPromises();
+  await button(w, '生成 CSR').trigger('click');
+  await flushPromises();
+  expect(api.csr).toHaveBeenCalledWith(keyId, 'CN=svs-device,O=Example,C=CN');
+  expect((w.vm as any).csrPem).toContain('CERTIFICATE REQUEST');
+  expect(api.upload).not.toHaveBeenCalled();
+  w.unmount();
+});
+it('hides certificate mutations for query-only users', async () => {
+  const w = mountPage(false);
+  await flushPromises();
+  expect(w.text()).not.toContain('生成证书请求 CSR');
+  expect(w.text()).not.toContain('导入公开证书');
+  w.unmount();
+});
+it('rejects private key input and surfaces device public-key mismatch', async () => {
+  const w = mountPage();
+  await flushPromises();
+  await button(w, '导入公开证书').trigger('click');
+  await flushPromises();
+  (w.vm as any).certificate = '-----BEGIN PRIVATE KEY-----';
+  await flushPromises();
+  await button(w, '校验并导入').trigger('click');
+  await flushPromises();
+  expect(api.upload).not.toHaveBeenCalled();
+  (w.vm as any).certificate = '-----BEGIN CERTIFICATE-----';
+  vi.mocked(api.upload).mockRejectedValue(new Error('证书公钥与所选设备密钥不一致'));
+  await flushPromises();
+  await button(w, '校验并导入').trigger('click');
+  await flushPromises();
+  expect((w.vm as any).importDialog).toBe(true);
+  expect(w.text()).toContain('公钥与所选设备密钥不一致');
+  w.unmount();
+});

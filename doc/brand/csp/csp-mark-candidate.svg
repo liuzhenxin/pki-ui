@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-labelledby="title description">
+  <title id="title">CSP 密码服务平台图标</title>
+  <desc id="description">C 形安全边界和青绿密钥。品牌候选，待产品负责人确认。</desc>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M91 31A44 44 0 1 0 91 97" stroke="#172B42" stroke-width="14"/>
+    <circle cx="55" cy="64" r="11" stroke="#087F8C" stroke-width="9"/>
+    <path d="M66 64H110M91 64V78M105 64V73" stroke="#087F8C" stroke-width="9"/>
+  </g>
+</svg>

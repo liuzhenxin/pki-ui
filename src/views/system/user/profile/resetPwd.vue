@@ -35,7 +35,7 @@ const equalToPassword = (rule: any, value: string, callback: any) => {
     callback();
   }
 };
-const rules = ref({
+const rules = ref<ElFormRules>({
   oldPassword: [{ required: true, message: '旧密码不能为空', trigger: 'blur' }],
   newPassword: [
     { required: true, message: '新密码不能为空', trigger: 'blur' },

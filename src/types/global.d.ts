@@ -59,7 +59,7 @@ declare global {
   declare interface DictDataOption {
     label: string;
     value: string;
-    elTagType?: ElTagType;
+    elTagType?: ElTagType | 'default' | '';
     elTagClass?: string;
   }
 
@@ -89,6 +89,7 @@ declare global {
     pageSize: number;
   }
   declare interface LayoutSetting {
+    dark: boolean;
     /**
      * 是否显示顶部导航
      */

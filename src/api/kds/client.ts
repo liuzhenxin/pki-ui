@@ -24,6 +24,21 @@ export async function kdsPost<T>(action: string, body: Record<string, unknown> =
   return envelope ? envelope.data : (undefined as T);
 }
 
+export async function kdsManagement<T>(path: string, method: 'get' | 'post' = 'get', body: Record<string, unknown> = {}, headers: Record<string, string> = {}): Promise<T> {
+  const envelope = (await request({
+    url: `${PREFIX}/mmj/${path}`,
+    method,
+    data: method === 'post' ? body : undefined,
+    headers: method === 'post' ? { 'Idempotency-Key': crypto.randomUUID(), ...headers } : headers
+  })) as unknown as KdsEnvelope<T>;
+  if (envelope && envelope.code && envelope.code !== '9000') {
+    const error = new Error(envelope.msg || 'MMJ 管理请求失败');
+    (error as Error & { code?: string }).code = envelope.code;
+    throw error;
+  }
+  return envelope ? envelope.data : (undefined as T);
+}
+
 export interface KdsError {
   code?: string;
   message: string;

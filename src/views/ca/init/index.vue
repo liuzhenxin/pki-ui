@@ -1,5 +1,9 @@
 <template>
-  <div class="app-container">
+  <ApplicationInstallation v-if="authorizationMode === 'ENFORCE'" />
+  <el-card v-else-if="authorizationMode !== 'LEGACY' && authorizationMode !== 'SHADOW'" v-loading="loading"
+    ><el-empty description="无法确认当前安装权限，操作已关闭"
+  /></el-card>
+  <div v-else class="app-container">
     <el-card v-loading="loading">
       <el-steps :active="active" finish-status="success" simple>
         <el-step title="协议" />
@@ -297,7 +301,9 @@
 
               <el-tab-pane label="CRL配置">
                 <el-form-item label="更新间隔(小时)" prop="crlIntervalHours">
-                  <el-input-number v-model="rootCaForm.crlIntervalHours" :min="1" />
+                  <el-select v-model="rootCaForm.crlIntervalHours" style="width: 200px">
+                    <el-option v-for="item in crlIntervalHoursOptions" :key="item" :label="item + '小时'" :value="item" />
+                  </el-select>
                 </el-form-item>
                 <el-form-item label="全量CRL间隔" prop="crlFullIntervals">
                   <el-input-number v-model="rootCaForm.crlFullIntervals" :min="1" />
@@ -323,6 +329,10 @@
               </el-tab-pane>
 
               <el-tab-pane label="URI配置">
+                <el-form-item label="CPS URI" prop="cpsUri">
+                  <el-input v-model="rootCaForm.cpsUri" clearable placeholder="例如：http://ca.faw-vw.com/cps.html" />
+                </el-form-item>
+
                 <el-form-item
                   v-for="(item, index) in rootCaForm.cacertUris"
                   :key="'cacert-' + index"
@@ -656,12 +666,14 @@
 </template>
 
 <script setup lang="ts">
+import ApplicationInstallation from '@/components/ApplicationInstallation/index.vue';
+import { getApplicationAuthorizationContext } from '@/api/system/applicationAuthorization';
+const authorizationMode = ref('');
 import { ref, computed, reactive, onMounted, onUnmounted, watch, getCurrentInstance, ComponentInternalInstance } from 'vue';
 import { ElMessage, FormInstance, FormRules, UploadInstance, UploadUserFile, UploadProps, UploadRawFile, genFileId } from 'element-plus';
 import { useRouter } from 'vue-router';
 import { listProfile, listInitProfile, getProfile, initProfiles } from '@/api/ca/profile';
 import { listSigner, saveSigner, removeSigner, modifySigner } from '@/api/ca/signer';
-import { uploadUserCert, resetUserPwd } from '@/api/system/user';
 import { getTenant } from '@/api/system/tenant';
 import { genRootCa, importExternalCert, issueAdminCert, deleteAllRootCa } from '@/api/ca/root';
 import { getInitStatus, completeInit, initAdmin as submitInitAdmin } from '@/api/ca/init';
@@ -911,8 +923,6 @@ const submitSignerForm = async () => {
 };
 
 // 常量定义
-const ADMIN_USER_ID = '401';
-const AUDITOR_USER_ID = '402';
 
 // 租户信息
 const tenantCode = ref('');
@@ -1020,9 +1030,12 @@ watch(active, async (newActive) => {
     // Ensure subjectItems is at least initialized with basic structure if still empty
     if (!rootCaForm.subjectItems || rootCaForm.subjectItems.length === 0) {
       rootCaForm.subjectItems = sortSubjectItems([
-        { type: 'country', value: 'CN' },
-        { type: 'organization', value: '' },
-        { type: 'commonName', value: '' }
+        { type: 'country', value: '', minOccurs: 0 },
+        { type: 'organization', value: '', minOccurs: 0 },
+        { type: 'organizationalUnit', value: '', minOccurs: 0 },
+        { type: 'domainComponent', value: '', minOccurs: 0, maxOccurs: 2 },
+        { type: 'domainComponent', value: '', minOccurs: 0, maxOccurs: 2 },
+        { type: 'commonName', value: '', minOccurs: 1 }
       ]);
     }
   }
@@ -1176,6 +1189,7 @@ const rootCaForm = reactive({
   nextCrlNo: 1,
 
   // URIs
+  cpsUri: 'http://ca.faw-vw.com/cps.html',
   cacertUris: [{ value: 'https://myorg.org/rootca1.der' }],
   crlUris: [{ value: 'https://localhost:8081/dummy/crl/?type=crl&name=rootca1' }],
   deltaCrlUris: [{ value: '' }],
@@ -1221,14 +1235,8 @@ const loadProfileToForm = async (id: string | number, form: any, defaultValues?:
     if (!profile) {
       throw new Error('Profile data is empty');
     }
-    // Remove JSON comments before parsing
-    const parseConf = (confStr: string) => {
-      // Remove single-line comments (// ...)
-      const withoutSingleLine = confStr.replace(/\/\/.*$/gm, '');
-      // Remove multi-line comments (/* ... */)
-      const withoutComments = withoutSingleLine.replace(/\/\*[\s\S]*?\*\//g, '');
-      return JSON.parse(withoutComments);
-    };
+    // 初始化接口返回后端已校验的标准 JSON；不要用正则删除注释，避免破坏 http:// 等 URI。
+    const parseConf = (confStr: string) => JSON.parse(confStr);
     const conf = typeof profile.conf === 'string' ? parseConf(profile.conf) : profile.conf;
     if (conf) {
       // 1. Subject Items
@@ -1254,8 +1262,7 @@ const loadProfileToForm = async (id: string | number, form: any, defaultValues?:
             }
           }
 
-          // If minOccurs > 1, create multiple items
-          const count = Math.max(1, rdn.minOccurs || 0);
+          const count = rdn.maxOccurs ?? Math.max(1, rdn.minOccurs ?? 1);
           for (let i = 0; i < count; i++) {
             items.push({
               type: compType,
@@ -1304,9 +1311,20 @@ const loadProfileToForm = async (id: string | number, form: any, defaultValues?:
   }
 };
 
+const crlIntervalHoursOptions = [1, 2, 3, 4, 6, 8, 12, 24];
+
 const rootCaRules = reactive<FormRules>({
   name: [{ required: true, message: '请输入CA名称', trigger: 'blur' }],
   signerId: [{ required: true, message: '请选择关联签名者', trigger: 'change' }],
+  crlIntervalHours: [
+    { required: true, message: '请选择CRL更新间隔', trigger: 'change' },
+    {
+      validator: (_rule, value, callback) => {
+        crlIntervalHoursOptions.includes(Number(value)) ? callback() : callback(new Error('CRL更新间隔仅支持1、2、3、4、6、8、12或24小时'));
+      },
+      trigger: 'change'
+    }
+  ],
   maxValidity: [
     { required: true, message: '请输入最大有效期', trigger: 'blur' },
     { type: 'integer', message: '必须为正整数', trigger: 'blur', min: 1 }
@@ -1929,7 +1947,7 @@ const next = async () => {
             const reqData = {
               signerId: rootCaForm.signerId,
               name: rootCaForm.name,
-              rootcaProfile: rootCaForm.rootcaProfileName,
+              rootcaProfile: rootCaForm.rootcaProfileName || 'RootCA证书模板',
               subject: rootCaForm.subjectItems
                 .filter((item: any) => item.value)
                 .map((item: any) => {
@@ -1949,6 +1967,7 @@ const next = async () => {
               snLen: rootCaForm.snSize,
               nextCrlNumber: rootCaForm.nextCrlNo,
               crlControl: crlControlArr.join(','),
+              cpsUri: rootCaForm.cpsUri?.trim() || undefined,
               caCertUris: rootCaForm.cacertUris.map((u) => u.value).filter((v) => v),
               crlUris: rootCaForm.crlUris.map((u) => u.value).filter((v) => v),
               deltaCrlUris: rootCaForm.deltaCrlUris.map((u) => u.value).filter((v) => v),
@@ -1997,22 +2016,11 @@ const next = async () => {
           }
           loading.value = true;
           try {
-            // 上传证书逻辑已经替换为写入USBKey
-            // 这里我们只需要提交生成的证书PEM给后端保存
-            // 发起一个表单提交用户证书
-            const formData = new FormData();
-            const certBlob = new Blob([adminCertPem.value], { type: 'application/x-x509-ca-cert' });
-            formData.append('file', certBlob, 'admin.pem');
-            formData.append('id', ADMIN_USER_ID); // 管理员ID
-            await uploadUserCert(formData);
-
-            // 提交证书成功后，重置用户密码
-            await resetUserPwd(ADMIN_USER_ID, adminForm.password);
-
-            ElMessage.success('管理员设置成功');
+            // 管理员和审计员证书仍逐张签发；两张均完成后由初始化专用接口统一绑定。
+            ElMessage.success('管理员证书已生成并写入USBKey');
             await updateTenantStep();
           } catch (error) {
-            ElMessage.error('管理员设置失败');
+            ElMessage.error('管理员步骤提交失败');
           } finally {
             loading.value = false;
           }
@@ -2029,24 +2037,22 @@ const next = async () => {
           }
           loading.value = true;
           try {
-            // 提交通过 USBKey 生成并签发的证书数据
-            const formData = new FormData();
-            const certBlob = new Blob([auditorCertPem.value], { type: 'application/x-x509-ca-cert' });
-            formData.append('file', certBlob, 'auditor.pem');
-            formData.append('id', AUDITOR_USER_ID); // 审计员ID
-            await uploadUserCert(formData);
-
-            // 提交证书成功后，重置用户密码
-            await resetUserPwd(AUDITOR_USER_ID, auditorForm.password);
-
-            ElMessage.success('审计员设置成功');
+            // 初始化账号不调用普通用户管理接口；专用接口在同一事务中设置密码并绑定两张证书。
             await submitInitAdmin({
-              admin: { username: adminForm.username, password: adminForm.password },
-              auditor: { username: auditorForm.username, password: auditorForm.password }
+              admin: {
+                username: adminForm.username,
+                password: adminForm.password,
+                certPem: adminCertPem.value
+              },
+              auditor: {
+                username: auditorForm.username,
+                password: auditorForm.password,
+                certPem: auditorCertPem.value
+              }
             });
             await updateTenantStep();
           } catch (error) {
-            ElMessage.error('审计员设置或激活租户失败');
+            ElMessage.error('管理员和审计员初始化失败');
           } finally {
             loading.value = false;
           }
@@ -2096,6 +2102,16 @@ const prev = async () => {
 };
 
 onMounted(async () => {
+  try {
+    authorizationMode.value = (await getApplicationAuthorizationContext()).mode;
+  } catch {
+    loading.value = false;
+    return;
+  }
+  if (authorizationMode.value === 'ENFORCE') {
+    loading.value = false;
+    return;
+  }
   // 获取租户信息并恢复初始化步骤
   try {
     const tenantId = userStore.tenantId || localStorage.getItem('tenantId') || '';

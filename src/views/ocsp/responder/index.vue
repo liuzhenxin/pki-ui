@@ -1,62 +1,82 @@
 <template>
   <div class="app-container ocsp-page">
-    <el-card shadow="hover" class="mb16">
-      <el-form :inline="true" :model="query">
-        <el-form-item label="名称">
-          <el-input v-model="query.name" clearable placeholder="响应者名称" @keyup.enter="handleQuery" />
-        </el-form-item>
-        <el-form-item label="状态">
-          <el-select v-model="query.status" clearable placeholder="全部" style="width: 140px">
-            <el-option label="ACTIVE" value="ACTIVE" />
-            <el-option label="INACTIVE" value="INACTIVE" />
-          </el-select>
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary" icon="Search" @click="handleQuery">搜索</el-button>
-          <el-button icon="Refresh" @click="resetQuery">重置</el-button>
-          <el-button v-hasPermi="['ocsp:responder:save']" type="primary" plain icon="Plus" @click="openEdit()">新建</el-button>
-        </el-form-item>
-      </el-form>
-    </el-card>
+    <ResponderDetail v-if="selectedId" :id="selectedId" :revision="detailRevision" @back="closeDetail" @edit="openEdit" @certificate="openCert" />
+    <template v-else>
+      <OcspPageHeader title="响应者管理" description="查看响应者、签名证书和关联数据源。"
+        ><el-button v-hasPermi="['ocsp:responder:save']" type="primary" icon="Plus" @click="openEdit()">新建响应者</el-button></OcspPageHeader
+      >
+      <el-card shadow="never" class="mb16">
+        <el-form :inline="true" :model="query">
+          <el-form-item label="名称">
+            <el-input v-model="query.name" clearable placeholder="响应者名称" @keyup.enter="handleQuery" />
+          </el-form-item>
+          <el-form-item label="状态">
+            <el-select v-model="query.status" clearable placeholder="全部" style="width: 140px">
+              <el-option label="已启用" value="ACTIVE" />
+              <el-option label="已停用" value="INACTIVE" />
+            </el-select>
+          </el-form-item>
+          <el-form-item>
+            <el-button type="primary" icon="Search" @click="handleQuery">搜索</el-button>
+            <el-button icon="Refresh" @click="resetQuery">重置</el-button>
+          </el-form-item>
+        </el-form>
+      </el-card>
 
-    <el-card shadow="hover">
-      <el-table v-loading="loading" :data="rows" border>
-        <template #empty>
-          <el-empty description="暂无响应者" />
-        </template>
-        <el-table-column prop="name" label="名称" min-width="160" />
-        <el-table-column prop="caId" label="CA ID" width="90" />
-        <el-table-column prop="signerType" label="签名类型" width="110" />
-        <el-table-column label="状态" width="110" align="center">
-          <template #default="{ row }">
-            <el-tag :type="row.status === 'ACTIVE' ? 'success' : 'info'" size="small">{{ row.status }}</el-tag>
+      <el-card shadow="never">
+        <el-table v-loading="loading" :data="rows" border>
+          <template #empty>
+            <OcspEmptyState
+              v-if="!loading"
+              :error="loadError"
+              :title="loadError ? '响应者读取失败' : '暂无响应者'"
+              :description="loadError ? '请重试，或检查当前账号的访问权限。' : '可调整筛选条件，或创建用于签名响应的响应者。'"
+              ><el-button @click="loadError ? getList() : resetQuery()">{{ loadError ? '重新加载' : '重置筛选' }}</el-button></OcspEmptyState
+            >
           </template>
-        </el-table-column>
-        <el-table-column prop="responseValidity" label="有效期(秒)" width="120" />
-        <el-table-column label="Nonce" width="90">
-          <template #default="{ row }">{{ row.nonceEnabled ? '启用' : '关闭' }}</template>
-        </el-table-column>
-        <el-table-column prop="updateTime" label="更新时间" min-width="170" />
-        <el-table-column label="操作" width="240" fixed="right">
-          <template #default="{ row }">
-            <el-button link type="primary" @click="openCert(row)">证书</el-button>
-            <el-button v-hasPermi="['ocsp:responder:save']" link type="primary" @click="openEdit(row)">编辑</el-button>
-            <el-button v-hasPermi="['ocsp:responder:status']" link type="warning" @click="toggleStatus(row)">
-              {{ row.status === 'ACTIVE' ? '停用' : '启用' }}
-            </el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-      <pagination v-show="total > 0" v-model:page="query.pageNum" v-model:limit="query.pageSize" :total="total" @pagination="getList" />
-    </el-card>
+          <el-table-column prop="name" label="名称" min-width="180"
+            ><template #default="{ row }"
+              ><el-button link type="primary" @click="openDetail(row)">{{ row.name }}</el-button></template
+            ></el-table-column
+          >
+          <el-table-column prop="caId" label="CA ID" min-width="190" />
+          <el-table-column label="签名类型" min-width="130"
+            ><template #default="{ row }">{{ signerTypeLabel(row.signerType) }}</template></el-table-column
+          >
+          <el-table-column label="状态" width="110" align="center">
+            <template #default="{ row }">
+              <el-tag :type="row.status === 'ACTIVE' ? 'success' : 'info'" size="small">{{ responderStatusLabel(row.status) }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="responseValidity" label="有效期(秒)" width="120" />
+          <el-table-column label="Nonce" width="90">
+            <template #default="{ row }">{{ row.nonceEnabled ? '启用' : '关闭' }}</template>
+          </el-table-column>
+          <el-table-column prop="updateTime" label="更新时间" min-width="170" />
+          <el-table-column label="操作" width="240" fixed="right">
+            <template #default="{ row }">
+              <el-button link type="primary" @click="openDetail(row)">详情</el-button>
+              <el-button v-hasPermi="['ocsp:responder:save']" link type="primary" @click="openEdit(row)">编辑</el-button>
+              <el-button v-hasPermi="['ocsp:responder:status']" link type="warning" @click="toggleStatus(row)">
+                {{ row.status === 'ACTIVE' ? '停用' : '启用' }}
+              </el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+        <pagination v-show="total > 0" v-model:page="query.pageNum" v-model:limit="query.pageSize" :total="total" @pagination="getList" />
+      </el-card>
+    </template>
 
-    <el-drawer v-model="editVisible" :title="form.id ? '编辑响应者' : '新建响应者'" size="680px">
+    <el-drawer v-model="editVisible" :title="form.id ? '编辑响应者' : '新建响应者'" size="min(680px, 100vw)">
       <el-form ref="formRef" :model="form" :rules="rules" label-width="140px">
         <el-form-item label="名称" prop="name">
           <el-input v-model="form.name" />
         </el-form-item>
         <el-form-item label="CA ID" prop="caId">
-          <el-input-number v-model="form.caId" :min="1" controls-position="right" class="w-full" />
+          <el-select v-model="form.caId" filterable :loading="caLoading" placeholder="选择已登记的服务 CA" class="w-full">
+            <el-option v-for="caId in caOptions" :key="caId" :label="`CA ${caId}`" :value="caId" />
+          </el-select>
+          <div>请先在“按 CA 配置”中保存签发者证书，创建服务 CA 草稿。</div>
         </el-form-item>
         <el-form-item label="签名者类型" prop="signerType">
           <el-segmented v-model="form.signerType" :options="['SOFTWARE', 'HSM']" />
@@ -93,11 +113,13 @@
           />
         </el-form-item>
         <ResponderCsrPanel
+          v-if="editVisible"
           :name="form.name"
           :signer-type="form.signerType"
           v-model:signer-cert="form.signerCert"
           v-model:signer-conf="form.signerConf"
           v-model:cert-source="certSource"
+          @imported="handleCertificateImported"
         />
       </el-form>
       <template #footer>
@@ -106,29 +128,50 @@
       </template>
     </el-drawer>
 
-    <el-drawer v-model="certVisible" title="响应者证书" size="520px">
+    <el-drawer v-model="certVisible" title="响应者证书" size="min(720px, 100vw)">
       <X509Cert v-if="certVisible && certPem" :certPem="certPem" />
     </el-drawer>
   </div>
 </template>
 
 <script setup name="OcspResponder" lang="ts">
-import { onMounted, reactive, ref, watch } from 'vue';
-import { useRoute } from 'vue-router';
+import OcspPageHeader from '@/views/ocsp/components/OcspPageHeader.vue';
+import OcspEmptyState from '@/views/ocsp/components/OcspEmptyState.vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import type { FormInstance, FormRules } from 'element-plus';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import X509Cert from '@/components/X509Cert/index.vue';
+import ResponderDetail from '@/views/ocsp/components/ResponderDetail.vue';
+import { normalizeOcspCaId } from '@/utils/ocspIdentifier';
+import { responderStatusLabel, signerTypeLabel } from '@/utils/ocspPresentation';
 import ResponderCsrPanel from '@/views/ocsp/components/ResponderCsrPanel.vue';
 import { assertSafeSignerCert, assertSafeSignerConf } from '@/api/ocsp/common';
 import { createOcspResponder, getOcspResponder, pageOcspResponders, updateOcspResponder, updateOcspResponderStatus } from '@/api/ocsp/responder';
+import { listServiceCaDrafts } from '@/api/ocsp/serviceCa';
 import type { OcspResponder } from '@/api/ocsp/types';
 
 const route = useRoute();
+const router = useRouter();
+const detailRevision = ref(0);
+const selectedId = computed(() => {
+  const id = Number(route.query.id);
+  return Number.isSafeInteger(id) && id > 0 ? id : undefined;
+});
+const openDetail = (row: OcspResponder) => router.push({ path: route.path, query: { ...route.query, id: row.id } });
+const closeDetail = () => {
+  const query = { ...route.query };
+  delete query.id;
+  router.push({ path: route.path, query });
+};
 const loading = ref(false);
+const loadError = ref(false);
 const saving = ref(false);
 const rows = ref<OcspResponder[]>([]);
 const total = ref(0);
 const editVisible = ref(false);
+const caLoading = ref(false);
+const caOptions = ref<string[]>([]);
 const certVisible = ref(false);
 const certPem = ref('');
 const formRef = ref<FormInstance>();
@@ -137,7 +180,7 @@ const softwareSignerConf = '{\n  "keyAlias": "ocsp-responder-key",\n  "algorithm
 const query = reactive({ pageNum: 1, pageSize: 10, name: '', status: '' });
 const form = reactive<OcspResponder>({
   name: '',
-  caId: 1,
+  caId: '',
   signerType: 'SOFTWARE',
   signerConf: softwareSignerConf,
   signerCert: '',
@@ -153,7 +196,7 @@ const form = reactive<OcspResponder>({
 
 const rules: FormRules = {
   name: [{ required: true, message: '请输入响应者名称', trigger: 'blur' }],
-  caId: [{ required: true, message: '请输入 CA ID', trigger: 'change' }],
+  caId: [{ required: true, message: '请选择服务 CA', trigger: 'change' }],
   signerType: [{ required: true, message: '请选择签名者类型', trigger: 'change' }],
   signerConf: [{ required: true, message: '请输入签名配置', trigger: 'blur' }],
   signerCert: [
@@ -177,10 +220,15 @@ const rules: FormRules = {
 
 const getList = async () => {
   loading.value = true;
+  loadError.value = false;
   try {
     const page = await pageOcspResponders(query);
     rows.value = page?.records || [];
     total.value = page?.total || 0;
+  } catch {
+    rows.value = [];
+    total.value = 0;
+    loadError.value = true;
   } finally {
     loading.value = false;
   }
@@ -200,13 +248,20 @@ const resetQuery = () => {
 const openEdit = async (row?: OcspResponder) => {
   if (row?.id) {
     const detail = await getOcspResponder(row.id);
-    Object.assign(form, detail);
+    Object.assign(form, detail, {
+      protocolExtensionPolicy: {
+        archiveCutoffEnabled: false,
+        crlReferenceEnabled: false,
+        preferredSignatureEnabled: false,
+        ...detail.protocolExtensionPolicy
+      }
+    });
     certSource.value = detail.signerType === 'HSM' || detail.signerCert ? 'PEM' : 'CSR';
   } else {
     Object.assign(form, {
       id: undefined,
       name: '',
-      caId: 1,
+      caId: '',
       signerType: 'SOFTWARE',
       signerConf: softwareSignerConf,
       signerCert: '',
@@ -222,6 +277,26 @@ const openEdit = async (row?: OcspResponder) => {
     certSource.value = 'CSR';
   }
   editVisible.value = true;
+  caLoading.value = true;
+  caOptions.value = [];
+  try {
+    const drafts = await listServiceCaDrafts();
+    caOptions.value = [...new Set(drafts.map((draft) => normalizeOcspCaId(draft.caId)))];
+  } catch {
+    ElMessage.error('服务 CA 列表加载失败，请检查权限或稍后重试');
+  } finally {
+    if (row && form.caId) {
+      const existing = normalizeOcspCaId(form.caId);
+      form.caId = existing;
+      if (!caOptions.value.includes(existing)) caOptions.value.push(existing);
+    }
+    caLoading.value = false;
+  }
+};
+
+const handleCertificateImported = () => {
+  detailRevision.value++;
+  void getList();
 };
 
 const openCert = (row: OcspResponder) => {
@@ -239,6 +314,7 @@ const submit = async () => {
     return;
   }
   try {
+    form.caId = normalizeOcspCaId(form.caId);
     const crlUrl = form.protocolExtensionPolicy?.crlUrl || '';
     if (/@|password=|passwd=|secret=|token=|pin=/i.test(crlUrl)) {
       throw new Error('CRL URL 不得包含凭据或敏感参数');
@@ -258,6 +334,7 @@ const submit = async () => {
     }
     ElMessage.success('保存成功');
     editVisible.value = false;
+    detailRevision.value++;
     await getList();
   } finally {
     saving.value = false;
@@ -292,21 +369,17 @@ watch(
   }
 );
 
-onMounted(async () => {
-  await getList();
-  const id = Number(route.query.id);
-  if (id) {
-    const target = rows.value.find((item) => item.id === id);
-    if (target) {
-      await openEdit(target);
-    }
-  }
-});
+onMounted(getList);
 </script>
 
 <style scoped>
 .ocsp-page {
-  padding: 16px;
+  padding: 24px;
+}
+@media (max-width: 760px) {
+  .ocsp-page {
+    padding: 12px;
+  }
 }
 .mb16 {
   margin-bottom: 16px;

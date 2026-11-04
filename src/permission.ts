@@ -1,3 +1,6 @@
+import { getKmsInitialization } from '@/api/kms/initialization';
+import { kmsInitializationRedirect } from '@/utils/kmsInitializationRoute';
+import { getSvsInitialization } from '@/api/svs/init';
 import { to as tos } from 'await-to-js';
 import router from './router';
 import NProgress from 'nprogress';
@@ -28,6 +31,7 @@ const getCurrentTenantId = () => useUserStore().tenantId || localStorage.getItem
 
 const getCurrentInitPath = () => {
   const tenantId = String(getCurrentTenantId());
+  if (tenantId === '2') return '/kms/init';
   if (tenantId === '100') {
     return licenseInitPath;
   }
@@ -37,6 +41,8 @@ const getCurrentInitPath = () => {
   if (tenantId === '5') {
     return raInitPath;
   }
+  if (tenantId === '9') return '/svs/init';
+  if (tenantId === '7') return '/hsm/initialization';
   if (tenantId === '6') {
     return ocspInitPath;
   }
@@ -44,7 +50,7 @@ const getCurrentInitPath = () => {
 };
 
 const isInitRoute = (path: string) =>
-  path === caInitPath || path === licenseInitPath || path === kmcInitPath || path === raInitPath || path === ocspInitPath || path.includes('/setup');
+  path === '/kms/init' || path === '/svs/init' || path === caInitPath || path === licenseInitPath || path === kmcInitPath || path === raInitPath || path === ocspInitPath || path.includes('/setup');
 
 const isTenantInitialized = (status: unknown) => Number(status) === -1;
 
@@ -54,6 +60,9 @@ const getTenantAppTitle = (tenantName: string, tenantId: string, longName = fals
   }
   if (tenantId === '100') {
     return `${tenantName} (${longName ? 'License授权系统' : 'License'})`;
+  }
+  if (tenantId === '2') {
+    return `${tenantName} (${longName ? '通用密钥管理系统' : 'KMS'})`;
   }
   if (tenantId === '3') {
     return `${tenantName} (${longName ? '密钥管理中心' : 'KMC'})`;
@@ -66,6 +75,11 @@ const getTenantAppTitle = (tenantName: string, tenantId: string, longName = fals
   }
   if (tenantId === '10') {
     return `${tenantName} (${longName ? 'NAS网络存储管理系统' : 'NAS'})`;
+  }
+  if (tenantId === '7') return `${tenantName} (${longName ? '服务器密码机' : 'HSM'})`;
+  if (tenantId === '9') return `${tenantName} (${longName ? '签名验签服务器' : 'SVS'})`;
+  if (tenantId === '21') {
+    return `${tenantName} (${longName ? '密钥分发与终端接入系统' : 'KDS'})`;
   }
   return `${tenantName} (CA)`;
 };
@@ -89,6 +103,18 @@ const syncTenantContext = async () => {
 };
 
 const ensureTenantBoundary = async (path: string) => {
+  // HSM 初始化由独立状态接口管理，平台租户状态不决定设备就绪。
+  if (String(getCurrentTenantId()) === '7') return '';
+  if (String(getCurrentTenantId()) === '2') {
+    try { return kmsInitializationRedirect((await getKmsInitialization()).locked, path); }
+    catch { return path === '/kms/init' ? '' : '/kms/init'; }
+  }
+  if (getCurrentTenantId() === '9') {
+    const state = await getSvsInitialization();
+    if (!state.locked && path !== '/svs/init') return '/svs/init';
+    if (state.locked && (path === '/svs/init' || path === '/')) return '/svs/home';
+    return '';
+  }
   const userStore = useUserStore();
   let status = userStore.tenantInitStatus;
   if (status === undefined) {
@@ -133,7 +159,9 @@ router.beforeEach(async (to, from, next) => {
         } else {
           isRelogin.show = false;
           const res = await syncTenantContext();
-          const tenantInitialized = isTenantInitialized(res?.data?.status);
+          const kmsTenant = String(getCurrentTenantId()) === '2';
+          const kmsBoundary = kmsTenant ? await ensureTenantBoundary(to.path) : '';
+          const tenantInitialized = kmsTenant ? kmsBoundary !== '/kms/init' && (to.path !== '/kms/init' || kmsBoundary === '/index') : String(getCurrentTenantId()) === '7' || isTenantInitialized(res?.data?.status);
           if (res?.data && !tenantInitialized) {
             const accessRoutes = await usePermissionStore().generateInitRoutes();
             accessRoutes.forEach((route) => {
@@ -142,7 +170,7 @@ router.beforeEach(async (to, from, next) => {
               }
             });
             const targetInitPath = getCurrentInitPath();
-            const targetPath = isInitRoute(to.path) ? to.path : targetInitPath;
+            const targetPath = kmsTenant ? '/kms/init' : isInitRoute(to.path) ? to.path : targetInitPath;
             next({ path: targetPath, replace: true, params: to.params, query: targetPath === targetInitPath ? {} : to.query, hash: to.hash });
           } else {
             const accessRoutes = await usePermissionStore().generateRoutes();
@@ -151,7 +179,7 @@ router.beforeEach(async (to, from, next) => {
                 router.addRoute(route);
               }
             });
-            const targetPath = isInitRoute(to.path) ? '/' : to.path;
+            const targetPath = kmsTenant && kmsBoundary ? kmsBoundary : isInitRoute(to.path) ? '/' : to.path;
             next({ path: targetPath, replace: true, params: to.params, query: to.query, hash: to.hash });
           }
         }

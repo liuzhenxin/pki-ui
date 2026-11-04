@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.json",
+  "include": [
+    "src/api/kms/**/*.ts",
+    "src/views/kms/**/*.vue",
+    "src/utils/kms*.ts",
+    "src/types/**/*.d.ts",
+    "src/auto-imports.d.ts",
+    "src/components.d.ts"
+  ],
+  "exclude": ["node_modules", "dist"]
+}

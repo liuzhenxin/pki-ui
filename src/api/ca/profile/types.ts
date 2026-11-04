@@ -1,5 +1,3 @@
-import { PageQuery } from '@/api/types';
-
 /**
  * 证书模板查询对象类型
  */

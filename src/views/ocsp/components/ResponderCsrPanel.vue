@@ -90,6 +90,7 @@ const emit = defineEmits<{
   'update:signerCert': [value: string];
   'update:signerConf': [value: string];
   'update:certSource': [value: 'CSR' | 'PEM'];
+  imported: [];
 }>();
 
 const loading = ref(false);
@@ -203,6 +204,7 @@ const importCertificate = async () => {
     emit('update:signerCert', imported.signerCert || certificatePem);
     emit('update:signerConf', imported.signerConf || DB_SIGNER_CONF);
     emit('update:certSource', 'PEM');
+    emit('imported');
     applyCsr({ ...csr, csrPending: false });
     issuedPem.value = '';
     chainPem.value = '';

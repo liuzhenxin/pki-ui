@@ -6,7 +6,7 @@
     <el-tabs>
       <el-tab-pane label="路由预览">
         <el-form :inline="true" :model="previewForm">
-          <el-form-item label="CA ID"><el-input-number v-model="previewForm.caId" :min="1" /></el-form-item>
+          <el-form-item label="CA ID"><el-input v-model="previewForm.caId" inputmode="numeric" placeholder="完整 CA ID" /></el-form-item>
           <el-form-item label="客户端 IP（可选）"><el-input v-model="previewForm.clientIp" placeholder="用于 Canary 范围预览" /></el-form-item>
           <el-form-item
             ><el-button v-hasPermi="['ocsp:source:probe']" type="primary" :loading="previewing" @click="preview">预览</el-button></el-form-item
@@ -72,9 +72,10 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue';
 import { ElMessage } from 'element-plus';
+import { normalizeOcspCaId } from '@/utils/ocspIdentifier';
 import { getOcspConfigHistory, pageOcspConfigHistory, previewOcspRouting } from '@/api/ocsp/operations';
 import type { OcspConfigHistory, OcspConfigHistoryQry, OcspRoutingPreview } from '@/api/ocsp/types';
-const previewForm = reactive({ caId: undefined as number | undefined, clientIp: '' });
+const previewForm = reactive({ caId: '', clientIp: '' });
 const previewing = ref(false);
 const previewResult = ref<OcspRoutingPreview>();
 const historyLoading = ref(false);
@@ -84,7 +85,13 @@ const historyQry = reactive<OcspConfigHistoryQry>({ pageNum: 1, pageSize: 20, ta
 const detailVisible = ref(false);
 const selected = ref<OcspConfigHistory>();
 const preview = async () => {
-  if (!previewForm.caId) return ElMessage.warning('请输入 CA ID');
+  previewResult.value = undefined;
+  try {
+    previewForm.caId = normalizeOcspCaId(previewForm.caId);
+  } catch {
+    ElMessage.warning('CA ID 必须为有效正整数');
+    return;
+  }
   previewing.value = true;
   try {
     previewResult.value = await previewOcspRouting({ caId: previewForm.caId, clientIp: previewForm.clientIp || undefined });

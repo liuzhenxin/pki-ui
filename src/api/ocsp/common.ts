@@ -3,6 +3,11 @@ export const unwrapOcspData = <T = any>(res: any): T => {
   return (body?.data ?? body) as T;
 };
 
+export const unwrapNullableOcspData = <T = any>(res: any): T | null => {
+  const body = res?.code !== undefined ? res : (res?.data ?? res);
+  return body == null || (body.code !== undefined && body.data == null) ? null : unwrapOcspData<T>(res);
+};
+
 const SENSITIVE_CONF = /"\s*(password|pin|privateKey|private_key|keystorePassword|hsmPin)\s*"/i;
 
 export const assertSafeSignerConf = (raw: string): string => {

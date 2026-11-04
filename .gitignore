@@ -38,3 +38,7 @@ components.d.ts
 # 本地生成的部署归档；部署定义保留在 deploy/ 目录中纳管。
 pki-ui-ra-deploy-*.tar.gz
 fawvw-ca-cert-ui-patch-*.tar.gz
+
+# CSP 最小控制台编译产物
+dist-csp-console/
+dist-csp/

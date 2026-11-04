@@ -274,10 +274,12 @@ import { HttpStatus } from '@/enums/RespEnum';
 import { useI18n } from 'vue-i18n';
 import { v4 as uuidv4 } from 'uuid';
 import { getRadiusStatus } from '@/api/ops';
+import { SVS_INIT_PATH, SVS_TENANT_CODE, getSvsInitialization } from '@/api/svs/init';
 import defaultLoginBackground from '@/assets/images/login-background.jpg';
 import opsLoginBackground from '@/assets/images/login/tenant-ops.webp';
 import caLoginBackground from '@/assets/images/login/tenant-ca.webp';
 import kmcLoginBackground from '@/assets/images/login/tenant-kmc.webp';
+import svsLoginBackground from '@/assets/images/login/tenant-svs.svg';
 import raLoginBackground from '@/assets/images/login/tenant-ra.webp';
 import ocspLoginBackground from '@/assets/images/login/tenant-ocsp.webp';
 import nasLoginBackground from '@/assets/images/login/tenant-nas.webp';
@@ -302,7 +304,7 @@ const initialTenantId = configuredTenantIds.length && !configuredTenantIds.inclu
 const loginForm = ref<LoginData>({
   tenantId: initialTenantId,
   tenantCode: localStorage.getItem('tenantCode') || '',
-  username: localStorage.getItem('username') || 'admin',
+  username: localStorage.getItem('username') || '',
   password: '',
   radiusPassword: '',
   rememberMe: localStorage.getItem('rememberMe') === 'true',
@@ -459,6 +461,7 @@ const tenantLoginBackgrounds: Record<string, string> = {
   '4': caLoginBackground,
   '5': raLoginBackground,
   '6': ocspLoginBackground,
+  '9': svsLoginBackground,
   '10': nasLoginBackground,
   '100': licenseLoginBackground
 };
@@ -476,6 +479,18 @@ const defaultTenantBrand = {
   subtitle: '面向 CA、RA、KMC、OCSP 的统一安全运营入口'
 };
 const tenantBrandProfiles: Record<string, typeof defaultTenantBrand> = {
+  '7': {
+    className: 'brand-panel--hsm',
+    logo: 'HSM',
+    heading: '服务器密码机',
+    subtitle: '设备身份认证与受控的密钥生命周期管理'
+  },
+  '9': {
+    className: 'brand-panel--svs',
+    logo: 'SVS',
+    heading: '签名验签服务器',
+    subtitle: '统一签名验签入口，守护文件与报文的真实性和完整性'
+  },
   '1': {
     className: 'brand-panel--ops',
     logo: 'OPS',
@@ -517,8 +532,19 @@ const tenantBrandProfiles: Record<string, typeof defaultTenantBrand> = {
     logo: 'LIC',
     heading: 'License 授权系统',
     subtitle: '统一管理产品授权、许可状态与客户交付凭证'
+  },
+  '21': {
+    className: 'brand-panel--kds',
+    logo: 'KDS',
+    heading: '密钥分发与终端接入系统',
+    subtitle: '向已注册终端交付密钥与密码参数，并保留可追溯的分发记录'
   }
 };
+if (tenantBrandProfiles[initialTenantId]) {
+  loginTitle.value = tenantBrandProfiles[initialTenantId].heading;
+}
+if (initialTenantId === '7') loginTitle.value = '服务器密码机';
+if (initialTenantId === '9') loginTitle.value = '签名验签服务器';
 const hasTenantLoginBackground = computed(() => Boolean(tenantLoginBackgrounds[String(loginForm.value.tenantId || '')]));
 const tenantBrand = computed(() => tenantBrandProfiles[String(loginForm.value.tenantId || '')] || defaultTenantBrand);
 const loginBackgroundStyle = computed(() => {
@@ -539,6 +565,12 @@ watch(
   },
   { immediate: true }
 );
+
+async function svsPostLoginPath(): Promise<string | null> {
+  if (String(loginForm.value.tenantCode || '') !== SVS_TENANT_CODE && String(loginForm.value.tenantId || '') !== '9') return null;
+  const state = await getSvsInitialization();
+  return state.locked ? '/svs/home' : SVS_INIT_PATH;
+}
 
 const handleLogin = () => {
   if (tenantWhitelistMissed.value) {
@@ -570,7 +602,7 @@ const handleLogin = () => {
 
       const [err] = await to(userStore.login(loginData.value));
       if (!err) {
-        const redirectUrl = redirect.value || '/';
+        const redirectUrl = (await svsPostLoginPath()) || redirect.value || '/';
         await router.push(redirectUrl);
         loading.value = false;
       } else {
@@ -701,7 +733,7 @@ async function handleCertificateLogin() {
     localStorage.setItem('tenantId', String(loginForm.value.tenantId || ''));
     localStorage.setItem('tenantCode', tenantCode);
     certificateForm.pin = '';
-    await router.push(redirect.value || '/');
+    await router.push((await svsPostLoginPath()) || redirect.value || '/');
   } catch (error: any) {
     certificateForm.pin = '';
     ElMessage.error(error?.message || error?.msg || '证书登录失败，请重新读取证书后重试');
@@ -798,6 +830,8 @@ const isPkiTenant = (item: any) => {
 };
 
 const getTenantAppTitle = (tenantName: string, tenantId: string) => {
+  if (tenantId === '7') return '服务器密码机';
+  if (tenantId === '9') return '签名验签服务器';
   if (tenantId === '1') {
     return `${tenantName} (平台运维中心)`;
   }
@@ -815,6 +849,9 @@ const getTenantAppTitle = (tenantName: string, tenantId: string) => {
   }
   if (tenantId === '10') {
     return `${tenantName} (NAS网络存储管理系统)`;
+  }
+  if (tenantId === '21') {
+    return `${tenantName} (密钥分发与终端接入系统)`;
   }
   return `${tenantName} (CA)`;
 };
@@ -907,7 +944,7 @@ const refreshRadiusStatus = async (tenantCode?: string) => {
 const getTenantInfo = async (tenantId: string) => {
   const res = await getTenant(tenantId);
   if (res.data && res.data.name) {
-    loginTitle.value = res.data.name;
+    loginTitle.value = String(tenantId) === '7' ? '服务器密码机' : String(tenantId) === '9' ? '签名验签服务器' : res.data.name;
     settingsStore.setAppTitle(getTenantAppTitle(res.data.name, String(tenantId)));
   }
 };
@@ -2638,6 +2675,58 @@ onBeforeUnmount(() => {
     right: 44px;
     bottom: 70px;
     opacity: 0.64;
+  }
+}
+
+.brand-panel--kds {
+  background:
+    radial-gradient(circle at 72% 24%, rgba(14, 165, 164, 0.18), transparent 31%), linear-gradient(135deg, #f4fffd 0%, #e7f6f4 48%, #d7e8f2 100%);
+
+  .brand-logo {
+    width: 40px;
+    flex: 0 0 40px;
+    color: #0f766e;
+    border-color: #14b8a6;
+    font-size: 10px;
+  }
+
+  .visual-base {
+    background: linear-gradient(145deg, #0f766e, #155e75);
+  }
+
+  .visual-key {
+    right: 42px;
+    bottom: 78px;
+    width: 118px;
+    background: linear-gradient(90deg, #5eead4, #0f766e);
+    transform: rotate(-16deg);
+    opacity: 1;
+  }
+
+  .visual-key::before {
+    border-color: #0f766e;
+  }
+
+  .visual-platform,
+  .visual-shield,
+  .visual-cert-a,
+  .visual-cert-b {
+    display: none;
+  }
+}
+
+.brand-panel--svs {
+  .brand-logo {
+    color: #2467bb;
+    border-color: #4b97dc;
+  }
+
+  .brand-visual {
+    background: url('@/assets/images/login/tenant-svs.svg') center / contain no-repeat;
+
+    > span {
+      display: none;
+    }
   }
 }
 

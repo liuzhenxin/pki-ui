@@ -23,8 +23,8 @@ COPY . .
 
 # 生产构建：target is intentionally mandatory to prevent cross-tenant artifacts.
 RUN case "$BUILD_TARGET" in \
-      ops|ca|kmc|ra) yarn "build:$BUILD_TARGET" ;; \
-      *) echo >&2 "BUILD_TARGET must be one of: ops, ca, kmc, ra"; exit 64 ;; \
+      ops|ca|kmc|ra|ocsp) yarn "build:$BUILD_TARGET" ;; \
+      *) echo >&2 "BUILD_TARGET must be one of: ops, ca, kmc, ra, ocsp"; exit 64 ;; \
     esac
 
 # ============================================

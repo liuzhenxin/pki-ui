@@ -6,7 +6,7 @@ export interface OcspAdminPage<T> {
 export interface OcspResponder {
   id?: number;
   name: string;
-  caId: number;
+  caId: number | string;
   signerCert?: string;
   signerType: 'HSM' | 'SOFTWARE' | string;
   signerConf?: string;
@@ -22,6 +22,9 @@ export interface OcspResponder {
     crlNumber?: string;
     preferredSignatureEnabled?: boolean;
   };
+  signerPolicyOk?: boolean | null;
+  signerRejectionCode?: string;
+  signerAlgorithm?: string;
   updateTime?: string;
 }
 
@@ -102,8 +105,8 @@ export interface OcspRequestLogPageQry {
   pageSize?: number;
   requestTimeFrom?: string;
   requestTimeTo?: string;
-  responderId?: number;
-  caId?: number;
+  responderId?: number | string;
+  caId?: number | string;
   certSerialNumber?: string;
   certStatus?: string;
   responseStatus?: string;
@@ -114,7 +117,9 @@ export interface OcspRequestLogPageQry {
 export interface OcspStatusSource {
   type: 'DB' | 'LDAP' | string;
   /** 按 CA 配置时必填（CA 与数据源 1:1）；为空表示平台默认数据源 */
-  caId?: number;
+  caId?: number | string;
+  sourceCaId?: string;
+  responderId?: number | string;
   name?: string;
   enabled?: boolean;
   db?: {
@@ -170,7 +175,7 @@ export interface OcspProbe {
 }
 
 export interface OcspRoutingPreviewCmd {
-  caId: number;
+  caId: number | string;
   issuerHashAlgorithm?: 'SHA1' | 'SHA256';
   issuerNameHash?: string;
   issuerKeyHash?: string;

@@ -109,7 +109,7 @@ service.interceptors.request.use(
     }
     // 对应国际化资源文件后缀
     config.headers['Content-Language'] = getLanguage();
-    const language = getLanguage();
+    const language: string = getLanguage();
     if (language === 'zh_CN' || language === 'zh-CN') {
       config.headers['Language'] = 'zh-CN';
     } else if (language === 'en_US' || language === 'en-US') {
@@ -212,6 +212,10 @@ service.interceptors.response.use(
         res.data = JSON.parse(decryptData);
       }
     }
+    // SVS management returns domain objects; `code` is the product code, not a platform status.
+    if (String(res.config?.url || '').startsWith('/admin/svs/')) {
+      return Promise.resolve(res.data);
+    }
     // 未设置状态码则默认成功状态
     //const code = res.data.code || HttpStatus.SUCCESS;
     // 未设置状态码则默认成功状态
@@ -223,6 +227,10 @@ service.interceptors.response.use(
     // 二进制数据则直接返回
     if (res.request.responseType === 'blob' || res.request.responseType === 'arraybuffer') {
       return res.data;
+    }
+    // KDS 信封使用 9000 表示成功，不能按平台 code===200 拦截。
+    if (String(res.config?.url || '').includes('/platform/kds/')) {
+      return Promise.resolve(res.data);
     }
     if (res.data.code === 'Unauthorized' || res.data.code === 'Bad credentials' || res.data.code === 'oauth2_token_error') {
       code = 401;
@@ -301,7 +309,7 @@ service.interceptors.response.use(
       if (!(res.config as any).hideErrorNotify) {
         ElNotification.error({ title: msg });
       }
-      return Promise.reject('error');
+      return Promise.reject(String(res.config?.url || '').startsWith('/kms/v1/') ? new Error(msg) : 'error');
     } else {
       return Promise.resolve(res.data);
     }
@@ -318,9 +326,13 @@ service.interceptors.response.use(
       return Promise.reject(handleSessionExpired());
     }
 
+    // AxiosError 包含请求体；KMS 网络失败不得将密码数据写入控制台。
+    if (String(error.config?.url || '').startsWith('/kms/v1/')) {
+      return Promise.reject(new Error('KMS 请求失败，请检查网络、认证与服务可用性'));
+    }
     console.log(error);
     let { message } = error;
-    const responseMsg = error.response?.data?.msg;
+    const responseMsg = error.response?.data?.msg || error.response?.data?.Status?.Msg || error.response?.data?.message;
     if (error.response != null && error.response.data != null && error.response.data.error_description != null) {
       message = error.response.data.error_description;
     } else if (responseMsg) {

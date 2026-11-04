@@ -302,12 +302,7 @@ import { getTenant } from '@/api/system/tenant';
 import { useUserStore } from '@/store/modules/user';
 import Agreement from '@/components/Agreement/index.vue';
 
-interface EnvRow {
-  name: string;
-  value: string;
-  message?: string;
-  ok: boolean;
-}
+import { normalizeKmcEnvironment, type KmcEnvironmentRow as EnvRow } from '@/utils/kmcEnvironment';
 
 const router = useRouter();
 const userStore = useUserStore();
@@ -412,23 +407,6 @@ const identityRules = reactive<FormRules>({
   ]
 });
 
-const normalizeEnvRows = (data: any): EnvRow[] => {
-  if (Array.isArray(data)) {
-    return data.map((item, index) => ({
-      name: item.name ?? item.item ?? `检测项 ${index + 1}`,
-      value: String(item.value ?? '-'),
-      message: item.message ?? item.remark,
-      ok: item.ok ?? item.status === 'success' ?? item.status === true
-    }));
-  }
-  return Object.entries(data ?? {}).map(([name, value]: [string, any]) => ({
-    name,
-    value: String(value?.value ?? value ?? '-'),
-    message: value?.message ?? value?.remark,
-    ok: value?.ok ?? value?.status === 'success' ?? value === true
-  }));
-};
-
 const allEnvOk = computed(() => envRows.value.length > 0 && envRows.value.every((item) => item.ok));
 const okCount = computed(() => envRows.value.filter((item) => item.ok).length);
 const failCount = computed(() => envRows.value.filter((item) => !item.ok).length);
@@ -512,7 +490,7 @@ const loadEnvInfo = async () => {
   envLoading.value = true;
   try {
     const res = await getEnvInfo();
-    envRows.value = normalizeEnvRows(unwrapKmcData(res));
+    envRows.value = normalizeKmcEnvironment(unwrapKmcData(res));
   } catch (error) {
     envRows.value = [
       {

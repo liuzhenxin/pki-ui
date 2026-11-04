@@ -102,7 +102,7 @@ function handleQuery() {
 }
 
 function resetQuery() {
-  proxy?.resetForm('queryForm');
+  (proxy?.$refs.queryForm as ElFormInstance | undefined)?.resetFields();
   handleQuery();
 }
 

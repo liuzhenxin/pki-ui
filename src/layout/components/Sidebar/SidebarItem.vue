@@ -30,6 +30,7 @@
 </template>
 
 <script setup lang="ts">
+import { sidebarDestination } from '@/utils/sidebarPath';
 import { isExternal } from '@/utils/validate';
 import AppLink from './Link.vue';
 import { getNormalPath } from '@/utils/ruoyi';
@@ -87,9 +88,9 @@ const resolvePath = (routePath: string, routeQuery?: string): any => {
   }
   if (routeQuery) {
     const query = JSON.parse(routeQuery);
-    return { path: getNormalPath(props.basePath + '/' + routePath), query: query };
+    return { path: getNormalPath(sidebarDestination(props.basePath, routePath)), query: query };
   }
-  return getNormalPath(props.basePath + '/' + routePath);
+  return getNormalPath(sidebarDestination(props.basePath, routePath));
 };
 
 const hasTitle = (title: string | undefined): string => {

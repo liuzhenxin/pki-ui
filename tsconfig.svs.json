@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.json",
+  "include": [
+    "src/api/svs/**/*.ts",
+    "src/views/svs/**/*.vue",
+    "src/utils/svsNavigation.ts",
+    "src/types/env.d.ts",
+    "src/types/**/*.d.ts",
+    "src/auto-imports.d.ts",
+    "src/components.d.ts"
+  ],
+  "exclude": ["node_modules", "dist"]
+}

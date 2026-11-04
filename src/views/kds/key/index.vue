@@ -1,13 +1,14 @@
 <template>
-  <div class="kds-key">
-    <el-card v-loading="loading">
-      <template #header><span>密钥与通道快照</span></template>
-      <el-form inline>
+  <div class="app-container kds-page kds-key">
+    <KdsPageHeader title="密钥与通道快照" description="查询设备的密钥版本计数、通道绑定和待生效版本；页面仅展示受控引用。" />
+    <el-card v-loading="loading" shadow="hover" class="kds-panel">
+      <template #header><div class="kds-panel__header"><span>设备查询</span></div></template>
+      <el-form inline class="kds-filter-form">
         <el-form-item label="设备序列号">
           <el-input v-model="deviceSn" placeholder="MMJ 设备序列号" style="width: 260px" />
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" @click="load">查询</el-button>
+          <el-button type="primary" icon="Search" :loading="loading" @click="load">查询</el-button>
         </el-form-item>
       </el-form>
       <el-alert v-if="error" type="error" :closable="false" show-icon :title="error" class="mb" />
@@ -47,6 +48,7 @@ import { computed, ref } from 'vue';
 import { getKeySnapshot } from '@/api/kds/device';
 import { toKdsError } from '@/api/kds/client';
 import type { KeySnapshot } from '@/types/kds';
+import KdsPageHeader from '@/views/kds/components/KdsPageHeader.vue';
 
 const deviceSn = ref('');
 const snapshot = ref<KeySnapshot>();
@@ -74,9 +76,6 @@ async function load() {
 }
 </script>
 <style scoped>
-.kds-key {
-  padding: 20px;
-}
 .mb {
   margin-bottom: 12px;
 }
@@ -91,3 +90,4 @@ async function load() {
   color: var(--el-text-color-secondary);
 }
 </style>
+<style src="../styles/page.css"></style>

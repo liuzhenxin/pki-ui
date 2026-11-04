@@ -11,9 +11,12 @@ import { ref } from 'vue';
 import { createCustomNameComponent } from '@/utils/createCustomNameComponent';
 import { Result } from '@/api/types';
 import { useUserStore } from '@/store/modules/user';
+import { isSvsProduct, svsRoutes } from '@/utils/svsNavigation';
+import { isHsmProduct, buildHsmRoutes } from '@/utils/hsmNavigation';
+import { buildOcspNavigation } from '@/utils/ocspNavigation';
 
 // 匹配views里面所有的.vue文件
-const modules = import.meta.glob('./../../views/**/*.vue');
+const modules = ['7', '9'].includes(import.meta.env.VITE_APP_TENANT_IDS) ? {} : import.meta.glob('./../../views/**/*.vue');
 export const usePermissionStore = defineStore('permission', () => {
   const routes = ref<RouteRecordRaw[]>([]);
   const addRoutes = ref<RouteRecordRaw[]>([]);
@@ -48,13 +51,21 @@ export const usePermissionStore = defineStore('permission', () => {
     sidebarRouters.value = routes;
   };
   const generateRoutes = async (): Promise<RouteRecordRaw[]> => {
+    if (isSvsProduct() || isHsmProduct()) {
+      const productRoutes = isHsmProduct() ? buildHsmRoutes((permission) => auth.hasPermi(permission)) : await svsRoutes();
+      setRoutes(productRoutes);
+      setSidebarRouters(productRoutes);
+      setDefaultRoutes(productRoutes);
+      setTopbarRoutes(productRoutes);
+      return productRoutes;
+    }
     const res = await getRouters({ types: ['M', 'C'] });
     const { data } = res;
     const sourceRoutes = filterFawvwAdminRoutes(removeRetiredKmcRoutes(JSON.parse(JSON.stringify(data))));
     const sdata = JSON.parse(JSON.stringify(sourceRoutes));
     const rdata = JSON.parse(JSON.stringify(sourceRoutes));
     const defaultData = JSON.parse(JSON.stringify(sourceRoutes));
-    const sidebarRoutes = filterAsyncRouter(sdata);
+    const sidebarRoutes = filterAsyncRouter(buildOcspNavigation(sdata, auth.hasPermi('ocsp:monitoring')));
     const rewriteRoutes = filterAsyncRouter(rdata, undefined, true);
     const defaultRoutes = filterAsyncRouter(defaultData);
     const asyncRoutes = filterDynamicRoutes(dynamicRoutes);
@@ -71,13 +82,14 @@ export const usePermissionStore = defineStore('permission', () => {
   };
 
   const generateInitRoutes = async (): Promise<RouteRecordRaw[]> => {
+    if (isSvsProduct() || isHsmProduct()) return generateRoutes();
     const res = await getInitRouters({ types: ['M', 'C'] });
     // const { data } = res.data;
     const sourceRoutes = filterFawvwAdminRoutes(removeRetiredKmcRoutes(JSON.parse(JSON.stringify(res.data))));
     const sdata = JSON.parse(JSON.stringify(sourceRoutes));
     const rdata = JSON.parse(JSON.stringify(sourceRoutes));
     const defaultData = JSON.parse(JSON.stringify(sourceRoutes));
-    const sidebarRoutes = filterAsyncRouter(sdata);
+    const sidebarRoutes = filterAsyncRouter(buildOcspNavigation(sdata, false));
     const rewriteRoutes = filterAsyncRouter(rdata, undefined, true);
     const defaultRoutes = filterAsyncRouter(defaultData);
     const asyncRoutes = filterDynamicRoutes(dynamicRoutes);

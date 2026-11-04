@@ -33,6 +33,8 @@ export interface UserQuery extends PageQuery {
  * 用户返回对象
  */
 export interface UserVO {
+  status?: string | number;
+  roles?: RoleVO[];
   id: number;
   username: string;
   userName?: string;
@@ -53,8 +55,8 @@ export interface UserVO {
  * 用户表单类型
  */
 export interface UserForm {
-  id?: string;
-  userId?: string;
+  id?: string | number;
+  userId?: string | number;
   deptId?: string | number;
   username: string;
   nickName?: string;
@@ -63,7 +65,7 @@ export interface UserForm {
   mail?: string;
   userCategory?: string;
   sex?: string;
-  status: string;
+  status: string | number;
   remark?: string;
   postIds: string[];
   roleIds: string[];
@@ -71,8 +73,8 @@ export interface UserForm {
   cert?: string; // 证书内容
 }
 
-export interface UserInfoVO {
-  user: UserVO;
+export interface UserInfoVO extends Partial<UserVO> {
+  user?: UserVO;
   roles?: RoleVO[];
   roleIds?: string[];
   posts?: PostVO[];

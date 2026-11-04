@@ -43,16 +43,24 @@ const sideTheme = computed(() => settingsStore.sideTheme);
 
 function syncLogoText(tenantId?: string | number | null) {
   const idStr = String(tenantId || '');
-  if (idStr === '1' || route.path.startsWith('/ops')) {
+  if (idStr === '7' || route.path.startsWith('/hsm')) {
+    logoText.value = 'HSM';
+  } else if (idStr === '9' || route.path.startsWith('/svs')) {
+    logoText.value = 'SVS';
+  } else if (idStr === '1' || route.path.startsWith('/ops')) {
     logoText.value = 'OPS';
   } else if (idStr === '100' || route.path.startsWith('/license')) {
     logoText.value = 'LIC';
+  } else if (idStr === '2') {
+    logoText.value = 'KMS';
   } else if (idStr === '3') {
     logoText.value = 'KMC';
   } else if (idStr === '10') {
     logoText.value = 'NAS';
   } else if (idStr === '5') {
     logoText.value = 'RA';
+  } else if (idStr === '21' || route.path.startsWith('/kds')) {
+    logoText.value = 'KDS';
   } else if (idStr === '4' || !idStr) {
     logoText.value = 'CA';
   } else {
@@ -63,6 +71,18 @@ function syncLogoText(tenantId?: string | number | null) {
 onMounted(() => {
   const tenantId = userStore.tenantId || localStorage.getItem('tenantId');
   syncLogoText(tenantId);
+  if (String(tenantId) === '7' || String(import.meta.env.VITE_APP_TENANT_IDS) === '7') {
+    title.value = '服务器密码机';
+    name.value = '服务器密码机';
+    logoText.value = 'HSM';
+    return;
+  }
+  if (String(tenantId) === '9' || String(import.meta.env.VITE_APP_TENANT_IDS) === '9') {
+    title.value = '签名验签服务器';
+    name.value = '签名验签服务器';
+    logoText.value = 'SVS';
+    return;
+  }
   if (tenantId) {
     getTenant(tenantId).then((res) => {
       if (res.data) {
@@ -75,6 +95,8 @@ onMounted(() => {
         } else if (idStr === '100') {
           title.value = 'License授权系统';
           name.value = '授权系统';
+        } else if (idStr === '2') {
+          title.value = 'KMS通用密钥管理系统';
         } else if (idStr === '3') {
           title.value = 'KMC密钥管理中心';
         } else if (idStr === '10') {

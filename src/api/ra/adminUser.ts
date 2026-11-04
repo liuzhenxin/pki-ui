@@ -1,5 +1,7 @@
 import request from '@/utils/request';
 import { AxiosPromise } from 'axios';
+import type { Result } from '@/api/types';
+import type { UserPage } from '@/api/system/user';
 import { parseStrEmpty } from '@/utils/ruoyi';
 import { RoleVO } from '@/api/system/role/types';
 import { UserForm, UserInfoVO, UserQuery, UserVO } from '@/api/system/user/types';
@@ -7,11 +9,12 @@ import { UserForm, UserInfoVO, UserQuery, UserVO } from '@/api/system/user/types
 const ROLE_OPTIONS = [
   { roleId: '503', roleName: '录入员', roleSort: 503 },
   { roleId: '504', roleName: '审核员', roleSort: 504 },
-  { roleId: '505', roleName: '制证员', roleSort: 505 }
+  { roleId: '505', roleName: '制证员', roleSort: 505 },
+  { roleId: '507', roleName: '机构（部门）管理员', roleSort: 507 }
 ];
 
-export const listAdminUser = (query: UserQuery): AxiosPromise<UserVO[]> => {
-  return request({
+export const listAdminUser = (query: UserQuery): Promise<Result<UserPage> & UserPage> => {
+  return request<UserPage, Result<UserPage> & UserPage>({
     url: '/ra/v1/admin-users/page',
     method: 'post',
     data: { params: {}, ...query }
