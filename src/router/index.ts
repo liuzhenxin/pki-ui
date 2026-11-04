@@ -30,6 +30,19 @@ import { hsmConstantRoutes } from './hsm';
 // 公共路由
 const platformConstantRoutes: RouteRecordRaw[] = [
   {
+    path: '/business-applications',
+    component: Layout,
+    hidden: true,
+    children: [
+      {
+        path: '',
+        name: 'BusinessApplications',
+        component: () => import('@/views/system/businessApplications/index.vue'),
+        meta: { title: '业务应用接入', noCache: true }
+      }
+    ]
+  },
+  {
     path: '/redirect',
     component: Layout,
     hidden: true,
