@@ -2,6 +2,7 @@ import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
 import { consoleRequest, ConsoleRequestError, type ConsoleResponses, type ConsoleCommands } from '@/api/csp/console';
 import { skfCall, closeSkf, normalizeSkfSignature } from '@/services/csp/skf';
+import { cspDestination } from '@/config/csp';
 
 export const useCspConsoleStore = defineStore('csp-console', () => {
   const loginMode = ref<'account' | 'certificate'>('account');
@@ -82,6 +83,7 @@ export const useCspConsoleStore = defineStore('csp-console', () => {
   const busy = ref(false);
   const error = ref('');
   const signedIn = ref(false);
+  const installationInitialized = ref<boolean | null>(null);
   const initialized = ref<boolean | null>(null);
   const checkedAt = ref('');
   const setupStep = ref(0);
@@ -145,10 +147,20 @@ export const useCspConsoleStore = defineStore('csp-console', () => {
     confirmed.value = false;
     setup.value = null;
     try {
+      const installation = await api('installation');
+      if (typeof installation?.initialized !== 'boolean') throw new Error('安装初始化状态无效，请联系运维核查。');
+      installationInitialized.value = installation.initialized;
+      signedIn.value = true;
+      if (!installation.initialized) {
+        initialized.value = null;
+        initializationAttempted.value = false;
+        completion.value = false;
+        return;
+      }
       const data = await api('setup');
       applySetup(data);
-      signedIn.value = true;
     } catch (failure) {
+      installationInitialized.value = null;
       initialized.value = null;
       if (failure instanceof ConsoleRequestError && failure.status === 401) signedIn.value = false;
       error.value = (failure as Error).message;
@@ -255,6 +267,7 @@ export const useCspConsoleStore = defineStore('csp-console', () => {
     try {
       await api('logout', {});
       signedIn.value = false;
+      installationInitialized.value = null;
       initialized.value = null;
       environment.value = [];
       confirmed.value = false;
@@ -292,17 +305,19 @@ export const useCspConsoleStore = defineStore('csp-console', () => {
         return;
       }
       signedIn.value = false;
+      installationInitialized.value = null;
       initialized.value = null;
       environment.value = [];
       completion.value = false;
     } catch {
       signedIn.value = false;
+      installationInitialized.value = null;
       initialized.value = null;
       csrf.value = '';
       error.value = '控制台连接失败，请刷新页面。';
     }
   }
-  const destination = computed(() => (initialized.value === true && !completion.value ? '/csp/overview' : '/csp/setup'));
+  const destination = computed(() => cspDestination(installationInitialized.value, initialized.value, completion.value));
   return {
     loginMode,
     certificateEnabled,

@@ -6,8 +6,14 @@ export const cspProduct = Object.freeze({
   name: '密码服务平台',
   version: '3.0.0-rc.1',
   setup: '/csp/setup',
+  installation: '/csp/installation',
   home: '/csp/overview'
 });
+
+export function cspDestination(installationInitialized: boolean | null, serviceInitialized: boolean | null, completion = false) {
+  if (installationInitialized !== true) return cspProduct.installation;
+  return serviceInitialized === true && !completion ? cspProduct.home : cspProduct.setup;
+}
 export function assertCspProduct(product: unknown, tenant: unknown) {
   if (product !== cspProduct.code || tenant !== cspProduct.tenantId) throw new Error('CSP_PRODUCT_CONFIGURATION_INVALID');
 }
