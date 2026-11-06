@@ -45,6 +45,9 @@ async function logout() {
               ><el-icon><Monitor v-if="destination === '/csp/overview'" /><Setting v-else /></el-icon
               ><span>{{ destination === '/csp/overview' ? '运行总览' : '资源接入与服务启用' }}</span></el-menu-item
             >
+            <el-menu-item index="/csp/installation"
+              ><el-icon><Setting /></el-icon><span>安装初始化</span></el-menu-item
+            >
           </el-menu>
         </nav>
         <p class="csp-sidebar-note">CSP · {{ cspProduct.version }} 测试版<br />未开放业务菜单不显示</p>
@@ -65,7 +68,7 @@ async function logout() {
         >
         <el-button class="csp-logout" :disabled="busy" @click="logout">退出登录</el-button>
       </header>
-      <div class="csp-tabs" aria-label="当前页面">
+      <div class="csp-tabs" role="region" aria-label="当前页面">
         <span>{{ route.meta.title }}</span>
       </div>
     </template>

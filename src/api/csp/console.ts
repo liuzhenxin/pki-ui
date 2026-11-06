@@ -1,3 +1,17 @@
+export interface InstallationView {
+  initialized: boolean;
+  draftVersion: number;
+  step: number;
+  agreed: boolean;
+  attempted: boolean;
+  agreementVersion: string;
+  companyName: string;
+  serviceVersion: string;
+  environment: string;
+  checkedAt: string | null;
+  accounts: { role: 'SYSTEM_ADMIN' | 'SECURITY_ADMIN' | 'AUDIT_ADMIN'; valid: boolean }[];
+}
+export type InstallationAction = 'AGREE' | 'CHECK_ENV' | 'VERIFY_ACCOUNTS';
 export interface SetupView {
   workflow: 'SERVICE_ACTIVATION_V3';
   initialized: boolean;
@@ -19,6 +33,9 @@ export interface ConsoleResponses {
   'certificate-challenge': { challengeId: string; signData: string; sm2UserId: string };
   'certificate-login': { authenticated: boolean };
   state: { initialized: boolean };
+  installation: InstallationView;
+  'installation-advance': InstallationView;
+  'installation-complete': InstallationView;
   setup: SetupView;
   'setup-advance': SetupView;
   'setup-complete': SetupView;
@@ -33,6 +50,9 @@ export interface ConsoleCommands {
   'certificate-challenge': { certificate: string };
   'certificate-login': { challengeId: string; signature: string };
   state: undefined;
+  installation: undefined;
+  'installation-advance': { draftVersion: number; action: InstallationAction; agreementVersion?: string };
+  'installation-complete': { draftVersion: number; confirm: true };
   setup: undefined;
   'setup-advance': { draftVersion: number; action: SetupAction };
   'setup-complete': { draftVersion: number; confirm: true };
@@ -41,6 +61,9 @@ export interface ConsoleCommands {
   logout: Record<string, never>;
 }
 const endpoints = [
+  'installation',
+  'installation-advance',
+  'installation-complete',
   'session',
   'challenge',
   'login',
