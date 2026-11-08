@@ -15,6 +15,7 @@ export function createCspRouter(pinia: Pinia, history: RouterHistory = createWeb
         component: () => import('@/layout/CspLayout.vue'),
         meta: { title: '密码服务平台' },
         children: [
+          { path: 'management', component: () => import('@/views/csp/management/index.vue'), meta: { title: '服务与应用管理' } },
           { path: 'installation', component: () => import('@/views/csp/installation/index.vue'), meta: { title: '安装初始化' } },
           { path: 'setup', component: () => import('@/views/csp/setup/index.vue'), meta: { title: '资源接入与服务启用' } },
           { path: 'overview', component: () => import('@/views/csp/overview/index.vue'), meta: { title: '运行总览' } }
@@ -27,7 +28,7 @@ export function createCspRouter(pinia: Pinia, history: RouterHistory = createWeb
   router.beforeEach(async (to) => {
     const store = useCspConsoleStore(pinia);
     // 每次导航重取受控会话/CSP状态；浏览器tenant、平台租户status和隐藏菜单均非授权依据。
-    await store.restore();
+    await store.restore(to.path !== '/csp/management');
     if (!store.signedIn) return to.path === '/login' ? true : { path: '/login', replace: true };
     if (to.path === '/login') return { path: store.destination, replace: true };
     if ((to.path === cspProduct.setup || to.path === cspProduct.home) && to.path !== store.destination)

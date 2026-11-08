@@ -13,6 +13,7 @@ export default defineConfig({
   outputDir: 'test-results/csp/browser',
   use: {
     browserName: 'chromium',
+    channel: process.env.CSP_TEST_BROWSER_CHANNEL || undefined,
     timezoneId: 'Asia/Shanghai',
     viewport: { width: 1440, height: 900 },
     reducedMotion: 'reduce',

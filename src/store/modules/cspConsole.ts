@@ -290,7 +290,7 @@ export const useCspConsoleStore = defineStore('csp-console', () => {
     }
   }
 
-  async function restore() {
+  async function restore(includeSetup = true) {
     try {
       const session = await api('session');
       if (!session || typeof session.csrf !== 'string' || !session.csrf || typeof session.authenticated !== 'boolean')
@@ -301,7 +301,8 @@ export const useCspConsoleStore = defineStore('csp-console', () => {
       initializationAttempted.value = session.initializationAttempted === true;
       if (session.authenticated === true) {
         signedIn.value = true;
-        await readState();
+        error.value = '';
+        if (includeSetup) await readState();
         return;
       }
       signedIn.value = false;

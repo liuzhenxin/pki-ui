@@ -45,12 +45,15 @@ async function logout() {
               ><el-icon><Monitor v-if="destination === '/csp/overview'" /><Setting v-else /></el-icon
               ><span>{{ destination === '/csp/overview' ? '运行总览' : '资源接入与服务启用' }}</span></el-menu-item
             >
+            <el-menu-item index="/csp/management"
+              ><el-icon><Setting /></el-icon><span>服务与应用管理</span></el-menu-item
+            >
             <el-menu-item index="/csp/installation"
               ><el-icon><Setting /></el-icon><span>安装初始化</span></el-menu-item
             >
           </el-menu>
         </nav>
-        <p class="csp-sidebar-note">CSP · {{ cspProduct.version }} 测试版<br />未开放业务菜单不显示</p>
+        <p class="csp-sidebar-note">CSP · {{ cspProduct.version }} 测试版<br />管理操作按当前权限校验</p>
       </aside>
     </template>
     <template #header>

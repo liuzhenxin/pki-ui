@@ -1,3 +1,55 @@
+export type ServiceFamily = 'HSM' | 'SVS' | 'TSA' | 'SEF';
+export interface ServiceResource {
+  serviceId: string;
+  family: ServiceFamily;
+  poolKey: string;
+  adapterKey: string;
+  simulated: boolean;
+  enabled: boolean;
+  healthy: boolean;
+  version: string;
+}
+export interface ServiceGrant {
+  serviceId: string;
+  operation: string;
+  algorithm: string;
+  objectId: string;
+}
+export interface ApplicationPolicy {
+  capabilities: string[];
+  poolKey: string;
+  maxRequests: number;
+  windowSeconds: number;
+  services: ServiceGrant[];
+}
+export interface ApplicationSummary {
+  applicationId: string;
+  name: string;
+  platformStatus: string;
+  onboardingState: string;
+  version: string;
+}
+export interface ApplicationView {
+  applicationId: string;
+  version: string;
+  state: string;
+  platformVersion: string | null;
+  proposerId: string | null;
+  approverId: string | null;
+  policy: ApplicationPolicy | null;
+}
+export interface SharedQuota {
+  dimension: 'TENANT' | 'CAPABILITY' | 'RESOURCE_POOL';
+  key: string;
+  capability: string;
+  maxRequests: number;
+  windowSeconds: number;
+  version: string;
+}
+export interface ManagementPage<T> {
+  items: T[];
+  hasMore: boolean;
+}
 export interface InstallationView {
   initialized: boolean;
   draftVersion: number;
@@ -27,6 +79,15 @@ export interface SetupView {
 export type SetupAction = 'CHECK_ENV' | 'CHECK_RESOURCES' | 'CHECK_POLICY';
 /** 固定同源BFF契约；浏览器不持有Auth令牌或OAuth客户端秘密。 */
 export interface ConsoleResponses {
+  'service-list': ManagementPage<ServiceResource>;
+  'service-save': ServiceResource;
+  'application-list': ManagementPage<ApplicationSummary>;
+  'application-view': ApplicationView;
+  'application-draft': ApplicationView;
+  'application-publish': ApplicationView;
+  'application-suspend': ApplicationView;
+  'quota-list': ManagementPage<SharedQuota>;
+  'quota-save': SharedQuota;
   session: { csrf: string; authenticated: boolean; initializationAttempted?: boolean; certificateLoginEnabled?: boolean; httpTestMode?: boolean };
   challenge: { csrf: string; captchaEnabled: boolean; image: string };
   login: { authenticated: boolean };
@@ -44,6 +105,15 @@ export interface ConsoleResponses {
   logout: { authenticated: boolean };
 }
 export interface ConsoleCommands {
+  'service-list': { offset: number };
+  'service-save': Pick<ServiceResource, 'serviceId' | 'family' | 'poolKey' | 'adapterKey' | 'enabled'> & { expectedVersion: string };
+  'application-list': { offset: number };
+  'application-view': { applicationId: string };
+  'application-draft': ApplicationPolicy & { applicationId: string; expectedVersion: string };
+  'application-publish': { applicationId: string; expectedVersion: string };
+  'application-suspend': { applicationId: string; expectedVersion: string };
+  'quota-list': { offset: number };
+  'quota-save': Omit<SharedQuota, 'version'> & { expectedVersion: string };
   session: undefined;
   challenge: undefined;
   login: { username: string; password: string; captcha: string };
@@ -61,6 +131,15 @@ export interface ConsoleCommands {
   logout: Record<string, never>;
 }
 const endpoints = [
+  'service-list',
+  'service-save',
+  'application-list',
+  'application-view',
+  'application-draft',
+  'application-publish',
+  'application-suspend',
+  'quota-list',
+  'quota-save',
   'installation',
   'installation-advance',
   'installation-complete',
