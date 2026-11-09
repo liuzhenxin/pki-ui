@@ -9,7 +9,7 @@ import mark from '@/assets/brand/csp-mark-inverse.svg';
 import { useCspConsoleStore } from '@/store/modules/cspConsole';
 import { cspProduct } from '@/config/csp';
 const store = useCspConsoleStore();
-const { busy, error, destination } = storeToRefs(store);
+const { busy, error, destination, canInitialize } = storeToRefs(store);
 const router = useRouter();
 const route = useRoute();
 const { width } = useWindowSize();
@@ -41,14 +41,14 @@ async function logout() {
         >
         <nav aria-label="控制台导航">
           <el-menu :default-active="route.path" router background-color="transparent" text-color="#e2e8f0" active-text-color="#176ac3">
-            <el-menu-item :index="destination" :aria-label="destination === '/csp/overview' ? '运行总览' : '资源接入与服务启用'"
+            <el-menu-item v-if="canInitialize" :index="destination" :aria-label="destination === '/csp/overview' ? '运行总览' : '资源接入与服务启用'"
               ><el-icon><Monitor v-if="destination === '/csp/overview'" /><Setting v-else /></el-icon
               ><span>{{ destination === '/csp/overview' ? '运行总览' : '资源接入与服务启用' }}</span></el-menu-item
             >
             <el-menu-item index="/csp/management"
               ><el-icon><Setting /></el-icon><span>服务与应用管理</span></el-menu-item
             >
-            <el-menu-item index="/csp/installation"
+            <el-menu-item v-if="canInitialize" index="/csp/installation"
               ><el-icon><Setting /></el-icon><span>安装初始化</span></el-menu-item
             >
           </el-menu>

@@ -30,6 +30,8 @@ export function createCspRouter(pinia: Pinia, history: RouterHistory = createWeb
     // 每次导航重取受控会话/CSP状态；浏览器tenant、平台租户status和隐藏菜单均非授权依据。
     await store.restore(to.path !== '/csp/management');
     if (!store.signedIn) return to.path === '/login' ? true : { path: '/login', replace: true };
+    if (!store.canInitialize && [cspProduct.installation, cspProduct.setup, cspProduct.home].includes(to.path))
+      return { path: '/csp/management', replace: true };
     if (to.path === '/login') return { path: store.destination, replace: true };
     if ((to.path === cspProduct.setup || to.path === cspProduct.home) && to.path !== store.destination)
       return { path: store.destination, replace: true };

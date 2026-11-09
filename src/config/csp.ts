@@ -10,7 +10,13 @@ export const cspProduct = Object.freeze({
   home: '/csp/overview'
 });
 
-export function cspDestination(installationInitialized: boolean | null, serviceInitialized: boolean | null, completion = false) {
+export function cspDestination(
+  installationInitialized: boolean | null,
+  serviceInitialized: boolean | null,
+  completion = false,
+  canInitialize = true
+) {
+  if (!canInitialize) return '/csp/management';
   if (installationInitialized !== true) return cspProduct.installation;
   return serviceInitialized === true && !completion ? cspProduct.home : cspProduct.setup;
 }

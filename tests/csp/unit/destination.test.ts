@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { cspDestination } from '@/config/csp';
 
 describe('CSP authenticated destination', () => {
+  it('routes service administrators directly to management without installation rights', () => {
+    expect(cspDestination(null, null, false, false)).toBe('/csp/management');
+  });
   it.each([
     [null, null, false, '/csp/installation'],
     [false, null, false, '/csp/installation'],

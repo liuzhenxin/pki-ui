@@ -88,11 +88,18 @@ export interface ConsoleResponses {
   'application-suspend': ApplicationView;
   'quota-list': ManagementPage<SharedQuota>;
   'quota-save': SharedQuota;
-  session: { csrf: string; authenticated: boolean; initializationAttempted?: boolean; certificateLoginEnabled?: boolean; httpTestMode?: boolean };
+  session: {
+    csrf: string;
+    authenticated: boolean;
+    canInitialize?: boolean;
+    initializationAttempted?: boolean;
+    certificateLoginEnabled?: boolean;
+    httpTestMode?: boolean;
+  };
   challenge: { csrf: string; captchaEnabled: boolean; image: string };
-  login: { authenticated: boolean };
+  login: { authenticated: boolean; canInitialize?: boolean };
   'certificate-challenge': { challengeId: string; signData: string; sm2UserId: string };
-  'certificate-login': { authenticated: boolean };
+  'certificate-login': { authenticated: boolean; canInitialize?: boolean };
   state: { initialized: boolean };
   installation: InstallationView;
   'installation-advance': InstallationView;

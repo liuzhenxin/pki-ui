@@ -60,7 +60,8 @@ export const useCspConsoleStore = defineStore('csp-console', () => {
       const digest = calculateSm2SignatureDigest(certificate.cert, challenge.signData, challenge.sm2UserId);
       const rawSignature = await skfCall('SignData', [certificate.key, digest]);
       if (typeof rawSignature !== 'string') throw new Error('USB Key 签名响应无效。');
-      await api('certificate-login', { challengeId: challenge.challengeId, signature: normalizeSkfSignature(rawSignature) });
+      const login = await api('certificate-login', { challengeId: challenge.challengeId, signature: normalizeSkfSignature(rawSignature) });
+      canInitialize.value = login.canInitialize !== false;
       certificates.value = [];
       certificateKey.value = '';
       signedIn.value = true;
@@ -83,6 +84,7 @@ export const useCspConsoleStore = defineStore('csp-console', () => {
   const busy = ref(false);
   const error = ref('');
   const signedIn = ref(false);
+  const canInitialize = ref(true);
   const installationInitialized = ref<boolean | null>(null);
   const initialized = ref<boolean | null>(null);
   const checkedAt = ref('');
@@ -142,6 +144,7 @@ export const useCspConsoleStore = defineStore('csp-console', () => {
   }
 
   async function readState() {
+    if (!canInitialize.value) return;
     busy.value = true;
     error.value = '';
     confirmed.value = false;
@@ -233,7 +236,8 @@ export const useCspConsoleStore = defineStore('csp-console', () => {
     busy.value = true;
     error.value = '';
     try {
-      await api('login', { username: username.value.trim(), password: password.value, captcha: captcha.value });
+      const login = await api('login', { username: username.value.trim(), password: password.value, captcha: captcha.value });
+      canInitialize.value = login.canInitialize !== false;
       password.value = '';
       captcha.value = '';
       image.value = '';
@@ -267,6 +271,7 @@ export const useCspConsoleStore = defineStore('csp-console', () => {
     try {
       await api('logout', {});
       signedIn.value = false;
+      canInitialize.value = true;
       installationInitialized.value = null;
       initialized.value = null;
       environment.value = [];
@@ -279,6 +284,7 @@ export const useCspConsoleStore = defineStore('csp-console', () => {
       if (!session || typeof session.csrf !== 'string' || !session.csrf || typeof session.authenticated !== 'boolean')
         throw new Error('会话状态无效。');
       csrf.value = session.csrf;
+      canInitialize.value = session.canInitialize !== false;
       certificateEnabled.value = session.certificateLoginEnabled === true;
       httpTestMode.value = session.httpTestMode === true && location.origin === 'http://10.10.10.128:9085';
       initializationAttempted.value = session.initializationAttempted === true;
@@ -296,6 +302,7 @@ export const useCspConsoleStore = defineStore('csp-console', () => {
       if (!session || typeof session.csrf !== 'string' || !session.csrf || typeof session.authenticated !== 'boolean')
         throw new Error('会话状态无效。');
       csrf.value = session.csrf;
+      canInitialize.value = session.canInitialize !== false;
       certificateEnabled.value = session.certificateLoginEnabled === true;
       httpTestMode.value = session.httpTestMode === true && location.origin === 'http://10.10.10.128:9085';
       initializationAttempted.value = session.initializationAttempted === true;
@@ -306,19 +313,21 @@ export const useCspConsoleStore = defineStore('csp-console', () => {
         return;
       }
       signedIn.value = false;
+      canInitialize.value = true;
       installationInitialized.value = null;
       initialized.value = null;
       environment.value = [];
       completion.value = false;
     } catch {
       signedIn.value = false;
+      canInitialize.value = true;
       installationInitialized.value = null;
       initialized.value = null;
       csrf.value = '';
       error.value = '控制台连接失败，请刷新页面。';
     }
   }
-  const destination = computed(() => cspDestination(installationInitialized.value, initialized.value, completion.value));
+  const destination = computed(() => cspDestination(installationInitialized.value, initialized.value, completion.value, canInitialize.value));
   return {
     loginMode,
     certificateEnabled,
@@ -334,6 +343,7 @@ export const useCspConsoleStore = defineStore('csp-console', () => {
     busy,
     error,
     signedIn,
+    canInitialize,
     initialized,
     checkedAt,
     setupStep,
