@@ -50,6 +50,7 @@ async function logout() {
                 ><el-icon><Setting /></el-icon><span>应用接入</span></template
               >
               <el-menu-item index="/csp/applications">应用列表</el-menu-item>
+              <el-menu-item v-if="store.allows('/csp/application-resources')" index="/csp/application-resources">服务与配额</el-menu-item>
             </el-sub-menu>
             <el-sub-menu v-if="store.allows('/csp/devices')" index="device-management">
               <template #title

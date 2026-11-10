@@ -18,9 +18,14 @@ export function createCspRouter(pinia: Pinia, history: RouterHistory = createWeb
           { path: 'management', component: () => import('@/views/csp/management/index.vue'), meta: { title: '服务与应用管理' } },
           {
             path: 'applications',
-            component: () => import('@/views/csp/management/index.vue'),
-            props: { applicationOnly: true },
+            component: () => import('@/views/csp/applications/Entry.vue'),
             meta: { title: '应用列表' }
+          },
+          {
+            path: 'application-resources',
+            component: () => import('@/views/csp/management/index.vue'),
+            props: { resourcesOnly: true },
+            meta: { title: '服务与配额' }
           },
           { path: 'devices', component: () => import('@/views/csp/devices/index.vue'), meta: { title: '设备列表' } },
           {

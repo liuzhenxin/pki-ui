@@ -15,7 +15,7 @@ import {
 } from '@/api/csp/console';
 import { useCspConsoleStore } from '@/store/modules/cspConsole';
 const session = useCspConsoleStore();
-const props = defineProps<{ applicationOnly?: boolean; family?: ServiceFamily }>();
+const props = defineProps<{ applicationOnly?: boolean; resourcesOnly?: boolean; family?: ServiceFamily }>();
 const familyTitles: Record<ServiceFamily, string> = { HSM: '密码机服务', SVS: '签名验签服务器', TSA: '时间戳服务器', SEF: '电子签章系统' };
 const tab = ref<'services' | 'applications' | 'quotas'>(props.applicationOnly ? 'applications' : 'services');
 const busy = ref(false),
@@ -88,7 +88,10 @@ async function run(work: () => Promise<void>, mutation = false) {
 }
 async function load() {
   if (tab.value === 'services') {
-    const p = await api('service-list', { offset: offset.value, ...(props.family ? { family: props.family } : {}) });
+    const p = await api(session.ownedApplications ? 'owned-service-list' : 'service-list', {
+      offset: offset.value,
+      ...(props.family ? { family: props.family } : {})
+    });
     services.value = p.items;
     hasMore.value = p.hasMore;
   } else if (tab.value === 'applications') {
@@ -96,7 +99,7 @@ async function load() {
     applications.value = p.items;
     hasMore.value = p.hasMore;
   } else {
-    const p = await api('quota-list', { offset: offset.value });
+    const p = await api(session.ownedApplications ? 'owned-quota-list' : 'quota-list', { offset: offset.value });
     quotas.value = p.items;
     hasMore.value = p.hasMore;
   }
@@ -138,7 +141,10 @@ function editService(row?: ServiceResource) {
 async function saveService() {
   if (service.expectedVersion !== '0') {
     try {
-      await ElMessageBox.confirm('保存后将清除健康状态并停用该服务已有的应用授权；需要重新提出授权草稿和独立审核。', '确认服务变更', {
+      const message = session.ownedApplications
+        ? '保存后将清除健康状态并停用该服务已有的应用授权。服务恢复后，请按新版本重新保存授权。'
+        : '保存后将清除健康状态并停用该服务已有的应用授权；需要重新提出授权草稿和独立审核。';
+      await ElMessageBox.confirm(message, '确认服务变更', {
         confirmButtonText: '确认保存',
         cancelButtonText: '取消'
       });
@@ -147,7 +153,7 @@ async function saveService() {
     }
   }
   await run(async () => {
-    const saved = await api('service-save', { ...service });
+    const saved = await api(session.ownedApplications ? 'owned-service-save' : 'service-save', { ...service });
     editService(saved);
     notice.value = '服务已保存，等待适配器上报健康状态。';
     await load();
@@ -216,7 +222,7 @@ function editQuota(row?: SharedQuota) {
 }
 async function saveQuota() {
   await run(async () => {
-    const saved = await api('quota-save', { ...quota });
+    const saved = await api(session.ownedApplications ? 'owned-quota-save' : 'quota-save', { ...quota });
     editQuota(saved);
     notice.value = '共享配额已保存。';
     await load();
@@ -228,8 +234,10 @@ onMounted(refresh);
   <section class="management-page" aria-labelledby="management-title">
     <header class="management-heading">
       <div>
-        <h1 id="management-title">{{ props.family ? familyTitles[props.family] : props.applicationOnly ? '应用列表' : '服务与应用管理' }}</h1>
-        <p v-if="!props.family">按逻辑对象授权应用，设置共享配额。</p>
+        <h1 id="management-title">
+          {{ props.family ? familyTitles[props.family] : props.applicationOnly ? '应用列表' : props.resourcesOnly ? '服务与配额' : '服务与应用管理' }}
+        </h1>
+        <p v-if="!props.family && !props.resourcesOnly">按逻辑对象授权应用，设置共享配额。</p>
       </div>
       <el-button :disabled="busy" @click="refresh">刷新当前页</el-button>
     </header>
@@ -243,6 +251,7 @@ onMounted(refresh);
         >密码服务</el-button
       >
       <el-button
+        v-if="!props.resourcesOnly"
         :type="tab === 'applications' ? 'primary' : 'default'"
         :aria-pressed="tab === 'applications'"
         :disabled="busy"

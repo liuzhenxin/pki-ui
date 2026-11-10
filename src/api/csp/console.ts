@@ -64,6 +64,7 @@ export interface ConsoleNavigation {
   canInitialize?: boolean;
   canManageServices?: boolean;
   canManageDevices?: boolean;
+  canOperateApplications?: boolean;
   canManageAuditors?: boolean;
   canReadLoginLogs?: boolean;
   canReadOperationLogs?: boolean;
@@ -104,7 +105,46 @@ export interface SetupView {
 }
 export type SetupAction = 'CHECK_ENV' | 'CHECK_RESOURCES' | 'CHECK_POLICY';
 /** 固定同源BFF契约；浏览器不持有Auth令牌或OAuth客户端秘密。 */
+export interface OwnedApplication {
+  applicationId: string;
+  name: string;
+  appKey: string;
+  version: string;
+  enabled: boolean;
+}
+export interface IssuedApplicationCredential {
+  applicationId: string;
+  appKey: string;
+  appSecret: string;
+  version: string;
+}
+export interface OwnedApplicationPolicy {
+  grants: ServiceGrant[];
+  maxRequests: number;
+  windowSeconds: number;
+}
+export interface OwnedApplicationView {
+  application: OwnedApplication;
+  quota: Omit<OwnedApplicationPolicy, 'grants'> | null;
+  activeGrants: ServiceGrant[];
+}
+interface OwnedTarget {
+  applicationId: string;
+  expectedVersion: string;
+}
+
 export interface ConsoleResponses {
+  'owned-application-list': ManagementPage<OwnedApplication>;
+  'owned-application-register': IssuedApplicationCredential;
+  'owned-application-view': OwnedApplicationView;
+  'owned-application-save-policy': OwnedApplicationView;
+  'owned-application-revoke': OwnedApplicationView;
+  'owned-application-suspend': OwnedApplicationView;
+  'owned-application-rotate': IssuedApplicationCredential;
+  'owned-service-list': ManagementPage<ServiceResource>;
+  'owned-service-save': ServiceResource;
+  'owned-quota-list': ManagementPage<SharedQuota>;
+  'owned-quota-save': SharedQuota;
   'device-list': ManagementPage<ManagedDevice>;
   'device-save': ManagedDevice;
   'device-state': ManagedDevice;
@@ -145,6 +185,17 @@ export interface ConsoleResponses {
   logout: { authenticated: boolean };
 }
 export interface ConsoleCommands {
+  'owned-application-list': { offset: number };
+  'owned-application-register': { name: string };
+  'owned-application-view': { applicationId: string };
+  'owned-application-save-policy': OwnedTarget & { policy: OwnedApplicationPolicy };
+  'owned-application-revoke': OwnedTarget & { grant: ServiceGrant };
+  'owned-application-suspend': OwnedTarget;
+  'owned-application-rotate': OwnedTarget;
+  'owned-service-list': { offset: number; family?: ServiceFamily };
+  'owned-service-save': Pick<ServiceResource, 'serviceId' | 'family' | 'poolKey' | 'adapterKey' | 'enabled'> & { expectedVersion: string };
+  'owned-quota-list': { offset: number };
+  'owned-quota-save': Omit<SharedQuota, 'version'> & { expectedVersion: string };
   'device-list': { offset: number };
   'device-save': Omit<ManagedDevice, 'state' | 'health' | 'version'> & { expectedVersion: string };
   'device-state': { deviceKey: string; expectedVersion: string; operation: 'SUSPEND' | 'RETIRE' };
@@ -179,6 +230,17 @@ export interface ConsoleCommands {
   logout: Record<string, never>;
 }
 const endpoints = [
+  'owned-application-list',
+  'owned-application-register',
+  'owned-application-view',
+  'owned-application-save-policy',
+  'owned-application-revoke',
+  'owned-application-suspend',
+  'owned-application-rotate',
+  'owned-service-list',
+  'owned-service-save',
+  'owned-quota-list',
+  'owned-quota-save',
   'device-list',
   'device-save',
   'device-state',

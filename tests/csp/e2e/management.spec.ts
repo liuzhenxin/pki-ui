@@ -135,3 +135,69 @@ for (const width of [1440, 390])
     expect(failures).toEqual([]);
     expect(calls.some((c) => ['installation', 'setup'].includes(c.action))).toBe(false);
   });
+
+test.describe('CSP-owned applications', () => {
+  test('registers OA, clears the one-time secret, and saves an exact grant', async ({ page }) => {
+    const application = {
+      applicationId: 'app_12345678-1234-1234-1234-123456789012',
+      name: 'OA 系统',
+      appKey: 'csp_' + 'k'.repeat(32),
+      version: '1',
+      enabled: true
+    };
+    const appSecret = 's'.repeat(43);
+    const grant = { serviceId: 'svs-test', operation: 'SIGN', algorithm: 'SM2', objectId: 'oa-signer' };
+    let registered = false;
+    let saved = false;
+    await page.route('**/console-api/**', async (route) => {
+      const action = new URL(route.request().url()).pathname.split('/').at(-1);
+      const body = route.request().postDataJSON();
+      const view = {
+        application: { ...application, version: saved ? '2' : '1' },
+        quota: saved ? { maxRequests: 100, windowSeconds: 60 } : null,
+        activeGrants: saved ? [grant] : []
+      };
+      switch (action) {
+        case 'session':
+          return route.fulfill({ json: { csrf: 'test-csrf', authenticated: true, canOperateApplications: true } });
+        case 'owned-application-list':
+          return route.fulfill({ json: { items: registered ? [view.application] : [], hasMore: false } });
+        case 'owned-service-list':
+          return route.fulfill({ json: { items: [{ serviceId: grant.serviceId, family: 'SVS', enabled: true }], hasMore: false } });
+        case 'owned-application-register':
+          expect(body).toEqual({ name: application.name });
+          registered = true;
+          return route.fulfill({ json: { ...application, appSecret } });
+        case 'owned-application-view':
+          return route.fulfill({ json: view });
+        case 'owned-application-save-policy':
+          expect(body).toEqual({
+            applicationId: application.applicationId,
+            expectedVersion: '1',
+            policy: { grants: [grant], maxRequests: 100, windowSeconds: 60 }
+          });
+          saved = true;
+          return route.fulfill({ json: { ...view, application: { ...application, version: '2' }, activeGrants: [grant] } });
+        default:
+          return route.abort();
+      }
+    });
+    await page.goto(origin + '/csp/applications');
+    await page.getByLabel('应用名称').fill(application.name);
+    await page.getByRole('button', { name: '注册并签发凭据' }).click();
+    await expect(page.getByLabel('APP Secret', { exact: true })).toHaveValue(appSecret);
+    await page.getByRole('button', { name: '已保存', exact: true }).click();
+    await expect(page.getByLabel('APP Secret', { exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name: '查看授权' }).click();
+    await page.getByLabel('服务', { exact: true }).selectOption(grant.serviceId);
+    await page.getByLabel('操作', { exact: true }).selectOption(grant.operation);
+    await page.getByLabel('算法').fill(grant.algorithm);
+    await page.getByLabel('逻辑对象').fill(grant.objectId);
+    await page.getByRole('button', { name: '添加授权' }).click();
+    await page.getByRole('button', { name: '保存并生效' }).click();
+    await page.getByRole('button', { name: '确认', exact: true }).click();
+    await expect(page.getByRole('button', { name: '撤销授权' })).toBeVisible();
+    await expect(page.getByLabel('APP Secret', { exact: true })).toHaveCount(0);
+    expect(saved).toBe(true);
+  });
+});

@@ -91,22 +91,30 @@ export const useCspConsoleStore = defineStore('csp-console', () => {
     navigation.value = {
       canManageServices: session.canManageServices !== false,
       canManageDevices: session.canManageDevices === true,
+      canOperateApplications: session.canOperateApplications === true,
       canManageAuditors: session.canManageAuditors === true,
       canReadLoginLogs: session.canReadLoginLogs === true,
       canReadOperationLogs: session.canReadOperationLogs === true
     };
   }
+  const canOperateApplications = computed(() => navigation.value.canOperateApplications === true);
+  const ownedApplications = canOperateApplications;
+
   function allows(path: string) {
     switch (path) {
       case '/csp/setup':
       case '/csp/overview':
         return canInitialize.value;
+      case '/csp/application-resources':
+        return canOperateApplications.value;
       case '/csp/management':
+        return !ownedApplications.value && navigation.value.canManageServices !== false;
       case '/csp/applications':
+        return ownedApplications.value || navigation.value.canManageServices !== false;
       case '/csp/services/svs':
       case '/csp/services/tsa':
       case '/csp/services/sef':
-        return navigation.value.canManageServices !== false;
+        return canOperateApplications.value || (!ownedApplications.value && navigation.value.canManageServices !== false);
       case '/csp/devices':
         return navigation.value.canManageDevices === true && installationInitialized.value === true;
       case '/csp/auditors':
@@ -284,7 +292,7 @@ export const useCspConsoleStore = defineStore('csp-console', () => {
   }
   const destination = computed(() => {
     if (canInitialize.value || allows('/csp/management')) return cspDestination(installationInitialized.value, canInitialize.value);
-    return ['/csp/auditors', '/csp/login-logs', '/csp/operation-logs'].find(allows) ?? '/csp/unavailable';
+    return ['/csp/applications', '/csp/auditors', '/csp/login-logs', '/csp/operation-logs'].find(allows) ?? '/csp/unavailable';
   });
   return {
     loginMode,
@@ -303,6 +311,8 @@ export const useCspConsoleStore = defineStore('csp-console', () => {
     signedIn,
     canInitialize,
     allows,
+    canOperateApplications,
+    ownedApplications,
     checkedAt,
     setup,
     secure,
