@@ -5,20 +5,14 @@ export const cspProduct = Object.freeze({
   tenantCode: 'csp',
   name: '密码服务平台',
   version: '3.0.0-rc.1',
-  setup: '/csp/setup',
-  installation: '/csp/installation',
+  installation: '/csp/setup',
   home: '/csp/overview'
 });
 
-export function cspDestination(
-  installationInitialized: boolean | null,
-  serviceInitialized: boolean | null,
-  completion = false,
-  canInitialize = true
-) {
+export function cspDestination(installationInitialized: boolean | null, canInitialize = true) {
   if (!canInitialize) return '/csp/management';
   if (installationInitialized !== true) return cspProduct.installation;
-  return serviceInitialized === true && !completion ? cspProduct.home : cspProduct.setup;
+  return cspProduct.home;
 }
 export function assertCspProduct(product: unknown, tenant: unknown) {
   if (product !== cspProduct.code || tenant !== cspProduct.tenantId) throw new Error('CSP_PRODUCT_CONFIGURATION_INVALID');

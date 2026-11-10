@@ -1,10 +1,18 @@
 import { ref, computed, watch } from 'vue';
 import { defineStore, storeToRefs } from 'pinia';
-import { consoleRequest, ConsoleRequestError, type ConsoleResponses, type ConsoleCommands, type InstallationView } from '@/api/csp/console';
+import {
+  consoleRequest,
+  ConsoleRequestError,
+  type ConsoleResponses,
+  type ConsoleCommands,
+  type InstallationView,
+  type InstallationAccount
+} from '@/api/csp/console';
 import { useCspConsoleStore } from './cspConsole';
+import { cspProduct } from '@/config/csp';
 export const useCspInstallationStore = defineStore('csp-installation', () => {
   const shared = useCspConsoleStore();
-  const { signedIn, httpTestMode, accountTransport } = storeToRefs(shared);
+  const { signedIn, httpTestMode, accountTransport, secure, certificateEnabled } = storeToRefs(shared);
   const busy = ref(false),
     error = ref(''),
     initialized = ref<boolean | null>(null),
@@ -15,7 +23,11 @@ export const useCspInstallationStore = defineStore('csp-installation', () => {
     initializationAttempted = ref(false),
     completion = ref(false);
   const environmentReady = computed(
-    () => setup.value !== null && setup.value.step >= 2 && setup.value.accounts.length === 3 && setup.value.accounts.every((a) => a.valid)
+    () =>
+      setup.value !== null &&
+      setup.value.step >= 2 &&
+      setup.value.accounts.length === 2 &&
+      (['SYSTEM_ADMIN', 'AUDIT_ADMIN'] as const).every((role) => setup.value?.accounts.some((account) => account.role === role && account.valid))
   );
   function api<K extends keyof ConsoleResponses>(path: K, body?: ConsoleCommands[K]): Promise<ConsoleResponses[K]> {
     return consoleRequest(path, shared.csrf, body);
@@ -88,10 +100,10 @@ export const useCspInstallationStore = defineStore('csp-installation', () => {
     }
   }
 
-  async function initialize() {
+  async function initialize(admin: InstallationAccount, auditor: InstallationAccount) {
     if (
       busy.value ||
-      !accountTransport.value ||
+      !secure.value ||
       initialized.value !== false ||
       !environmentReady.value ||
       !confirmed.value ||
@@ -104,7 +116,7 @@ export const useCspInstallationStore = defineStore('csp-installation', () => {
     error.value = '';
     initializationAttempted.value = true;
     try {
-      const result = await api('installation-complete', { draftVersion: setup.value.draftVersion, confirm: true });
+      const result = await api('installation-complete', { draftVersion: setup.value.draftVersion, confirm: true, admin, auditor });
       if (result.initialized !== true) throw new Error('初始化回执无效。');
       applySetup(result);
       completion.value = true;
@@ -135,6 +147,8 @@ export const useCspInstallationStore = defineStore('csp-installation', () => {
     signedIn,
     httpTestMode,
     accountTransport,
+    secure,
+    certificateEnabled,
     busy,
     error,
     initialized,
@@ -149,6 +163,6 @@ export const useCspInstallationStore = defineStore('csp-installation', () => {
     advanceSetup,
     initialize,
     logout: shared.logout,
-    destination: '/csp/installation'
+    destination: cspProduct.installation
   };
 });

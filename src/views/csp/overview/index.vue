@@ -1,10 +1,12 @@
 <script setup lang="ts">
+import { onMounted } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useRouter } from 'vue-router';
 import { useCspConsoleStore } from '@/store/modules/cspConsole';
 const store = useCspConsoleStore();
 const router = useRouter();
 const { httpTestMode, checkedAt, busy, setup } = storeToRefs(store);
+onMounted(() => store.refresh());
 async function refresh() {
   await store.refresh();
   await router.replace(store.destination);
@@ -24,7 +26,7 @@ async function refresh() {
     <el-card shadow="never" class="csp-overview-card"
       ><template #header><h2>服务启用状态</h2></template>
       <el-tag :type="setup?.enabledCapabilities.length ? 'success' : 'warning'" effect="plain">{{
-        setup?.enabledCapabilities.length ? '随机数服务已启用' : '当前检查未通过，服务关闭'
+        !setup ? '服务状态尚未确认' : setup.enabledCapabilities.length ? '随机数服务已启用' : '当前检查未通过，服务关闭'
       }}</el-tag>
       <p>统一 Auth 身份认证 · CSP 租户 10</p>
       <p class="muted">最近核查：{{ checkedAt || '尚无成功核查' }} · Asia/Shanghai</p>

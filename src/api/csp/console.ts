@@ -50,6 +50,17 @@ export interface ManagementPage<T> {
   items: T[];
   hasMore: boolean;
 }
+export interface ConsoleNavigation {
+  canInitialize?: boolean;
+  canManageServices?: boolean;
+  canManageAuditors?: boolean;
+  canReadLoginLogs?: boolean;
+  canReadOperationLogs?: boolean;
+}
+export interface AuditPage {
+  items: Record<string, string | number | null>[];
+  total: number;
+}
 export interface InstallationView {
   initialized: boolean;
   draftVersion: number;
@@ -61,7 +72,11 @@ export interface InstallationView {
   serviceVersion: string;
   environment: string;
   checkedAt: string | null;
-  accounts: { role: 'SYSTEM_ADMIN' | 'SECURITY_ADMIN' | 'AUDIT_ADMIN'; valid: boolean }[];
+  accounts: { role: 'SYSTEM_ADMIN' | 'AUDIT_ADMIN'; valid: boolean }[];
+}
+export interface InstallationAccount {
+  password: string;
+  certPem?: string;
 }
 export type InstallationAction = 'AGREE' | 'CHECK_ENV' | 'VERIFY_ACCOUNTS';
 export interface SetupView {
@@ -88,18 +103,22 @@ export interface ConsoleResponses {
   'application-suspend': ApplicationView;
   'quota-list': ManagementPage<SharedQuota>;
   'quota-save': SharedQuota;
-  session: {
+  'auditor-list': AuditPage;
+  'auditor-create': { saved: true };
+  'auditor-status': { saved: true };
+  'login-log-list': AuditPage;
+  'operation-log-list': AuditPage;
+  session: ConsoleNavigation & {
     csrf: string;
     authenticated: boolean;
-    canInitialize?: boolean;
     initializationAttempted?: boolean;
     certificateLoginEnabled?: boolean;
     httpTestMode?: boolean;
   };
   challenge: { csrf: string; captchaEnabled: boolean; image: string };
-  login: { authenticated: boolean; canInitialize?: boolean };
+  login: ConsoleNavigation & { authenticated: boolean };
   'certificate-challenge': { challengeId: string; signData: string; sm2UserId: string };
-  'certificate-login': { authenticated: boolean; canInitialize?: boolean };
+  'certificate-login': ConsoleNavigation & { authenticated: boolean };
   state: { initialized: boolean };
   installation: InstallationView;
   'installation-advance': InstallationView;
@@ -121,6 +140,11 @@ export interface ConsoleCommands {
   'application-suspend': { applicationId: string; expectedVersion: string };
   'quota-list': { offset: number };
   'quota-save': Omit<SharedQuota, 'version'> & { expectedVersion: string };
+  'auditor-list': { page: number };
+  'auditor-create': { username: string; password: string };
+  'auditor-status': { id: string; status: 0 | 1 };
+  'login-log-list': { page: number };
+  'operation-log-list': { page: number };
   session: undefined;
   challenge: undefined;
   login: { username: string; password: string; captcha: string };
@@ -129,7 +153,7 @@ export interface ConsoleCommands {
   state: undefined;
   installation: undefined;
   'installation-advance': { draftVersion: number; action: InstallationAction; agreementVersion?: string };
-  'installation-complete': { draftVersion: number; confirm: true };
+  'installation-complete': { draftVersion: number; confirm: true; admin: InstallationAccount; auditor: InstallationAccount };
   setup: undefined;
   'setup-advance': { draftVersion: number; action: SetupAction };
   'setup-complete': { draftVersion: number; confirm: true };
@@ -138,6 +162,11 @@ export interface ConsoleCommands {
   logout: Record<string, never>;
 }
 const endpoints = [
+  'auditor-list',
+  'auditor-create',
+  'auditor-status',
+  'login-log-list',
+  'operation-log-list',
   'service-list',
   'service-save',
   'application-list',

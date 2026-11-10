@@ -68,7 +68,7 @@ try {
           initialized=true;initializationAttempted=true;submissions++;
         }
         body={initialized,draftVersion,step,agreed:step>0,attempted:initializationAttempted,agreementVersion,companyName:'测试权利主体',serviceVersion:'v2',environment:'test',checkedAt:step>=2?new Date().toISOString():null,
-          accounts:step===0?[]:['SYSTEM_ADMIN','SECURITY_ADMIN','AUDIT_ADMIN'].map(role=>({role,valid:true}))};
+          accounts:step===0?[]:['SYSTEM_ADMIN','AUDIT_ADMIN'].map(role=>({role,valid:true}))};
       } else if (action === 'logout') {
         authenticated = false;
         initializationAttempted = false;
@@ -94,7 +94,7 @@ try {
         []
       );
       await login.click();
-      await page.getByRole('heading', { name: 'CSP 初始化向导' }).waitFor();
+      await page.getByRole('heading', { name: '安装初始化' }).waitFor();
       await expect(page.getByText('128 HTTP 测试入口', { exact: false })).toBeVisible();
       if (process.env.CSP_UI_SCREENSHOTS === 'true') await page.screenshot({ path: `/tmp/csp-http-test-setup-${scenario.width}.png`, fullPage: true });
       assert.deepEqual(
@@ -106,11 +106,10 @@ try {
       await page.getByRole('button', { name: '检测并继续' }).click();
       await page.getByRole('button', { name: '核验并继续' }).click();
       await page.getByRole('checkbox').check();
-      await page.getByRole('button', { name: '确认并完成初始化' }).dblclick();
-      await page.getByRole('heading', { name: '初始化成功，请重新登录' }).waitFor();
-      assert.equal(submissions, 1);
+      await expect(page.getByRole('button', { name: '确认并完成初始化' })).toBeDisabled();
+      assert.equal(submissions, 0);
       assert.equal(logins, 1);
-      await page.getByRole('button', { name: '退出并重新登录' }).click();
+      await page.getByRole('button', { name: '退出登录' }).click();
       await page.getByRole('heading', { name: '欢迎回来' }).waitFor();
     }
     await page.getByRole('button', { name: '证书登录', exact: true }).click();

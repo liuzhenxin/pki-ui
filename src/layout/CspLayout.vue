@@ -41,16 +41,24 @@ async function logout() {
         >
         <nav aria-label="控制台导航">
           <el-menu :default-active="route.path" router background-color="transparent" text-color="#e2e8f0" active-text-color="#176ac3">
-            <el-menu-item v-if="canInitialize" :index="destination" :aria-label="destination === '/csp/overview' ? '运行总览' : '资源接入与服务启用'"
-              ><el-icon><Monitor v-if="destination === '/csp/overview'" /><Setting v-else /></el-icon
-              ><span>{{ destination === '/csp/overview' ? '运行总览' : '资源接入与服务启用' }}</span></el-menu-item
+            <el-menu-item v-if="canInitialize" :index="cspProduct.home"
+              ><el-icon><Monitor /></el-icon><span>运行总览</span></el-menu-item
             >
-            <el-menu-item index="/csp/management"
+            <el-menu-item v-if="store.allows('/csp/management')" index="/csp/management"
               ><el-icon><Setting /></el-icon><span>服务与应用管理</span></el-menu-item
             >
-            <el-menu-item v-if="canInitialize" index="/csp/installation"
+            <el-menu-item v-if="canInitialize" :index="cspProduct.installation"
               ><el-icon><Setting /></el-icon><span>安装初始化</span></el-menu-item
             >
+            <el-menu-item v-if="store.allows('/csp/auditors')" index="/csp/auditors">
+              <el-icon><Setting /></el-icon><span>审计员管理</span>
+            </el-menu-item>
+            <el-menu-item v-if="store.allows('/csp/login-logs')" index="/csp/login-logs">
+              <el-icon><Monitor /></el-icon><span>登录日志</span>
+            </el-menu-item>
+            <el-menu-item v-if="store.allows('/csp/operation-logs')" index="/csp/operation-logs">
+              <el-icon><Monitor /></el-icon><span>操作日志</span>
+            </el-menu-item>
           </el-menu>
         </nav>
         <p class="csp-sidebar-note">CSP · {{ cspProduct.version }} 测试版<br />管理操作按当前权限校验</p>
@@ -76,6 +84,6 @@ async function logout() {
       </div>
     </template>
     <main id="main" tabindex="-1"><router-view /></main>
-    <p v-if="error && route.path !== '/csp/setup'" class="error" role="alert">{{ error }}</p>
+    <p v-if="error" class="error" role="alert">{{ error }}</p>
   </ManagementFrame>
 </template>

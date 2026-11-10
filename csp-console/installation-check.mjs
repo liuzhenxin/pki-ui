@@ -17,7 +17,7 @@ try {
    else if(path.startsWith('installation')) {
     if(path==='installation-advance'){step++;version++;}
     if(path==='installation-complete'){initialized=true;completed++;}
-    data={initialized,draftVersion:version,step,agreed:step>0,attempted:false,agreementVersion,companyName:'测试权利主体',serviceVersion:'test',environment:'test',checkedAt:null,accounts:['SYSTEM_ADMIN','SECURITY_ADMIN','AUDIT_ADMIN'].map(role=>({role,valid:true}))};
+    data={initialized,draftVersion:version,step,agreed:step>0,attempted:false,agreementVersion,companyName:'测试权利主体',serviceVersion:'test',environment:'test',checkedAt:null,accounts:['SYSTEM_ADMIN','AUDIT_ADMIN'].map(role=>({role,valid:true}))};
    } else throw new Error('Unexpected endpoint '+path);
    await route.fulfill({json:data});
   });
@@ -26,15 +26,20 @@ try {
   await expect(page.getByRole('button',{name:'同意并继续'})).toBeDisabled();
   await page.getByRole('checkbox').check();await page.getByRole('button',{name:'同意并继续'}).click();
   await page.getByRole('button',{name:'检测并继续'}).click();
-  await expect(page.getByRole('list',{name:'三角色核验结果'})).toContainText('安全管理员');
+  await expect(page.getByRole('list',{name:'两员核验结果'})).toContainText('审计管理员');
   await page.getByRole('button',{name:'核验并继续'}).click();
   await page.reload();await expect(page.getByRole('heading',{name:'确认初始化结果'})).toBeVisible();
+  for (const [label, password] of [['系统管理员（admin）','fixture-admin-password'],['审计管理员（auditor）','fixture-auditor-password']]) {
+   const group=page.getByRole('group',{name:label});
+   await group.getByLabel('新密码',{exact:true}).fill(password);
+   await group.getByLabel('确认新密码',{exact:true}).fill(password);
+  }
   await page.getByRole('checkbox').check();await page.getByRole('button',{name:'确认并完成初始化'}).click();
   await expect(page.getByRole('heading',{name:'初始化成功，请重新登录'})).toBeVisible();
   if(completed!==1) throw new Error('Repeated completion');
   const axe=await new AxeBuilder({page}).analyze();if(axe.violations.length) throw new Error(JSON.stringify(axe.violations.map(v=>({id:v.id,nodes:v.nodes.map(n=>n.html)}))));
   await page.goto('http://127.0.0.1:5187/csp/setup');
-  await expect(page.getByRole('heading',{name:'资源接入与服务启用',exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'CSP 已完成初始化',exact:true})).toBeVisible();
   console.log('PASS installation '+width+' restore completion isolation axe0');await context.close();
  }
 } finally {await browser.close();await server.httpServer.close();}

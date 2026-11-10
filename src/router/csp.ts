@@ -16,8 +16,17 @@ export function createCspRouter(pinia: Pinia, history: RouterHistory = createWeb
         meta: { title: '密码服务平台' },
         children: [
           { path: 'management', component: () => import('@/views/csp/management/index.vue'), meta: { title: '服务与应用管理' } },
-          { path: 'installation', component: () => import('@/views/csp/installation/index.vue'), meta: { title: '安装初始化' } },
-          { path: 'setup', component: () => import('@/views/csp/setup/index.vue'), meta: { title: '资源接入与服务启用' } },
+          { path: 'auditors', component: () => import('@/views/csp/audit/index.vue'), props: { kind: 'auditors' }, meta: { title: '审计员管理' } },
+          { path: 'login-logs', component: () => import('@/views/csp/audit/index.vue'), props: { kind: 'login' }, meta: { title: '登录日志' } },
+          {
+            path: 'operation-logs',
+            component: () => import('@/views/csp/audit/index.vue'),
+            props: { kind: 'operation' },
+            meta: { title: '操作日志' }
+          },
+          { path: 'unavailable', component: () => import('@/views/csp/not-found.vue'), meta: { title: '页面未开放' } },
+          { path: 'installation', redirect: cspProduct.installation },
+          { path: 'setup', component: () => import('@/views/csp/setup/index.vue'), meta: { title: '安装初始化' } },
           { path: 'overview', component: () => import('@/views/csp/overview/index.vue'), meta: { title: '运行总览' } }
         ]
       },
@@ -30,11 +39,9 @@ export function createCspRouter(pinia: Pinia, history: RouterHistory = createWeb
     // 每次导航重取受控会话/CSP状态；浏览器tenant、平台租户status和隐藏菜单均非授权依据。
     await store.restore(to.path !== '/csp/management');
     if (!store.signedIn) return to.path === '/login' ? true : { path: '/login', replace: true };
-    if (!store.canInitialize && [cspProduct.installation, cspProduct.setup, cspProduct.home].includes(to.path))
-      return { path: '/csp/management', replace: true };
+    if (!store.allows(to.path)) return { path: store.destination, replace: true };
     if (to.path === '/login') return { path: store.destination, replace: true };
-    if ((to.path === cspProduct.setup || to.path === cspProduct.home) && to.path !== store.destination)
-      return { path: store.destination, replace: true };
+    if (to.path === cspProduct.home && to.path !== store.destination) return { path: store.destination, replace: true };
     return true;
   });
   router.afterEach((to) => {
