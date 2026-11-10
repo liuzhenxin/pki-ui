@@ -50,9 +50,20 @@ export interface ManagementPage<T> {
   items: T[];
   hasMore: boolean;
 }
+export interface ManagedDevice {
+  deviceKey: string;
+  poolKey: string;
+  agentKey: string;
+  softwareVersion: string;
+  maxConcurrency: number;
+  state: 'REGISTERED' | 'ACTIVE' | 'DRAINING' | 'SUSPENDED' | 'RETIRED';
+  health: 'HEALTHY' | 'UNHEALTHY' | 'UNKNOWN';
+  version: string;
+}
 export interface ConsoleNavigation {
   canInitialize?: boolean;
   canManageServices?: boolean;
+  canManageDevices?: boolean;
   canManageAuditors?: boolean;
   canReadLoginLogs?: boolean;
   canReadOperationLogs?: boolean;
@@ -94,6 +105,9 @@ export interface SetupView {
 export type SetupAction = 'CHECK_ENV' | 'CHECK_RESOURCES' | 'CHECK_POLICY';
 /** 固定同源BFF契约；浏览器不持有Auth令牌或OAuth客户端秘密。 */
 export interface ConsoleResponses {
+  'device-list': ManagementPage<ManagedDevice>;
+  'device-save': ManagedDevice;
+  'device-state': ManagedDevice;
   'service-list': ManagementPage<ServiceResource>;
   'service-save': ServiceResource;
   'application-list': ManagementPage<ApplicationSummary>;
@@ -131,7 +145,10 @@ export interface ConsoleResponses {
   logout: { authenticated: boolean };
 }
 export interface ConsoleCommands {
-  'service-list': { offset: number };
+  'device-list': { offset: number };
+  'device-save': Omit<ManagedDevice, 'state' | 'health' | 'version'> & { expectedVersion: string };
+  'device-state': { deviceKey: string; expectedVersion: string; operation: 'SUSPEND' | 'RETIRE' };
+  'service-list': { offset: number; family?: ServiceFamily };
   'service-save': Pick<ServiceResource, 'serviceId' | 'family' | 'poolKey' | 'adapterKey' | 'enabled'> & { expectedVersion: string };
   'application-list': { offset: number };
   'application-view': { applicationId: string };
@@ -162,6 +179,9 @@ export interface ConsoleCommands {
   logout: Record<string, never>;
 }
 const endpoints = [
+  'device-list',
+  'device-save',
+  'device-state',
   'auditor-list',
   'auditor-create',
   'auditor-status',

@@ -7,6 +7,7 @@ import {
   type ConsoleCommands,
   type ConsoleResponses,
   type ServiceResource,
+  type ServiceFamily,
   type ApplicationSummary,
   type ApplicationView,
   type ApplicationPolicy,
@@ -14,7 +15,9 @@ import {
 } from '@/api/csp/console';
 import { useCspConsoleStore } from '@/store/modules/cspConsole';
 const session = useCspConsoleStore();
-const tab = ref<'services' | 'applications' | 'quotas'>('services');
+const props = defineProps<{ applicationOnly?: boolean; family?: ServiceFamily }>();
+const familyTitles: Record<ServiceFamily, string> = { HSM: '密码机服务', SVS: '签名验签服务器', TSA: '时间戳服务器', SEF: '电子签章系统' };
+const tab = ref<'services' | 'applications' | 'quotas'>(props.applicationOnly ? 'applications' : 'services');
 const busy = ref(false),
   error = ref(''),
   notice = ref(''),
@@ -26,7 +29,7 @@ const services = ref<ServiceResource[]>([]),
   quotas = ref<SharedQuota[]>([]);
 const service = reactive<ConsoleCommands['service-save']>({
   serviceId: '',
-  family: 'SVS',
+  family: props.family ?? 'SVS',
   poolKey: '',
   adapterKey: '',
   enabled: false,
@@ -85,7 +88,7 @@ async function run(work: () => Promise<void>, mutation = false) {
 }
 async function load() {
   if (tab.value === 'services') {
-    const p = await api('service-list', { offset: offset.value });
+    const p = await api('service-list', { offset: offset.value, ...(props.family ? { family: props.family } : {}) });
     services.value = p.items;
     hasMore.value = p.hasMore;
   } else if (tab.value === 'applications') {
@@ -128,7 +131,7 @@ function editService(row?: ServiceResource) {
           enabled: row.enabled,
           expectedVersion: row.version
         }
-      : { serviceId: '', family: 'SVS', poolKey: '', adapterKey: '', enabled: false, expectedVersion: '0' }
+      : { serviceId: '', family: props.family ?? 'SVS', poolKey: '', adapterKey: '', enabled: false, expectedVersion: '0' }
   );
   stale.value = false;
 }
@@ -225,13 +228,18 @@ onMounted(refresh);
   <section class="management-page" aria-labelledby="management-title">
     <header class="management-heading">
       <div>
-        <h1 id="management-title">服务与应用管理</h1>
-        <p>登记密码服务，按逻辑对象授权应用，设置共享配额。</p>
+        <h1 id="management-title">{{ props.family ? familyTitles[props.family] : props.applicationOnly ? '应用列表' : '服务与应用管理' }}</h1>
+        <p v-if="!props.family">按逻辑对象授权应用，设置共享配额。</p>
       </div>
       <el-button :disabled="busy" @click="refresh">刷新当前页</el-button>
     </header>
-    <nav class="management-tabs" aria-label="管理分类">
-      <el-button :type="tab === 'services' ? 'primary' : 'default'" :aria-pressed="tab === 'services'" :disabled="busy" @click="changeTab('services')"
+    <nav v-if="!props.family" class="management-tabs" aria-label="管理分类">
+      <el-button
+        v-if="!props.applicationOnly"
+        :type="tab === 'services' ? 'primary' : 'default'"
+        :aria-pressed="tab === 'services'"
+        :disabled="busy"
+        @click="changeTab('services')"
         >密码服务</el-button
       >
       <el-button
@@ -290,7 +298,7 @@ onMounted(refresh);
                 :readonly="service.expectedVersion !== '0'"
             /></label>
             <label
-              >服务类型<select v-model="service.family">
+              >服务类型<select v-model="service.family" :disabled="Boolean(props.family)">
                 <option v-for="f in ['HSM', 'SVS', 'TSA', 'SEF']" :key="f">{{ f }}</option>
               </select></label
             >

@@ -90,6 +90,7 @@ export const useCspConsoleStore = defineStore('csp-console', () => {
     canInitialize.value = session.canInitialize !== false;
     navigation.value = {
       canManageServices: session.canManageServices !== false,
+      canManageDevices: session.canManageDevices === true,
       canManageAuditors: session.canManageAuditors === true,
       canReadLoginLogs: session.canReadLoginLogs === true,
       canReadOperationLogs: session.canReadOperationLogs === true
@@ -101,7 +102,13 @@ export const useCspConsoleStore = defineStore('csp-console', () => {
       case '/csp/overview':
         return canInitialize.value;
       case '/csp/management':
+      case '/csp/applications':
+      case '/csp/services/svs':
+      case '/csp/services/tsa':
+      case '/csp/services/sef':
         return navigation.value.canManageServices !== false;
+      case '/csp/devices':
+        return navigation.value.canManageDevices === true && installationInitialized.value === true;
       case '/csp/auditors':
         return navigation.value.canManageAuditors === true;
       case '/csp/login-logs':

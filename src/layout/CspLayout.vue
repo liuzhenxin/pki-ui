@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { storeToRefs } from 'pinia';
 import { useWindowSize } from '@vueuse/core';
 import { Menu, Monitor, Setting } from '@element-plus/icons-vue';
+import { ElSubMenu } from 'element-plus';
 import ManagementFrame from './components/ManagementFrame.vue';
 import mark from '@/assets/brand/csp-mark-inverse.svg';
 import { useCspConsoleStore } from '@/store/modules/cspConsole';
@@ -44,9 +45,26 @@ async function logout() {
             <el-menu-item v-if="canInitialize" :index="cspProduct.home"
               ><el-icon><Monitor /></el-icon><span>运行总览</span></el-menu-item
             >
-            <el-menu-item v-if="store.allows('/csp/management')" index="/csp/management"
-              ><el-icon><Setting /></el-icon><span>服务与应用管理</span></el-menu-item
-            >
+            <el-sub-menu v-if="store.allows('/csp/applications')" index="application-management">
+              <template #title
+                ><el-icon><Setting /></el-icon><span>应用接入</span></template
+              >
+              <el-menu-item index="/csp/applications">应用列表</el-menu-item>
+            </el-sub-menu>
+            <el-sub-menu v-if="store.allows('/csp/devices')" index="device-management">
+              <template #title
+                ><el-icon><Setting /></el-icon><span>密码设备管理</span></template
+              >
+              <el-menu-item index="/csp/devices">设备列表</el-menu-item>
+            </el-sub-menu>
+            <el-sub-menu v-if="store.allows('/csp/services/svs')" index="service-management">
+              <template #title
+                ><el-icon><Setting /></el-icon><span>密码服务管理</span></template
+              >
+              <el-menu-item index="/csp/services/svs">签名验签服务器</el-menu-item>
+              <el-menu-item index="/csp/services/tsa">时间戳服务器</el-menu-item>
+              <el-menu-item index="/csp/services/sef">电子签章系统</el-menu-item>
+            </el-sub-menu>
             <el-menu-item v-if="canInitialize" :index="cspProduct.installation"
               ><el-icon><Setting /></el-icon><span>安装初始化</span></el-menu-item
             >
@@ -83,7 +101,7 @@ async function logout() {
         <span>{{ route.meta.title }}</span>
       </div>
     </template>
-    <main id="main" tabindex="-1"><router-view /></main>
+    <main id="main" tabindex="-1"><router-view :key="route.path" /></main>
     <p v-if="error" class="error" role="alert">{{ error }}</p>
   </ManagementFrame>
 </template>
