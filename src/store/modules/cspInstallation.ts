@@ -19,7 +19,6 @@ export const useCspInstallationStore = defineStore('csp-installation', () => {
     setup = ref<InstallationView | null>(null);
   const setupStep = ref(0),
     checkedAt = ref(''),
-    confirmed = ref(false),
     initializationAttempted = ref(false),
     completion = ref(false);
   const environmentReady = computed(
@@ -58,7 +57,6 @@ export const useCspInstallationStore = defineStore('csp-installation', () => {
   async function readState() {
     busy.value = true;
     error.value = '';
-    confirmed.value = false;
     setup.value = null;
     try {
       const data = await api('installation');
@@ -77,7 +75,6 @@ export const useCspInstallationStore = defineStore('csp-installation', () => {
     if (busy.value || !accountTransport.value || !setup.value || initializationAttempted.value) return;
     busy.value = true;
     error.value = '';
-    confirmed.value = false;
     try {
       applySetup(
         await api('installation-advance', {
@@ -101,17 +98,10 @@ export const useCspInstallationStore = defineStore('csp-installation', () => {
   }
 
   async function initialize(admin: InstallationAccount, auditor: InstallationAccount) {
-    if (
-      busy.value ||
-      !secure.value ||
-      initialized.value !== false ||
-      !environmentReady.value ||
-      !confirmed.value ||
-      initializationAttempted.value ||
-      !setup.value ||
-      setup.value.step !== 3
-    )
+    if (busy.value || !secure.value || initialized.value !== false || !environmentReady.value || initializationAttempted.value || !setup.value)
       return;
+    if (setup.value.step === 2) await advanceSetup('VERIFY_ACCOUNTS');
+    if (setup.value?.step !== 3 || !environmentReady.value || error.value) return;
     busy.value = true;
     error.value = '';
     initializationAttempted.value = true;
@@ -121,7 +111,6 @@ export const useCspInstallationStore = defineStore('csp-installation', () => {
       applySetup(result);
       completion.value = true;
     } catch (failure) {
-      confirmed.value = false;
       if (failure instanceof ConsoleRequestError && [400, 403, 409, 412].includes(failure.status)) {
         initializationAttempted.value = false;
         setup.value = null;
@@ -139,7 +128,6 @@ export const useCspInstallationStore = defineStore('csp-installation', () => {
       initialized.value = null;
       initializationAttempted.value = false;
       completion.value = false;
-      confirmed.value = false;
       error.value = '';
     }
   });
@@ -155,7 +143,6 @@ export const useCspInstallationStore = defineStore('csp-installation', () => {
     setup,
     setupStep,
     checkedAt,
-    confirmed,
     initializationAttempted,
     completion,
     environmentReady,

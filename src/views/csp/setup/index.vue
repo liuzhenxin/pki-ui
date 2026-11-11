@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useRouter } from 'vue-router';
+import { ElForm, ElFormItem } from 'element-plus';
 import Agreement from '@/components/Agreement/index.vue';
 import { CSP_AGREEMENT_VERSION } from '@/products/csp/agreement';
 import { useCspInstallationStore } from '@/store/modules/cspInstallation';
@@ -17,7 +18,6 @@ const {
   busy,
   error,
   environmentReady,
-  confirmed,
   accountTransport,
   secure,
   certificateEnabled,
@@ -25,9 +25,11 @@ const {
 } = storeToRefs(store);
 const accepted = ref(false);
 const accounts = [
-  { label: '系统管理员', password: ref(''), repeat: ref(''), certificate: ref('') },
-  { label: '审计管理员', password: ref(''), repeat: ref(''), certificate: ref('') }
-];
+  { role: 'SYSTEM_ADMIN', password: ref(''), repeat: ref(''), certificate: ref('') },
+  { role: 'AUDIT_ADMIN', password: ref(''), repeat: ref(''), certificate: ref('') }
+] as const;
+const roleNames = { SYSTEM_ADMIN: '系统管理员', AUDIT_ADMIN: '审计管理员' };
+const visibleStep = computed(() => (initialized.value ? 3 : Math.min(setupStep.value, 2)));
 const credentialsReady = computed(
   () =>
     accounts[0].password.value !== accounts[1].password.value &&
@@ -46,9 +48,9 @@ function clearCredentials() {
     account.certificate.value = '';
   }
 }
-watch(setupStep, clearCredentials);
+watch(visibleStep, clearCredentials);
 async function finish() {
-  if (!credentialsReady.value || !confirmed.value || !secure.value) return;
+  if (busy.value || !environmentReady.value || !credentialsReady.value || !secure.value) return;
   const [admin, auditor] = accounts.map((account) => ({
     password: account.password.value,
     ...(certificateEnabled.value && account.certificate.value.trim() ? { certPem: account.certificate.value.trim() } : {})
@@ -59,7 +61,6 @@ async function finish() {
     clearCredentials();
   }
 }
-const roleNames = { SYSTEM_ADMIN: '系统管理员', AUDIT_ADMIN: '审计管理员' };
 const accountChecks = computed(() =>
   (['SYSTEM_ADMIN', 'AUDIT_ADMIN'] as const).map((role) => ({
     role,
@@ -87,8 +88,8 @@ async function logout() {
         <li
           v-for="(title, index) in ['协议', '环境检查', '账号初始化', '完成']"
           :key="title"
-          :class="{ current: setupStep === index, done: setupStep > index || initialized }"
-          :aria-current="setupStep === index ? 'step' : undefined"
+          :class="{ current: visibleStep === index, done: visibleStep > index || initialized }"
+          :aria-current="visibleStep === index ? 'step' : undefined"
         >
           <span aria-hidden="true">{{ index + 1 }}</span
           >{{ title }}
@@ -146,55 +147,55 @@ async function logout() {
               >
             </div>
           </template>
-          <template v-else-if="setupStep === 2">
-            <h2>账号初始化</h2>
-            <p class="muted">核验预置的系统管理员和审计管理员。核验通过后设置两员的登录凭据。</p>
-            <ul class="environment-list" aria-label="两员核验结果">
-              <li v-for="account in setup.accounts" :key="account.role">
-                <strong>{{ roleNames[account.role] }}</strong
-                ><span :class="account.valid ? 'check-ok' : 'check-failed'">{{ account.valid ? '身份与权限核验通过' : '核验未通过' }}</span>
-              </li>
-            </ul>
-            <div class="wizard-actions">
-              <el-button :disabled="busy" @click="store.advanceSetup('CHECK_ENV')">重新检测</el-button
-              ><el-button type="primary" :loading="busy" :disabled="busy || !environmentReady" @click="store.advanceSetup('VERIFY_ACCOUNTS')"
-                >核验并继续</el-button
-              >
-            </div>
-          </template>
           <template v-else>
-            <h2>确认初始化结果</h2>
-            <dl class="setup-summary">
-              <dt>服务版本</dt>
-              <dd>{{ setup.serviceVersion }}</dd>
-              <dt>运行环境</dt>
-              <dd>{{ setup.environment }}</dd>
-              <dt>管理身份</dt>
-              <dd>系统管理员、审计管理员</dd>
-              <dt>核验时间</dt>
-              <dd>{{ checkedAt }}</dd>
-            </dl>
-            <p class="notice" v-if="!secure">请通过 HTTPS 或本机安全入口设置管理员凭据。</p>
-            <p class="muted">两员使用不同密码，每个密码至少 12 个字符，最多 72 个 UTF-8 字节。</p>
-            <fieldset v-for="account in accounts" :key="account.label" class="setup-account" :disabled="busy || !secure">
-              <legend>{{ account.label }}</legend>
-              <label>新密码<input v-model="account.password.value" type="password" autocomplete="new-password" /></label>
-              <label>确认新密码<input v-model="account.repeat.value" type="password" autocomplete="new-password" /></label>
-              <label v-if="certificateEnabled"
-                >SM2 登录证书 PEM（可选）
-                <textarea v-model="account.certificate.value" rows="4" maxlength="12000" spellcheck="false" />
-              </label>
-            </fieldset>
-            <label class="setup-confirm"><input v-model="confirmed" type="checkbox" :disabled="busy" />我确认以上结果并完成 CSP 初始化</label>
+            <header class="step-title">
+              <h2>账号初始化</h2>
+              <p>为两个预置账号设置不同的登录密码。每个密码至少 12 个字符，最多 72 个 UTF-8 字节。</p>
+            </header>
+            <p v-if="!secure" class="notice">请通过 HTTPS 或本机安全入口设置管理员凭据。</p>
+            <p v-if="!environmentReady" class="notice" role="status">账号核验未通过，请重新检测环境。</p>
+            <el-form
+              id="csp-account-form"
+              class="account-form"
+              label-width="auto"
+              :disabled="busy || !secure || !environmentReady"
+              @submit.prevent="finish"
+            >
+              <section v-for="account in accounts" :key="account.role" class="account-section" role="group" :aria-labelledby="account.role">
+                <h3 :id="account.role">{{ roleNames[account.role] }}</h3>
+                <el-form-item label="登录密码" required>
+                  <el-input v-model="account.password.value" type="password" autocomplete="new-password" show-password />
+                </el-form-item>
+                <el-form-item
+                  label="确认密码"
+                  required
+                  :error="account.repeat.value && account.repeat.value !== account.password.value ? '两次输入的密码不一致' : ''"
+                >
+                  <el-input v-model="account.repeat.value" type="password" autocomplete="new-password" show-password />
+                </el-form-item>
+                <el-form-item v-if="certificateEnabled" label="证书 PEM（可选）">
+                  <el-input
+                    v-model="account.certificate.value"
+                    type="textarea"
+                    :rows="4"
+                    maxlength="12000"
+                    :spellcheck="false"
+                    placeholder="可粘贴 SM2 登录证书 PEM"
+                  />
+                </el-form-item>
+              </section>
+            </el-form>
             <div class="wizard-actions">
-              <el-button :disabled="busy" @click="store.advanceSetup('CHECK_ENV')">重新检测</el-button
-              ><el-button
+              <el-button :disabled="busy || !accountTransport" @click="store.advanceSetup('CHECK_ENV')">重新检测</el-button>
+              <el-button
                 type="primary"
+                native-type="submit"
+                form="csp-account-form"
                 :loading="busy"
-                :disabled="busy || !confirmed || !environmentReady || !secure || !credentialsReady"
-                @click="finish"
-                >确认并完成初始化</el-button
+                :disabled="busy || !environmentReady || !secure || !credentialsReady"
               >
+                提交初始化
+              </el-button>
             </div>
           </template>
         </section>
@@ -268,22 +269,25 @@ async function logout() {
   padding: 12px 16px;
   margin-bottom: 8px;
 }
-.setup-account {
-  border: 1px solid var(--el-border-color);
+.account-form {
+  max-width: 720px;
+  margin: 0 auto;
+}
+.account-section {
+  padding: 18px 20px 4px;
+  margin-bottom: 18px;
+  border: 1px solid var(--el-border-color-lighter);
   border-radius: 8px;
-  margin: 1rem 0;
-  padding: 1rem;
+  background: var(--el-fill-color-blank);
 }
-.setup-account label {
-  display: grid;
-  gap: 6px;
-  margin-bottom: 10px;
-}
-.setup-account input,
-.setup-account textarea {
-  border: 1px solid var(--el-border-color);
-  border-radius: 4px;
-  padding: 8px;
+.account-section h3 {
+  margin: 0 0 18px;
+  padding-left: 10px;
+  border-left: 3px solid var(--el-color-primary);
+  color: var(--el-text-color-primary);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.25;
 }
 .agreement-scroll {
   max-height: 22rem;
@@ -321,9 +325,6 @@ async function logout() {
 .muted {
   overflow-wrap: anywhere;
 }
-.setup-summary dd {
-  overflow-wrap: anywhere;
-}
 @media (max-width: 600px) {
   .csp-init-page {
     padding: 12px;
@@ -339,6 +340,15 @@ async function logout() {
   .environment-list li {
     flex-wrap: wrap;
     gap: 0.5rem;
+  }
+  .account-section {
+    padding-inline: 12px;
+  }
+  .account-section :deep(.el-form-item) {
+    display: block;
+  }
+  .account-section :deep(.el-form-item__label) {
+    justify-content: flex-start;
   }
   .wizard-actions {
     flex-wrap: wrap;

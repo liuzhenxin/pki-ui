@@ -98,7 +98,7 @@ for (const width of [1440, 390])
     if (width < 992) await page.getByRole('button', { name: '切换导航菜单' }).click();
     const navigation = page.getByRole('navigation', { name: '控制台导航' });
     await expect(navigation.getByRole('menuitem')).toHaveText(['安装初始化']);
-    if (width < 992) await page.getByRole('button', { name: '关闭导航菜单' }).click();
+    if (width < 992) await page.getByRole('button', { name: '关闭导航菜单' }).click({ position: { x: width - 20, y: 100 } });
 
     initialized = true;
     await page.getByRole('button', { name: '退出登录' }).click();
@@ -113,7 +113,7 @@ for (const width of [1440, 390])
     await expect(navigation.getByRole('menuitem', { name: '运行总览' })).toBeVisible();
     await expect(navigation.getByRole('menuitem', { name: '应用接入' })).toBeVisible();
     await expect(navigation.getByRole('menuitem', { name: '安装初始化' })).toHaveCount(0);
-    if (width < 992) await page.getByRole('button', { name: '关闭导航菜单' }).click();
+    if (width < 992) await page.getByRole('button', { name: '关闭导航菜单' }).click({ position: { x: width - 20, y: 100 } });
     await expect(page.getByText('服务状态尚未确认', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: '刷新状态' }).click();
     await expect(page).toHaveURL(origin + '/csp/overview');
@@ -139,13 +139,14 @@ for (const width of [1440, 390])
     expect(failures).toEqual([]);
   });
 
-test('two seeded accounts use distinct passwords and optional certificates at completion', async ({ page }) => {
+test('account initialization verifies the seeded accounts before submitting credentials', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 900 });
   let completed = false;
+  const verifications: unknown[] = [];
   const submissions: unknown[] = [];
   const state = {
-    draftVersion: 3,
-    step: 3,
+    draftVersion: 2,
+    step: 2,
     agreed: true,
     attempted: false,
     checkedAt: '2026-11-11T00:00:00Z',
@@ -162,6 +163,11 @@ test('two seeded accounts use distinct passwords and optional certificates at co
     const path = new URL(route.request().url()).pathname;
     if (path.endsWith('/session'))
       return route.fulfill({ json: { authenticated: true, initialized: false, csrf: 'test', certificateLoginEnabled: true } });
+    if (path.endsWith('/installation-advance')) {
+      verifications.push(route.request().postDataJSON());
+      state.draftVersion = 3;
+      state.step = 3;
+    }
     if (path.endsWith('/installation-complete')) {
       submissions.push(route.request().postDataJSON());
       completed = true;
@@ -171,21 +177,23 @@ test('two seeded accounts use distinct passwords and optional certificates at co
   await page.goto(origin + '/csp/setup');
   const admin = page.getByRole('group', { name: '系统管理员' });
   const auditor = page.getByRole('group', { name: '审计管理员' });
-  const finish = page.getByRole('button', { name: '确认并完成初始化' });
-  await page.getByRole('checkbox').check();
+  const finish = page.getByRole('button', { name: '提交初始化' });
+  await expect(page.getByRole('heading', { name: '账号初始化', exact: true })).toBeVisible();
   await expect(finish).toBeDisabled();
   for (const group of [admin, auditor]) {
-    await group.getByLabel('新密码', { exact: true }).fill('fixture-system-password');
-    await group.getByLabel('确认新密码', { exact: true }).fill('fixture-system-password');
+    await group.getByLabel('登录密码', { exact: true }).fill('fixture-system-password');
+    await group.getByLabel('确认密码', { exact: true }).fill('fixture-system-password');
   }
   await expect(finish).toBeDisabled();
-  await auditor.getByLabel('新密码', { exact: true }).fill('fixture-audit-password');
-  await auditor.getByLabel('确认新密码', { exact: true }).fill('fixture-audit-password');
-  await auditor.getByLabel('SM2 登录证书 PEM（可选）').fill('public certificate fixture');
+  await auditor.getByLabel('登录密码', { exact: true }).fill('fixture-audit-password');
+  await expect(auditor.getByText('两次输入的密码不一致')).toBeVisible();
+  await auditor.getByLabel('确认密码', { exact: true }).fill('fixture-audit-password');
+  await auditor.getByLabel('证书 PEM（可选）').fill('public certificate fixture');
   await expect(finish).toBeEnabled();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await finish.click();
   await expect(page.getByRole('heading', { name: '初始化成功，请重新登录' })).toBeVisible();
+  expect(verifications).toEqual([{ draftVersion: 2, action: 'VERIFY_ACCOUNTS' }]);
   expect(submissions).toEqual([
     {
       draftVersion: 3,
