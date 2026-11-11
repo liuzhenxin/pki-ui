@@ -169,8 +169,8 @@ test('two seeded accounts use distinct passwords and optional certificates at co
     return route.fulfill({ json: { ...state, initialized: completed } });
   });
   await page.goto(origin + '/csp/setup');
-  const admin = page.getByRole('group', { name: '系统管理员（admin）' });
-  const auditor = page.getByRole('group', { name: '审计管理员（auditor）' });
+  const admin = page.getByRole('group', { name: '系统管理员' });
+  const auditor = page.getByRole('group', { name: '审计管理员' });
   const finish = page.getByRole('button', { name: '确认并完成初始化' });
   await page.getByRole('checkbox').check();
   await expect(finish).toBeDisabled();

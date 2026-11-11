@@ -25,8 +25,8 @@ const {
 } = storeToRefs(store);
 const accepted = ref(false);
 const accounts = [
-  { username: 'admin', label: '系统管理员', password: ref(''), repeat: ref(''), certificate: ref('') },
-  { username: 'auditor', label: '审计管理员', password: ref(''), repeat: ref(''), certificate: ref('') }
+  { label: '系统管理员', password: ref(''), repeat: ref(''), certificate: ref('') },
+  { label: '审计管理员', password: ref(''), repeat: ref(''), certificate: ref('') }
 ];
 const credentialsReady = computed(
   () =>
@@ -128,14 +128,14 @@ async function logout() {
           <template v-else-if="setupStep === 1">
             <header class="step-title">
               <h2>环境检查</h2>
-              <p>确认 CSP 业务库、平台租户、两员账号和互斥策略已准备就绪。</p>
+              <p>确认 CSP 业务库、平台租户和两员预置账号已准备就绪。</p>
             </header>
             <ul class="environment-list" aria-label="环境检测结果">
               <li><strong>平台及 CSP 业务库</strong><span>待检测，执行检测成功后确认</span></li>
               <li v-for="account in accountChecks" :key="account.role">
                 <strong>{{ roleNames[account.role] }}</strong>
                 <span :class="{ 'check-ok': account.valid === true, 'check-failed': account.valid === false }">{{
-                  account.valid === undefined ? '待核验' : account.valid ? '核验通过' : '未通过，请核查账号、权限及互斥策略'
+                  account.valid === undefined ? '待核验' : account.valid ? '核验通过' : '未通过，请核查预置账号和角色权限'
                 }}</span>
               </li>
               <li><strong>密码设备</strong><span>未核验，初始化后配置并执行真实自测</span></li>
@@ -148,7 +148,7 @@ async function logout() {
           </template>
           <template v-else-if="setupStep === 2">
             <h2>账号初始化</h2>
-            <p class="muted">核验初始化 SQL 预置的 admin 和 auditor。核验通过后设置两员的登录凭据。</p>
+            <p class="muted">核验预置的系统管理员和审计管理员。核验通过后设置两员的登录凭据。</p>
             <ul class="environment-list" aria-label="两员核验结果">
               <li v-for="account in setup.accounts" :key="account.role">
                 <strong>{{ roleNames[account.role] }}</strong
@@ -170,14 +170,14 @@ async function logout() {
               <dt>运行环境</dt>
               <dd>{{ setup.environment }}</dd>
               <dt>管理身份</dt>
-              <dd>系统管理员 admin、审计管理员 auditor</dd>
+              <dd>系统管理员、审计管理员</dd>
               <dt>核验时间</dt>
               <dd>{{ checkedAt }}</dd>
             </dl>
             <p class="notice" v-if="!secure">请通过 HTTPS 或本机安全入口设置管理员凭据。</p>
             <p class="muted">两员使用不同密码，每个密码至少 12 个字符，最多 72 个 UTF-8 字节。</p>
-            <fieldset v-for="account in accounts" :key="account.username" class="setup-account" :disabled="busy || !secure">
-              <legend>{{ account.label }}（{{ account.username }}）</legend>
+            <fieldset v-for="account in accounts" :key="account.label" class="setup-account" :disabled="busy || !secure">
+              <legend>{{ account.label }}</legend>
               <label>新密码<input v-model="account.password.value" type="password" autocomplete="new-password" /></label>
               <label>确认新密码<input v-model="account.repeat.value" type="password" autocomplete="new-password" /></label>
               <label v-if="certificateEnabled"
