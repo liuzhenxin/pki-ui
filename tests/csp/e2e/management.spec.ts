@@ -137,7 +137,7 @@ for (const width of [1440, 390])
   });
 
 test.describe('CSP-owned applications', () => {
-  test('registers OA, clears the one-time secret, and saves an exact grant', async ({ page }) => {
+  test('registers OA, saves a grant, renames the application, and removes it after suspension', async ({ page }) => {
     const application = {
       applicationId: 'app_12345678-1234-1234-1234-123456789012',
       name: 'OA 系统',
@@ -149,11 +149,12 @@ test.describe('CSP-owned applications', () => {
     const grant = { serviceId: 'svs-test', operation: 'SIGN', algorithm: 'SM2', objectId: 'oa-signer' };
     let registered = false;
     let saved = false;
+    let version = '1';
     await page.route('**/console-api/**', async (route) => {
       const action = new URL(route.request().url()).pathname.split('/').at(-1);
       const body = route.request().postDataJSON();
       const view = {
-        application: { ...application, version: saved ? '2' : '1' },
+        application: { ...application, version },
         quota: saved ? { maxRequests: 100, windowSeconds: 60 } : null,
         activeGrants: saved ? [grant] : []
       };
@@ -177,7 +178,22 @@ test.describe('CSP-owned applications', () => {
             policy: { grants: [grant], maxRequests: 100, windowSeconds: 60 }
           });
           saved = true;
-          return route.fulfill({ json: { ...view, application: { ...application, version: '2' }, activeGrants: [grant] } });
+          version = '2';
+          return route.fulfill({ json: { ...view, application: { ...application, version }, activeGrants: [grant] } });
+        case 'owned-application-rename':
+          expect(body).toEqual({ applicationId: application.applicationId, expectedVersion: '2', name: 'OA 生产系统' });
+          application.name = body.name;
+          version = '3';
+          return route.fulfill({ json: { ...view, application: { ...application, version } } });
+        case 'owned-application-suspend':
+          expect(body).toEqual({ applicationId: application.applicationId, expectedVersion: '3' });
+          application.enabled = false;
+          version = '4';
+          return route.fulfill({ json: { ...view, application: { ...application, version }, activeGrants: [] } });
+        case 'owned-application-remove':
+          expect(body).toEqual({ applicationId: application.applicationId, expectedVersion: '4' });
+          registered = false;
+          return route.fulfill({ json: { applicationId: application.applicationId, version: '5' } });
         default:
           return route.abort();
       }
@@ -199,5 +215,18 @@ test.describe('CSP-owned applications', () => {
     await expect(page.getByRole('button', { name: '撤销授权' })).toBeVisible();
     await expect(page.getByLabel('APP Secret', { exact: true })).toHaveCount(0);
     expect(saved).toBe(true);
+    await expect(page.getByRole('button', { name: '移除应用' })).toHaveCount(0);
+    await page.getByRole('button', { name: '修改名称' }).click();
+    await page.getByLabel('新应用名称').fill('OA 生产系统');
+    await page.getByRole('button', { name: '保存名称' }).click();
+    await expect(page.getByRole('heading', { name: 'OA 生产系统' })).toBeVisible();
+    await expect(page.getByRole('button', { name: '撤销授权' })).toBeVisible();
+    await page.getByRole('button', { name: '停用应用' }).click();
+    await page.getByRole('button', { name: '确认', exact: true }).click();
+    await page.getByRole('button', { name: '移除应用' }).click();
+    await page.getByRole('button', { name: '确认', exact: true }).click();
+    await expect(page.getByText('应用已移除。')).toBeVisible();
+    await expect(page.getByText('暂无应用')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'OA 生产系统' })).toHaveCount(0);
   });
 });

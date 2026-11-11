@@ -137,9 +137,11 @@ export interface ConsoleResponses {
   'owned-application-list': ManagementPage<OwnedApplication>;
   'owned-application-register': IssuedApplicationCredential;
   'owned-application-view': OwnedApplicationView;
+  'owned-application-rename': OwnedApplicationView;
   'owned-application-save-policy': OwnedApplicationView;
   'owned-application-revoke': OwnedApplicationView;
   'owned-application-suspend': OwnedApplicationView;
+  'owned-application-remove': { applicationId: string; version: string };
   'owned-application-rotate': IssuedApplicationCredential;
   'owned-service-list': ManagementPage<ServiceResource>;
   'owned-service-save': ServiceResource;
@@ -188,9 +190,11 @@ export interface ConsoleCommands {
   'owned-application-list': { offset: number };
   'owned-application-register': { name: string };
   'owned-application-view': { applicationId: string };
+  'owned-application-rename': OwnedTarget & { name: string };
   'owned-application-save-policy': OwnedTarget & { policy: OwnedApplicationPolicy };
   'owned-application-revoke': OwnedTarget & { grant: ServiceGrant };
   'owned-application-suspend': OwnedTarget;
+  'owned-application-remove': OwnedTarget;
   'owned-application-rotate': OwnedTarget;
   'owned-service-list': { offset: number; family?: ServiceFamily };
   'owned-service-save': Pick<ServiceResource, 'serviceId' | 'family' | 'poolKey' | 'adapterKey' | 'enabled'> & { expectedVersion: string };
@@ -233,9 +237,11 @@ const endpoints = [
   'owned-application-list',
   'owned-application-register',
   'owned-application-view',
+  'owned-application-rename',
   'owned-application-save-policy',
   'owned-application-revoke',
   'owned-application-suspend',
+  'owned-application-remove',
   'owned-application-rotate',
   'owned-service-list',
   'owned-service-save',
