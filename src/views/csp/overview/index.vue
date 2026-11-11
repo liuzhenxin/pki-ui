@@ -5,7 +5,7 @@ import { useRouter } from 'vue-router';
 import { useCspConsoleStore } from '@/store/modules/cspConsole';
 const store = useCspConsoleStore();
 const router = useRouter();
-const { httpTestMode, checkedAt, busy, setup } = storeToRefs(store);
+const { checkedAt, busy, setup } = storeToRefs(store);
 onMounted(() => store.refresh());
 async function refresh() {
   await store.refresh();
@@ -14,7 +14,6 @@ async function refresh() {
 </script>
 <template>
   <div class="app-container csp-page">
-    <p v-if="httpTestMode" class="notice" role="status">128 HTTP 测试入口 · 不用于生产，网络传输未加密。</p>
     <div class="wizard-heading">
       <div>
         <p class="eyebrow">CSP CONSOLE</p>

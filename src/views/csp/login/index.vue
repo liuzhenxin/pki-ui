@@ -24,7 +24,6 @@ const {
   busy,
   error,
   secure,
-  httpTestMode,
   accountTransport
 } = storeToRefs(store);
 const { switchMode, readCertificates, reloadChallenge } = store;
@@ -106,7 +105,6 @@ onUnmounted(() => {
             </button>
           </div>
           <p v-if="error" class="login-error" role="alert">{{ error }}</p>
-          <p v-if="httpTestMode" class="transport-note" role="status"><Lock aria-hidden="true" class="field-icon" />HTTP 测试入口 · 网络传输未加密</p>
           <el-button
             class="submit"
             type="primary"
