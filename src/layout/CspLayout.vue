@@ -80,7 +80,7 @@ async function logout() {
             </el-menu-item>
           </el-menu>
         </nav>
-        <p class="csp-sidebar-note">CSP · {{ cspProduct.version }} 测试版<br />管理操作按当前权限校验</p>
+        <p class="csp-sidebar-note">CSP · {{ cspProduct.version }}<br />管理操作按当前权限校验</p>
       </aside>
     </template>
     <template #header>
