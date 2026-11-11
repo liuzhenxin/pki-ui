@@ -104,7 +104,6 @@ async function logout() {
           <Agreement tenant-code="csp" tenant-name="密码服务平台" :company-name="setup.companyName" />
         </div>
         <p v-else class="notice" role="status">协议版本或权利主体尚未配置，请联系运维。</p>
-        <p v-if="agreementAvailable" class="muted">协议版本：{{ setup.agreementVersion }}</p>
         <label class="setup-confirm"
           ><input v-model="accepted" type="checkbox" :disabled="busy || !agreementAvailable" />我已阅读并同意公共用户协议</label
         >
