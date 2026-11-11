@@ -9,11 +9,6 @@ export const cspProduct = Object.freeze({
   home: '/csp/overview'
 });
 
-export function cspDestination(installationInitialized: boolean | null, canInitialize = true) {
-  if (!canInitialize) return '/csp/management';
-  if (installationInitialized !== true) return cspProduct.installation;
-  return cspProduct.home;
-}
 export function assertCspProduct(product: unknown, tenant: unknown) {
   if (product !== cspProduct.code || tenant !== cspProduct.tenantId) throw new Error('CSP_PRODUCT_CONFIGURATION_INVALID');
 }

@@ -61,6 +61,7 @@ export interface ManagedDevice {
   version: string;
 }
 export interface ConsoleNavigation {
+  initialized?: boolean;
   canInitialize?: boolean;
   canManageServices?: boolean;
   canManageDevices?: boolean;

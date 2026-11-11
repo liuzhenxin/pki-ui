@@ -53,7 +53,15 @@ for (const width of [1440, 390])
       if (!url.pathname.startsWith('/console-api/')) return route.continue();
       const action = url.pathname.split('/').at(-1)!;
       calls.push(action);
-      if (action === 'session') return route.fulfill({ json: { csrf: 'test-csrf', authenticated, canInitialize } });
+      if (action === 'session') return route.fulfill({ json: { csrf: 'test-csrf', authenticated, initialized, canInitialize } });
+      if (action === 'logout') {
+        authenticated = false;
+        return route.fulfill({ json: { authenticated: false } });
+      }
+      if (action === 'login') {
+        authenticated = true;
+        return route.fulfill({ json: { authenticated, initialized, canInitialize } });
+      }
       if (action === 'installation')
         return route.fulfill({
           json: {
@@ -85,16 +93,27 @@ for (const width of [1440, 390])
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await page.screenshot({ path: 'test-results/csp/installation-route-' + width + '.png', fullPage: true });
 
-    await page.reload();
-    await expect(page.getByRole('heading', { name: '安装初始化', exact: true })).toBeVisible();
-    initialized = true;
-    await page.goto(origin + '/csp/setup');
-    await expect(page.getByRole('heading', { name: 'CSP 已完成初始化' })).toBeVisible();
-    await page.getByRole('button', { name: '进入服务与应用管理' }).click();
-    await expect(page).toHaveURL(origin + '/csp/management');
+    await page.goto(origin + '/csp/management');
+    await expect(page).toHaveURL(origin + '/csp/setup');
+    if (width < 992) await page.getByRole('button', { name: '切换导航菜单' }).click();
+    const navigation = page.getByRole('navigation', { name: '控制台导航' });
+    await expect(navigation.getByRole('menuitem')).toHaveText(['安装初始化']);
+    if (width < 992) await page.getByRole('button', { name: '关闭导航菜单' }).click();
 
-    await page.goto(origin + '/login');
+    initialized = true;
+    await page.getByRole('button', { name: '退出登录' }).click();
+    await expect(page).toHaveURL(origin + '/login');
+    await page.getByLabel('账号', { exact: true }).fill('fixture-admin');
+    await page.getByLabel('密码', { exact: true }).fill('fixture-password');
+    await page.getByRole('button', { name: '登录', exact: true }).click();
     await expect(page).toHaveURL(origin + '/csp/overview');
+    await page.goto(origin + '/csp/setup');
+    await expect(page).toHaveURL(origin + '/csp/overview');
+    if (width < 992) await page.getByRole('button', { name: '切换导航菜单' }).click();
+    await expect(navigation.getByRole('menuitem', { name: '运行总览' })).toBeVisible();
+    await expect(navigation.getByRole('menuitem', { name: '应用接入' })).toBeVisible();
+    await expect(navigation.getByRole('menuitem', { name: '安装初始化' })).toHaveCount(0);
+    if (width < 992) await page.getByRole('button', { name: '关闭导航菜单' }).click();
     await expect(page.getByText('服务状态尚未确认', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: '刷新状态' }).click();
     await expect(page).toHaveURL(origin + '/csp/overview');
@@ -141,7 +160,8 @@ test('two seeded accounts use distinct passwords and optional certificates at co
   };
   await page.route('**/console-api/**', async (route) => {
     const path = new URL(route.request().url()).pathname;
-    if (path.endsWith('/session')) return route.fulfill({ json: { authenticated: true, csrf: 'test', certificateLoginEnabled: true } });
+    if (path.endsWith('/session'))
+      return route.fulfill({ json: { authenticated: true, initialized: false, csrf: 'test', certificateLoginEnabled: true } });
     if (path.endsWith('/installation-complete')) {
       submissions.push(route.request().postDataJSON());
       completed = true;
@@ -186,6 +206,7 @@ test('audit administrator and auditor land on separate menus and routes', async 
       return route.fulfill({
         json: {
           authenticated: true,
+          initialized: true,
           csrf: 'test',
           canInitialize: false,
           canManageServices: false,

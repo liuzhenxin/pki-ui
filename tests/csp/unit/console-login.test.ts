@@ -6,7 +6,9 @@ afterEach(() => vi.unstubAllGlobals());
 
 test('service administrator restores a session without calling installation APIs', async () => {
   setActivePinia(createPinia());
-  const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({ csrf: 'test', authenticated: true, canInitialize: false })));
+  const fetcher = vi
+    .fn()
+    .mockResolvedValue(new Response(JSON.stringify({ csrf: 'test', authenticated: true, initialized: true, canInitialize: false })));
   vi.stubGlobal('fetch', fetcher);
   const store = useCspConsoleStore();
   await store.restore();
@@ -18,7 +20,7 @@ test('service administrator restores a session without calling installation APIs
 
 test('service administrator login clears password and goes directly to management', async () => {
   setActivePinia(createPinia());
-  const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({ authenticated: true, canInitialize: false })));
+  const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({ authenticated: true, initialized: true, canInitialize: false })));
   vi.stubGlobal('fetch', fetcher);
   const store = useCspConsoleStore();
   store.username = 'service-manager';
@@ -48,6 +50,8 @@ test.each([
   expect(store.signedIn).toBe(true);
   expect(store.password).toBe('');
   expect(store.destination).toBe(destination);
+  expect(store.allows('/csp/setup')).toBe(!initialized);
+  expect(store.allows('/csp/applications')).toBe(initialized);
   expect(fetcher.mock.calls.map((call) => call[0])).toEqual(['/console-api/login', '/console-api/installation']);
 });
 
@@ -102,6 +106,7 @@ test.each([
         JSON.stringify({
           csrf: 'test',
           authenticated: true,
+          initialized: true,
           canInitialize: false,
           canManageServices: false,
           ...permissions
@@ -114,4 +119,22 @@ test.each([
   expect(store.destination).toBe(destination);
   const paths = ['/csp/setup', '/csp/overview', '/csp/management', '/csp/auditors', '/csp/login-logs', '/csp/operation-logs'];
   expect(paths.filter(store.allows)).toEqual(allowed);
+});
+
+test('personnel without installation permission cannot enter management before installation', async () => {
+  setActivePinia(createPinia());
+  vi.stubGlobal(
+    'fetch',
+    vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ csrf: 'test', authenticated: true, initialized: false, canInitialize: false, canManageServices: true }))
+      )
+  );
+  const store = useCspConsoleStore();
+  await store.restore();
+  expect(store.signedIn).toBe(true);
+  expect(store.destination).toBe('/csp/unavailable');
+  expect(store.allows('/csp/setup')).toBe(false);
+  expect(store.allows('/csp/management')).toBe(false);
 });

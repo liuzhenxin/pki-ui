@@ -68,7 +68,7 @@ for (const width of [1440, 390])
       const body = route.request().postDataJSON() || {};
       calls.push({ action, body });
       let result: unknown;
-      if (action === 'session') result = { csrf: 'public-test-csrf', authenticated: true };
+      if (action === 'session') result = { csrf: 'public-test-csrf', authenticated: true, initialized: true };
       else if (action === 'service-list') result = { items: [resource], hasMore: false };
       else if (action === 'service-save') {
         if (conflict) {
@@ -160,7 +160,7 @@ test.describe('CSP-owned applications', () => {
       };
       switch (action) {
         case 'session':
-          return route.fulfill({ json: { csrf: 'test-csrf', authenticated: true, canOperateApplications: true } });
+          return route.fulfill({ json: { csrf: 'test-csrf', authenticated: true, initialized: true, canOperateApplications: true } });
         case 'owned-application-list':
           return route.fulfill({ json: { items: registered ? [view.application] : [], hasMore: false } });
         case 'owned-service-list':

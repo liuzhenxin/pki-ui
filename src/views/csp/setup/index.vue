@@ -16,7 +16,6 @@ const {
   initializationAttempted,
   busy,
   error,
-  httpTestMode,
   environmentReady,
   confirmed,
   accountTransport,
@@ -73,7 +72,6 @@ async function logout() {
 </script>
 <template>
   <div class="app-container csp-page">
-    <p v-if="httpTestMode" class="notice" role="status">128 HTTP 测试入口 · 不用于生产，网络传输未加密。</p>
     <p class="eyebrow">CSP CONSOLE</p>
     <h1>安装初始化</h1>
     <p class="muted">确认使用协议、核验运行环境与两类管理身份，保存 CSP 初始化结果。</p>
@@ -92,8 +90,7 @@ async function logout() {
       <span class="status-tag">已完成初始化</span>
       <h2>{{ completion ? '初始化成功，请重新登录' : 'CSP 已完成初始化' }}</h2>
       <p class="muted">一次性初始化入口已锁定。设备、资源池、业务密钥、设备证书、应用接入和信任策略在管理功能中配置。</p>
-      <el-button v-if="completion" type="primary" :loading="busy" @click="logout">退出并重新登录</el-button>
-      <el-button v-else :disabled="busy" @click="router.replace('/csp/management')">进入服务与应用管理</el-button>
+      <el-button type="primary" :loading="busy" @click="logout">退出并重新登录</el-button>
     </section>
     <section v-else-if="initializationAttempted || initialized === null || !setup" class="wizard-panel">
       <h2>{{ initializationAttempted ? '提交结果需要核查' : '需要确认初始化状态' }}</h2>

@@ -2,7 +2,7 @@ import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
 import { consoleRequest, ConsoleRequestError, type ConsoleResponses, type ConsoleCommands, type ConsoleNavigation } from '@/api/csp/console';
 import { skfCall, closeSkf, normalizeSkfSignature } from '@/services/csp/skf';
-import { cspDestination } from '@/config/csp';
+import { cspProduct } from '@/config/csp';
 
 export const useCspConsoleStore = defineStore('csp-console', () => {
   const loginMode = ref<'account' | 'certificate'>('account');
@@ -85,9 +85,11 @@ export const useCspConsoleStore = defineStore('csp-console', () => {
   const error = ref('');
   const signedIn = ref(false);
   const canInitialize = ref(true);
+  const installationInitialized = ref<boolean | null>(null);
   const navigation = ref<ConsoleNavigation>({});
   function applyNavigation(session: ConsoleNavigation) {
     canInitialize.value = session.canInitialize !== false;
+    installationInitialized.value = session.initialized ?? null;
     navigation.value = {
       canManageServices: session.canManageServices !== false,
       canManageDevices: session.canManageDevices === true,
@@ -101,9 +103,11 @@ export const useCspConsoleStore = defineStore('csp-console', () => {
   const ownedApplications = canOperateApplications;
 
   function allows(path: string) {
+    if (path === '/csp/unavailable') return true;
+    if (path === cspProduct.installation) return canInitialize.value && installationInitialized.value !== true;
+    if (installationInitialized.value !== true) return false;
     switch (path) {
-      case '/csp/setup':
-      case '/csp/overview':
+      case cspProduct.home:
         return canInitialize.value;
       case '/csp/application-resources':
         return canOperateApplications.value;
@@ -116,7 +120,7 @@ export const useCspConsoleStore = defineStore('csp-console', () => {
       case '/csp/services/sef':
         return canOperateApplications.value || (!ownedApplications.value && navigation.value.canManageServices !== false);
       case '/csp/devices':
-        return navigation.value.canManageDevices === true && installationInitialized.value === true;
+        return navigation.value.canManageDevices === true;
       case '/csp/auditors':
         return navigation.value.canManageAuditors === true;
       case '/csp/login-logs':
@@ -127,7 +131,6 @@ export const useCspConsoleStore = defineStore('csp-console', () => {
         return true;
     }
   }
-  const installationInitialized = ref<boolean | null>(null);
   const checkedAt = ref('');
   const setup = ref<import('@/api/csp/console').SetupView | null>(null);
   const secure = computed(() => location.protocol === 'https:' || ['localhost', '127.0.0.1'].includes(location.hostname));
@@ -180,7 +183,7 @@ export const useCspConsoleStore = defineStore('csp-console', () => {
   }
 
   async function readInstallationState() {
-    if (!canInitialize.value) return;
+    if (installationInitialized.value !== null || !canInitialize.value) return;
     busy.value = true;
     error.value = '';
     setup.value = null;
@@ -260,7 +263,7 @@ export const useCspConsoleStore = defineStore('csp-console', () => {
     }
   }
 
-  async function restore(includeInstallation = true) {
+  async function restore() {
     try {
       const session = await api('session');
       if (!session || typeof session.csrf !== 'string' || !session.csrf || typeof session.authenticated !== 'boolean')
@@ -272,7 +275,7 @@ export const useCspConsoleStore = defineStore('csp-console', () => {
       if (session.authenticated === true) {
         signedIn.value = true;
         error.value = '';
-        if (includeInstallation) await readInstallationState();
+        await readInstallationState();
         return;
       }
       signedIn.value = false;
@@ -291,8 +294,17 @@ export const useCspConsoleStore = defineStore('csp-console', () => {
     }
   }
   const destination = computed(() => {
-    if (canInitialize.value || allows('/csp/management')) return cspDestination(installationInitialized.value, canInitialize.value);
-    return ['/csp/applications', '/csp/auditors', '/csp/login-logs', '/csp/operation-logs'].find(allows) ?? '/csp/unavailable';
+    return (
+      [
+        cspProduct.installation,
+        cspProduct.home,
+        '/csp/management',
+        '/csp/applications',
+        '/csp/auditors',
+        '/csp/login-logs',
+        '/csp/operation-logs'
+      ].find(allows) ?? '/csp/unavailable'
+    );
   });
   return {
     loginMode,

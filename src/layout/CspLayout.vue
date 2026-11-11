@@ -10,7 +10,7 @@ import mark from '@/assets/brand/csp-mark-inverse.svg';
 import { useCspConsoleStore } from '@/store/modules/cspConsole';
 import { cspProduct } from '@/config/csp';
 const store = useCspConsoleStore();
-const { busy, error, destination, canInitialize } = storeToRefs(store);
+const { busy, error, destination } = storeToRefs(store);
 const router = useRouter();
 const route = useRoute();
 const { width } = useWindowSize();
@@ -42,7 +42,7 @@ async function logout() {
         >
         <nav aria-label="控制台导航">
           <el-menu :default-active="route.path" router background-color="transparent" text-color="#e2e8f0" active-text-color="#176ac3">
-            <el-menu-item v-if="canInitialize" :index="cspProduct.home"
+            <el-menu-item v-if="store.allows(cspProduct.home)" :index="cspProduct.home"
               ><el-icon><Monitor /></el-icon><span>运行总览</span></el-menu-item
             >
             <el-sub-menu v-if="store.allows('/csp/applications')" index="application-management">
@@ -66,7 +66,7 @@ async function logout() {
               <el-menu-item index="/csp/services/tsa">时间戳服务器</el-menu-item>
               <el-menu-item index="/csp/services/sef">电子签章系统</el-menu-item>
             </el-sub-menu>
-            <el-menu-item v-if="canInitialize" :index="cspProduct.installation"
+            <el-menu-item v-if="store.allows(cspProduct.installation)" :index="cspProduct.installation"
               ><el-icon><Setting /></el-icon><span>安装初始化</span></el-menu-item
             >
             <el-menu-item v-if="store.allows('/csp/auditors')" index="/csp/auditors">
