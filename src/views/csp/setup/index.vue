@@ -25,8 +25,8 @@ const {
 } = storeToRefs(store);
 const accepted = ref(false);
 const accounts = [
-  { role: 'SYSTEM_ADMIN', password: ref(''), repeat: ref(''), certificate: ref('') },
-  { role: 'AUDIT_ADMIN', password: ref(''), repeat: ref(''), certificate: ref('') }
+  { role: 'SYSTEM_ADMIN', username: 'admin', password: ref(''), repeat: ref(''), certificate: ref('') },
+  { role: 'AUDIT_ADMIN', username: 'auditor', password: ref(''), repeat: ref(''), certificate: ref('') }
 ] as const;
 const roleNames = { SYSTEM_ADMIN: '系统管理员', AUDIT_ADMIN: '审计管理员' };
 const visibleStep = computed(() => (initialized.value ? 3 : Math.min(setupStep.value, 2)));
@@ -163,6 +163,9 @@ async function logout() {
             >
               <section v-for="account in accounts" :key="account.role" class="account-section" role="group" :aria-labelledby="account.role">
                 <h3 :id="account.role">{{ roleNames[account.role] }}</h3>
+                <el-form-item label="用户名">
+                  <el-input :model-value="account.username" readonly />
+                </el-form-item>
                 <el-form-item label="登录密码" required>
                   <el-input v-model="account.password.value" type="password" autocomplete="new-password" show-password />
                 </el-form-item>

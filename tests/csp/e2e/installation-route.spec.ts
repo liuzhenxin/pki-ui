@@ -179,6 +179,10 @@ test('account initialization verifies the seeded accounts before submitting cred
   const auditor = page.getByRole('group', { name: '审计管理员' });
   const finish = page.getByRole('button', { name: '提交初始化' });
   await expect(page.getByRole('heading', { name: '账号初始化', exact: true })).toBeVisible();
+  await expect(admin.getByLabel('用户名')).toHaveValue('admin');
+  await expect(auditor.getByLabel('用户名')).toHaveValue('auditor');
+  await expect(admin.getByLabel('用户名')).not.toBeEditable();
+  await expect(auditor.getByLabel('用户名')).not.toBeEditable();
   await expect(finish).toBeDisabled();
   for (const group of [admin, auditor]) {
     await group.getByLabel('登录密码', { exact: true }).fill('fixture-system-password');
