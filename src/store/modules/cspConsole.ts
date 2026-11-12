@@ -1,7 +1,8 @@
 import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
-import { consoleRequest, ConsoleRequestError, type ConsoleResponses, type ConsoleCommands } from '@/api/csp/console';
+import { consoleRequest, ConsoleRequestError, type ConsoleResponses, type ConsoleCommands, type ConsoleNavigation } from '@/api/csp/console';
 import { skfCall, closeSkf, normalizeSkfSignature } from '@/services/csp/skf';
+import { cspProduct } from '@/config/csp';
 
 export const useCspConsoleStore = defineStore('csp-console', () => {
   const loginMode = ref<'account' | 'certificate'>('account');
@@ -59,11 +60,12 @@ export const useCspConsoleStore = defineStore('csp-console', () => {
       const digest = calculateSm2SignatureDigest(certificate.cert, challenge.signData, challenge.sm2UserId);
       const rawSignature = await skfCall('SignData', [certificate.key, digest]);
       if (typeof rawSignature !== 'string') throw new Error('USB Key 签名响应无效。');
-      await api('certificate-login', { challengeId: challenge.challengeId, signature: normalizeSkfSignature(rawSignature) });
+      const login = await api('certificate-login', { challengeId: challenge.challengeId, signature: normalizeSkfSignature(rawSignature) });
+      applyNavigation(login);
       certificates.value = [];
       certificateKey.value = '';
       signedIn.value = true;
-      await readState();
+      await readInstallationState();
     } catch (failure) {
       error.value = (failure as Error).message;
     } finally {
@@ -82,24 +84,58 @@ export const useCspConsoleStore = defineStore('csp-console', () => {
   const busy = ref(false);
   const error = ref('');
   const signedIn = ref(false);
-  const initialized = ref<boolean | null>(null);
+  const canInitialize = ref(true);
+  const installationInitialized = ref<boolean | null>(null);
+  const navigation = ref<ConsoleNavigation>({});
+  function applyNavigation(session: ConsoleNavigation) {
+    canInitialize.value = session.canInitialize !== false;
+    installationInitialized.value = session.initialized ?? null;
+    navigation.value = {
+      canManageServices: session.canManageServices !== false,
+      canManageDevices: session.canManageDevices === true,
+      canOperateApplications: session.canOperateApplications === true,
+      canManageAuditors: session.canManageAuditors === true,
+      canReadLoginLogs: session.canReadLoginLogs === true,
+      canReadOperationLogs: session.canReadOperationLogs === true
+    };
+  }
+  const canOperateApplications = computed(() => navigation.value.canOperateApplications === true);
+  const ownedApplications = canOperateApplications;
+
+  function allows(path: string) {
+    if (path === '/csp/unavailable') return true;
+    if (path === cspProduct.installation) return canInitialize.value && installationInitialized.value !== true;
+    if (installationInitialized.value !== true) return false;
+    switch (path) {
+      case cspProduct.home:
+        return canInitialize.value;
+      case '/csp/application-resources':
+        return canOperateApplications.value;
+      case '/csp/management':
+        return !ownedApplications.value && navigation.value.canManageServices !== false;
+      case '/csp/applications':
+        return ownedApplications.value || navigation.value.canManageServices !== false;
+      case '/csp/services/svs':
+      case '/csp/services/tsa':
+      case '/csp/services/sef':
+        return canOperateApplications.value || (!ownedApplications.value && navigation.value.canManageServices !== false);
+      case '/csp/devices':
+        return navigation.value.canManageDevices === true;
+      case '/csp/auditors':
+        return navigation.value.canManageAuditors === true;
+      case '/csp/login-logs':
+        return navigation.value.canReadLoginLogs === true;
+      case '/csp/operation-logs':
+        return navigation.value.canReadOperationLogs === true;
+      default:
+        return true;
+    }
+  }
   const checkedAt = ref('');
-  const setupStep = ref(0);
   const setup = ref<import('@/api/csp/console').SetupView | null>(null);
-  const environment = ref<{ name: string; ok: boolean }[]>([]);
-  const confirmed = ref(false);
-  const initializationAttempted = ref(false);
-  const completion = ref(false);
-  const environmentReady = computed(
-    () => setup.value !== null && setup.value.step >= 1 && setup.value.checks.length === 9 && setup.value.checks.every((row) => row.ready)
-  );
   const secure = computed(() => location.protocol === 'https:' || ['localhost', '127.0.0.1'].includes(location.hostname));
   const httpTestMode = ref(false);
   const accountTransport = computed(() => secure.value || httpTestMode.value);
-  const stateLabel = computed(() =>
-    initialized.value === null ? '状态未确认' : initialized.value ? '已完成服务启用验收' : '等待资源接入与服务启用'
-  );
-
   function api<K extends keyof ConsoleResponses>(path: K, body?: ConsoleCommands[K]): Promise<ConsoleResponses[K]> {
     return consoleRequest(path, csrf.value, body);
   }
@@ -114,8 +150,19 @@ export const useCspConsoleStore = defineStore('csp-console', () => {
   }
 
   async function refresh() {
-    if (busy.value) return;
-    await readState();
+    if (busy.value || !canInitialize.value) return;
+    busy.value = true;
+    error.value = '';
+    setup.value = null;
+    checkedAt.value = '';
+    try {
+      applySetup(await api('setup'));
+    } catch (failure) {
+      if (failure instanceof ConsoleRequestError && failure.status === 401) signedIn.value = false;
+      error.value = (failure as Error).message;
+    } finally {
+      busy.value = false;
+    }
   }
 
   function applySetup(data: import('@/api/csp/console').SetupView) {
@@ -132,85 +179,25 @@ export const useCspConsoleStore = defineStore('csp-console', () => {
     )
       throw new Error('服务启用状态无效，请联系运维核查。');
     setup.value = data;
-    initialized.value = data.initialized;
-    setupStep.value = data.step;
-    completion.value = data.initialized && (completion.value || initializationAttempted.value || data.attempted);
-    initializationAttempted.value = data.attempted;
     checkedAt.value = data.checkedAt ? new Date(data.checkedAt).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }) : '';
   }
 
-  async function readState() {
+  async function readInstallationState() {
+    if (installationInitialized.value !== null || !canInitialize.value) return;
     busy.value = true;
     error.value = '';
-    confirmed.value = false;
     setup.value = null;
     try {
-      const data = await api('setup');
-      applySetup(data);
+      const installation = await api('installation');
+      if (typeof installation?.initialized !== 'boolean') throw new Error('安装初始化状态无效，请联系运维核查。');
+      installationInitialized.value = installation.initialized;
       signedIn.value = true;
     } catch (failure) {
-      initialized.value = null;
+      installationInitialized.value = null;
+      setup.value = null;
+      checkedAt.value = '';
       if (failure instanceof ConsoleRequestError && failure.status === 401) signedIn.value = false;
       error.value = (failure as Error).message;
-    } finally {
-      busy.value = false;
-    }
-  }
-
-  async function advanceSetup(action: import('@/api/csp/console').SetupAction) {
-    if (busy.value || !accountTransport.value || !setup.value || initializationAttempted.value) return;
-    busy.value = true;
-    error.value = '';
-    confirmed.value = false;
-    try {
-      applySetup(
-        await api('setup-advance', {
-          draftVersion: setup.value.draftVersion,
-          action
-        })
-      );
-    } catch (failure) {
-      const message = (failure as Error).message;
-      try {
-        applySetup(await api('setup'));
-      } catch {
-        setup.value = null;
-        initialized.value = null;
-      }
-      error.value = message;
-    } finally {
-      busy.value = false;
-    }
-  }
-
-  async function initialize() {
-    if (
-      busy.value ||
-      !accountTransport.value ||
-      initialized.value !== false ||
-      !environmentReady.value ||
-      !confirmed.value ||
-      initializationAttempted.value ||
-      !setup.value ||
-      setup.value.step !== 3
-    )
-      return;
-    busy.value = true;
-    error.value = '';
-    initializationAttempted.value = true;
-    try {
-      const result = await api('setup-complete', { draftVersion: setup.value.draftVersion, confirm: true });
-      if (result.initialized !== true) throw new Error('服务启用回执无效。');
-      applySetup(result);
-      completion.value = true;
-    } catch (failure) {
-      confirmed.value = false;
-      if (failure instanceof ConsoleRequestError && [400, 403, 409, 412].includes(failure.status)) {
-        initializationAttempted.value = false;
-        setup.value = null;
-        initialized.value = null;
-      }
-      error.value = `${(failure as Error).message} 请点击“刷新状态”核查；本页不会再次提交。`;
     } finally {
       busy.value = false;
     }
@@ -221,12 +208,13 @@ export const useCspConsoleStore = defineStore('csp-console', () => {
     busy.value = true;
     error.value = '';
     try {
-      await api('login', { username: username.value.trim(), password: password.value, captcha: captcha.value });
+      const login = await api('login', { username: username.value.trim(), password: password.value, captcha: captcha.value });
+      applyNavigation(login);
       password.value = '';
       captcha.value = '';
       image.value = '';
       signedIn.value = true;
-      await readState();
+      await readInstallationState();
     } catch (failure) {
       password.value = '';
       captcha.value = '';
@@ -255,20 +243,18 @@ export const useCspConsoleStore = defineStore('csp-console', () => {
     try {
       await api('logout', {});
       signedIn.value = false;
-      initialized.value = null;
-      environment.value = [];
-      confirmed.value = false;
-      initializationAttempted.value = false;
-      completion.value = false;
-      setupStep.value = 0;
+      applyNavigation({});
+      installationInitialized.value = null;
+      setup.value = null;
+      checkedAt.value = '';
       password.value = '';
       const session = await api('session');
       if (!session || typeof session.csrf !== 'string' || !session.csrf || typeof session.authenticated !== 'boolean')
         throw new Error('会话状态无效。');
       csrf.value = session.csrf;
+      applyNavigation(session);
       certificateEnabled.value = session.certificateLoginEnabled === true;
       httpTestMode.value = session.httpTestMode === true && location.origin === 'http://10.10.10.128:9085';
-      initializationAttempted.value = session.initializationAttempted === true;
       await reloadChallenge();
     } catch {
       error.value = '退出或新会话状态未确认，请刷新页面核查。';
@@ -283,26 +269,43 @@ export const useCspConsoleStore = defineStore('csp-console', () => {
       if (!session || typeof session.csrf !== 'string' || !session.csrf || typeof session.authenticated !== 'boolean')
         throw new Error('会话状态无效。');
       csrf.value = session.csrf;
+      applyNavigation(session);
       certificateEnabled.value = session.certificateLoginEnabled === true;
       httpTestMode.value = session.httpTestMode === true && location.origin === 'http://10.10.10.128:9085';
-      initializationAttempted.value = session.initializationAttempted === true;
       if (session.authenticated === true) {
         signedIn.value = true;
-        await readState();
+        error.value = '';
+        await readInstallationState();
         return;
       }
       signedIn.value = false;
-      initialized.value = null;
-      environment.value = [];
-      completion.value = false;
+      applyNavigation({});
+      installationInitialized.value = null;
+      setup.value = null;
+      checkedAt.value = '';
     } catch {
       signedIn.value = false;
-      initialized.value = null;
+      applyNavigation({});
+      installationInitialized.value = null;
+      setup.value = null;
+      checkedAt.value = '';
       csrf.value = '';
       error.value = '控制台连接失败，请刷新页面。';
     }
   }
-  const destination = computed(() => (initialized.value === true && !completion.value ? '/csp/overview' : '/csp/setup'));
+  const destination = computed(() => {
+    return (
+      [
+        cspProduct.installation,
+        cspProduct.home,
+        '/csp/management',
+        '/csp/applications',
+        '/csp/auditors',
+        '/csp/login-logs',
+        '/csp/operation-logs'
+      ].find(allows) ?? '/csp/unavailable'
+    );
+  });
   return {
     loginMode,
     certificateEnabled,
@@ -318,26 +321,20 @@ export const useCspConsoleStore = defineStore('csp-console', () => {
     busy,
     error,
     signedIn,
-    initialized,
+    canInitialize,
+    allows,
+    canOperateApplications,
+    ownedApplications,
     checkedAt,
-    setupStep,
     setup,
-    advanceSetup,
-    environment,
-    confirmed,
-    initializationAttempted,
-    completion,
-    environmentReady,
     secure,
     httpTestMode,
     accountTransport,
-    stateLabel,
     destination,
     switchMode,
     readCertificates,
     certificateLogin,
     refresh,
-    initialize,
     login,
     reloadChallenge,
     logout,

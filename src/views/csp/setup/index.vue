@@ -1,121 +1,360 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useRouter } from 'vue-router';
-import { useCspConsoleStore } from '@/store/modules/cspConsole';
-const store = useCspConsoleStore();
+import { ElForm, ElFormItem } from 'element-plus';
+import Agreement from '@/components/Agreement/index.vue';
+import { CSP_AGREEMENT_VERSION } from '@/products/csp/agreement';
+import { useCspInstallationStore } from '@/store/modules/cspInstallation';
+const store = useCspInstallationStore();
 const router = useRouter();
-const { initialized, setupStep, setup, busy, error, httpTestMode, confirmed, accountTransport, checkedAt } = storeToRefs(store);
-const groups = ['ENVIRONMENT', 'RESOURCES', 'POLICY'] as const;
-const titles = ['环境检查', '密码资源接入', '服务策略核验', '验收并启用'];
-const labels: Record<string, string> = {
-  PLATFORM_SCHEMA: '数据库与平台部署基线',
-  HARDWARE_PROTECTION: '硬件保护与禁止软件回退',
-  EXECUTION_ENTRY: '已实现的密码服务入口',
-  SDF_RANDOM_RESOURCE: '真实 SDF 随机数资源与近期健康',
-  SDF_SM3_RESOURCE: '真实 SDF 摘要资源与近期健康',
-  APPLICATION_MAPPING: 'Auth 客户端与 CSP 应用映射',
-  RANDOM_AUTHORIZATION: '随机数能力授权',
-  SM3_AUTHORIZATION: '公开摘要自检授权',
-  FOUR_DIMENSION_QUOTAS: '租户、应用、能力与资源池配额'
-};
-const visibleChecks = computed(
-  () => setup.value?.checks.filter((row) => initialized.value || setupStep.value === 3 || row.group === groups[setupStep.value]) || []
+onMounted(() => store.refresh());
+const {
+  initialized,
+  completion,
+  setupStep,
+  setup,
+  initializationAttempted,
+  busy,
+  error,
+  environmentReady,
+  accountTransport,
+  secure,
+  certificateEnabled,
+  checkedAt
+} = storeToRefs(store);
+const accepted = ref(false);
+const accounts = [
+  { role: 'SYSTEM_ADMIN', username: 'admin', password: ref(''), repeat: ref(''), certificate: ref('') },
+  { role: 'AUDIT_ADMIN', username: 'auditor', password: ref(''), repeat: ref(''), certificate: ref('') }
+] as const;
+const roleNames = { SYSTEM_ADMIN: '系统管理员', AUDIT_ADMIN: '审计管理员' };
+const visibleStep = computed(() => (initialized.value ? 3 : Math.min(setupStep.value, 2)));
+const credentialsReady = computed(
+  () =>
+    accounts[0].password.value !== accounts[1].password.value &&
+    accounts.every(
+      ({ password, repeat }) =>
+        password.value.trim().length > 0 &&
+        Array.from(password.value).length >= 12 &&
+        new TextEncoder().encode(password.value).length <= 72 &&
+        password.value === repeat.value
+    )
 );
-const currentReady = computed(() => visibleChecks.value.length > 0 && visibleChecks.value.every((row) => row.ready));
-const actions = ['CHECK_ENV', 'CHECK_RESOURCES', 'CHECK_POLICY'] as const;
+function clearCredentials() {
+  for (const account of accounts) {
+    account.password.value = '';
+    account.repeat.value = '';
+    account.certificate.value = '';
+  }
+}
+watch(visibleStep, clearCredentials);
+async function finish() {
+  if (busy.value || !environmentReady.value || !credentialsReady.value || !secure.value) return;
+  const [admin, auditor] = accounts.map((account) => ({
+    password: account.password.value,
+    ...(certificateEnabled.value && account.certificate.value.trim() ? { certPem: account.certificate.value.trim() } : {})
+  }));
+  try {
+    await store.initialize(admin, auditor);
+  } finally {
+    clearCredentials();
+  }
+}
+const accountChecks = computed(() =>
+  (['SYSTEM_ADMIN', 'AUDIT_ADMIN'] as const).map((role) => ({
+    role,
+    valid: setup.value?.accounts.find((account) => account.role === role)?.valid
+  }))
+);
+const agreementAvailable = computed(() => Boolean(setup.value?.agreementVersion === CSP_AGREEMENT_VERSION && setup.value?.companyName));
 async function refresh() {
   await store.refresh();
+  await router.replace(store.destination);
+}
+async function logout() {
+  await store.logout();
+  if (!store.signedIn) await router.replace('/login');
 }
 </script>
 <template>
-  <div class="app-container csp-page">
-    <p v-if="httpTestMode" class="notice" role="status">HTTP 测试入口 · 不用于生产，网络传输未加密。</p>
-    <p class="eyebrow">CSP CONSOLE</p>
-    <h1>资源接入与服务启用</h1>
-    <p class="muted">安装由部署脚本完成，账号与登录由 Auth/Admin 管理。本向导核验已纳管资源、现有策略和服务启用条件。</p>
-    <ol class="setup-steps" aria-label="服务启用进度">
-      <li
-        v-for="(title, index) in titles"
-        :key="title"
-        :class="{ current: setupStep === index, done: setupStep > index || initialized }"
-        :aria-current="setupStep === index ? 'step' : undefined"
-      >
-        <span aria-hidden="true">{{ index + 1 }}</span
-        >{{ title }}
-      </li>
-    </ol>
-    <section v-if="!setup || initialized === null" class="wizard-panel">
-      <h2>需要确认服务启用状态</h2>
-      <p>请刷新查询。缺少部署基线或当前授权时，由运维及平台管理员处理。</p>
-      <el-button :loading="busy" @click="refresh">刷新状态</el-button>
-    </section>
-    <section v-else class="wizard-panel" :aria-busy="busy">
-      <h2>{{ initialized ? '已完成首次服务启用验收' : titles[setupStep] }}</h2>
-      <p v-if="setupStep === 0 && !initialized">核验数据库部署基线、硬件保护模式与已实现入口。连接凭据通过部署 Secret 注入。</p>
-      <p v-else-if="setupStep === 1 && !initialized">
-        核验已部署 Agent 与已纳管密码资源的当前健康和能力。资源不存在时，请先通过受控资源管理流程纳管。
-      </p>
-      <p v-else-if="setupStep === 2 && !initialized">
-        核验现有应用映射、能力授权与配额。由 Auth/Admin 管理身份，通过受控配置管理服务策略；本页不创建或改写账号。
-      </p>
-      <p v-else-if="!initialized">确认后经正式路由和 Agent 执行随机数、公开 SM3 向量自检，并原子保存服务启用回执与审计。</p>
-      <ul class="environment-list" aria-label="当前必要检查">
-        <li v-for="check in visibleChecks" :key="check.code">
-          <strong>{{ labels[check.code] || '必要检查' }}</strong>
-          <span :class="check.ready ? 'check-ok' : 'check-failed'">{{ check.ready ? '当前检查通过' : '尚未通过，请完成对应部署或管理配置' }}</span>
+  <div class="app-container csp-page csp-init-page">
+    <el-card class="init-card" shadow="never">
+      <header class="init-heading">
+        <p class="heading-label">密码服务平台</p>
+        <h1>安装初始化</h1>
+      </header>
+      <ol class="setup-steps" aria-label="初始化进度">
+        <li
+          v-for="(title, index) in ['协议', '环境检查', '账号初始化', '完成']"
+          :key="title"
+          :class="{ current: visibleStep === index, done: visibleStep > index || initialized }"
+          :aria-current="visibleStep === index ? 'step' : undefined"
+        >
+          <span aria-hidden="true">{{ index + 1 }}</span
+          >{{ title }}
         </li>
-      </ul>
-      <p class="notice">本向导不收集 PIN 或底层口令，不生成、覆盖或销毁设备密钥。自检通过仅支持已实现能力，不表示全部 17 项操作可用。</p>
-      <template v-if="initialized">
-        <p role="status">当前可用能力：{{ setup.enabledCapabilities.length ? '随机数 HTTP 服务' : '当前检查未通过，服务保持关闭' }}。</p>
-        <p>后续变更通过正常管理与审计流程处理，首次向导不重新开放。</p>
-        <el-button :disabled="busy" @click="router.replace('/csp/overview')">进入管理首页</el-button>
-      </template>
-      <template v-else-if="setupStep < 3">
-        <el-button
-          type="primary"
-          :loading="busy"
-          :disabled="busy || !accountTransport || !currentReady"
-          @click="store.advanceSetup(actions[setupStep])"
-          >核验并继续</el-button
-        >
-      </template>
-      <template v-else>
-        <dl class="setup-summary">
-          <dt>服务版本</dt>
-          <dd>{{ setup.serviceVersion }}</dd>
-          <dt>运行环境</dt>
-          <dd>{{ setup.environment }}</dd>
-          <dt>核验时间</dt>
-          <dd>{{ checkedAt }}</dd>
-        </dl>
-        <label class="setup-confirm"
-          ><input v-model="confirmed" type="checkbox" :disabled="busy" />我确认现有资源与策略，执行非破坏性自检并启用已实现服务</label
-        >
-        <el-button type="primary" :loading="busy" :disabled="busy || !confirmed || !currentReady || !accountTransport" @click="store.initialize"
-          >自检并启用</el-button
-        >
-      </template>
-      <el-button :disabled="busy" @click="refresh">刷新检查结果</el-button>
-      <el-button v-if="!initialized && setupStep > 0" :disabled="busy" @click="store.advanceSetup('CHECK_ENV')">从环境重新核验</el-button>
-    </section>
-    <p v-if="error" class="error" role="alert">{{ error }}</p>
-    <p class="muted">最近核验：{{ checkedAt || '尚无有效核验' }} · Asia/Shanghai</p>
+      </ol>
+      <div class="wizard-content">
+        <section v-if="initialized" class="step-content" aria-live="polite">
+          <span class="status-tag">已完成初始化</span>
+          <h2>{{ completion ? '初始化成功，请重新登录' : 'CSP 已完成初始化' }}</h2>
+          <p class="muted">一次性初始化入口已锁定。设备、资源池、业务密钥、设备证书、应用接入和信任策略在管理功能中配置。</p>
+          <el-button type="primary" :loading="busy" @click="logout">退出并重新登录</el-button>
+        </section>
+        <section v-else-if="initializationAttempted || initialized === null || !setup" class="step-content">
+          <h2>{{ initializationAttempted ? '提交结果需要核查' : '需要确认初始化状态' }}</h2>
+          <p>已有提交尝试时只查询结果。未确认成功前，请联系运维核查，不能重新提交或重置。</p>
+          <el-button :loading="busy" @click="refresh">刷新状态</el-button>
+        </section>
+        <section v-else class="step-content" :aria-busy="busy">
+          <template v-if="setupStep === 0">
+            <header class="step-title">
+              <h2>公共用户协议</h2>
+              <p>请阅读并确认用户协议后继续初始化。</p>
+            </header>
+            <div v-if="agreementAvailable" class="agreement-scroll" tabindex="0" aria-label="公共用户协议正文">
+              <Agreement tenant-code="csp" tenant-name="密码服务平台" :company-name="setup.companyName" />
+            </div>
+            <p v-else class="notice" role="status">协议版本或权利主体尚未配置，请联系运维。</p>
+            <label class="setup-confirm agreement-confirm"
+              ><input v-model="accepted" type="checkbox" :disabled="busy || !agreementAvailable" />我已阅读并同意公共用户协议</label
+            >
+            <div class="wizard-actions">
+              <el-button type="primary" :disabled="busy || !accepted || !agreementAvailable || !accountTransport" @click="store.advanceSetup('AGREE')"
+                >同意并继续</el-button
+              >
+            </div>
+          </template>
+          <template v-else-if="setupStep === 1">
+            <header class="step-title">
+              <h2>环境检查</h2>
+              <p>确认 CSP 业务库、平台租户和两员预置账号已准备就绪。</p>
+            </header>
+            <ul class="environment-list" aria-label="环境检测结果">
+              <li><strong>平台及 CSP 业务库</strong><span>待检测，执行检测成功后确认</span></li>
+              <li v-for="account in accountChecks" :key="account.role">
+                <strong>{{ roleNames[account.role] }}</strong>
+                <span :class="{ 'check-ok': account.valid === true, 'check-failed': account.valid === false }">{{
+                  account.valid === undefined ? '待核验' : account.valid ? '核验通过' : '未通过，请核查预置账号和角色权限'
+                }}</span>
+              </li>
+              <li><strong>密码设备</strong><span>未核验，初始化后配置并执行真实自测</span></li>
+            </ul>
+            <div class="wizard-actions">
+              <el-button type="primary" :loading="busy" :disabled="busy || !accountTransport" @click="store.advanceSetup('CHECK_ENV')"
+                >检测并继续</el-button
+              >
+            </div>
+          </template>
+          <template v-else>
+            <header class="step-title">
+              <h2>账号初始化</h2>
+              <p>为两个预置账号设置不同的登录密码。每个密码至少 12 个字符，最多 72 个 UTF-8 字节。</p>
+            </header>
+            <p v-if="!secure" class="notice">请通过 HTTPS 或本机安全入口设置管理员凭据。</p>
+            <p v-if="!environmentReady" class="notice" role="status">账号核验未通过，请重新检测环境。</p>
+            <el-form
+              id="csp-account-form"
+              class="account-form"
+              label-width="auto"
+              :disabled="busy || !secure || !environmentReady"
+              @submit.prevent="finish"
+            >
+              <section v-for="account in accounts" :key="account.role" class="account-section" role="group" :aria-labelledby="account.role">
+                <h3 :id="account.role">{{ roleNames[account.role] }}</h3>
+                <el-form-item label="用户名">
+                  <el-input :model-value="account.username" readonly />
+                </el-form-item>
+                <el-form-item label="登录密码" required>
+                  <el-input v-model="account.password.value" type="password" autocomplete="new-password" show-password />
+                </el-form-item>
+                <el-form-item
+                  label="确认密码"
+                  required
+                  :error="account.repeat.value && account.repeat.value !== account.password.value ? '两次输入的密码不一致' : ''"
+                >
+                  <el-input v-model="account.repeat.value" type="password" autocomplete="new-password" show-password />
+                </el-form-item>
+                <el-form-item v-if="certificateEnabled" label="证书 PEM（可选）">
+                  <el-input
+                    v-model="account.certificate.value"
+                    type="textarea"
+                    :rows="4"
+                    maxlength="12000"
+                    :spellcheck="false"
+                    placeholder="可粘贴 SM2 登录证书 PEM"
+                  />
+                </el-form-item>
+              </section>
+            </el-form>
+            <div class="wizard-actions">
+              <el-button :disabled="busy || !accountTransport" @click="store.advanceSetup('CHECK_ENV')">重新检测</el-button>
+              <el-button
+                type="primary"
+                native-type="submit"
+                form="csp-account-form"
+                :loading="busy"
+                :disabled="busy || !environmentReady || !secure || !credentialsReady"
+              >
+                提交初始化
+              </el-button>
+            </div>
+          </template>
+        </section>
+        <p v-if="error" class="error step-content" role="alert">{{ error }}</p>
+        <p v-if="checkedAt" class="muted step-content check-time">最近核验 {{ checkedAt }} · Asia/Shanghai</p>
+      </div>
+    </el-card>
   </div>
 </template>
 <style scoped>
-.setup-steps {
-  flex-wrap: wrap;
+.csp-init-page {
+  min-height: calc(100dvh - 96px);
+  padding: 20px;
+  background: var(--el-fill-color-lighter);
 }
-.muted,
-.setup-summary dd {
+.init-card {
+  max-width: 1180px;
+  margin: 0 auto;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+}
+.init-heading {
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+}
+.heading-label,
+.step-title p {
+  margin: 0 0 6px;
+  color: var(--el-text-color-secondary);
+  font-size: 14px;
+}
+.init-heading h1 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+.wizard-content {
+  min-height: 480px;
+  padding: 28px 0 8px;
+}
+.step-content {
+  max-width: 960px;
+  margin-inline: auto;
+}
+.step-content h2 {
+  margin: 0 0 6px;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+.step-title {
+  margin-bottom: 18px;
+}
+.agreement-confirm {
+  justify-content: flex-end;
+  margin: 12px 0;
+}
+.wizard-actions {
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding-top: 20px;
+  border-top: 1px solid var(--el-border-color-lighter);
+}
+.check-time {
+  margin-top: 14px;
+  font-size: 13px;
+}
+.environment-list li {
+  padding: 12px 16px;
+  margin-bottom: 8px;
+}
+.account-form {
+  max-width: 720px;
+  margin: 0 auto;
+}
+.account-section {
+  padding: 18px 20px 4px;
+  margin-bottom: 18px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+  background: var(--el-fill-color-blank);
+}
+.account-section h3 {
+  margin: 0 0 18px;
+  padding-left: 10px;
+  border-left: 3px solid var(--el-color-primary);
+  color: var(--el-text-color-primary);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+.agreement-scroll {
+  max-height: 22rem;
+  overflow: auto;
+  border: 1px solid var(--el-border-color);
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+.setup-steps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px 14px;
+  padding: 12px 18px;
+  margin: 18px 0 0;
+  border: 0;
+  border-radius: 6px;
+  background: var(--el-fill-color-light);
+}
+.setup-steps li {
+  min-width: 0;
+  gap: 8px;
+  font-size: 14px;
+}
+.setup-steps li > span {
+  width: 24px;
+  height: 24px;
+}
+.setup-steps .done {
+  color: var(--el-color-success-dark-2);
+}
+.setup-steps .current {
+  color: var(--el-color-primary);
+}
+.muted {
   overflow-wrap: anywhere;
 }
 @media (max-width: 600px) {
+  .csp-init-page {
+    padding: 12px;
+  }
+  .setup-steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding: 10px;
+  }
+  .wizard-content {
+    min-height: 0;
+    padding-top: 20px;
+  }
   .environment-list li {
     flex-wrap: wrap;
     gap: 0.5rem;
+  }
+  .account-section {
+    padding-inline: 12px;
+  }
+  .account-section :deep(.el-form-item) {
+    display: block;
+  }
+  .account-section :deep(.el-form-item__label) {
+    justify-content: flex-start;
+  }
+  .wizard-actions {
+    flex-wrap: wrap;
   }
 }
 </style>

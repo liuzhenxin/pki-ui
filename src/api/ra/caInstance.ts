@@ -72,11 +72,16 @@ export function getRaCaInstance(id: number | string): Promise<Result<RaCaInstanc
   return request({ url: `/ra/v1/ca-instances/${id}`, method: 'get' }) as any;
 }
 
-export function saveRaCaInstance(data: RaCaInstance): Promise<Result<number | string>> {
+type RaCaInstanceConfiguration = Pick<
+  RaCaInstance,
+  'id' | 'code' | 'name' | 'baseUrl' | 'mode' | 'requestorName' | 'connectTimeoutMs' | 'readTimeoutMs'
+>;
+
+export function saveRaCaInstance(data: RaCaInstanceConfiguration): Promise<Result<number | string>> {
   return request({ url: '/ra/v1/ca-instances', method: 'post', data }) as any;
 }
 
-export function modifyRaCaInstance(data: RaCaInstance): Promise<Result<void>> {
+export function modifyRaCaInstance(data: RaCaInstanceConfiguration): Promise<Result<void>> {
   return request({ url: '/ra/v1/ca-instances', method: 'put', data }) as any;
 }
 
@@ -97,5 +102,5 @@ export function testRaCaConnection(id: number | string): Promise<Result<RaCaConn
 }
 
 export function syncRaCaInstance(id: number | string): Promise<Result<RaCaSyncResult>> {
-  return request({ url: '/ra/v1/init/sync-ca', method: 'post', data: { caInstanceId: id } }) as any;
+  return request({ url: `/ra/v1/ca-instances/${id}/sync`, method: 'post' }) as any;
 }

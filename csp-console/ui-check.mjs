@@ -82,7 +82,7 @@ try {
         body = { initialized, draftVersion, step, agreed: step > 0, attempted: initializationAttempted,
           agreementVersion, companyName: '测试软件权利主体', serviceVersion: 'test-v2', environment: 'test',
           checkedAt: step >= 2 ? new Date().toISOString() : null,
-          accounts: step === 0 ? [] : ['SYSTEM_ADMIN', 'SECURITY_ADMIN', 'AUDIT_ADMIN'].map(role => ({ role, valid: environmentReady })) };
+          accounts: step === 0 ? [] : ['SYSTEM_ADMIN', 'AUDIT_ADMIN'].map(role => ({ role, valid: environmentReady })) };
         if (stateExpired) status = 401;
         if (status !== 200) body = { message: '核验或提交未确认' };
       } else if (action === 'logout') {
@@ -118,7 +118,7 @@ try {
     await page.getByLabel('密码', { exact: true }).fill('Synthetic-password-only');
     await page.getByLabel('图形验证码', { exact: true }).fill('test');
     await page.getByRole('button', { name: '登录', exact: true }).click();
-    await page.getByRole('heading', { name: 'CSP 初始化向导' }).waitFor();
+    await page.getByRole('heading', { name: '安装初始化' }).waitFor();
     assert.equal(new URL(page.url()).pathname, '/csp/setup');
     await page.goto('http://127.0.0.1:5185/csp/overview');
     await expect(page).toHaveURL(/\/csp\/setup$/);
@@ -139,6 +139,14 @@ try {
     await page.getByRole('button', { name: '核验并继续' }).click();
     await expect(page.getByRole('heading', { name: '确认初始化结果' })).toBeVisible();
     assert.equal(await page.getByRole('button', { name: '确认并完成初始化' }).isDisabled(), true);
+    async function fillInstallationPasswords() {
+      for (const [label, password] of [['系统管理员（admin）', 'fixture-admin-password'], ['审计管理员（auditor）', 'fixture-auditor-password']]) {
+        const group = page.getByRole('group', { name: label });
+        await group.getByLabel('新密码', { exact: true }).fill(password);
+        await group.getByLabel('确认新密码', { exact: true }).fill(password);
+      }
+    }
+    await fillInstallationPasswords();
     assert.equal(await page.evaluate(() => localStorage.length + sessionStorage.length), 0);
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
     assert.equal((await page.locator('main').innerText()).includes('租户 10'), false);
@@ -170,6 +178,7 @@ try {
     await loginAgain();
     await expect(page.getByRole('heading', { name: '确认初始化结果' })).toBeVisible();
     await page.getByRole('checkbox').check();
+    await fillInstallationPasswords();
     await page.getByRole('button', { name: '确认并完成初始化' }).dblclick();
     await page.getByRole('heading', { name: '初始化成功，请重新登录' }).waitFor();
     assert.equal(initializeCount, 2);
@@ -184,7 +193,8 @@ try {
     await page.getByRole('heading', { name: '运行总览', exact: true }).waitFor();
     assert.equal(new URL(page.url()).pathname, '/csp/overview');
     await page.goto('http://127.0.0.1:5185/csp/setup');
-    await expect(page).toHaveURL(/\/csp\/overview$/);
+    await expect(page.getByRole('heading', { name: 'CSP 已完成初始化' })).toBeVisible();
+    await page.goto('http://127.0.0.1:5185/csp/overview');
     await page.reload();
     await expect(page.getByRole('heading', { name: '运行总览', exact: true })).toBeVisible();
     await page.goto('http://127.0.0.1:5185/csp/not-open');

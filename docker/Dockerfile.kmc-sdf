@@ -1,0 +1,16 @@
+ARG SDF_BASE_IMAGE=pki-ui-kmc:3.0.5-sdf-20261102
+FROM ${SDF_BASE_IMAGE}
+
+ARG IMAGE_VERSION
+ARG IMAGE_REVISION
+
+# 保留 SDF 镜像的网关模板和入口；完整替换静态文件，避免旧资源混入。
+RUN test -n "$IMAGE_VERSION" && test -n "$IMAGE_REVISION" && \
+    find /usr/share/nginx/html -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+COPY html/ /usr/share/nginx/html/
+
+LABEL org.opencontainers.image.version="$IMAGE_VERSION" \
+      org.opencontainers.image.revision="$IMAGE_REVISION"
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD wget -q -O /dev/null http://127.0.0.1/healthz || exit 1

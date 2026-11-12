@@ -110,14 +110,20 @@
               ></el-button>
               <template #dropdown>
                 <el-dropdown-menu>
-                  <el-dropdown-item v-if="scope.row.defaultForApply !== 1" v-hasPermi="['ra:ca:default']" command="default"
+                  <el-dropdown-item
+                    v-if="scope.row.status === 'ACTIVE' && scope.row.defaultForApply !== 1"
+                    v-hasPermi="['ra:ca:default']"
+                    command="default"
                     >设为默认</el-dropdown-item
                   >
                   <el-dropdown-item v-if="scope.row.status !== 'ACTIVE'" v-hasPermi="['ra:ca:status']" command="ACTIVE">恢复正常</el-dropdown-item>
-                  <el-dropdown-item v-if="scope.row.status === 'ACTIVE'" v-hasPermi="['ra:ca:status']" command="SUSPENDED"
+                  <el-dropdown-item
+                    v-if="scope.row.status === 'ACTIVE' && scope.row.defaultForApply !== 1"
+                    v-hasPermi="['ra:ca:status']"
+                    command="SUSPENDED"
                     >暂停新业务</el-dropdown-item
                   >
-                  <el-dropdown-item v-if="scope.row.status !== 'RETIRED'" v-hasPermi="['ra:ca:status']" command="RETIRED">退役</el-dropdown-item>
+                  <el-dropdown-item v-if="scope.row.status === 'SUSPENDED'" v-hasPermi="['ra:ca:status']" command="RETIRED">退役</el-dropdown-item>
                   <el-dropdown-item v-hasPermi="['ra:ca:remove']" divided command="remove">删除</el-dropdown-item>
                 </el-dropdown-menu>
               </template>
@@ -154,15 +160,6 @@
               </el-select>
             </el-form-item>
           </el-col>
-          <el-col :span="12">
-            <el-form-item label="业务状态" prop="status">
-              <el-select v-model="instanceForm.status" style="width: 100%">
-                <el-option label="正常" value="ACTIVE" />
-                <el-option label="暂停新业务" value="SUSPENDED" />
-                <el-option label="已退役" value="RETIRED" />
-              </el-select>
-            </el-form-item>
-          </el-col>
         </el-row>
         <el-form-item label="请求者名称"><el-input v-model="instanceForm.requestorName" placeholder="CA侧登记的RA请求者名称" /></el-form-item>
         <el-row :gutter="16">
@@ -179,10 +176,13 @@
             </el-form-item>
           </el-col>
         </el-row>
-        <el-form-item label="设为默认">
-          <el-switch v-model="instanceForm.defaultForApply" :active-value="1" :inactive-value="0" />
-          <span class="hint">默认CA必须处于正常状态</span>
-        </el-form-item>
+        <el-alert
+          v-if="!instanceForm.id"
+          title="新增后处于暂停新业务状态。通过连接测试并同步根证书和模板后，可在操作菜单中启用。"
+          type="info"
+          :closable="false"
+          show-icon
+        />
       </el-form>
       <template #footer>
         <el-button @click="instanceDialog.visible = false">取消</el-button>
@@ -242,7 +242,7 @@ const defaultInstance = (): RaCaInstance => ({
   name: '',
   baseUrl: '',
   mode: 'external',
-  status: 'ACTIVE',
+  status: 'SUSPENDED',
   defaultForApply: 0,
   requestorName: '',
   connectTimeoutMs: 5000,
@@ -261,8 +261,7 @@ const instanceRules: FormRules = {
     { required: true, message: 'CA服务地址不能为空', trigger: 'blur' },
     { pattern: urlRule, message: '请输入有效的HTTP/HTTPS地址', trigger: 'blur' }
   ],
-  mode: [{ required: true, message: '请选择接入模式', trigger: 'change' }],
-  status: [{ required: true, message: '请选择业务状态', trigger: 'change' }]
+  mode: [{ required: true, message: '请选择接入模式', trigger: 'change' }]
 };
 const unwrap = (response: any) => {
   const body = response?.data ?? response;
@@ -291,7 +290,7 @@ function resetQuery() {
 }
 
 function handleAdd() {
-  Object.assign(instanceForm, defaultInstance());
+  Object.assign(instanceForm, defaultInstance(), { id: undefined });
   instanceDialog.title = '新增CA实例';
   instanceDialog.visible = true;
   instanceFormRef.value?.clearValidate();
@@ -309,10 +308,12 @@ async function submitInstance() {
   await instanceFormRef.value?.validate();
   saving.value = true;
   try {
-    if (instanceForm.id) {
-      await modifyRaCaInstance({ ...instanceForm });
+    const { id, code, name, baseUrl, mode, requestorName, connectTimeoutMs, readTimeoutMs } = instanceForm;
+    const configuration = { code, name, baseUrl, mode, requestorName, connectTimeoutMs, readTimeoutMs };
+    if (id) {
+      await modifyRaCaInstance({ id, ...configuration });
     } else {
-      await saveRaCaInstance({ ...instanceForm });
+      await saveRaCaInstance(configuration);
     }
     ElMessage.success('保存成功');
     instanceDialog.visible = false;
@@ -362,7 +363,9 @@ async function handleCommand(command: string, row: RaCaInstance) {
   } else {
     const status = command as RaCaStatus;
     const action = status === 'ACTIVE' ? '恢复正常' : status === 'SUSPENDED' ? '暂停新业务' : '退役';
-    await ElMessageBox.confirm(`确认将“${row.name}”${action}？`, '修改CA状态', { type: 'warning' });
+    const impact =
+      status === 'RETIRED' ? '退役后停止办理该 CA 的存量证书操作。' : status === 'SUSPENDED' ? '暂停后仍可办理该 CA 的存量证书操作。' : '';
+    await ElMessageBox.confirm(`确认将“${row.name}”${action}？${impact}`, '修改CA状态', { type: 'warning' });
     await updateRaCaInstanceStatus(row.id!, status);
     ElMessage.success('状态已更新');
   }
