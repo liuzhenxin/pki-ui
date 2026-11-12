@@ -35,3 +35,7 @@ components.d.ts
 # CSP 最小控制台编译产物
 dist-csp-console/
 dist-csp/
+
+# 构建与测试产物
+/target/
+/test-results/
