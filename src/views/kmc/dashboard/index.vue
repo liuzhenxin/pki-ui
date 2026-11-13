@@ -115,9 +115,6 @@
           <template #header>
             <div class="card-header">
               <span>系统健康事件</span>
-              <el-button v-if="systemHealth.cryptoProviderStatus !== 'SOFTWARE'" link type="primary" @click="deviceDrawerVisible = true">
-                数盾设备详情
-              </el-button>
             </div>
           </template>
           <el-timeline size="small" class="health-timeline">
@@ -128,49 +125,6 @@
         </el-card>
       </el-col>
     </el-row>
-
-    <el-drawer v-model="deviceDrawerVisible" title="数盾密码机状态" size="480px">
-      <el-alert
-        :title="deviceStatus.message || '尚未获取设备状态'"
-        :type="deviceStatus.status === 'UP' ? 'success' : 'error'"
-        :closable="false"
-        show-icon
-        class="mb20"
-      />
-      <el-descriptions :column="1" border>
-        <el-descriptions-item label="运行状态">
-          <el-tag :type="deviceStatus.status === 'UP' ? 'success' : 'danger'">
-            {{ deviceStatus.status === 'UP' ? '正常' : '不可用' }}
-          </el-tag>
-        </el-descriptions-item>
-        <el-descriptions-item label="逻辑设备">{{ deviceStatus.deviceId || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="厂商 / Provider"> {{ deviceStatus.vendor || '-' }} / {{ deviceStatus.provider || '-' }} </el-descriptions-item>
-        <el-descriptions-item label="设备名称">{{ deviceStatus.deviceName || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="设备序列号">{{ deviceStatus.maskedSerial || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="设备 / 标准版本">
-          {{ deviceStatus.deviceVersion || '-' }} / {{ deviceStatus.standardVersion || '-' }}
-        </el-descriptions-item>
-        <el-descriptions-item label="算法能力">
-          <el-space wrap>
-            <el-tag v-for="algorithm in deviceStatus.algorithms || []" :key="algorithm" size="small">
-              {{ algorithm }}
-            </el-tag>
-          </el-space>
-        </el-descriptions-item>
-        <el-descriptions-item label="SDF会话">
-          {{ deviceStatus.availableSessions ?? 0 }} / {{ deviceStatus.sessionPoolSize ?? 0 }} 可用
-        </el-descriptions-item>
-        <el-descriptions-item label="借用超时">{{ deviceStatus.borrowTimeoutMs ?? '-' }} ms</el-descriptions-item>
-        <el-descriptions-item label="探测延迟">{{ deviceStatus.latencyMs ?? '-' }} ms</el-descriptions-item>
-        <el-descriptions-item label="最近成功">{{ formatDeviceTime(deviceStatus.lastSuccessAt) }}</el-descriptions-item>
-        <el-descriptions-item v-if="deviceStatus.errorCategory" label="错误分类">
-          {{ deviceStatus.errorCategory }}
-        </el-descriptions-item>
-      </el-descriptions>
-      <template #footer>
-        <el-button :loading="deviceRefreshing" @click="refreshDeviceStatus">重新探测</el-button>
-      </template>
-    </el-drawer>
   </div>
 </template>
 
@@ -179,7 +133,6 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import * as echarts from 'echarts';
 import { Coin, Connection, Key, Refresh, TrendCharts, Warning } from '@element-plus/icons-vue';
 import { getKmcDashboardStats } from '@/api/kmc/dashboard';
-import { getCryptoDeviceStatus, type CryptoDeviceStatus } from '@/api/kmc/cryptoDevice';
 import { unwrapKmcData } from '@/api/kmc/common';
 
 interface PoolStats {
@@ -194,9 +147,6 @@ interface PoolStats {
 
 const loading = ref(false);
 const stats = ref<any>({});
-const deviceStatus = ref<Partial<CryptoDeviceStatus>>({});
-const deviceDrawerVisible = ref(false);
-const deviceRefreshing = ref(false);
 const algoChartRef = ref<HTMLElement | null>(null);
 let algoChart: echarts.ECharts | null = null;
 
@@ -383,30 +333,12 @@ const renderAlgoChart = () => {
 const loadStats = async () => {
   loading.value = true;
   try {
-    const [dashboardResponse, deviceResponse] = await Promise.all([getKmcDashboardStats(), getCryptoDeviceStatus()]);
-    stats.value = unwrapKmcData(dashboardResponse) ?? {};
-    deviceStatus.value = unwrapKmcData(deviceResponse) ?? {};
+    stats.value = unwrapKmcData(await getKmcDashboardStats()) ?? {};
     await nextTick();
     renderAlgoChart();
   } finally {
     loading.value = false;
   }
-};
-
-const refreshDeviceStatus = async () => {
-  deviceRefreshing.value = true;
-  try {
-    deviceStatus.value = unwrapKmcData(await getCryptoDeviceStatus(true)) ?? {};
-  } finally {
-    deviceRefreshing.value = false;
-  }
-};
-
-const formatDeviceTime = (value?: string) => {
-  if (!value) {
-    return '-';
-  }
-  return new Date(value).toLocaleString();
 };
 
 const handleResize = () => {
@@ -433,10 +365,6 @@ onUnmounted(() => {
   .mt20 {
     margin-top: 20px;
   }
-}
-
-.mb20 {
-  margin-bottom: 20px;
 }
 
 .dashboard-header {
