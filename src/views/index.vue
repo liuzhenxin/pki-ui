@@ -417,7 +417,12 @@
       </el-row>
     </div>
 
-    <el-row v-if="!isLicense && !isNAS && !isCA && !isRA && !isOps && !isKds && !isOCSP" :gutter="20" class="main-content">
+    <el-row
+      v-if="!isLicense && !isNAS && !isCA && !isRA && !isOps && !isKds && !isOCSP"
+      :gutter="20"
+      class="main-content"
+      :class="{ 'kmc-overview': isKMC }"
+    >
       <!-- 左侧：核心功能 -->
       <el-col :xs="24" :sm="24" :lg="16">
         <el-card class="box-card feature-card" shadow="hover">
@@ -429,7 +434,7 @@
           </template>
           <el-row :gutter="20" class="feature-list">
             <template v-if="isKMC">
-              <el-col :span="12">
+              <el-col :xs="24" :sm="12">
                 <ul>
                   <li>
                     <div class="feature-icon">
@@ -460,7 +465,7 @@
                   </li>
                 </ul>
               </el-col>
-              <el-col :span="12">
+              <el-col :xs="24" :sm="12">
                 <ul>
                   <li>
                     <div class="feature-icon">
@@ -1940,6 +1945,20 @@ const handleResize = () => {
     .status-tags {
       .el-tag {
         margin-left: 10px;
+      }
+    }
+  }
+
+  .kmc-overview {
+    row-gap: 20px;
+    margin-bottom: 20px;
+
+    > .el-col {
+      display: flex;
+
+      > .box-card {
+        width: 100%;
+        margin-bottom: 0;
       }
     }
   }
