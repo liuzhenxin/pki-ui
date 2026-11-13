@@ -259,7 +259,7 @@ const healthEvents = computed<Array<{ label: string; type: ElTagType; content: s
   {
     label: systemHealth.value.cryptoProviderStatus === 'SOFTWARE' ? '软件密钥' : 'HSM',
     type: systemHealth.value.hsmStatus === 'UP' ? 'success' : systemHealth.value.hsmStatus === 'DEGRADED' ? 'warning' : 'danger',
-    content: `加密提供方：${systemHealth.value.cryptoProvider || '-'}（${cryptoProviderStatusText(systemHealth.value.cryptoProviderStatus)}）`
+    content: `加密提供方：${cryptoProviderTypeText(systemHealth.value.cryptoProviderStatus)}`
   },
   {
     label: '数据库',
@@ -324,14 +324,14 @@ const keyStoreStatusText = (status?: string) => {
   return map[status || ''] || status || '-';
 };
 
-const cryptoProviderStatusText = (status?: string) => {
+const cryptoProviderTypeText = (status?: string) => {
   const map: Record<string, string> = {
-    HARDWARE: '硬件可用',
-    SOFTWARE: '软件密钥',
-    SOFTWARE_FALLBACK: '软件备用',
-    UNAVAILABLE: '不可用'
+    HARDWARE: '硬件',
+    SOFTWARE: '软件',
+    SOFTWARE_FALLBACK: '软件',
+    UNAVAILABLE: '硬件'
   };
-  return map[status || ''] || status || '-';
+  return map[status || ''] || '-';
 };
 
 const keyStoreIconClass = computed(() => {
