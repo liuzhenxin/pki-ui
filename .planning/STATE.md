@@ -31,5 +31,6 @@
 |---|-------------|------|--------|-----------|
 | 261011-hy4 | 新增 KMS 专属控制台；19 项测试、生产构建与隔离导出验证通过 | 2026-10-11 | 0c23466 | [261011-hy4-add-kms-console](./quick/261011-hy4-add-kms-console/) |
 | 261112-rrw | 优化 KMC 系统配置页响应式布局 | 2026-11-12 | 06c00bb | [261112-rrw-kmc](./quick/261112-rrw-kmc/) |
+| 261113-imv | 修复 KMC 首页卡片底边错位 | 2026-11-13 | 5609573 | [261113-imv-kmc](./quick/261113-imv-kmc/) |
 
-Last activity: 2026-11-12 - Completed quick task 261112-rrw: 优化 KMC 系统配置页响应式布局
+Last activity: 2026-11-13 - Completed quick task 261113-imv: 修复 KMC 首页卡片底边错位
