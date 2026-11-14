@@ -65,7 +65,7 @@
       <div class="help-content">
         <div class="help-item">本页由运维平台统一配置，所有系统控制台登录共用。保存后下一次密码登录按新值执行。</div>
         <div class="help-item">锁定记在 Redis，到期自动解除；也可在用户管理「清除登录锁定」。不会把账号改成禁用。</div>
-        <div class="help-item">关闭验证码后普通用户可不填；超级管理员仍会被要求补验证码（第一次失败后出现输入框）。</div>
+        <div class="help-item">账号密码登录时，RADIUS 双因素生效则验证动态口令，其他情况必须验证图形验证码。</div>
         <div class="help-item">访问令牌时长在重新登录后生效。刷新令牌换发的新 access 仍按认证服务默认 4 小时。</div>
       </div>
     </el-drawer>
@@ -119,12 +119,7 @@ const policySections = [
   {
     key: 'captcha',
     title: '验证码',
-    items: [
-      { key: 'loginCaptchaEnabled', label: '登录启用验证码', type: 'boolean', defaultValue: true },
-      { key: 'captchaExpireSeconds', label: '验证码有效期（秒）', type: 'number', min: 30, max: 600, defaultValue: 120 },
-      { key: 'forceAfterFailures', label: '失败后强制验证码次数', type: 'number', min: 0, max: 20, defaultValue: 2 },
-      { key: 'adminRequired', label: '超级管理员即使关闭验证码也必须校验', type: 'boolean', defaultValue: true }
-    ]
+    items: [{ key: 'captchaExpireSeconds', label: '验证码有效期（秒）', type: 'number', min: 30, max: 600, defaultValue: 120 }]
   },
   {
     key: 'session',
@@ -184,6 +179,8 @@ function buildPolicyContent() {
       content[section.key][item.key] = policyContentModel[section.key]?.[item.key];
     }
   }
+  const saved = parsePolicyContent(form.policyContent);
+  content.captcha = { ...(saved.captcha || saved.captchaPolicy), ...content.captcha };
   return JSON.stringify(content);
 }
 
