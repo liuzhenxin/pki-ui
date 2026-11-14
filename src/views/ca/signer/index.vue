@@ -1,9 +1,9 @@
 <template>
-  <div class="p-2 signer-page">
+  <div class="p-2">
     <transition :enter-active-class="proxy?.animate.searchAnimate.enter" :leave-active-class="proxy?.animate.searchAnimate.leave">
       <div v-show="showSearch" class="mb-10px">
         <el-card shadow="hover">
-          <el-form ref="queryFormRef" :model="queryParams" :inline="true">
+          <el-form ref="queryFormRef" class="ca-search-form" :model="queryParams" inline>
             <el-form-item label="签名者名称" prop="name">
               <el-input v-model="queryParams.name" placeholder="请输入签名者名称" clearable @keyup.enter="handleQuery" />
             </el-form-item>
@@ -17,7 +17,7 @@
                 <el-option v-for="item in categoryOptions" :key="item.value" :label="item.label" :value="item.value" />
               </el-select>
             </el-form-item>
-            <el-form-item>
+            <el-form-item class="ca-search-form__actions">
               <el-button type="primary" icon="Search" @click="handleQuery">搜索</el-button>
               <el-button icon="Refresh" @click="resetQuery">重置</el-button>
             </el-form-item>
@@ -487,12 +487,6 @@ getList();
 
 .mb-10px {
   margin-bottom: 10px;
-}
-
-.signer-page {
-  :deep(.el-form--inline .el-form-item) {
-    margin-right: 14px;
-  }
 }
 
 .signer-dialog {
