@@ -345,7 +345,8 @@ import {
   updateAdminUser as updateUser,
   resetAdminUserPwd as resetUserPwd,
   changeAdminUserStatus as changeStatus,
-  addAdminUser as addUser
+  addAdminUser as addUser,
+  RA_BUSINESS_ROLE_OPTIONS
 } from '@/api/ra/adminUser';
 import { getToken } from '@/utils/auth';
 import { UserForm, UserQuery, UserVO } from '@/api/system/user/types';
@@ -372,12 +373,7 @@ const title = ref('');
 const dateRange = ref<Array<Date | string>>();
 const initPassword = ref<string | undefined>(undefined);
 const isDataLoaded = ref(false);
-const raBizRoleOptions = [
-  { label: '录入员', value: '503' },
-  { label: '审核员', value: '504' },
-  { label: '制证员', value: '505' },
-  { label: '机构（部门）管理员', value: '507' }
-];
+const raBizRoleOptions = RA_BUSINESS_ROLE_OPTIONS.map(({ roleId, roleName }) => ({ label: roleName, value: roleId }));
 const RA_BIZ_ROLE_IDS = raBizRoleOptions.map((role) => role.value);
 const RA_DEFAULT_BIZ_ROLE_IDS = ['503'];
 const ALL_DEPT_ID = '__ALL__';
