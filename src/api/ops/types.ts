@@ -144,9 +144,11 @@ export interface RadiusServerConfig {
   configured?: boolean;
 }
 
+export type RadiusSystemScope = 'CA' | 'KMC' | 'RA' | 'OCSP' | 'OPS';
+
 export interface RadiusConfig {
   enabled: boolean;
-  scopes: Array<'ALL' | 'CA' | 'KMC' | 'RA'>;
+  scopes: Array<'ALL' | RadiusSystemScope>;
   primary: RadiusServerConfig;
   secondary?: RadiusServerConfig;
   nasIdentifier: string;

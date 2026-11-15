@@ -5,12 +5,12 @@ import type { UserPage } from '@/api/system/user';
 import { parseStrEmpty } from '@/utils/ruoyi';
 import { RoleVO } from '@/api/system/role/types';
 import { UserForm, UserInfoVO, UserQuery, UserVO } from '@/api/system/user/types';
+import type { RaUserCertScopeSaveRoot } from './userCertScope';
 
-const ROLE_OPTIONS = [
+export const RA_BUSINESS_ROLE_OPTIONS = [
   { roleId: '503', roleName: '录入员', roleSort: 503 },
   { roleId: '504', roleName: '审核员', roleSort: 504 },
-  { roleId: '505', roleName: '制证员', roleSort: 505 },
-  { roleId: '507', roleName: '机构（部门）管理员', roleSort: 507 }
+  { roleId: '505', roleName: '制证员', roleSort: 505 }
 ];
 
 export const listAdminUser = (query: UserQuery): Promise<Result<UserPage> & UserPage> => {
@@ -73,7 +73,7 @@ export const getAdminUserAuthRole = async (userId: string | number): Promise<any
   const response: any = await getAdminUser(userId);
   const user = response?.data ?? {};
   const selectedRoleIds = new Set((user.roleIds ?? []).map((id: string | number) => String(id)));
-  const roles = ROLE_OPTIONS.map((role) => ({
+  const roles = RA_BUSINESS_ROLE_OPTIONS.map((role) => ({
     ...role,
     roleKey: role.roleId,
     status: '0',
@@ -93,15 +93,10 @@ export const getAdminUserAuthRole = async (userId: string | number): Promise<any
   };
 };
 
-export const updateAdminUserAuthRole = (data: { userId: string; roleIds: string }) => {
+export const updateAdminUserAuthority = (userId: string | number, roleIds: Array<string | number>, roots: RaUserCertScopeSaveRoot[]) => {
   return request({
-    url: '/ra/v1/admin-users/authority',
+    url: '/ra/v1/admin-users/authority-and-scope',
     method: 'put',
-    data: {
-      co: {
-        id: data.userId,
-        roleIds: data.roleIds ? data.roleIds.split(',').filter(Boolean) : []
-      }
-    }
+    data: { co: { id: userId, roleIds }, roots }
   });
 };

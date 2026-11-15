@@ -3,7 +3,7 @@
     <transition :enter-active-class="proxy?.animate.searchAnimate.enter" :leave-active-class="proxy?.animate.searchAnimate.leave">
       <div v-show="showSearch" class="mb-10px">
         <el-card shadow="hover">
-          <el-form ref="queryFormRef" :model="queryParams" :inline="true">
+          <el-form ref="queryFormRef" class="ca-search-form" :model="queryParams" inline>
             <el-form-item label="请求者名称" prop="name">
               <el-input v-model="queryParams.name" placeholder="请输入请求者名称" clearable @keyup.enter="handleQuery" />
             </el-form-item>
@@ -17,7 +17,7 @@
                 <el-option v-for="item in protocolTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
               </el-select>
             </el-form-item>
-            <el-form-item>
+            <el-form-item class="ca-search-form__actions">
               <el-button type="primary" icon="Search" @click="handleQuery">搜索</el-button>
               <el-button icon="Refresh" @click="resetQuery">重置</el-button>
             </el-form-item>

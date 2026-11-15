@@ -3,12 +3,12 @@
     <transition :enter-active-class="proxy?.animate.searchAnimate.enter" :leave-active-class="proxy?.animate.searchAnimate.leave">
       <div v-show="showSearch" class="mb-10px">
         <el-card shadow="hover">
-          <el-form ref="queryFormRef" :model="queryParams" :inline="true">
+          <el-form ref="queryFormRef" class="ca-search-form" :model="queryParams" inline>
             <el-form-item label="发布者名称" prop="name">
               <el-input v-model="queryParams.name" placeholder="请输入发布者名称" clearable @keyup.enter="handleQuery" />
             </el-form-item>
             <el-form-item label="发布者类型" prop="type">
-              <el-select v-model="queryParams.type" placeholder="请选择类型" clearable style="width: 160px">
+              <el-select v-model="queryParams.type" placeholder="请选择类型" clearable>
                 <el-option label="LDAP" value="LDAP" />
                 <el-option label="数据库" value="DATABASE" />
                 <el-option label="文件系统" value="FILE" />
@@ -16,7 +16,7 @@
                 <el-option label="OCSP" value="OCSP" />
               </el-select>
             </el-form-item>
-            <el-form-item label="创建时间" prop="createTime">
+            <el-form-item class="ca-search-form__date-range" label="创建时间" prop="createTime">
               <el-date-picker
                 v-model="queryParams.createTime"
                 type="daterange"
@@ -24,10 +24,9 @@
                 start-placeholder="开始日期"
                 end-placeholder="结束日期"
                 value-format="YYYY-MM-DD"
-                style="width: 260px"
               />
             </el-form-item>
-            <el-form-item>
+            <el-form-item class="ca-search-form__actions">
               <el-button type="primary" icon="Search" @click="handleQuery">搜索</el-button>
               <el-button icon="Refresh" @click="resetQuery">重置</el-button>
             </el-form-item>

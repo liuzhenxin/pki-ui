@@ -102,7 +102,7 @@
       </div>
     </div>
     <div style="text-align: center; margin-left: -120px; margin-top: 30px">
-      <el-button type="primary" :loading="submitting" @click="submitForm()">提交</el-button>
+      <el-button type="primary" :loading="submitting" :disabled="loading || scopeLoading || !form.userId" @click="submitForm()">提交</el-button>
       <el-button @click="close()">返回</el-button>
     </div>
   </div>
@@ -110,9 +110,9 @@
 
 <script setup name="RaAdminAuthRole" lang="ts">
 import { RoleVO } from '@/api/system/role/types';
-import { getAdminUserAuthRole, updateAdminUserAuthRole } from '@/api/ra/adminUser';
+import { getAdminUserAuthRole, updateAdminUserAuthority } from '@/api/ra/adminUser';
 import { UserForm } from '@/api/system/user/types';
-import { getUserCertScopes, listUserCertScopeOptions, saveUserCertScopes } from '@/api/ra/userCertScope';
+import { getUserCertScopes, listUserCertScopeOptions } from '@/api/ra/userCertScope';
 import type { RaUserCertScopeRoot, RaUserCertScopeSaveRoot } from '@/api/ra/userCertScope';
 import { RouteLocationNormalized } from 'vue-router';
 
@@ -139,8 +139,7 @@ const backPath = '/ra-admin/ra-admin-operator';
 /** 单击选中行数据 */
 const clickRow = (row: RoleVO) => {
   if (checkSelectable(row)) {
-    row.flag = !row.flag;
-    tableRef.value?.toggleRowSelection(row, row.flag);
+    tableRef.value?.toggleRowSelection(row, !roleIds.value.includes(row.roleId));
   }
 };
 /** 多选框选中数据 */
@@ -173,12 +172,14 @@ const close = () => {
 /** 提交按钮 */
 const submitForm = async () => {
   const userId = form.value.userId;
-  if (!userId || submitting.value) return;
+  if (!userId || loading.value || scopeLoading.value || submitting.value) return;
+  if (!roleIds.value.length) {
+    proxy?.$modal.msgWarning('请至少选择一个业务角色');
+    return;
+  }
   submitting.value = true;
   try {
-    const rIds = roleIds.value.join(',');
-    await updateAdminUserAuthRole({ userId: userId as string, roleIds: rIds });
-    await saveUserCertScopes(userId, buildScopePayload());
+    await updateAdminUserAuthority(userId, roleIds.value, buildScopePayload());
     proxy?.$modal.msgSuccess('授权成功');
     close();
   } finally {

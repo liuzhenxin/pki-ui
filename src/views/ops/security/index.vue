@@ -27,22 +27,25 @@
         <el-switch v-model="form.enabled" inline-prompt active-text="启用" inactive-text="关闭" />
       </section>
 
-      <section class="settings-band">
+      <section class="settings-band scope-band" aria-labelledby="radius-scope-title">
         <div class="section-title">
-          <h3>生效范围</h3>
+          <h3 id="radius-scope-title">生效范围</h3>
           <el-tag v-if="form.tested" type="success" effect="plain">已完成测试</el-tag>
           <el-tag v-else type="warning" effect="plain">启用前需测试</el-tag>
         </div>
-        <el-form-item prop="scopes">
-          <el-radio-group v-model="scopeMode" @change="changeScopeMode">
-            <el-radio-button value="ALL">全部服务</el-radio-button>
-            <el-radio-button value="CUSTOM">指定系统</el-radio-button>
-          </el-radio-group>
-          <el-checkbox-group v-if="scopeMode === 'CUSTOM'" v-model="form.scopes" class="scope-options">
-            <el-checkbox value="CA">CA</el-checkbox>
-            <el-checkbox value="KMC">KMC</el-checkbox>
-            <el-checkbox value="RA">RA</el-checkbox>
-          </el-checkbox-group>
+        <el-form-item prop="scopes" class="scope-field">
+          <div class="scope-controls">
+            <el-radio-group v-model="scopeMode" aria-label="RADIUS 生效范围" @change="changeScopeMode">
+              <el-radio-button value="ALL">全部服务</el-radio-button>
+              <el-radio-button value="CUSTOM">指定系统</el-radio-button>
+            </el-radio-group>
+            <el-checkbox-group v-if="scopeMode === 'CUSTOM'" v-model="form.scopes" class="scope-options" aria-label="选择启用 RADIUS 的系统">
+              <el-checkbox v-for="system in scopeSystems" :key="system.code" :value="system.code" border>
+                <span class="scope-system-code">{{ system.code }}</span>
+                <span class="scope-system-name">{{ system.name }}</span>
+              </el-checkbox>
+            </el-checkbox-group>
+          </div>
         </el-form-item>
       </section>
 
@@ -147,11 +150,19 @@
 <script setup name="OpsSecurity" lang="ts">
 import type { FormInstance, FormRules } from 'element-plus';
 import { getRadiusConfig, saveRadiusConfig, testRadiusAuthentication } from '@/api/ops';
-import type { RadiusConfig } from '@/api/ops/types';
+import type { RadiusConfig, RadiusSystemScope } from '@/api/ops/types';
 import { configPayload } from '@/utils/configPayload';
 import SyslogConfigPane from './SyslogConfigPane.vue';
 import MenuDisplayConfigPane from './MenuDisplayConfigPane.vue';
 import AccessControlPane from './AccessControlPane.vue';
+
+const scopeSystems: { code: RadiusSystemScope; name: string }[] = [
+  { code: 'CA', name: '证书认证中心' },
+  { code: 'KMC', name: '密钥管理中心' },
+  { code: 'RA', name: '注册认证中心' },
+  { code: 'OCSP', name: '在线证书状态服务' },
+  { code: 'OPS', name: '平台运维中心' }
+];
 
 const defaultConfig = (): RadiusConfig => ({
   enabled: false,
@@ -308,6 +319,10 @@ onMounted(load);
   background: #fff;
 }
 
+.security-tabs :deep(.el-tabs__header) {
+  margin-bottom: 0;
+}
+
 .page-header {
   display: flex;
   align-items: center;
@@ -375,8 +390,64 @@ onMounted(load);
   margin-bottom: 0;
 }
 
+.scope-band .section-title {
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.scope-field {
+  margin-bottom: 0;
+}
+
+.scope-field.is-error {
+  margin-bottom: 12px;
+}
+
+.scope-controls {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  gap: 12px;
+}
+
 .scope-options {
-  margin-top: 14px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 148px), 1fr));
+  gap: 10px;
+}
+
+.scope-options :deep(.el-checkbox.is-bordered) {
+  height: auto;
+  min-height: 56px;
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+}
+
+.scope-options :deep(.el-checkbox.is-checked) {
+  background: var(--el-color-primary-light-9);
+}
+
+.scope-options :deep(.el-checkbox:focus-within) {
+  outline: 2px solid var(--el-color-primary);
+  outline-offset: 2px;
+}
+
+.scope-options :deep(.el-checkbox__label) {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+  white-space: normal;
+}
+
+.scope-system-code {
+  color: var(--el-text-color-primary);
+  font-weight: 600;
+}
+
+.scope-system-name {
+  color: var(--el-text-color-regular);
+  font-size: 12px;
 }
 
 .server-grid,
@@ -430,6 +501,11 @@ onMounted(load);
 @media (max-width: 680px) {
   .security-page {
     padding: 12px;
+  }
+
+  .settings-band,
+  .security-tabs {
+    padding-inline: 16px;
   }
 
   .page-header,
