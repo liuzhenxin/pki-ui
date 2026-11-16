@@ -37,9 +37,9 @@ export interface RaUserCertScopeDetail {
   roots: RaUserCertScopeSaveRoot[];
 }
 
-export function listUserCertScopeOptions(): Promise<Result<RaUserCertScopeRoot[]>> {
+export function listUserCertScopeOptions(userId?: string | number): Promise<Result<RaUserCertScopeRoot[]>> {
   return request({
-    url: '/ra/v1/user-cert-scopes/options',
+    url: userId == null ? '/ra/v1/user-cert-scopes/options' : `/ra/v1/user-cert-scopes/options/${userId}`,
     method: 'get'
   }) as any;
 }
@@ -64,4 +64,12 @@ export function saveUserCertScopes(userId: string | number, roots: RaUserCertSco
     method: 'put',
     data: { roots }
   }) as any;
+}
+
+export function getOrganizationCertScopes(deptId: string | number): Promise<Result<RaUserCertScopeSaveRoot[]>> {
+  return request({ url: `/ra/v1/user-cert-scopes/organization/${deptId}`, method: 'get' }) as any;
+}
+
+export function saveOrganizationCertScopes(deptId: string | number, roots: RaUserCertScopeSaveRoot[]): Promise<Result<void>> {
+  return request({ url: `/ra/v1/user-cert-scopes/organization/${deptId}`, method: 'put', data: { roots } }) as any;
 }

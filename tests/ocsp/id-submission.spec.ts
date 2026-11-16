@@ -80,6 +80,33 @@ describe('real OCSP ID submission handlers', () => {
     const source = readFileSync(new URL('../../src/views/ocsp/ca-source/index.vue', import.meta.url), 'utf8');
     expect(source).not.toContain('旧数据源');
   });
+  it('finds service CAs by certificate subject and full ID and keeps the enabled version visible', async () => {
+    const certificate = vi.spyOn(presentation, 'summarizeOcspCertificate');
+    certificate.mockReturnValueOnce({ state: '有效期内', subject: '/CN=测试签发 CA', issuer: '-', serial: '-', algorithm: '-', validity: '-' });
+    try {
+      const rows = [
+        { caId: largeId, version: 3, publishedVersion: 2 },
+        { caId: '42', version: 1 },
+        { caId: '43', version: 5, verifiedVersion: '5', publishedVersion: 4 },
+        { caId: '44', version: 6, publishedVersion: '6' }
+      ];
+      const page = loadSetup('views/ocsp/ca-source/index.vue', { listServiceCaDrafts: vi.fn().mockResolvedValue(rows) });
+      await page.refresh();
+      page.caSearch.value = ' 测试签发 ca ';
+      expect(page.filteredRows.value.map(({ caId }) => caId)).toEqual([largeId]);
+      page.caSearch.value = largeId;
+      expect(page.filteredRows.value[0].publishedVersion).toBe(2);
+      expect(page.managedStatus(rows[0])).toBe('已启用，有未发布草稿');
+      expect(rows.map(page.managedAction)).toEqual(['继续配置', '继续配置', '启用已验证草稿', '查看配置']);
+      page.openWizard(largeId);
+      expect(page.wizardCaId.value).toBe(largeId);
+      page.caSearch.value = '找不到';
+      expect(page.filteredRows.value).toEqual([]);
+    } finally {
+      certificate.mockRestore();
+    }
+  });
+
   it('clears stale service CA drafts when refresh fails', async () => {
     const listServiceCaDrafts = vi
       .fn()
@@ -203,6 +230,55 @@ describe('OCSP loading failures and recovery', () => {
     expect(page.alertsError.value).toBe(false);
     expect(page.cards.value[0].value).toBe(0);
   });
+  it('loads named issuing CA options, deduplicates IDs and submits the selected ID intact', async () => {
+    const listServiceCaDrafts = vi.fn().mockResolvedValue([{ caId: largeId }]);
+    const listOcspCaStatusSources = vi.fn().mockResolvedValue([{ caId: largeId }, { caId: Number(largeId) }]);
+    const pageOcspResponders = vi.fn().mockResolvedValue({ records: [{ caId: largeId }], total: 1 });
+    const listOcspIssuerCerts = vi.fn().mockResolvedValue([{ subjectDn: 'CN=签发 CA', enabled: true }]);
+    const queryOcspCertStatus = vi.fn().mockResolvedValue({ status: 'GOOD' });
+    const page = loadSetup('views/ocsp/status/index.vue', {
+      listServiceCaDrafts,
+      listOcspCaStatusSources,
+      pageOcspResponders,
+      listOcspIssuerCerts,
+      queryOcspCertStatus
+    });
+    expect(page.form.caId).toBe('');
+    await page.loadCaOptions();
+    expect(listOcspIssuerCerts).toHaveBeenCalledExactlyOnceWith(largeId);
+    expect(page.caOptions.value).toEqual([{ id: largeId, label: `CN=签发 CA · ${largeId}` }]);
+    const source = readFileSync(new URL('../../src/views/ocsp/status/index.vue', import.meta.url), 'utf8');
+    expect(source).toMatch(/<el-select[\s\S]*?filterable/);
+    expect(source).toContain(':label="ca.label"');
+    page.form.caId = largeId;
+    page.form.serialNumber = ' ab ';
+    await page.queryStatus();
+    expect(queryOcspCertStatus).toHaveBeenCalledWith({ caId: largeId, serialNumber: 'ab', bypassCache: false });
+  });
+
+  it('keeps manual lookup available if CA lists fail and requires an explicit ID', async () => {
+    const unavailable = vi.fn().mockRejectedValue(new Error('unavailable'));
+    const queryOcspCertStatus = vi.fn().mockResolvedValue({ status: 'UNKNOWN' });
+    const page = loadSetup('views/ocsp/status/index.vue', {
+      listServiceCaDrafts: unavailable,
+      listOcspCaStatusSources: unavailable,
+      pageOcspResponders: unavailable,
+      queryOcspCertStatus
+    });
+    await page.loadCaOptions();
+    expect(page.caLoadError.value).toBe(true);
+    page.form.serialNumber = 'ab';
+    await page.queryStatus();
+    expect(queryOcspCertStatus).not.toHaveBeenCalled();
+    page.toggleManualEntry();
+    expect(page.manualEntry.value).toBe(true);
+    page.form.caId = '9223372036854775807';
+    await page.queryStatus();
+    expect(queryOcspCertStatus).toHaveBeenCalledWith({ caId: '9223372036854775807', serialNumber: 'ab', bypassCache: false });
+    page.toggleManualEntry();
+    expect(page.form.caId).toBe('');
+  });
+
   it('distinguishes a failed status query from a real UNKNOWN certificate result', async () => {
     const queryOcspCertStatus = vi.fn().mockRejectedValueOnce(new Error('unavailable')).mockResolvedValueOnce({ status: 'UNKNOWN' });
     const page = loadSetup('views/ocsp/status/index.vue', { queryOcspCertStatus });

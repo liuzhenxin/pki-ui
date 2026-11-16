@@ -1,3 +1,7 @@
+import { cspProduct } from '@/config/csp';
+import { isUcspProduct, ucspName } from '@/config/ucsp';
+import { useCspConsoleStore } from '@/store/modules/cspConsole';
+import { getUcspInitStatus } from '@/api/ucsp/init';
 import { getKmsInitialization } from '@/api/kms/initialization';
 import { kmsInitializationRedirect } from '@/utils/kmsInitializationRoute';
 import { getSvsInitialization } from '@/api/svs/init';
@@ -17,6 +21,14 @@ import setting from '@/settings';
 
 NProgress.configure({ showSpinner: false });
 const whiteList = ['/login', '/register', '/social-callback', '/register*', '/register/*', '/ra-public-cert', '/ra-public-cert*'];
+const ucspInitPath = '/ucsp/setup';
+let ucspRoutesToken: string | undefined;
+let removeUcspRoutes: Array<() => void> = [];
+const resetUcspRoutes = () => {
+  removeUcspRoutes.forEach((remove) => remove());
+  removeUcspRoutes = [];
+  ucspRoutesToken = undefined;
+};
 const caInitPath = '/ca/setup';
 const licenseInitPath = '/license/setup';
 const kmcInitPath = '/kmc/setup';
@@ -50,7 +62,16 @@ const getCurrentInitPath = () => {
 };
 
 const isInitRoute = (path: string) =>
-  path === '/kms/init' || path === '/svs/init' || path === caInitPath || path === licenseInitPath || path === kmcInitPath || path === raInitPath || path === ocspInitPath || path.includes('/setup');
+  path === '/kms/init' ||
+  path === '/svs/init' ||
+  path === caInitPath ||
+  path === licenseInitPath ||
+  path === kmcInitPath ||
+  path === raInitPath ||
+  path === ocspInitPath ||
+  path.includes('/setup');
+
+const isDeploymentInitializedProduct = () => ['1', '100'].includes(String(getCurrentTenantId()));
 
 const isTenantInitialized = (status: unknown) => Number(status) === -1;
 
@@ -73,9 +94,8 @@ const getTenantAppTitle = (tenantName: string, tenantId: string, longName = fals
   if (tenantId === '6') {
     return `${tenantName} (${longName ? '在线证书状态服务' : 'OCSP'})`;
   }
-  if (tenantId === '10') {
-    return `${tenantName} (${longName ? 'NAS网络存储管理系统' : 'NAS'})`;
-  }
+  if (tenantId === cspProduct.tenantId) return isUcspProduct ? ucspName : cspProduct.name;
+  if (tenantId === '20') return `${tenantName} (${longName ? 'NAS网络存储管理系统' : 'NAS'})`;
   if (tenantId === '7') return `${tenantName} (${longName ? '服务器密码机' : 'HSM'})`;
   if (tenantId === '9') return `${tenantName} (${longName ? '签名验签服务器' : 'SVS'})`;
   if (tenantId === '21') {
@@ -103,11 +123,15 @@ const syncTenantContext = async () => {
 };
 
 const ensureTenantBoundary = async (path: string) => {
+  if (isDeploymentInitializedProduct()) return isInitRoute(path) ? '/' : '';
   // HSM 初始化由独立状态接口管理，平台租户状态不决定设备就绪。
   if (String(getCurrentTenantId()) === '7') return '';
   if (String(getCurrentTenantId()) === '2') {
-    try { return kmsInitializationRedirect((await getKmsInitialization()).locked, path); }
-    catch { return path === '/kms/init' ? '' : '/kms/init'; }
+    try {
+      return kmsInitializationRedirect((await getKmsInitialization()).locked, path);
+    } catch {
+      return path === '/kms/init' ? '' : '/kms/init';
+    }
   }
   if (getCurrentTenantId() === '9') {
     const state = await getSvsInitialization();
@@ -140,6 +164,61 @@ router.beforeEach(async (to, from, next) => {
       NProgress.done();
     } else if (isWhiteList(to.path)) {
       next();
+    } else if (isUcspProduct) {
+      try {
+        const status = await getUcspInitStatus();
+        if (!status.initialized) {
+          resetUcspRoutes();
+          if (to.path === ucspInitPath) next();
+          else next({ path: ucspInitPath, replace: true });
+          return;
+        }
+        const session = getToken();
+        const userStore = useUserStore();
+        if (ucspRoutesToken !== session) {
+          resetUcspRoutes();
+          await userStore.getInfo();
+          userStore.setTenantInitStatus(-1);
+          const routes = await usePermissionStore().generateRoutes();
+          routes.forEach((route) => {
+            if (!isHttp(route.path)) removeUcspRoutes.push(router.addRoute(route));
+          });
+          ucspRoutesToken = session;
+          next({ path: to.path === ucspInitPath ? '/' : to.path, query: to.query, hash: to.hash, replace: true });
+        } else if (to.path === ucspInitPath) {
+          next({ path: '/', replace: true });
+        } else if (to.path === '/' || to.path === '/index') {
+          if (userStore.permissions.includes('ucsp:tsa:read')) {
+            next();
+            return;
+          }
+          const landing = userStore.permissions.includes('csp:auditor:manage')
+            ? '/ucsp-audit/auditors'
+            : userStore.permissions.includes('sys:login-log:page')
+              ? '/ucsp-audit/login-logs'
+              : '/user/profile';
+          next({ path: landing, replace: true });
+        } else {
+          next();
+        }
+      } catch {
+        // Keep normal routes closed until the installation state can be verified.
+        if (to.path === ucspInitPath) next();
+        else next({ path: ucspInitPath, replace: true });
+      }
+    } else if (!isUcspProduct && String(getCurrentTenantId()) === cspProduct.tenantId) {
+      useSettingsStore().setAppTitle(cspProduct.name);
+      const csp = useCspConsoleStore();
+      await csp.restore();
+      if (!getToken()) {
+        next({ path: '/login', query: { redirect: to.fullPath }, replace: true });
+      } else if (csp.allows(to.path)) {
+        next();
+      } else {
+        next({ path: csp.destination, replace: true });
+      }
+    } else if (to.path.startsWith('/csp/')) {
+      next({ path: '/', replace: true });
     } else {
       if (useUserStore().permissions.length === 0) {
         isRelogin.show = true;
@@ -161,8 +240,10 @@ router.beforeEach(async (to, from, next) => {
           const res = await syncTenantContext();
           const kmsTenant = String(getCurrentTenantId()) === '2';
           const kmsBoundary = kmsTenant ? await ensureTenantBoundary(to.path) : '';
-          const tenantInitialized = kmsTenant ? kmsBoundary !== '/kms/init' && (to.path !== '/kms/init' || kmsBoundary === '/index') : String(getCurrentTenantId()) === '7' || isTenantInitialized(res?.data?.status);
-          if (res?.data && !tenantInitialized) {
+          const tenantInitialized = kmsTenant
+            ? kmsBoundary !== '/kms/init' && (to.path !== '/kms/init' || kmsBoundary === '/index')
+            : isDeploymentInitializedProduct() || String(getCurrentTenantId()) === '7' || isTenantInitialized(res?.data?.status);
+          if (!isUcspProduct && res?.data && !tenantInitialized) {
             const accessRoutes = await usePermissionStore().generateInitRoutes();
             accessRoutes.forEach((route) => {
               if (!isHttp(route.path)) {
@@ -195,6 +276,7 @@ router.beforeEach(async (to, from, next) => {
   } else {
     // 没有token
     if (isWhiteList(to.path)) {
+      resetUcspRoutes();
       resetSessionGuard();
       // 在免登录白名单，直接进入, 并且获取租户信息, 如果有租户id
       const tenantId = localStorage.getItem('tenantId');

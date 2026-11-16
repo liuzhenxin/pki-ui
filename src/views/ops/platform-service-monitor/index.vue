@@ -24,7 +24,7 @@
           <el-descriptions-item label="状态说明" :span="2">{{ component.container?.status || '-' }}</el-descriptions-item>
           <el-descriptions-item label="依赖服务" :span="2">
             <el-tag v-for="dependency in component.dependencies" :key="dependency" class="dependency" size="small" effect="plain">
-              {{ dependency }}
+              {{ dependencyLabel(dependency, overview) }}
             </el-tag>
             <span v-if="!component.dependencies?.length">无</span>
           </el-descriptions-item>
@@ -37,7 +37,7 @@
 <script setup name="OpsPlatformServiceMonitor" lang="ts">
 import { getOpsOverview } from '@/api/ops';
 import type { OpsComponent, OpsOverview } from '@/api/ops/types';
-import { dateTimeText, statusTagType, statusText } from '@/views/ops/utils';
+import { dateTimeText, dependencyLabel, statusTagType, statusText } from '@/views/ops/utils';
 
 const route = useRoute();
 const loading = ref(false);

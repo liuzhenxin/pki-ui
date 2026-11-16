@@ -105,39 +105,41 @@
             </el-table-column>
             <el-table-column label="操作" min-width="230" fixed="right">
               <template #default="{ row }">
-                <el-button link type="primary" @click="openDetail(row)">详情</el-button>
-                <el-button v-hasPermi="['ops:container:logs']" link @click="openLogs(row)">日志</el-button>
-                <el-button
-                  v-if="!row.running && manageable(row)"
-                  v-hasPermi="['ops:container:start']"
-                  link
-                  type="success"
-                  @click="confirmAction(row, 'START')"
-                  >启动</el-button
-                >
-                <el-button
-                  v-if="row.running && manageable(row)"
-                  v-hasPermi="['ops:container:stop']"
-                  link
-                  type="danger"
-                  @click="confirmAction(row, 'STOP')"
-                  >停止</el-button
-                >
-                <el-button
-                  v-if="row.running && manageable(row)"
-                  v-hasPermi="['ops:container:restart']"
-                  link
-                  type="warning"
-                  @click="confirmAction(row, 'RESTART')"
-                  >重启</el-button
-                >
-                <el-tooltip v-if="manageable(row)" :content="disabledReason(row)" :disabled="canUpgrade(row)">
-                  <span
-                    ><el-button v-hasPermi="['ops:container:upgrade']" link type="primary" :disabled="!canUpgrade(row)" @click="openUpgrade(row)"
-                      >升级</el-button
-                    ></span
+                <div class="container-actions">
+                  <el-button link type="primary" @click="openDetail(row)">详情</el-button>
+                  <el-button v-hasPermi="['ops:container:logs']" link @click="openLogs(row)">日志</el-button>
+                  <el-button
+                    v-if="!row.running && manageable(row)"
+                    v-hasPermi="['ops:container:start']"
+                    link
+                    type="success"
+                    @click="confirmAction(row, 'START')"
+                    >启动</el-button
                   >
-                </el-tooltip>
+                  <el-button
+                    v-if="row.running && manageable(row)"
+                    v-hasPermi="['ops:container:stop']"
+                    link
+                    type="danger"
+                    @click="confirmAction(row, 'STOP')"
+                    >停止</el-button
+                  >
+                  <el-button
+                    v-if="row.running && manageable(row)"
+                    v-hasPermi="['ops:container:restart']"
+                    link
+                    type="warning"
+                    @click="confirmAction(row, 'RESTART')"
+                    >重启</el-button
+                  >
+                  <el-tooltip
+                    v-if="manageable(row) && checkPermi(['ops:container:upgrade'])"
+                    :content="disabledReason(row)"
+                    :disabled="canUpgrade(row)"
+                  >
+                    <span><el-button link type="primary" :disabled="!canUpgrade(row)" @click="openUpgrade(row)">升级</el-button></span>
+                  </el-tooltip>
+                </div>
               </template>
             </el-table-column>
           </el-table>
@@ -189,39 +191,37 @@
           >
           <el-table-column label="操作" width="300" fixed="right">
             <template #default="{ row }">
-              <el-button link type="primary" @click="openDetail(row)">详情</el-button>
-              <el-button v-hasPermi="['ops:container:logs']" link @click="openLogs(row)">日志</el-button>
-              <el-button
-                v-if="!row.running && manageable(row)"
-                v-hasPermi="['ops:container:start']"
-                link
-                type="success"
-                @click="confirmAction(row, 'START')"
-                >启动</el-button
-              >
-              <el-button
-                v-if="row.running && manageable(row)"
-                v-hasPermi="['ops:container:stop']"
-                link
-                type="danger"
-                @click="confirmAction(row, 'STOP')"
-                >停止</el-button
-              >
-              <el-button
-                v-if="row.running && manageable(row)"
-                v-hasPermi="['ops:container:restart']"
-                link
-                type="warning"
-                @click="confirmAction(row, 'RESTART')"
-                >重启</el-button
-              >
-              <el-tooltip v-if="manageable(row)" :content="disabledReason(row)" :disabled="canUpgrade(row)"
-                ><span
-                  ><el-button v-hasPermi="['ops:container:upgrade']" link type="primary" :disabled="!canUpgrade(row)" @click="openUpgrade(row)"
-                    >升级</el-button
-                  ></span
-                ></el-tooltip
-              >
+              <div class="container-actions">
+                <el-button link type="primary" @click="openDetail(row)">详情</el-button>
+                <el-button v-hasPermi="['ops:container:logs']" link @click="openLogs(row)">日志</el-button>
+                <el-button
+                  v-if="!row.running && manageable(row)"
+                  v-hasPermi="['ops:container:start']"
+                  link
+                  type="success"
+                  @click="confirmAction(row, 'START')"
+                  >启动</el-button
+                >
+                <el-button
+                  v-if="row.running && manageable(row)"
+                  v-hasPermi="['ops:container:stop']"
+                  link
+                  type="danger"
+                  @click="confirmAction(row, 'STOP')"
+                  >停止</el-button
+                >
+                <el-button
+                  v-if="row.running && manageable(row)"
+                  v-hasPermi="['ops:container:restart']"
+                  link
+                  type="warning"
+                  @click="confirmAction(row, 'RESTART')"
+                  >重启</el-button
+                >
+                <el-tooltip v-if="manageable(row) && checkPermi(['ops:container:upgrade'])" :content="disabledReason(row)" :disabled="canUpgrade(row)"
+                  ><span><el-button link type="primary" :disabled="!canUpgrade(row)" @click="openUpgrade(row)">升级</el-button></span></el-tooltip
+                >
+              </div>
             </template>
           </el-table-column>
         </el-table>
@@ -717,6 +717,15 @@ code {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+.container-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+.container-actions :deep(.el-button + .el-button) {
+  margin-left: 0;
 }
 .layer-list {
   min-height: 120px;

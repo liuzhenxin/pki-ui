@@ -19,6 +19,7 @@
 </template>
 
 <script setup lang="ts">
+import { isUcspProduct, ucspName } from '@/config/ucsp';
 import variables from '@/assets/styles/variables.module.scss';
 import { useSettingsStore } from '@/store/modules/settings';
 import { useUserStore } from '@/store/modules/user';
@@ -56,7 +57,7 @@ function syncLogoText(tenantId?: string | number | null) {
   } else if (idStr === '3') {
     logoText.value = 'KMC';
   } else if (idStr === '10') {
-    logoText.value = 'NAS';
+    logoText.value = isUcspProduct ? 'UCSP' : 'NAS';
   } else if (idStr === '5') {
     logoText.value = 'RA';
   } else if (idStr === '21' || route.path.startsWith('/kds')) {
@@ -100,7 +101,7 @@ onMounted(() => {
         } else if (idStr === '3') {
           title.value = 'KMC密钥管理中心';
         } else if (idStr === '10') {
-          title.value = 'NAS网络存储管理系统';
+          title.value = isUcspProduct ? ucspName : 'NAS网络存储管理系统';
         } else if (idStr === '5') {
           title.value = 'RA注册认证系统';
         } else if (idStr === '4') {

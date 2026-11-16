@@ -2,6 +2,29 @@
   <div class="ops-alert-page">
     <el-card shadow="never">
       <el-tabs v-model="activeTab">
+        <el-tab-pane v-for="tab in incidentTabs" :key="tab.name" :label="tab.label" :name="tab.name">
+          <template v-if="activeTab === tab.name">
+            <el-alert v-if="!incidentEnabled" title="告警实例功能未启用" type="info" :closable="false" />
+            <template v-else>
+              <el-button :loading="loading" @click="loadIncidents">刷新</el-button>
+              <el-table :data="incidents" v-loading="loading">
+                <el-table-column prop="title" label="告警" min-width="180" />
+                <el-table-column prop="objectKey" label="对象" min-width="130" />
+                <el-table-column label="首次发生" min-width="170">
+                  <template #default="{ row }">{{ dateTimeText(row.openedAt) }}</template>
+                </el-table-column>
+                <el-table-column label="状态" width="110">
+                  <template #default="{ row }">{{ row.recoveredAt ? '已恢复' : row.acknowledgedAt ? '已确认' : '待确认' }}</template>
+                </el-table-column>
+                <el-table-column label="操作" width="90">
+                  <template #default="{ row }"><el-button link type="primary" @click="openIncident(row.id)">详情</el-button></template>
+                </el-table-column>
+              </el-table>
+              <el-button :disabled="incidentOffset === 0 || loading" @click="changeIncidentPage(-50)">上一页</el-button>
+              <el-button :disabled="incidents.length < 50 || loading" @click="changeIncidentPage(50)">下一页</el-button>
+            </template>
+          </template>
+        </el-tab-pane>
         <el-tab-pane label="通知渠道" name="channels">
           <div class="toolbar">
             <el-button type="primary" icon="Plus" @click="openChannelDialog()">新建渠道</el-button>
@@ -18,7 +41,7 @@
               </template>
             </el-table-column>
             <el-table-column label="Token" min-width="180" show-overflow-tooltip>
-              <template #default="{ row }">{{ mask(row.accessToken) }}</template>
+              <template #default="{ row }">{{ row.accessToken || '未配置' }}</template>
             </el-table-column>
             <el-table-column label="备注" prop="remark" min-width="160" />
             <el-table-column label="操作" width="220" fixed="right">
@@ -29,6 +52,10 @@
               </template>
             </el-table-column>
           </el-table>
+        </el-tab-pane>
+
+        <el-tab-pane label="邮件渠道" name="mail">
+          <MailChannelPane v-if="activeTab === 'mail'" />
         </el-tab-pane>
 
         <el-tab-pane label="告警规则" name="rules">
@@ -82,12 +109,34 @@
       </el-tabs>
     </el-card>
 
+    <el-drawer v-model="incidentVisible" title="告警详情" size="min(520px, 100vw)">
+      <template v-if="incident">
+        <h3>{{ incident.title }}</h3>
+        <p>{{ incident.objectKey }} · {{ incident.occurrences }} 次异常观测</p>
+        <el-timeline>
+          <el-timeline-item :timestamp="dateTimeText(incident.openedAt)">首次发生</el-timeline-item>
+          <el-timeline-item :timestamp="dateTimeText(incident.lastSeenAt)">最近异常</el-timeline-item>
+          <el-timeline-item v-if="incident.acknowledgedAt" :timestamp="dateTimeText(incident.acknowledgedAt)">
+            {{ incident.acknowledgedBy }} 已确认
+          </el-timeline-item>
+          <el-timeline-item v-if="incident.recoveredAt" :timestamp="dateTimeText(incident.recoveredAt)">已恢复</el-timeline-item>
+        </el-timeline>
+        <el-button v-if="!incident.acknowledgedAt && !incident.recoveredAt" type="primary" :loading="acknowledging" @click="acknowledgeIncident">
+          确认告警
+        </el-button>
+      </template>
+    </el-drawer>
+
     <el-dialog v-model="channelVisible" :title="channelForm.id ? '编辑渠道' : '新建渠道'" width="520px">
       <el-form :model="channelForm" label-width="90px">
         <el-form-item label="名称" required><el-input v-model="channelForm.name" /></el-form-item>
         <el-form-item label="启用"><el-switch v-model="channelForm.enabled" /></el-form-item>
-        <el-form-item label="Access Token"><el-input v-model="channelForm.accessToken" type="textarea" :rows="2" /></el-form-item>
-        <el-form-item label="加签 Secret"><el-input v-model="channelForm.secret" type="password" show-password /></el-form-item>
+        <el-form-item label="Access Token"
+          ><el-input v-model="channelForm.accessToken" type="password" autocomplete="new-password" placeholder="编辑时留空保留原值"
+        /></el-form-item>
+        <el-form-item label="加签 Secret"
+          ><el-input v-model="channelForm.secret" type="password" autocomplete="new-password" placeholder="编辑时留空保留原值"
+        /></el-form-item>
         <el-form-item label="备注"><el-input v-model="channelForm.remark" /></el-form-item>
       </el-form>
       <template #footer>
@@ -122,8 +171,15 @@
 </template>
 
 <script setup name="OpsAlertCenter" lang="ts">
+import MailChannelPane from './MailChannelPane.vue';
+import type { AlertIncident } from '@/api/ops';
+import { dateTimeText } from '@/views/ops/utils';
+import { useRoute } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import {
+  acknowledgeAlertIncident,
+  getAlertIncident,
+  getAlertIncidents,
   createAlertChannel,
   createAlertRule,
   deleteAlertChannel,
@@ -137,7 +193,54 @@ import {
 } from '@/api/ops';
 import type { AlertChannel, AlertChannelSave, AlertDispatchResult, AlertEventLog, AlertRule, AlertRuleSave } from '@/api/ops/types';
 
-const activeTab = ref('channels');
+const incidentTabs = [
+  { label: '当前告警', name: 'current' },
+  { label: '告警历史', name: 'history' }
+];
+const activeTab = ref('current');
+const route = useRoute();
+const incidents = ref<AlertIncident[]>([]);
+const incident = ref<AlertIncident>();
+const incidentEnabled = ref(true);
+const incidentVisible = ref(false);
+const acknowledging = ref(false);
+const incidentOffset = ref(0);
+const loadIncidents = async () => {
+  loading.value = true;
+  try {
+    const page = await getAlertIncidents(activeTab.value === 'history', incidentOffset.value);
+    incidents.value = page.items;
+    incidentEnabled.value = page.enabled;
+  } finally {
+    loading.value = false;
+  }
+};
+const changeIncidentPage = (step: number) => {
+  incidentOffset.value += step;
+  return loadIncidents();
+};
+const openIncident = async (id: string) => {
+  incident.value = await getAlertIncident(id);
+  incidentVisible.value = true;
+};
+const acknowledgeIncident = async () => {
+  if (!incident.value) return;
+  acknowledging.value = true;
+  try {
+    await acknowledgeAlertIncident(incident.value.id);
+    await openIncident(incident.value.id);
+    await loadIncidents();
+  } finally {
+    acknowledging.value = false;
+  }
+};
+watch(
+  () => route.query.incident,
+  (id) => {
+    if (typeof id === 'string' && /^\d+$/.test(id)) void openIncident(id);
+  },
+  { immediate: true }
+);
 const loading = ref(false);
 const channels = ref<AlertChannel[]>([]);
 const rules = ref<AlertRule[]>([]);
@@ -156,8 +259,6 @@ const ruleForm = reactive<AlertRuleSave & { id?: number }>({
   enabled: true,
   cooldownSeconds: 900
 });
-
-const mask = (token?: string) => (token && token.length > 10 ? `${token.slice(0, 6)}…${token.slice(-4)}` : token || '-');
 
 const loadChannels = async () => {
   loading.value = true;
@@ -187,7 +288,11 @@ const loadLogs = async () => {
 watch(activeTab, (tab) => {
   if (tab === 'channels') loadChannels();
   else if (tab === 'rules') loadRules();
-  else loadLogs();
+  else if (tab === 'logs') loadLogs();
+  else {
+    incidentOffset.value = 0;
+    loadIncidents();
+  }
 });
 watch(ruleServiceFilter, () => loadRules());
 
@@ -195,7 +300,7 @@ const openChannelDialog = (row?: AlertChannel) => {
   Object.assign(
     channelForm,
     row
-      ? { id: row.id, name: row.name, enabled: row.enabled, accessToken: row.accessToken || '', secret: row.secret || '', remark: row.remark || '' }
+      ? { id: row.id, name: row.name, enabled: row.enabled, accessToken: '', secret: '', remark: row.remark || '' }
       : { id: undefined, name: '', enabled: true, accessToken: '', secret: '', remark: '' }
   );
   channelVisible.value = true;
@@ -220,8 +325,6 @@ const persistChannel = async (row: AlertChannel) => {
   await updateAlertChannel(row.id, {
     name: row.name,
     enabled: row.enabled,
-    accessToken: row.accessToken || '',
-    secret: row.secret || '',
     remark: row.remark || ''
   });
   ElMessage.success('已更新');
@@ -289,7 +392,7 @@ const handleDeleteRule = async (row: AlertRule) => {
   await loadRules();
 };
 
-onMounted(loadChannels);
+onMounted(loadIncidents);
 </script>
 
 <style scoped lang="scss">

@@ -29,6 +29,8 @@ import type { Result } from '@/api/types';
 const gatewayBaseURL = import.meta.env.VITE_APP_BASE_API.replace(/\/$/, '');
 const baseURL = import.meta.env.VITE_APP_OPS_API || `${gatewayBaseURL}/ops`;
 
+export { baseURL as opsApiBaseURL };
+
 export function getOpsOverview(): Promise<OpsOverview> {
   return request({
     baseURL,
@@ -206,11 +208,11 @@ export function getAlertChannels(): Promise<AlertChannel[]> {
 }
 
 export function createAlertChannel(data: AlertChannelSave): Promise<AlertChannel> {
-  return request({ baseURL, url: '/v1/alert/channels', method: 'post', data }) as any;
+  return request({ baseURL, url: '/v1/alert/channels', method: 'post', headers: { sensitive: true, repeatSubmit: false }, data }) as any;
 }
 
 export function updateAlertChannel(id: number, data: AlertChannelSave): Promise<AlertChannel> {
-  return request({ baseURL, url: `/v1/alert/channels/${id}`, method: 'put', data }) as any;
+  return request({ baseURL, url: `/v1/alert/channels/${id}`, method: 'put', headers: { sensitive: true, repeatSubmit: false }, data }) as any;
 }
 
 export function deleteAlertChannel(id: number): Promise<void> {
@@ -239,4 +241,34 @@ export function deleteAlertRule(id: number): Promise<void> {
 
 export function getAlertEventLogs(limit = 100): Promise<AlertEventLog[]> {
   return request({ baseURL, url: '/v1/alert/logs', method: 'get', params: { limit } }) as any;
+}
+
+export interface AlertIncident {
+  id: string;
+  source: string;
+  objectKey: string;
+  title: string;
+  openedAt: string;
+  lastSeenAt: string;
+  acknowledgedAt?: string;
+  acknowledgedBy?: string;
+  recoveredAt?: string;
+  occurrences: number;
+}
+
+export function getAlertIncidents(recovered = false, offset = 0, limit = 50): Promise<{ enabled: boolean; items: AlertIncident[] }> {
+  return request<unknown, { enabled: boolean; items: AlertIncident[] }>({
+    baseURL,
+    url: '/v1/alert/incidents',
+    method: 'get',
+    params: { recovered, offset, limit }
+  });
+}
+
+export function getAlertIncident(id: string): Promise<AlertIncident> {
+  return request<unknown, AlertIncident>({ baseURL, url: `/v1/alert/incidents/${id}`, method: 'get' });
+}
+
+export function acknowledgeAlertIncident(id: string) {
+  return request({ baseURL, url: `/v1/alert/incidents/${id}/acknowledgements`, method: 'post' });
 }

@@ -1,9 +1,9 @@
 <template>
-  <div class="ops-page">
+  <div class="ops-page" :class="{ 'ops-page-embedded': embedded }">
     <div class="ops-toolbar">
       <div>
-        <h2>平台运维中心</h2>
-        <span>系统资源监控面板 · 最近采集时间：{{ dateTimeText(overview?.collectedAt) }}</span>
+        <h2>运行总览</h2>
+        <span>最近采集时间：{{ dateTimeText(overview?.collectedAt) }}</span>
       </div>
       <el-button class="ops-refresh-btn" type="primary" icon="Refresh" :loading="loading" @click="loadData">刷新数据</el-button>
     </div>
@@ -22,8 +22,8 @@
       </div>
     </div>
 
-    <el-row :gutter="12">
-      <el-col :xs="24" :lg="16">
+    <div class="ops-dashboard-grid">
+      <section class="ops-component-panel" aria-label="平台组件与容器监控">
         <el-card shadow="never" class="ops-panel">
           <template #header>
             <div class="ops-panel-header">
@@ -37,39 +37,67 @@
             </div>
           </template>
           <el-skeleton :loading="loading" animated :rows="8">
-            <el-tabs v-model="activeLayerTab" class="ops-layer-tabs">
-              <el-tab-pane v-for="layer in overview?.layers || []" :key="layer.code" :name="layer.code">
-                <template #label>
-                  <span class="ops-tab-label">
-                    <span>{{ layer.name }}</span>
-                    <b>{{ layer.components.length }}</b>
-                  </span>
-                </template>
-                <div class="ops-tab-summary">
-                  <span>{{ layer.name }}</span>
-                  <small>{{ layer.components.length }} 个组件</small>
-                </div>
+            <el-select
+              v-if="overview?.layers?.length || unboundContainers.length"
+              v-model="activeLayerTab"
+              class="ops-layer-select"
+              aria-label="组件分层"
+              placeholder="选择组件分层"
+            >
+              <el-option
+                v-for="layer in overview?.layers || []"
+                :key="layer.code"
+                :label="`${layer.name}（${layer.components.length}）`"
+                :value="layer.code"
+              />
+              <el-option v-if="unboundContainers.length" :label="`未归属容器（${unboundContainers.length}）`" value="__unbound_containers" />
+            </el-select>
+            <template v-for="layer in overview?.layers || []" :key="layer.code">
+              <template v-if="activeLayerTab === layer.code">
                 <div class="ops-component-grid">
                   <div
-                    v-for="component in layer.components"
+                    v-for="component in layer.components.map(withSelectedAgent)"
                     :key="component.name"
                     class="ops-component"
                     role="button"
                     tabindex="0"
                     @click="openComponentDetail(component)"
-                    @keydown.enter.prevent="openComponentDetail(component)"
+                    @keydown.enter.self.prevent="openComponentDetail(component)"
                   >
                     <div class="ops-component-main">
                       <b>{{ component.displayName }}</b>
-                      <span>{{ component.name }}</span>
+                      <span v-if="layer.code === 'infrastructure'">{{ componentDeploymentText(component) }} · {{ component.name }}</span>
+                      <span v-else>{{ component.name }}</span>
                     </div>
-                    <el-tag
-                      :type="statusTagType(component.container?.state, component.container?.running, component.container?.present)"
-                      effect="plain"
-                    >
-                      {{ statusText(component.container?.state, component.container?.running, component.container?.present) }}
+                    <div v-if="component.name === agentName" @click.stop @keydown.stop>
+                      <el-select
+                        v-if="agentContainers.length > 1 || (agentContainers.length === 1 && !selectedAgent)"
+                        :model-value="selectedAgent?.serverCode || ''"
+                        @update:model-value="agentServerCode = $event"
+                        aria-label="Agent 所在节点"
+                        placeholder="选择 Agent 所在节点"
+                        size="small"
+                        class="ops-agent-node-select"
+                      >
+                        <el-option
+                          v-for="agent in agentContainers"
+                          :key="agent.serverCode"
+                          :label="agentNodeLabel(agent)"
+                          :value="agent.serverCode"
+                        />
+                      </el-select>
+                      <span v-else>所在节点：{{ selectedAgent ? agentNodeLabel(selectedAgent) : '未发现节点' }}</span>
+                    </div>
+                    <el-tag :type="componentStatusTagType(component)" effect="plain">
+                      {{ componentStatusText(component) }}
                     </el-tag>
-                    <div class="ops-container-inline">
+                    <div v-if="component.deployment === 'EXTERNAL'" class="ops-container-inline">
+                      <div>
+                        <span>检查:</span>
+                        <b :title="component.availability?.detail">{{ component.availability?.detail || '等待首次检查' }}</b>
+                      </div>
+                    </div>
+                    <div v-else class="ops-container-inline">
                       <div>
                         <span>ID:</span>
                         <b>{{ shortContainerId(component.container?.containerId) }}</b>
@@ -88,13 +116,17 @@
                         </b>
                       </div>
                     </div>
-                    <div class="ops-deps" v-if="component.dependencies?.length">依赖：{{ component.dependencies.join(' / ') }}</div>
-                    <div class="ops-card-actions">
+                    <div v-if="component.dependencies?.length" class="ops-deps">
+                      依赖：{{ component.dependencies.map((dependency) => dependencyLabel(dependency, overview)).join(' / ') }}
+                    </div>
+                    <div v-if="component.deployment !== 'EXTERNAL'" class="ops-card-actions">
                       <el-button
                         class="ops-log-btn ops-card-log-btn"
                         icon="Document"
                         size="small"
-                        :disabled="!component.container?.present || !findServerByContainerName(component.container?.name)"
+                        :disabled="
+                          !component.container?.present || (component.name !== agentName && !findServerByContainerName(component.container?.name))
+                        "
                         @click.stop="openLogsForComponent(component)"
                       >
                         查看日志
@@ -103,65 +135,55 @@
                   </div>
                   <el-empty v-if="layer.components.length === 0" description="暂无组件配置" />
                 </div>
-              </el-tab-pane>
-              <el-tab-pane v-if="unboundContainers.length > 0" name="__unbound_containers">
-                <template #label>
-                  <span class="ops-tab-label">
-                    <span>未归属容器</span>
-                    <b>{{ unboundContainers.length }}</b>
-                  </span>
-                </template>
-                <div class="ops-tab-summary">
-                  <span>未归属 Docker 容器</span>
-                  <small>{{ unboundContainers.length }} 个容器</small>
-                </div>
-                <div class="ops-container-grid compact">
-                  <div
-                    v-for="container in unboundContainers"
-                    :key="`${container.serverCode}-${container.name}-${container.containerId}`"
-                    class="ops-container-card"
-                    role="button"
-                    tabindex="0"
-                    @click="openContainerDetail(container)"
-                    @keydown.enter.prevent="openContainerDetail(container)"
-                  >
-                    <div class="ops-container-title">
-                      <el-icon><Box /></el-icon>
-                      <b>{{ container.name }}</b>
-                    </div>
-                    <div class="ops-container-detail">
-                      <span>ID:</span>
-                      <b>{{ shortContainerId(container.containerId) }}</b>
-                    </div>
-                    <div class="ops-container-detail">
-                      <span>状态:</span>
-                      <b>{{ container.status || statusText(container.state, container.running, container.present) }}</b>
-                    </div>
-                    <div class="ops-container-detail">
-                      <span>镜像:</span>
-                      <b>{{ container.image || '-' }}</b>
-                    </div>
-                    <div class="ops-card-actions">
-                      <el-button
-                        class="ops-log-btn ops-card-log-btn"
-                        icon="Document"
-                        size="small"
-                        :disabled="!container.serverCode"
-                        @click.stop="openLogsForContainer(container)"
-                      >
-                        查看日志
-                      </el-button>
-                    </div>
+              </template>
+            </template>
+            <template v-if="activeLayerTab === '__unbound_containers'">
+              <div class="ops-container-grid compact">
+                <div
+                  v-for="container in unboundContainers"
+                  :key="`${container.serverCode}-${container.name}-${container.containerId}`"
+                  class="ops-container-card"
+                  role="button"
+                  tabindex="0"
+                  @click="openContainerDetail(container)"
+                  @keydown.enter.prevent="openContainerDetail(container)"
+                >
+                  <div class="ops-container-title">
+                    <el-icon><Box /></el-icon>
+                    <b>{{ container.name }}</b>
+                  </div>
+                  <div class="ops-container-detail">
+                    <span>ID:</span>
+                    <b>{{ shortContainerId(container.containerId) }}</b>
+                  </div>
+                  <div class="ops-container-detail">
+                    <span>状态:</span>
+                    <b>{{ container.status || statusText(container.state, container.running, container.present) }}</b>
+                  </div>
+                  <div class="ops-container-detail">
+                    <span>镜像:</span>
+                    <b>{{ container.image || '-' }}</b>
+                  </div>
+                  <div class="ops-card-actions">
+                    <el-button
+                      class="ops-log-btn ops-card-log-btn"
+                      icon="Document"
+                      size="small"
+                      :disabled="!container.serverCode"
+                      @click.stop="openLogsForContainer(container)"
+                    >
+                      查看日志
+                    </el-button>
                   </div>
                 </div>
-              </el-tab-pane>
-              <el-empty v-if="!loading && !overview?.layers?.length && unboundContainers.length === 0" description="暂无组件与容器数据" />
-            </el-tabs>
+              </div>
+            </template>
+            <el-empty v-if="!overview?.layers?.length && !unboundContainers.length" description="暂无组件与容器数据" />
           </el-skeleton>
         </el-card>
-      </el-col>
+      </section>
 
-      <el-col :xs="24" :lg="8">
+      <aside class="ops-dashboard-aside" aria-label="告警与服务器状态">
         <el-card shadow="never" class="ops-panel">
           <template #header>
             <div class="ops-panel-header">
@@ -171,10 +193,16 @@
           </template>
           <el-skeleton :loading="loading" animated :rows="4">
             <div v-if="currentAlerts.length > 0" class="ops-alert-list">
-              <button v-for="alert in currentAlerts" :key="alert.name" class="ops-alert-item" type="button" @click="openAlertDetail(alert.name)">
+              <button
+                v-for="alert in currentAlerts"
+                :key="alert.id || alert.name"
+                class="ops-alert-item"
+                type="button"
+                @click="openAlertDetail(alert.name, alert.id)"
+              >
                 <div>
                   <b>{{ alert.displayName }}</b>
-                  <span>{{ alert.name }}</span>
+                  <span>{{ alert.source }} · {{ alert.name }}</span>
                 </div>
                 <el-tag type="danger" effect="plain">{{ alert.reason }}</el-tag>
               </button>
@@ -191,7 +219,7 @@
             </div>
           </template>
           <el-table v-loading="loading" :data="servers" size="small" max-height="360">
-            <el-table-column label="服务器" min-width="150" show-overflow-tooltip>
+            <el-table-column label="服务器" min-width="112" show-overflow-tooltip>
               <template #default="{ row }">
                 <div class="ops-table-main">
                   <b>{{ row.name }}</b>
@@ -199,60 +227,56 @@
                 </div>
               </template>
             </el-table-column>
-            <el-table-column label="状态" width="90" align="center">
+            <el-table-column label="状态" width="76" align="center">
               <template #default="{ row }">
                 <el-tag :type="statusTagType(row.status, row.online)" effect="plain">{{ statusText(row.status, row.online) }}</el-tag>
               </template>
             </el-table-column>
-            <el-table-column label="容器" width="80" align="center" prop="runningContainerCount" />
+            <el-table-column label="容器" width="56" align="center" prop="runningContainerCount" />
           </el-table>
         </el-card>
+      </aside>
 
-        <el-card shadow="never" class="ops-panel">
-          <template #header>
-            <div class="ops-panel-header">
-              <span>资源水位</span>
-            </div>
-          </template>
-          <div class="ops-resource-list">
-            <div v-for="server in servers" :key="server.code" class="ops-resource">
-              <div class="ops-resource-title">
-                <span>{{ server.name }}</span>
-                <small>{{ server.host }}</small>
-              </div>
-              <div class="ops-progress-row">
-                <span>CPU</span>
-                <el-progress :percentage="safePercent(server.cpuUsage)" :stroke-width="8" />
-              </div>
-              <div class="ops-progress-row">
-                <span>内存</span>
-                <el-progress
-                  :percentage="safePercent(server.memoryUsage)"
-                  :stroke-width="8"
-                  :status="server.memoryUsage && server.memoryUsage > 90 ? 'exception' : undefined"
-                />
-              </div>
-              <div class="ops-progress-row">
-                <span>磁盘</span>
-                <el-progress :percentage="safePercent(server.diskUsage)" :stroke-width="8" />
-              </div>
-            </div>
-            <el-empty v-if="!loading && servers.length === 0" description="暂无服务器上报" />
+      <el-card shadow="never" class="ops-panel ops-resources-panel">
+        <template #header>
+          <div class="ops-panel-header">
+            <span>服务器资源水位</span>
           </div>
-        </el-card>
-      </el-col>
-    </el-row>
+        </template>
+        <div class="ops-resource-list">
+          <div v-for="server in servers" :key="server.code" class="ops-resource">
+            <div class="ops-resource-title">
+              <span>{{ server.name }}</span>
+              <small>{{ server.host }}</small>
+            </div>
+            <div class="ops-progress-row">
+              <span>CPU</span>
+              <el-progress :percentage="safePercent(server.cpuUsage)" :stroke-width="8" />
+            </div>
+            <div class="ops-progress-row">
+              <span>内存</span>
+              <el-progress
+                :percentage="safePercent(server.memoryUsage)"
+                :stroke-width="8"
+                :status="server.memoryUsage && server.memoryUsage > 90 ? 'exception' : undefined"
+              />
+            </div>
+            <div class="ops-progress-row">
+              <span>磁盘</span>
+              <el-progress :percentage="safePercent(server.diskUsage)" :stroke-width="8" />
+            </div>
+          </div>
+          <el-empty v-if="!loading && servers.length === 0" description="暂无服务器上报" />
+        </div>
+      </el-card>
+    </div>
 
     <el-drawer v-model="detailDrawerVisible" :size="drawerSize" destroy-on-close>
       <template #header>
         <div class="ops-drawer-title">
           <span>{{ selectedComponent?.displayName || '组件详情' }}</span>
-          <el-tag
-            v-if="selectedComponent"
-            :type="statusTagType(selectedComponent.container?.state, selectedComponent.container?.running, selectedComponent.container?.present)"
-            effect="plain"
-          >
-            {{ statusText(selectedComponent.container?.state, selectedComponent.container?.running, selectedComponent.container?.present) }}
+          <el-tag v-if="selectedComponent" :type="componentStatusTagType(selectedComponent)" effect="plain">
+            {{ componentStatusText(selectedComponent) }}
           </el-tag>
         </div>
       </template>
@@ -261,22 +285,29 @@
         <el-descriptions :column="1" border>
           <el-descriptions-item label="组件编码">{{ selectedComponent.name }}</el-descriptions-item>
           <el-descriptions-item label="所属层级">{{ selectedComponent.layerName || selectedComponent.layer }}</el-descriptions-item>
+          <el-descriptions-item label="部署方式">{{ componentDeploymentText(selectedComponent) }}</el-descriptions-item>
           <el-descriptions-item label="依赖组件">
             <div v-if="selectedComponent.dependencies?.length" class="ops-detail-tags">
               <el-tag v-for="dependency in selectedComponent.dependencies" :key="dependency" effect="plain">
-                {{ dependency }}
+                {{ dependencyLabel(dependency, overview) }}
               </el-tag>
             </div>
             <span v-else>无</span>
           </el-descriptions-item>
-          <el-descriptions-item label="容器名称">{{ selectedComponent.container?.name || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="容器 ID">{{ selectedComponent.container?.containerId || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="镜像">{{ selectedComponent.container?.image || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="容器状态">
-            {{ selectedComponent.container?.status || selectedComponent.container?.state || '-' }}
-          </el-descriptions-item>
-          <el-descriptions-item label="端口">{{ selectedComponent.container?.ports || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="所在服务器">{{ selectedServerText }}</el-descriptions-item>
+          <template v-if="selectedComponent.deployment === 'EXTERNAL'">
+            <el-descriptions-item label="检查结果">{{ selectedComponent.availability?.detail || '等待首次检查' }}</el-descriptions-item>
+            <el-descriptions-item label="最近检查">{{ dateTimeText(selectedComponent.availability?.checkedAt) }}</el-descriptions-item>
+          </template>
+          <template v-else>
+            <el-descriptions-item label="容器名称">{{ selectedComponent.container?.name || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="容器 ID">{{ selectedComponent.container?.containerId || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="镜像">{{ selectedComponent.container?.image || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="容器状态">
+              {{ selectedComponent.container?.status || selectedComponent.container?.state || '-' }}
+            </el-descriptions-item>
+            <el-descriptions-item label="端口">{{ selectedComponent.container?.ports || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="所在服务器">{{ selectedServerText }}</el-descriptions-item>
+          </template>
         </el-descriptions>
       </div>
     </el-drawer>
@@ -332,9 +363,26 @@
 </template>
 
 <script setup name="OpsOverview" lang="ts">
-import { getOpsContainerLogs, getOpsContainers, getOpsOverview, getOpsServers } from '@/api/ops';
+import { getAlertIncidents, getOpsContainerLogs, getOpsContainers, getOpsOverview, getOpsServers } from '@/api/ops';
+import type { AlertIncident } from '@/api/ops';
+import { useRouter } from 'vue-router';
 import type { OpsComponent, OpsContainer, OpsContainerLogs, OpsOverview, OpsServer, OpsSummary } from '@/api/ops/types';
-import { buildSummary, collectContainers, dateTimeText, flattenComponents, statusTagType, statusText } from '@/views/ops/utils';
+import {
+  buildSummary,
+  collectContainers,
+  componentDeploymentText,
+  componentStatusTagType,
+  componentStatusText,
+  dateTimeText,
+  dependencyLabel,
+  flattenComponents,
+  findOverviewAgent,
+  isComponentAbnormal,
+  statusTagType,
+  statusText
+} from '@/views/ops/utils';
+
+defineProps<{ embedded?: boolean }>();
 
 type OpsContainerWithServer = OpsContainer & {
   serverCode?: string;
@@ -343,6 +391,8 @@ type OpsContainerWithServer = OpsContainer & {
 };
 
 const loading = ref(false);
+const router = useRouter();
+const trackedAlerts = ref<AlertIncident[]>();
 const overview = ref<OpsOverview>();
 const servers = ref<OpsServer[]>([]);
 const containers = ref<OpsContainer[]>([]);
@@ -356,10 +406,21 @@ const selectedLogsContainer = ref<OpsContainerWithServer | undefined>();
 const containerLogs = ref<OpsContainerLogs>();
 const activeLayerTab = ref('');
 const logsTail = 200;
+let logsRequestId = 0;
+const agentName = 'pki-ops-agent';
+const agentServerCode = ref('');
 
 const summary = computed<OpsSummary>(() => buildSummary(overview.value, servers.value, containers.value));
 const components = computed(() => flattenComponents(overview.value));
 const allContainers = computed<OpsContainerWithServer[]>(() => collectContainers(servers.value, containers.value));
+const agentContainers = computed(() =>
+  allContainers.value.filter((container) => container.name === agentName && container.present && container.serverCode !== '-')
+);
+const selectedAgent = computed(() => findOverviewAgent(agentContainers.value, agentServerCode.value));
+const agentNodeLabel = (agent: OpsContainerWithServer) =>
+  agent.serverHost && agent.serverHost !== agent.serverCode ? `${agent.serverCode}（${agent.serverHost}）` : agent.serverCode;
+const withSelectedAgent = (component: OpsComponent): OpsComponent =>
+  component.name === agentName ? { ...component, container: selectedAgent.value } : component;
 const componentContainerNames = computed(() => new Set(components.value.map((component) => component.container?.name).filter(Boolean)));
 const unboundContainers = computed(() =>
   allContainers.value.filter((container) => container.name && !componentContainerNames.value.has(container.name))
@@ -376,16 +437,21 @@ const overallStatus = computed(() => {
   }
   return 'UP';
 });
-const currentAlerts = computed(() =>
-  components.value
-    .filter((component) => !component.container?.running)
-    .map((component) => ({
+const currentAlerts = computed(
+  () =>
+    trackedAlerts.value?.map((alert) => ({
+      id: alert.id,
+      name: alert.objectKey,
+      displayName: alert.title,
+      source: alert.source === 'KMC_HSM' ? '密码机' : '组件监控',
+      reason: alert.acknowledgedAt ? '已确认' : '待确认'
+    })) ??
+    components.value.filter(isComponentAbnormal).map((component) => ({
+      id: undefined,
       name: component.name,
       displayName: component.displayName,
-      reason:
-        component.container?.present === false
-          ? '未发现'
-          : statusText(component.container?.state, component.container?.running, component.container?.present)
+      source: componentDeploymentText(component),
+      reason: componentStatusText(component)
     }))
 );
 const findServerByContainerName = (containerName?: string) => {
@@ -399,6 +465,9 @@ const selectedServer = computed(() => {
   return findServerByContainerName(containerName);
 });
 const selectedServerText = computed(() => {
+  if (selectedComponent.value?.name === agentName) {
+    return selectedAgent.value ? agentNodeLabel(selectedAgent.value) : '-';
+  }
   if (!selectedServer.value) {
     return '-';
   }
@@ -436,7 +505,11 @@ const openComponentDetail = (component: OpsComponent & { layerName?: string; lay
   detailDrawerVisible.value = true;
 };
 
-const openAlertDetail = (componentName: string) => {
+const openAlertDetail = (componentName: string, incidentId?: string) => {
+  if (incidentId) {
+    void router.push({ path: '/ops/alert', query: { incident: incidentId } });
+    return;
+  }
   const component = components.value.find((item) => item.name === componentName);
   if (component) {
     openComponentDetail(component);
@@ -449,6 +522,12 @@ const openContainerDetail = (container: OpsContainerWithServer) => {
 };
 
 const openLogsForComponent = async (component = selectedComponent.value) => {
+  if (component?.name === agentName) {
+    if (selectedAgent.value) {
+      await openLogsForContainer(selectedAgent.value);
+    }
+    return;
+  }
   const server = findServerByContainerName(component?.container?.name);
   if (!component?.container || !server) {
     return;
@@ -466,6 +545,7 @@ const openLogsForContainer = async (container: OpsContainerWithServer) => {
     ElMessage.warning('未找到容器所在服务器，无法读取日志');
     return;
   }
+  containerLogs.value = undefined;
   selectedLogsContainer.value = container;
   logsDrawerVisible.value = true;
   await loadContainerLogs(container);
@@ -481,14 +561,22 @@ const loadContainerLogs = async (container: OpsContainerWithServer) => {
   if (!container.serverCode || !container.name) {
     return;
   }
+  const requestId = ++logsRequestId;
   logsLoading.value = true;
   try {
-    containerLogs.value = await getOpsContainerLogs(container.serverCode, container.name, logsTail);
+    const logs = await getOpsContainerLogs(container.serverCode, container.name, logsTail);
+    if (requestId === logsRequestId) {
+      containerLogs.value = logs;
+    }
   } catch (error) {
-    containerLogs.value = undefined;
-    ElMessage.error((error as Error)?.message || '读取容器日志失败');
+    if (requestId === logsRequestId) {
+      containerLogs.value = undefined;
+      ElMessage.error((error as Error)?.message || '读取容器日志失败');
+    }
   } finally {
-    logsLoading.value = false;
+    if (requestId === logsRequestId) {
+      logsLoading.value = false;
+    }
   }
 };
 
@@ -504,11 +592,20 @@ const loadData = async () => {
   try {
     const [overviewRes, serverRes, containerRes] = await Promise.all([getOpsOverview(), getOpsServers(), getOpsContainers()]);
     overview.value = overviewRes;
+    try {
+      const page = await getAlertIncidents(false, 0, 200);
+      trackedAlerts.value = page.enabled ? page.items : undefined;
+    } catch {
+      trackedAlerts.value = undefined;
+    }
     servers.value = serverRes || [];
     containers.value = containerRes || [];
     const layerCodes = overviewRes?.layers?.map((layer) => layer.code) || [];
-    if (!activeLayerTab.value || !layerCodes.includes(activeLayerTab.value)) {
-      activeLayerTab.value = layerCodes[0] || (unboundContainers.value.length > 0 ? '__unbound_containers' : '');
+    if (unboundContainers.value.length > 0) {
+      layerCodes.push('__unbound_containers');
+    }
+    if (!layerCodes.includes(activeLayerTab.value)) {
+      activeLayerTab.value = layerCodes[0] || '';
     }
   } finally {
     loading.value = false;
@@ -522,9 +619,7 @@ onMounted(loadData);
 .ops-page {
   min-height: calc(100vh - 84px);
   padding: 24px;
-  background:
-    radial-gradient(circle at 12% 8%, rgb(168 237 234 / 52%), transparent 30%),
-    radial-gradient(circle at 88% 16%, rgb(254 214 227 / 70%), transparent 36%), linear-gradient(135deg, #a8edea 0%, #f4f6fb 48%, #fed6e3 100%);
+  background: var(--el-bg-color-page);
   color: #1d3557;
 }
 
@@ -569,7 +664,7 @@ onMounted(loadData);
 .ops-metrics-grid {
   max-width: 1420px;
   display: grid;
-  grid-template-columns: repeat(5, minmax(150px, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 12px;
   margin: 0 auto 16px;
 }
@@ -579,11 +674,9 @@ onMounted(loadData);
   align-items: center;
   min-height: 86px;
   padding: 16px;
-  border: 1px solid rgb(255 255 255 / 56%);
-  border-radius: 12px;
-  background: rgb(255 255 255 / 88%);
-  box-shadow: 0 12px 28px rgb(29 53 87 / 10%);
-  backdrop-filter: blur(10px);
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 10px;
+  background: var(--el-bg-color);
 
   span {
     display: block;
@@ -632,18 +725,36 @@ onMounted(loadData);
 }
 
 .ops-panel {
-  margin-bottom: 14px;
-  border: 1px solid rgb(255 255 255 / 56%);
-  border-radius: 12px;
-  background: rgb(255 255 255 / 88%);
-  box-shadow: 0 12px 28px rgb(29 53 87 / 10%);
-  backdrop-filter: blur(10px);
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 10px;
+  background: var(--el-bg-color);
+
+  :deep(.el-card__body) {
+    padding: 14px;
+  }
 }
 
-.ops-page :deep(.el-row) {
+.ops-dashboard-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(285px, 1fr);
+  align-items: start;
+  gap: 14px;
   max-width: 1420px;
-  margin-right: auto !important;
-  margin-left: auto !important;
+  margin: 0 auto;
+}
+
+.ops-component-panel,
+.ops-dashboard-aside {
+  min-width: 0;
+}
+
+.ops-dashboard-aside {
+  display: grid;
+  gap: 14px;
+}
+
+.ops-resources-panel {
+  grid-column: 1 / -1;
 }
 
 .ops-panel-header {
@@ -658,76 +769,14 @@ onMounted(loadData);
   gap: 8px;
 }
 
-.ops-layer-tabs {
-  :deep(.el-tabs__header) {
-    margin-bottom: 16px;
-  }
-
-  :deep(.el-tabs__nav-wrap::after) {
-    height: 1px;
-    background-color: rgb(29 53 87 / 8%);
-  }
-
-  :deep(.el-tabs__active-bar) {
-    height: 3px;
-    border-radius: 999px;
-    background: linear-gradient(90deg, #2a9d8f, #457b9d);
-  }
-
-  :deep(.el-tabs__item) {
-    height: 42px;
-    padding: 0 14px;
-    color: #5f6d7a;
-    font-weight: 700;
-
-    &.is-active {
-      color: #1d3557;
-    }
-  }
-}
-
-.ops-tab-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-
-  b {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 22px;
-    height: 22px;
-    padding: 0 7px;
-    border-radius: 999px;
-    background: rgb(42 157 143 / 10%);
-    color: #2a9d8f;
-    font-size: 12px;
-  }
-}
-
-.ops-tab-summary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 12px;
-  padding: 10px 12px;
-  border-radius: 8px;
-  background: rgb(42 157 143 / 7%);
-
-  span {
-    color: #1d3557;
-    font-weight: 800;
-  }
-
-  small {
-    color: #6c757d;
-  }
+.ops-layer-select {
+  width: min(100%, 320px);
+  margin-bottom: 14px;
 }
 
 .ops-component-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(285px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 285px), 1fr));
   gap: 14px;
 }
 
@@ -862,20 +911,23 @@ onMounted(loadData);
   }
 }
 
+.ops-resource-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr));
+  gap: 12px;
+}
+
 .ops-resource {
-  padding: 12px 0;
-  border-bottom: 1px solid rgb(29 53 87 / 7%);
-
-  &:first-child {
-    padding-top: 0;
-  }
-
-  &:last-child {
-    border-bottom: 0;
-  }
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
 }
 
 .ops-resource-title {
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  overflow-wrap: anywhere;
   margin-bottom: 10px;
 
   span {
@@ -900,11 +952,11 @@ onMounted(loadData);
 
 .ops-container-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(285px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 285px), 1fr));
   gap: 14px;
 
   &.compact {
-    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
   }
 }
 
@@ -991,6 +1043,10 @@ onMounted(loadData);
   }
 }
 
+.ops-agent-node-select {
+  width: 100%;
+}
+
 .ops-card-actions {
   display: flex;
   justify-content: flex-end;
@@ -1067,7 +1123,13 @@ onMounted(loadData);
 
 @media (max-width: 1200px) {
   .ops-metrics-grid {
-    grid-template-columns: repeat(3, minmax(150px, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1000px) {
+  .ops-dashboard-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -1082,12 +1144,28 @@ onMounted(loadData);
   }
 
   .ops-component-grid,
-  .ops-container-grid {
-    grid-template-columns: 1fr;
+  .ops-container-grid,
+  .ops-container-grid.compact {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ops-metric {
+    padding: 10px;
+  }
+
+  .ops-metric-icon {
+    flex: 0 0 30px;
+    height: 30px;
+    margin-right: 8px;
+    font-size: 16px;
   }
 
   .ops-page {
     padding: 14px;
   }
+}
+.ops-page.ops-page-embedded {
+  min-height: 0;
+  padding: 0;
 }
 </style>

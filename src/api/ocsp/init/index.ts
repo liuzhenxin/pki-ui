@@ -51,14 +51,20 @@ export function getOcspEnvInfo(): Promise<Result<any>> {
   });
 }
 
-export function getOcspInitStatus(): Promise<Result<any>> {
-  return request({
-    url: '/ocsp/v1/init/status',
-    method: 'get'
-  });
+export interface OcspInitStatus {
+  initialized: boolean;
+  tenantStatus: -1 | 0 | 1 | null;
 }
 
-export function completeOcspInitialization(): Promise<Result<any>> {
+export function getOcspInitStatus(): Promise<Result<OcspInitStatus>> {
+  return request({ url: '/ocsp/v1/init/status', method: 'get' });
+}
+
+export function confirmOcspAgreement(): Promise<Result<OcspInitStatus>> {
+  return request({ url: '/ocsp/v1/init/agreement', method: 'post', data: { accepted: true } });
+}
+
+export function completeOcspInitialization(): Promise<Result<OcspInitStatus>> {
   return request({ url: '/ocsp/v1/init/complete', method: 'post' });
 }
 

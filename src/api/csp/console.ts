@@ -105,7 +105,6 @@ export interface SetupView {
   enabledCapabilities: 'RANDOM'[];
 }
 export type SetupAction = 'CHECK_ENV' | 'CHECK_RESOURCES' | 'CHECK_POLICY';
-/** 固定同源BFF契约；浏览器不持有Auth令牌或OAuth客户端秘密。 */
 export interface OwnedApplication {
   applicationId: string;
   name: string;
@@ -165,27 +164,13 @@ export interface ConsoleResponses {
   'auditor-status': { saved: true };
   'login-log-list': AuditPage;
   'operation-log-list': AuditPage;
-  session: ConsoleNavigation & {
-    csrf: string;
-    authenticated: boolean;
-    initializationAttempted?: boolean;
-    certificateLoginEnabled?: boolean;
-    httpTestMode?: boolean;
-  };
-  challenge: { csrf: string; captchaEnabled: boolean; image: string };
-  login: ConsoleNavigation & { authenticated: boolean };
-  'certificate-challenge': { challengeId: string; signData: string; sm2UserId: string };
-  'certificate-login': ConsoleNavigation & { authenticated: boolean };
-  state: { initialized: boolean };
+  session: ConsoleNavigation & { authenticated: boolean };
   installation: InstallationView;
   'installation-advance': InstallationView;
   'installation-complete': InstallationView;
   setup: SetupView;
   'setup-advance': SetupView;
   'setup-complete': SetupView;
-  environment: { checks: { name: string; ok: boolean }[] };
-  initialize: { initialized: boolean; reauthenticationRequired: boolean };
-  logout: { authenticated: boolean };
 }
 export interface ConsoleCommands {
   'owned-application-list': { offset: number };
@@ -219,91 +204,10 @@ export interface ConsoleCommands {
   'login-log-list': { page: number };
   'operation-log-list': { page: number };
   session: undefined;
-  challenge: undefined;
-  login: { username: string; password: string; captcha: string };
-  'certificate-challenge': { certificate: string };
-  'certificate-login': { challengeId: string; signature: string };
-  state: undefined;
   installation: undefined;
   'installation-advance': { draftVersion: number; action: InstallationAction; agreementVersion?: string };
   'installation-complete': { draftVersion: number; confirm: true; admin: InstallationAccount; auditor: InstallationAccount };
   setup: undefined;
   'setup-advance': { draftVersion: number; action: SetupAction };
   'setup-complete': { draftVersion: number; confirm: true };
-  environment: undefined;
-  initialize: { confirm: true };
-  logout: Record<string, never>;
-}
-const endpoints = [
-  'owned-application-list',
-  'owned-application-register',
-  'owned-application-view',
-  'owned-application-rename',
-  'owned-application-save-policy',
-  'owned-application-revoke',
-  'owned-application-suspend',
-  'owned-application-remove',
-  'owned-application-rotate',
-  'owned-service-list',
-  'owned-service-save',
-  'owned-quota-list',
-  'owned-quota-save',
-  'device-list',
-  'device-save',
-  'device-state',
-  'auditor-list',
-  'auditor-create',
-  'auditor-status',
-  'login-log-list',
-  'operation-log-list',
-  'service-list',
-  'service-save',
-  'application-list',
-  'application-view',
-  'application-draft',
-  'application-publish',
-  'application-suspend',
-  'quota-list',
-  'quota-save',
-  'installation',
-  'installation-advance',
-  'installation-complete',
-  'session',
-  'challenge',
-  'login',
-  'certificate-challenge',
-  'certificate-login',
-  'state',
-  'setup',
-  'setup-advance',
-  'setup-complete',
-  'environment',
-  'initialize',
-  'logout'
-];
-export class ConsoleRequestError extends Error {
-  constructor(
-    message: string,
-    readonly status: number
-  ) {
-    super(message);
-  }
-}
-export async function consoleRequest<K extends keyof ConsoleResponses>(
-  path: K,
-  csrf: string,
-  body?: ConsoleCommands[K]
-): Promise<ConsoleResponses[K]> {
-  if (!endpoints.includes(path)) throw new Error('请求不受支持。');
-  const response = await fetch('/console-api/' + path, {
-    method: body ? 'POST' : 'GET',
-    credentials: 'same-origin',
-    cache: 'no-store',
-    signal: AbortSignal.timeout(15000),
-    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
-    body: body ? JSON.stringify(body) : undefined
-  });
-  const data = await response.json();
-  if (!response.ok) throw new ConsoleRequestError(typeof data?.message === 'string' ? data.message : '请求未完成，请稍后手动重试。', response.status);
-  return data;
 }

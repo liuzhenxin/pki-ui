@@ -1,11 +1,11 @@
 {
   "extends": "./tsconfig.json",
-  "compilerOptions": { "strict": true, "strictNullChecks": true, "noImplicitAny": true },
   "include": [
+    "src/types/*.d.ts",
     "src/products/csp/**/*",
     "src/api/csp/**/*",
     "src/config/csp.ts",
-    "src/store/modules/cspConsole.ts",
+    "src/store/modules/csp*.ts",
     "src/services/csp/**/*",
     "src/views/csp/**/*",
     "src/layout/CspLayout.vue",

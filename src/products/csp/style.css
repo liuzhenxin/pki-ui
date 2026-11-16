@@ -1,4 +1,4 @@
-:root {
+.csp-shell {
   font-family: 'PingFang SC', 'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif;
   color: #182b3b;
   background: #f7f7f3;
@@ -170,23 +170,20 @@
     padding: 16px;
   }
 }
-* {
+.csp-shell * {
   box-sizing: border-box;
 }
-body {
-  margin: 0;
-}
-button,
-a,
-input {
+.csp-shell button,
+.csp-shell a,
+.csp-shell input {
   touch-action: manipulation;
 }
-button,
-a {
+.csp-shell button,
+.csp-shell a {
   cursor: pointer;
 }
-button:focus-visible,
-a:focus-visible {
+.csp-shell button:focus-visible,
+.csp-shell a:focus-visible {
   outline: 3px solid #bd6f18;
   outline-offset: 4px;
 }
@@ -201,38 +198,38 @@ a:focus-visible {
 .skip:focus {
   top: 16px;
 }
-h2 {
+.csp-shell h2 {
   font-size: 24px;
   line-height: 1.5;
   margin: 0 0 12px;
 }
-h1 {
+.csp-shell h1 {
   font-size: 30px;
   line-height: 1.5;
 }
-.muted {
+.csp-shell .muted {
   color: var(--muted);
 }
-form {
+.csp-shell form {
   margin-top: 32px;
 }
-label {
+.csp-shell label {
   display: block;
   font-size: 14px;
   font-weight: 600;
   margin: 20px 0 8px;
 }
-.el-input__wrapper {
+.csp-shell .el-input__wrapper {
   min-height: 48px;
 }
-.error {
+.csp-shell .error {
   color: #a32d2d;
   background: #fff0ee;
   padding: 12px;
   border-left: 3px solid #a32d2d;
   overflow-wrap: anywhere;
 }
-.notice {
+.csp-shell .notice {
   font-size: 14px;
   color: #78450c;
   background: #fff2dc;
@@ -415,7 +412,7 @@ label {
 .scope h2 {
   font-size: 18px;
 }
-.el-button {
+.csp-shell .el-button {
   min-height: 44px;
 }
 @media (max-width: 900px) {
@@ -469,9 +466,9 @@ label {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
+  .csp-shell *,
+  .csp-shell *::before,
+  .csp-shell *::after {
     animation: none !important;
     transition: none !important;
     scroll-behavior: auto !important;

@@ -1,5 +1,5 @@
 <template>
-  <div class="app-container home">
+  <div class="app-container home" :class="{ 'ops-home': isOps }">
     <!-- 头部介绍 -->
     <el-card v-if="!isLicense && !isOps && !isOCSP" class="box-card header-card" shadow="hover">
       <div class="header">
@@ -15,23 +15,49 @@
 
     <OcspHome v-if="isOCSP" />
 
-    <OpsOverview v-if="isOps && canViewOpsOverview" />
-    <OpsAudit v-else-if="isOps && canViewOpsAudit" />
+    <template v-if="isOps">
+      <section class="ops-home-header">
+        <div>
+          <h1>{{ systemTitle }}</h1>
+          <p v-if="canViewOpsOverview">查看平台运行状态、当前告警和服务器资源。</p>
+        </div>
+        <span class="ops-home-version">前端版本 {{ frontendVersion }}</span>
+        <dl class="ops-home-system-info" aria-label="系统信息">
+          <div>
+            <dt>应用代码</dt>
+            <dd>ops</dd>
+          </div>
+          <div>
+            <dt>接口代理</dt>
+            <dd>{{ opsApiBaseURL }}</dd>
+          </div>
+          <div>
+            <dt>服务端口</dt>
+            <dd>18080 / 5050</dd>
+          </div>
+          <div>
+            <dt>数据来源</dt>
+            <dd>Agent + docker ps</dd>
+          </div>
+        </dl>
+      </section>
 
-    <el-card v-if="isOps" class="box-card ops-system-card" shadow="hover">
-      <template #header>
-        <div class="card-header">
-          <el-icon><InfoFilled /></el-icon>
-          <span>系统信息</span>
-        </div>
-      </template>
-      <div class="ops-info-grid ops-unified-info-grid">
-        <div v-for="item in opsInfoItems" :key="item.label" class="ops-info-item">
-          <span>{{ item.label }}</span>
-          <strong>{{ item.value }}</strong>
-        </div>
-      </div>
-    </el-card>
+      <nav v-if="opsHomeLinks.length" class="ops-home-links" aria-label="常用运维入口">
+        <router-link v-for="item in opsHomeLinks" :key="item.path" :to="item.path" class="ops-home-link">
+          <span class="ops-home-link-icon"
+            ><el-icon><component :is="item.icon" /></el-icon
+          ></span>
+          <span class="ops-home-link-copy">
+            <strong>{{ item.title }}</strong>
+            <small>{{ item.description }}</small>
+          </span>
+          <el-icon class="ops-home-link-arrow" aria-hidden="true"><ArrowRight /></el-icon>
+        </router-link>
+      </nav>
+
+      <OpsOverview v-if="canViewOpsOverview" embedded />
+      <OpsAudit v-else-if="canViewOpsAudit" />
+    </template>
 
     <div v-if="isLicense" class="license-dashboard">
       <section class="license-hero">
@@ -417,7 +443,12 @@
       </el-row>
     </div>
 
-    <el-row v-if="!isLicense && !isNAS && !isCA && !isRA && !isOps && !isKds && !isOCSP" :gutter="20" class="main-content">
+    <el-row
+      v-if="!isLicense && !isNAS && !isCA && !isRA && !isOps && !isKds && !isOCSP"
+      :gutter="20"
+      class="main-content"
+      :class="{ 'kmc-overview': isKMC }"
+    >
       <!-- 左侧：核心功能 -->
       <el-col :xs="24" :sm="24" :lg="16">
         <el-card class="box-card feature-card" shadow="hover">
@@ -429,7 +460,7 @@
           </template>
           <el-row :gutter="20" class="feature-list">
             <template v-if="isKMC">
-              <el-col :span="12">
+              <el-col :xs="24" :sm="12">
                 <ul>
                   <li>
                     <div class="feature-icon">
@@ -460,7 +491,7 @@
                   </li>
                 </ul>
               </el-col>
-              <el-col :span="12">
+              <el-col :xs="24" :sm="12">
                 <ul>
                   <li>
                     <div class="feature-icon">
@@ -755,6 +786,7 @@ import { listLicense, listProduct } from '@/api/license/license';
 import { LicenseVO, ProductVO } from '@/api/license/license/types';
 import NASDashboard from '@/views/nas/index.vue';
 import CADashboard from '@/views/ca/index.vue';
+import { opsApiBaseURL } from '@/api/ops';
 import OpsOverview from '@/views/ops/overview/index.vue';
 import OpsAudit from '@/views/ops/audit/index.vue';
 import OcspHome from '@/views/ocsp/home/index.vue';
@@ -785,7 +817,6 @@ const isRA = computed(() => String(currentTenantId.value) === '5');
 const isOCSP = computed(() => String(currentTenantId.value) === '6');
 const isKds = computed(() => String(currentTenantId.value) === '21');
 const isLicense = computed(() => String(currentTenantId.value) === '2');
-const opsVersion = computed(() => import.meta.env.VITE_APP_VERSION || '3.0.3');
 
 const systemTitle = computed(() => {
   if (tenantInfo.value && tenantInfo.value.name) {
@@ -822,18 +853,18 @@ const systemDesc = computed(() => {
   return '提供数字证书的全生命周期管理服务，包括证书申请、签发、查询、吊销、更新等，构建可信的网络安全基础环境。';
 });
 
-const opsSystemItems = computed(() => [
-  { label: '系统名称', value: '平台运维中心' },
-  { label: '应用代码', value: 'ops' },
-  { label: '应用 ID', value: '1' },
-  { label: '接口代理', value: import.meta.env.VITE_APP_OPS_API || '/ops-api' },
-  { label: '服务端口', value: '18080 / 5050' },
-  { label: '数据来源', value: 'Agent + docker ps' }
-]);
-
-const opsVersionItems = computed(() => [{ label: '版本', value: opsVersion.value, icon: 'Monitor' }]);
-
-const opsInfoItems = computed(() => [...opsSystemItems.value, ...opsVersionItems.value]);
+const opsHomeLinks = computed(() => {
+  const links = [
+    { title: '服务器监控', description: '查看节点在线状态和资源用量', icon: 'Monitor', path: '/ops/servers', permission: 'ops:server:page' },
+    { title: '容器管理', description: '查看实例状态和运行日志', icon: 'Box', path: '/ops/containers', permission: 'ops:container:page' },
+    { title: '运维审计', description: '查询运维操作及执行结果', icon: 'Document', path: '/ops/audit', permission: 'ops:audit:page' }
+  ];
+  return links.filter(
+    (item) =>
+      (userStore.permissions.includes(item.permission) || userStore.permissions.includes('*:*:*')) &&
+      router.resolve(item.path).matched.some((record) => record.path === item.path && !record.redirect)
+  );
+});
 
 const licenseList = ref<LicenseVO[]>([]);
 const backendLicenseProducts = ref<ProductVO[]>([]);
@@ -1313,6 +1344,133 @@ const handleResize = () => {
 </script>
 
 <style lang="scss" scoped>
+.home.ops-home {
+  min-height: 100%;
+  background: var(--el-bg-color-page);
+}
+
+.ops-home-header,
+.ops-home-links {
+  max-width: 1420px;
+  margin-inline: auto;
+}
+
+.ops-home-header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 18px;
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 10px;
+  background: var(--el-bg-color);
+
+  h1 {
+    margin: 0 0 6px;
+    color: var(--el-text-color-primary);
+    font-size: 24px;
+  }
+
+  p {
+    margin: 0;
+    color: var(--el-text-color-regular);
+  }
+}
+
+.ops-home-system-info {
+  display: grid;
+  flex: 0 0 100%;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr));
+  gap: 12px 20px;
+  margin: 4px 0 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--el-border-color-light);
+
+  dt {
+    color: var(--el-text-color-regular);
+    font-size: 13px;
+  }
+
+  dd {
+    margin: 4px 0 0;
+    color: var(--el-text-color-primary);
+    font-weight: 600;
+    overflow-wrap: anywhere;
+  }
+}
+
+.ops-home-version {
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: var(--el-fill-color-light);
+  color: var(--el-text-color-regular);
+  font-size: 13px;
+}
+
+.ops-home-links {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.ops-home-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 10px;
+  background: var(--el-bg-color);
+
+  &:hover,
+  &:focus-visible {
+    border-color: var(--el-color-primary);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--el-color-primary);
+    outline-offset: 2px;
+  }
+}
+
+.ops-home-link-icon {
+  display: grid;
+  flex: 0 0 38px;
+  height: 38px;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--el-color-primary-light-9);
+  color: var(--el-color-primary);
+  font-size: 18px;
+}
+
+.ops-home-link-copy {
+  flex: 1;
+  min-width: 0;
+
+  strong,
+  small {
+    display: block;
+  }
+
+  strong {
+    color: var(--el-text-color-primary);
+  }
+
+  small {
+    margin-top: 4px;
+    color: var(--el-text-color-regular);
+  }
+}
+
+.ops-home-link-arrow {
+  flex-shrink: 0;
+  color: var(--el-text-color-secondary);
+}
+
 .home {
   background-color: #f0f2f5;
   padding: 20px;
@@ -1364,115 +1522,6 @@ const handleResize = () => {
           max-width: 800px;
         }
       }
-    }
-  }
-
-  .ops-system-card {
-    .ops-system-layout {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-      gap: 16px;
-    }
-
-    .ops-info-section {
-      min-width: 0;
-      padding: 18px;
-      border: 1px solid #e5e7eb;
-      border-radius: 8px;
-      background: #f8fafc;
-    }
-
-    .ops-section-title {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-bottom: 14px;
-      color: #303133;
-      font-size: 15px;
-      font-weight: 600;
-
-      .el-icon {
-        color: #2563eb;
-        font-size: 18px;
-      }
-    }
-
-    .ops-info-grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 12px;
-    }
-
-    .ops-info-item,
-    .ops-version-item {
-      min-width: 0;
-      padding: 12px;
-      border-radius: 8px;
-      background: #fff;
-      border: 1px solid #eef2f7;
-    }
-
-    .ops-info-item {
-      span,
-      strong {
-        display: block;
-      }
-
-      span {
-        margin-bottom: 6px;
-        color: #64748b;
-        font-size: 12px;
-      }
-
-      strong {
-        color: #111827;
-        font-size: 14px;
-        font-weight: 600;
-        overflow-wrap: anywhere;
-      }
-    }
-
-    .ops-version-list {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 12px;
-    }
-
-    .ops-version-item {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-
-      span,
-      strong {
-        display: block;
-      }
-
-      span {
-        color: #64748b;
-        font-size: 12px;
-      }
-
-      strong {
-        margin-top: 4px;
-        color: #111827;
-        font-size: 14px;
-        font-weight: 600;
-        overflow-wrap: anywhere;
-      }
-    }
-
-    .ops-version-icon {
-      width: 38px;
-      height: 38px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      flex-shrink: 0;
-      border-radius: 8px;
-      color: #0f766e;
-      background: #ccfbf1;
-      font-size: 18px;
     }
   }
 
@@ -1944,6 +1993,20 @@ const handleResize = () => {
     }
   }
 
+  .kmc-overview {
+    row-gap: 20px;
+    margin-bottom: 20px;
+
+    > .el-col {
+      display: flex;
+
+      > .box-card {
+        width: 100%;
+        margin-bottom: 0;
+      }
+    }
+  }
+
   .feature-card {
     .feature-list ul {
       list-style-type: none;
@@ -2408,12 +2471,6 @@ const handleResize = () => {
       grid-template-columns: 1fr;
     }
 
-    .ops-system-card {
-      .ops-system-layout {
-        grid-template-columns: 1fr;
-      }
-    }
-
     .license-product-list,
     .license-flow {
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2456,13 +2513,6 @@ const handleResize = () => {
     .license-flow,
     .license-action-panel .license-actions {
       grid-template-columns: 1fr;
-    }
-
-    .ops-system-card {
-      .ops-info-grid,
-      .ops-version-list {
-        grid-template-columns: 1fr;
-      }
     }
 
     .license-service-grid,

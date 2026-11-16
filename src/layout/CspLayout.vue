@@ -8,6 +8,7 @@ import { ElSubMenu } from 'element-plus';
 import ManagementFrame from './components/ManagementFrame.vue';
 import mark from '@/assets/brand/csp-mark-inverse.svg';
 import { useCspConsoleStore } from '@/store/modules/cspConsole';
+import '@/products/csp/style.css';
 import { cspProduct } from '@/config/csp';
 const store = useCspConsoleStore();
 const { busy, error, destination } = storeToRefs(store);

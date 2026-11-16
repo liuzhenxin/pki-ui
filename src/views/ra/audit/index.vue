@@ -124,7 +124,7 @@
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="用户密码" prop="password" v-if="!form.userId">
+            <el-form-item label="用户密码" prop="password" v-if="form.id == null">
               <el-input v-model="form.password" placeholder="请输入用户密码" type="password" maxlength="20" show-password />
             </el-form-item>
           </el-col>
@@ -244,7 +244,15 @@
 import { ref, reactive, toRefs, getCurrentInstance, ComponentInternalInstance, onMounted, nextTick, computed, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 import { FormInstance, FormRules } from 'element-plus';
-import { listUser, getUser, delUser, updateUser, resetUserPwd, changeStatus, addUser } from '@/api/ra/user';
+import {
+  listAuditorUsers,
+  getAuditorUser,
+  deleteAuditorUsers,
+  updateAuditorUser,
+  resetAuditorPassword,
+  updateAuditorStatus,
+  addAuditorUser
+} from '@/api/ra/auditorUser';
 import { UserForm, UserQuery, UserVO } from '@/api/system/user/types';
 import { listDeptSelectTree } from '@/api/ra/dept';
 import { RaDeptTreeOption } from '@/api/ra/dept/types';
@@ -443,22 +451,18 @@ function handleDeptNodeClick(data: RaDeptTreeOption) {
 }
 
 /** 查询审计员列表 */
-function getList() {
+async function getList() {
   loading.value = true;
   isDataLoaded.value = false;
-  queryParams.value.roleIds = RA_AUDITOR_ROLE_IDS;
-  listUser(queryParams.value).then((res) => {
+  try {
+    const { data } = await listAuditorUsers(queryParams.value);
+    userList.value = data?.rows || data?.records || [];
+    total.value = data?.total || 0;
+    await nextTick();
+    isDataLoaded.value = true;
+  } finally {
     loading.value = false;
-    const page = res.data || res;
-    userList.value = [];
-    nextTick(() => {
-      userList.value = page.rows || page.records || [];
-      setTimeout(() => {
-        isDataLoaded.value = true;
-      }, 200);
-    });
-    total.value = page.total || 0;
-  });
+  }
 }
 
 /** 搜索按钮操作 */
@@ -491,7 +495,7 @@ function handleStatusChange(row: any, newStatus: number) {
   proxy?.$modal
     .confirm('确认要"' + text + '" "' + row.username + '"用户吗?')
     .then(function () {
-      return changeStatus(row.id, newStatus);
+      return updateAuditorStatus(row.id, newStatus);
     })
     .then(() => {
       proxy?.$modal.msgSuccess(text + '成功');
@@ -508,7 +512,7 @@ function handleDelete(row: any) {
   proxy?.$modal
     .confirm('确认要删除审计员"' + username + '"吗？')
     .then(function () {
-      return delUser(userIds);
+      return deleteAuditorUsers(userIds);
     })
     .then(() => {
       getList();
@@ -528,7 +532,7 @@ function handleResetPwd(row: any) {
       inputErrorMessage: '用户密码长度必须介于 6 和 30 之间'
     })
     .then(({ value }) => {
-      resetUserPwd(row.id, value).then(() => {
+      resetAuditorPassword(row.id, value).then(() => {
         proxy?.$modal.msgSuccess('修改成功，新密码是：' + value);
       });
     })
@@ -565,7 +569,7 @@ async function handleAdd() {
   reset();
   await loadDeptOptions();
   if (queryParams.value.deptId) {
-    form.value.deptId = Number(queryParams.value.deptId);
+    form.value.deptId = queryParams.value.deptId;
   }
   open.value = true;
   title.value = '添加审计员';
@@ -576,13 +580,20 @@ async function handleUpdate(row: any) {
   reset();
   await loadDeptOptions();
   const userId = row.id || ids.value[0];
-  getUser(userId).then((response) => {
-    form.value = response.data as any;
-    form.value.postIds = [];
-    form.value.roleIds = [...RA_AUDITOR_ROLE_IDS];
+  getAuditorUser(userId).then((response) => {
+    const user = response.data;
+    if (!user) return;
+    form.value = {
+      ...form.value,
+      id: user.id,
+      deptId: user.deptId,
+      username: user.username,
+      mobile: user.mobile,
+      mail: user.mail,
+      status: Number(user.status)
+    };
     open.value = true;
     title.value = '修改审计员';
-    form.value.password = '';
   });
 }
 
@@ -592,14 +603,14 @@ function submitForm() {
     if (valid) {
       form.value.roleIds = [...RA_AUDITOR_ROLE_IDS];
       if (form.value.id != undefined) {
-        updateUser(form.value).then(() => {
+        updateAuditorUser(form.value).then(() => {
           proxy?.$modal.msgSuccess('修改成功');
           open.value = false;
           getList();
         });
       } else {
         try {
-          await addUser(form.value);
+          await addAuditorUser(form.value);
         } catch (error) {
           ElMessage.error('新增审计员失败');
           return;
@@ -754,9 +765,9 @@ async function submitCertForm() {
 
       // 更新用户证书信息
       const serialNumber = issueData.serialNumber || issueData.certSn || '';
-      const userDataRes = await getUser(certForm.userId);
+      const userDataRes = await getAuditorUser(certForm.userId);
       const userData = userDataRes.data as any;
-      await updateUser({
+      await updateAuditorUser({
         id: userData.id,
         userId: userData.id,
         deptId: userData.deptId,

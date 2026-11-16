@@ -50,7 +50,9 @@
                       <b>{{ component.container?.image || '-' }}</b>
                     </div>
                     <div class="dependency-list">
-                      <el-tag v-for="dep in component.dependencies" :key="dep" size="small" effect="plain">{{ dep }}</el-tag>
+                      <el-tag v-for="dep in component.dependencies" :key="dep" size="small" effect="plain">{{
+                        dependencyLabel(dep, overview)
+                      }}</el-tag>
                       <span v-if="!component.dependencies?.length">无前置依赖</span>
                     </div>
                   </article>
@@ -76,7 +78,7 @@
 <script setup name="OpsComponent" lang="ts">
 import { getOpsOverview } from '@/api/ops';
 import type { OpsLayer, OpsOverview } from '@/api/ops/types';
-import { dateTimeText, statusTagType, statusText } from '@/views/ops/utils';
+import { dateTimeText, dependencyLabel, statusTagType, statusText } from '@/views/ops/utils';
 
 const loading = ref(false);
 const overview = ref<OpsOverview>();

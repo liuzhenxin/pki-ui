@@ -1,19 +1,19 @@
 <template>
   <div class="app-container">
-    <el-form :model="queryParams" ref="queryForm" :inline="true" v-show="showSearch" label-width="68px">
-      <el-form-item label="证书名称" prop="name">
-        <el-input v-model="queryParams.name" placeholder="请输入证书名称" clearable style="width: 240px" @keyup.enter="handleQuery" />
-      </el-form-item>
-      <el-form-item>
-        <el-button type="primary" icon="Search" @click="handleQuery">搜索</el-button>
-        <el-button icon="Refresh" @click="resetQuery">重置</el-button>
-      </el-form-item>
-    </el-form>
+    <div class="ca-root-toolbar">
+      <el-form ref="queryForm" :model="queryParams" :inline="true" class="ca-root-filter" @submit.prevent="handleQuery">
+        <el-form-item label="证书名称" prop="name">
+          <el-input v-model="queryParams.name" placeholder="请输入证书名称" :prefix-icon="Search" clearable @clear="handleQuery" />
+        </el-form-item>
+        <el-form-item class="ca-root-filter-buttons">
+          <el-button native-type="submit">搜索</el-button>
+          <el-button text @click="resetQuery">重置</el-button>
+        </el-form-item>
+      </el-form>
 
-    <el-row :gutter="10" class="mb8">
-      <el-col :span="1.5">
-        <el-dropdown @command="handleCommand" v-hasPermi="['ca:root:gen']">
-          <el-button type="primary" plain>
+      <div class="ca-root-toolbar-actions">
+        <el-dropdown v-hasPermi="['ca:root:gen']" trigger="click" @command="handleCommand">
+          <el-button type="primary" :icon="Plus">
             创建证书<el-icon class="el-icon--right"><arrow-down /></el-icon>
           </el-button>
           <template #dropdown>
@@ -23,69 +23,119 @@
             </el-dropdown-menu>
           </template>
         </el-dropdown>
-      </el-col>
-      <right-toolbar v-model:showSearch="showSearch" @queryTable="getList"></right-toolbar>
-    </el-row>
+        <el-dropdown v-hasPermi="['ca:root:import']" trigger="click" @command="openExistingImport">
+          <el-button>
+            导入已有 CA<el-icon class="el-icon--right"><arrow-down /></el-icon>
+          </el-button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="root">导入已有根 CA</el-dropdown-item>
+              <el-dropdown-item command="sub">导入已有子 CA</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
+        <el-tooltip content="刷新列表" placement="top">
+          <el-button :icon="Refresh" :disabled="loading" aria-label="刷新列表" @click="getList" />
+        </el-tooltip>
+      </div>
+    </div>
 
-    <el-table v-loading="loading" :data="certList">
-      <el-table-column label="证书名称" align="center" prop="name" />
-      <el-table-column label="颁发者" align="center" prop="issuer" />
-      <el-table-column label="主题" align="center" prop="subject" />
-      <el-table-column label="有效期开始" align="center" prop="notBefore" width="180">
-        <template #default="scope">
-          <span>{{ parseTime(scope.row.notBefore) }}</span>
+    <el-table
+      :key="searchName"
+      v-loading="loading"
+      :data="certTree"
+      :row-key="(row) => String(row.id)"
+      :empty-text="searchName ? '未找到匹配的证书' : '暂无 CA 证书'"
+      :scrollbar-tabindex="0"
+      scrollbar-always-on
+      default-expand-all
+      class="ca-root-table"
+    >
+      <el-table-column label="证书名称" prop="name" min-width="204" class-name="ca-root-name-cell">
+        <template #default="{ row }">
+          <div class="ca-root-name">
+            <span class="ca-root-name-text" :title="row.name">{{ row.name }}</span>
+            <div v-if="(row.selfSigned === false && row.parentRootId == null) || (row.imported && row.caStatus !== 'active')" class="ca-root-flags">
+              <el-tag v-if="row.selfSigned === false && row.parentRootId == null" type="warning" size="small" effect="plain">父 CA 未关联</el-tag>
+              <el-tag v-if="row.imported && row.caStatus !== 'active'" type="info" size="small" effect="plain">
+                {{ row.signerId == null ? '待绑定签名者' : '签发停用' }}
+              </el-tag>
+            </div>
+          </div>
         </template>
       </el-table-column>
-      <el-table-column label="有效期结束" align="center" prop="notAfter" width="180">
-        <template #default="scope">
-          <span>{{ parseTime(scope.row.notAfter) }}</span>
-        </template>
-      </el-table-column>
-      <el-table-column label="状态" align="center" width="100">
-        <template #default="scope">
-          <el-tooltip :content="scope.row.status === '1' ? '证书在有效期内' : '证书已过期或无效'" placement="top">
-            <el-tag :type="scope.row.status === '1' ? 'success' : 'info'">{{ scope.row.status === '1' ? '有效' : '无效' }}</el-tag>
+      <el-table-column v-for="column in dnColumns" :key="column.prop" :label="column.label" :prop="column.prop" min-width="144">
+        <template #default="{ row }">
+          <el-tooltip
+            v-if="row[column.prop].full"
+            :content="row[column.prop].full"
+            :trigger="['hover', 'focus']"
+            :popper-style="{ maxWidth: 'min(420px, calc(100vw - 24px))', overflowWrap: 'anywhere' }"
+            placement="top"
+          >
+            <span class="ca-root-dn" tabindex="0">{{ row[column.prop].commonName || row[column.prop].full }}</span>
           </el-tooltip>
+          <span v-else class="ca-root-empty-value">—</span>
         </template>
       </el-table-column>
-      <el-table-column label="操作" align="center" class-name="small-padding" width="380">
-        <template #default="scope">
-          <el-button link type="primary" icon="View" @click="handleView(scope.row)" v-hasPermi="['ca:root:detail']">详情</el-button>
-          <el-dropdown trigger="click" @command="(command: string) => handleDownload(scope.row, command)" v-hasPermi="['ca:root:download']">
-            <el-button link type="primary" icon="Download">
-              下载<el-icon class="el-icon--right"><arrow-down /></el-icon>
-            </el-button>
-            <template #dropdown>
-              <el-dropdown-menu>
-                <el-dropdown-item command="cert-der">根证书（DER）</el-dropdown-item>
-                <el-dropdown-item command="cert-pem">根证书（PEM）</el-dropdown-item>
-                <el-dropdown-item command="chain-der">证书链（DER）</el-dropdown-item>
-                <el-dropdown-item command="chain-pem">证书链（PEM）</el-dropdown-item>
-              </el-dropdown-menu>
-            </template>
-          </el-dropdown>
-          <el-button link type="success" icon="Stamp" @click="handleAuthorizeProfile(scope.row)" v-hasPermi="['ca:root:authorize']"
-            >授权模板</el-button
-          >
-          <el-button link type="primary" icon="Setting" @click="handleCrlConfig(scope.row)" v-hasPermi="['ca:root:crl-config']">URI/CRL配置</el-button>
-          <el-button link type="primary" icon="Link" @click="handleBindPublishers(scope.row)" v-hasPermi="['ca:publisher:save']"
-            >关联发布者</el-button
-          >
-          <el-button
-            v-if="scope.row.caStatus !== 'inactive'"
-            link
-            type="warning"
-            icon="CircleCloseFilled"
-            @click="handleDisable(scope.row)"
-            v-hasPermi="['ca:root:disable']"
-            >停用</el-button
-          >
-          <el-button v-else link type="success" icon="SuccessFilled" @click="handleEnable(scope.row)" v-hasPermi="['ca:root:enable']">启用</el-button>
+      <el-table-column label="有效期" width="178">
+        <template #default="{ row }">
+          <div class="ca-root-validity">
+            <span><span class="ca-root-period-label">起</span>{{ row.notBefore }}</span>
+            <span><span class="ca-root-period-label">止</span>{{ row.notAfter }}</span>
+          </div>
+        </template>
+      </el-table-column>
+      <el-table-column label="证书状态" align="center" width="90">
+        <template #default="{ row }">
+          <el-tag :type="row.status === '1' ? 'success' : 'info'" size="small">{{ row.status === '1' ? '有效' : '无效' }}</el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column label="操作" align="right" width="190">
+        <template #default="{ row }">
+          <div class="ca-root-row-actions">
+            <el-button v-hasPermi="['ca:root:detail']" link type="primary" @click="handleView(row)">详情</el-button>
+            <el-dropdown v-hasPermi="['ca:root:download']" trigger="click" @command="(command: string) => handleDownload(row, command)">
+              <el-button link type="primary">
+                下载<el-icon class="el-icon--right"><arrow-down /></el-icon>
+              </el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="cert-der">根证书（DER）</el-dropdown-item>
+                  <el-dropdown-item command="cert-pem">根证书（PEM）</el-dropdown-item>
+                  <el-dropdown-item command="chain-der">证书链（DER）</el-dropdown-item>
+                  <el-dropdown-item command="chain-pem">证书链（PEM）</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+            <el-dropdown v-if="hasManagementActions(row)" trigger="click">
+              <el-button link>
+                更多<el-icon class="el-icon--right"><arrow-down /></el-icon>
+              </el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item v-if="managementPermissions.authorize" @click="handleAuthorizeProfile(row)">授权模板</el-dropdown-item>
+                  <el-dropdown-item v-if="managementPermissions.crl" @click="handleCrlConfig(row)">URI/CRL 配置</el-dropdown-item>
+                  <el-dropdown-item v-if="managementPermissions.publisher" @click="handleBindPublishers(row)">关联发布者</el-dropdown-item>
+                  <template v-if="row.imported && row.signerId == null">
+                    <el-dropdown-item v-if="managementPermissions.bind" @click="existingCaDialog?.openBinding(row)">绑定签名者</el-dropdown-item>
+                  </template>
+                  <template v-else-if="row.caStatus === 'inactive'">
+                    <el-dropdown-item v-if="managementPermissions.enable" @click="handleEnable(row)">{{
+                      row.imported ? '启用签发' : '启用'
+                    }}</el-dropdown-item>
+                  </template>
+                  <el-dropdown-item v-else-if="managementPermissions.disable" @click="handleDisable(row)">{{
+                    row.imported ? '停用签发' : '停用'
+                  }}</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </div>
         </template>
       </el-table-column>
     </el-table>
-
-    <pagination v-show="total > 0" :total="total" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" @pagination="getList" />
+    <ExistingCaDialog ref="existingCaDialog" :parents="certList" @completed="focusExistingCa" />
 
     <!-- 关联证书发布者对话框 -->
     <el-dialog v-model="bindOpen" title="关联证书发布者" width="560px" append-to-body>
@@ -245,7 +295,7 @@
             </el-form-item>
             <el-form-item label="父级CA" prop="parentCaId">
               <el-select v-model="onlineSubForm.parentCaId" placeholder="请选择父级CA" @change="onParentCaChange" style="width: 100%">
-                <el-option v-for="item in certList" :key="item.id" :label="item.name" :value="item.id" />
+                <el-option v-for="item in signingCas" :key="item.id" :label="item.name" :value="item.id" />
               </el-select>
             </el-form-item>
             <el-form-item label="签名者" prop="signerId">
@@ -340,33 +390,6 @@
             </el-form-item>
           </el-form>
         </el-tab-pane>
-        <el-tab-pane v-if="dialogType === 'sub'" label="CSR导入模式" name="import">
-          <el-form ref="importFormRef" :model="importForm" :rules="importRules" label-width="100px">
-            <el-form-item label="证书名称" prop="name">
-              <el-input v-model="importForm.name" placeholder="请输入证书名称" />
-            </el-form-item>
-            <el-form-item label="CSR生成">
-              <el-button type="primary" @click="handleGenerateCSR">生成 CSR</el-button>
-              <el-input v-if="importForm.csr" v-model="importForm.csr" type="textarea" :rows="4" readonly style="margin-top: 10px" />
-            </el-form-item>
-            <el-form-item label="上传证书" prop="certFile">
-              <el-upload
-                ref="uploadRef"
-                action="#"
-                :limit="1"
-                :auto-upload="false"
-                :on-change="handleFileChange"
-                :on-remove="handleFileRemove"
-                accept=".cer,.crt,.pem"
-              >
-                <el-button type="primary">点击上传</el-button>
-                <template #tip>
-                  <div class="el-upload__tip">请上传由上级CA签发的证书文件</div>
-                </template>
-              </el-upload>
-            </el-form-item>
-          </el-form>
-        </el-tab-pane>
       </el-tabs>
       <template #footer>
         <div class="dialog-footer">
@@ -442,6 +465,9 @@
               <el-col :xs="24" :sm="12" :lg="8">
                 <el-form-item label="下一CRL编号" prop="nextCrlNumber">
                   <el-input-number v-model="crlConfigForm.nextCrlNumber" :min="1" style="width: 100%" />
+                  <div v-if="crlConfigDialog.imported" class="text-sm">
+                    若旧 CA 已发布过 CRL，请填写大于最后发布编号的值，并在发布前核对历史吊销记录。
+                  </div>
                 </el-form-item>
               </el-col>
               <el-col :xs="24" :sm="12" :lg="8">
@@ -548,31 +574,19 @@
 </template>
 
 <script setup name="RootCert" lang="ts">
-import { ref, reactive, toRefs, getCurrentInstance, ComponentInternalInstance, watch, nextTick } from 'vue';
+import { ref, reactive, toRefs, computed, getCurrentInstance, ComponentInternalInstance, watch, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
-import { ElMessage, FormInstance, UploadInstance, UploadProps } from 'element-plus';
-import {
-  ArrowDown,
-  Search,
-  Refresh,
-  View,
-  Download,
-  Plus,
-  Minus,
-  Stamp,
-  QuestionFilled,
-  Edit,
-  Delete,
-  SuccessFilled,
-  CircleCloseFilled
-} from '@element-plus/icons-vue';
+import { ElMessage, FormInstance } from 'element-plus';
+import { ArrowDown, Search, Refresh, Plus, Minus, QuestionFilled, Edit, Delete } from '@element-plus/icons-vue';
+import auth from '@/plugins/auth';
 import X509Cert from '@/components/X509Cert/index.vue';
 import SecurityConfirm from '@/components/SecurityConfirm/index.vue';
+import ExistingCaDialog from './ExistingCaDialog.vue';
 import CertSubject, { typeMapping, sortSubjectItems } from '@/components/CertSubject/index.vue';
 import { listProfile, getProfile } from '@/api/ca/profile';
 import { listSigner } from '@/api/ca/signer';
 import {
-  listRootCa,
+  listRootHierarchy,
   getRootCa,
   genRootCa,
   enableRootCa,
@@ -586,6 +600,7 @@ import {
   startRootCrlScheduler,
   stopRootCrlScheduler
 } from '@/api/ca/root';
+import type { RootHierarchyEntry } from '@/api/ca/root';
 import { pagePublisher } from '@/api/ca/publisher';
 import { publishCrl } from '@/api/crl';
 import { X509 } from 'jsrsasign';
@@ -605,6 +620,7 @@ const securityConfirm = reactive({
 const crlConfigDialog = reactive({
   visible: false,
   title: 'URI/CRL配置',
+  imported: false,
   rootId: undefined as string | number | undefined
 });
 
@@ -617,7 +633,7 @@ const crlConfigForm = reactive({
   overlapValue: 1,
   overlapUnit: 'h',
   intervalTime: '00:00',
-  nextCrlNumber: 1,
+  nextCrlNumber: 1 as number | undefined,
   caCertUris: [{ value: '' }],
   ocspUris: [{ value: '' }],
   crlUris: [{ value: '' }],
@@ -627,9 +643,41 @@ const crlConfigForm = reactive({
 });
 
 const loading = ref(false);
-const showSearch = ref(true);
-const total = ref(0);
-const certList = ref([]);
+const dnColumns = [
+  { label: '颁发者', prop: 'issuer' },
+  { label: '主题', prop: 'subject' }
+] as const;
+const managementPermissions = computed(() => ({
+  authorize: auth.hasPermi('ca:root:authorize'),
+  crl: auth.hasPermi('ca:root:crl-config'),
+  publisher: auth.hasPermi('ca:publisher:save'),
+  bind: auth.hasPermi('ca:root:import'),
+  enable: auth.hasPermi('ca:root:enable'),
+  disable: auth.hasPermi('ca:root:disable')
+}));
+type RootCertificateRow = RootHierarchyEntry & NonNullable<ReturnType<typeof parseCertInfo>>;
+type RootCertificateNode = RootCertificateRow & { children: RootCertificateNode[] };
+const certList = ref<RootCertificateRow[]>([]);
+const existingCaDialog = ref<InstanceType<typeof ExistingCaDialog>>();
+const signingCas = computed(() => certList.value.filter((ca) => !ca.imported || ca.caStatus === 'active'));
+const searchName = ref('');
+const certTree = computed(() => {
+  const nodes = new Map<string, RootCertificateNode>();
+  for (const row of certList.value) {
+    nodes.set(String(row.id), { ...row, children: [] });
+  }
+
+  const roots: RootCertificateNode[] = [];
+  for (const node of nodes.values()) {
+    const parent = node.parentRootId == null ? undefined : nodes.get(String(node.parentRootId));
+    if (parent) {
+      parent.children.push(node);
+    } else {
+      roots.push({ ...node, parentRootId: undefined });
+    }
+  }
+  return searchName.value ? filterCertTree(roots, searchName.value) : roots;
+});
 const open = ref(false);
 const title = ref('');
 const activeTab = ref('self');
@@ -654,9 +702,7 @@ const queryForm = ref<FormInstance>();
 
 const data = reactive({
   queryParams: {
-    pageNum: 1,
-    pageSize: 10,
-    name: undefined
+    name: ''
   },
   selfForm: {
     name: '',
@@ -695,11 +741,6 @@ const data = reactive({
     snSize: 20,
     status: 'active'
   },
-  importForm: {
-    name: '',
-    csr: '',
-    certFile: null as File | null
-  },
   onlineSubForm: {
     name: '',
     parentCaId: undefined as string | number | undefined,
@@ -713,7 +754,7 @@ const data = reactive({
   }
 });
 
-const { queryParams, selfForm, importForm, onlineSubForm } = toRefs(data);
+const { queryParams, selfForm, onlineSubForm } = toRefs(data);
 
 /** 签名者变更处理 */
 function onSignerChange(val: any) {
@@ -827,17 +868,10 @@ const selfRules = {
   ]
 };
 
-const importRules = {
-  name: [{ required: true, message: '请输入证书名称', trigger: 'blur' }],
-  certFile: [{ required: true, message: '请上传证书文件', trigger: 'change' }]
-};
-
 const selfFormRef = ref<FormInstance>();
-const importFormRef = ref<FormInstance>();
 const onlineSubFormRef = ref<FormInstance>();
 const crlConfigFormRef = ref<FormInstance>();
 const crlConfigPanelRef = ref<any>();
-const uploadRef = ref<UploadInstance>();
 
 /** 解析 X509 日期格式 */
 function parseX509Date(zStr: string): Date {
@@ -858,19 +892,6 @@ function parseX509Date(zStr: string): Date {
     s = zStr.substring(12, 14);
   }
   return new Date(Date.UTC(y as any, m, d as any, h as any, min as any, s as any));
-}
-
-/** 格式化 X509 日期为显示格式 */
-function formatX509Date(zStr: string): string {
-  const date = parseX509Date(zStr);
-  return date.toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit'
-  });
 }
 
 function getSubCaNotAfter(value: number, unit: string): Date {
@@ -1223,34 +1244,24 @@ function parseCertInfo(certPem: string) {
   try {
     x509.readCertPEM(certPem);
 
-    // 格式化 DN
-    const formatDN = (array: any[]) => {
-      if (!array || array.length === 0) return '';
-      return array
-        .map((e: any) => {
-          const type = e[0].type;
-          const val = e[0].value;
-          return `${type}=${val}`;
-        })
-        .join(', ');
-    };
-
-    const issuer = formatDN(x509.getIssuer().array);
-    const subject = formatDN(x509.getSubject().array);
-    const notBefore = x509.getNotBefore();
-    const notAfter = x509.getNotAfter();
+    const formatDN = (rdns: { type: string; value: string }[][]) => ({
+      commonName: rdns.flat().find((attribute) => attribute.type === 'CN')?.value,
+      full: rdns.map((rdn) => rdn.map(({ type, value }) => `${type}=${value}`).join(' + ')).join(', ')
+    });
+    const issuer = formatDN(x509.getIssuer().array ?? []);
+    const subject = formatDN(x509.getSubject().array ?? []);
+    const notBeforeDate = parseX509Date(x509.getNotBefore());
+    const notAfterDate = parseX509Date(x509.getNotAfter());
 
     // 判断证书状态（是否在有效期内）
     const now = new Date();
-    const notBeforeDate = parseX509Date(notBefore);
-    const notAfterDate = parseX509Date(notAfter);
     const status = now >= notBeforeDate && now <= notAfterDate ? '1' : '0';
 
     return {
       issuer,
       subject,
-      notBefore: formatX509Date(notBefore),
-      notAfter: formatX509Date(notAfter),
+      notBefore: parseTime(notBeforeDate),
+      notAfter: parseTime(notAfterDate),
       notAfterTime: notAfterDate.getTime(),
       status,
       pem: certPem
@@ -1264,65 +1275,49 @@ function parseCertInfo(certPem: string) {
 async function getList() {
   loading.value = true;
   try {
-    const res = await listRootCa(queryParams.value);
-
-    // 处理分页数据结构
-    let rawList = [];
-    let totalCount = 0;
-
-    if (res.data) {
-      // 尝试不同的数据结构
-      if (Array.isArray(res.data.records)) {
-        rawList = res.data.records;
-        totalCount = res.data.total || 0;
-      } else if (Array.isArray(res.data.rows)) {
-        rawList = res.data.rows;
-        totalCount = res.data.total || 0;
-      } else if (Array.isArray(res.data.list)) {
-        rawList = res.data.list;
-        totalCount = res.data.total || 0;
-      } else if (Array.isArray(res.data)) {
-        rawList = res.data;
-        totalCount = res.data.length;
-      }
-    }
-
-    // 解析每个证书
-    certList.value = rawList
-      .map((item: any) => {
-        const certInfo = parseCertInfo(item.cert);
-        return {
-          id: item.id,
-          name: item.name,
-          caStatus: item.caStatus,
-          cert: item.cert,
-          certchain: item.certchain,
-          ...certInfo
-        };
-      })
-      .filter((item: any) => item.issuer); // 过滤掉解析失败的证书
-
-    total.value = totalCount;
+    const { data } = await listRootHierarchy();
+    certList.value = (data ?? []).flatMap((item) => {
+      const certInfo = parseCertInfo(item.cert);
+      return certInfo ? [{ ...item, ...certInfo }] : [];
+    });
   } catch (error: any) {
     const errMsg = error.response?.data?.msg || error.message || '获取根证书列表失败';
     ElMessage.error(errMsg);
     certList.value = [];
-    total.value = 0;
   } finally {
     loading.value = false;
   }
 }
 
+function filterCertTree(nodes: RootCertificateNode[], name: string): RootCertificateNode[] {
+  return nodes.flatMap((node) => {
+    const children = filterCertTree(node.children, name);
+    return node.name.toLowerCase().includes(name) || children.length ? [{ ...node, children }] : [];
+  });
+}
+
 /** 搜索按钮操作 */
 function handleQuery() {
-  queryParams.value.pageNum = 1;
-  getList();
+  searchName.value = queryParams.value.name.trim().toLowerCase();
 }
 
 /** 重置按钮操作 */
 function resetQuery() {
   queryForm.value?.resetFields();
   handleQuery();
+}
+
+function openExistingImport(command: string) {
+  existingCaDialog.value?.openImport(command === 'sub');
+}
+
+async function focusExistingCa(id: string | number) {
+  await getList();
+  const row = certList.value.find((entry) => String(entry.id) === String(id));
+  if (row) {
+    queryParams.value.name = row.name;
+    handleQuery();
+  }
 }
 
 /** 新增按钮操作 */
@@ -1624,11 +1619,6 @@ function reset() {
     snSize: 20,
     status: 'active'
   };
-  importForm.value = {
-    name: '',
-    csr: '',
-    certFile: null
-  };
   onlineSubForm.value = {
     name: '',
     parentCaId: undefined,
@@ -1641,9 +1631,7 @@ function reset() {
     validityUnit: 'y'
   };
   if (selfFormRef.value) selfFormRef.value.resetFields();
-  if (importFormRef.value) importFormRef.value.resetFields();
   if (onlineSubFormRef.value) onlineSubFormRef.value.resetFields();
-  if (uploadRef.value) uploadRef.value.clearFiles();
 }
 
 /** 取消按钮 */
@@ -1651,23 +1639,6 @@ function cancel() {
   open.value = false;
   reset();
 }
-
-/** 生成CSR */
-function handleGenerateCSR() {
-  // 这里应该调用后端API生成CSR
-  // 模拟生成
-  importForm.value.csr = '-----BEGIN CERTIFICATE REQUEST-----\nMIIC...';
-  ElMessage.success('CSR 生成成功');
-}
-
-/** 文件上传变更 */
-const handleFileChange: UploadProps['onChange'] = (file) => {
-  importForm.value.certFile = file.raw as File;
-};
-
-const handleFileRemove: UploadProps['onRemove'] = () => {
-  importForm.value.certFile = null;
-};
 
 /** 提交按钮 */
 function submitForm() {
@@ -1768,16 +1739,6 @@ function submitForm() {
         }
       }
     });
-  } else {
-    importFormRef.value?.validate((valid) => {
-      if (valid) {
-        if (!importForm.value.certFile) {
-          ElMessage.error('请上传证书文件');
-          return;
-        }
-        ElMessage.warning('子CA证书导入接口暂未接入，请使用在线签发功能');
-      }
-    });
   }
 }
 
@@ -1802,14 +1763,14 @@ function applyCrlConfig(data: any) {
   const config = getResultData(data);
   crlConfigForm.intervalHours = toNumberValue(config?.intervalHours, 6);
   crlConfigForm.fullCrlIntervals = toNumberValue(config?.fullCrlIntervals, 4);
-  crlConfigForm.deltaCrlIntervals = toNumberValue(config?.deltaCrlIntervals, 1);
+  crlConfigForm.deltaCrlIntervals = crlConfigDialog.imported && config?.nextCrlNumber == null ? 0 : toNumberValue(config?.deltaCrlIntervals, 1);
   crlConfigForm.fullCrlThreads = toNumberValue(config?.fullCrlThreads, 1);
   crlConfigForm.deltaCrlThreads = toNumberValue(config?.deltaCrlThreads, 1);
   const overlap = parseDuration(config?.overlap);
   crlConfigForm.overlapValue = overlap.value;
   crlConfigForm.overlapUnit = overlap.unit;
   crlConfigForm.intervalTime = config?.intervalTime || '00:00';
-  crlConfigForm.nextCrlNumber = toNumberValue(config?.nextCrlNumber, 1);
+  crlConfigForm.nextCrlNumber = crlConfigDialog.imported && config?.nextCrlNumber == null ? undefined : toNumberValue(config?.nextCrlNumber, 1);
   crlConfigForm.caCertUris = (config?.caCertUris && config.caCertUris.length > 0 ? config.caCertUris : ['']).map((value: string) => ({ value }));
   crlConfigForm.ocspUris = (config?.ocspUris && config.ocspUris.length > 0 ? config.ocspUris : ['']).map((value: string) => ({ value }));
   crlConfigForm.crlUris = (config?.crlUris && config.crlUris.length > 0 ? config.crlUris : ['']).map((value: string) => ({ value }));
@@ -1847,6 +1808,7 @@ function addCrlOperationRecord(record: any) {
 
 async function handleCrlConfig(row: any) {
   crlConfigDialog.rootId = row.id;
+  crlConfigDialog.imported = Boolean(row.imported);
   crlConfigDialog.title = `URI/CRL配置 - ${row.name}`;
   crlConfigForm.publisherId = undefined;
   crlOperationRecords.value = [];
@@ -1987,6 +1949,13 @@ const addCrlConfigUri = (field: 'caCertUris' | 'ocspUris' | 'crlUris' | 'deltaCr
 const removeCrlConfigUri = (field: 'caCertUris' | 'ocspUris' | 'crlUris' | 'deltaCrlUris', index: number) => {
   crlConfigForm[field].splice(index, 1);
 };
+
+function hasManagementActions(row: RootCertificateRow) {
+  const permissions = managementPermissions.value;
+  if (permissions.authorize || permissions.crl || permissions.publisher) return true;
+  if (row.imported && row.signerId == null) return permissions.bind;
+  return row.caStatus === 'inactive' ? permissions.enable : permissions.disable;
+}
 
 /** 查看详情 */
 function handleView(row: any) {
@@ -2177,6 +2146,122 @@ getList();
 </script>
 
 <style scoped lang="scss">
+.ca-root-toolbar,
+.ca-root-filter,
+.ca-root-toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.ca-root-toolbar {
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.ca-root-filter {
+  min-width: 0;
+
+  :deep(.el-form-item) {
+    margin: 0;
+  }
+
+  :deep(.el-input) {
+    width: min(224px, 40vw);
+  }
+}
+
+.ca-root-filter-buttons :deep(.el-button + .el-button) {
+  margin-left: 4px;
+}
+
+.ca-root-table {
+  border-radius: var(--el-border-radius-base);
+  box-shadow: 0 0 0 1px var(--el-border-color-light);
+
+  :deep(.ca-root-name-cell > .cell) {
+    display: flex;
+    align-items: center;
+  }
+
+  :deep(.ca-root-name-cell > .cell > :not(.ca-root-name)) {
+    flex-shrink: 0;
+  }
+
+  :deep(.el-tag) {
+    --el-tag-text-color: var(--el-text-color-regular);
+  }
+}
+
+.ca-root-name {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.ca-root-name-text,
+.ca-root-dn {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ca-root-name-text {
+  color: var(--el-text-color-primary);
+  font-weight: 600;
+}
+
+.ca-root-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding-block: 2px;
+}
+
+.ca-root-dn {
+  width: fit-content;
+  max-width: 100%;
+  cursor: help;
+}
+
+.ca-root-dn:focus-visible {
+  border-radius: var(--el-border-radius-small);
+  outline: 2px solid var(--el-color-primary);
+  outline-offset: -2px;
+}
+
+.ca-root-validity {
+  display: grid;
+  font-size: 13px;
+  line-height: 20px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.ca-root-empty-value,
+.ca-root-period-label {
+  color: var(--el-text-color-regular);
+}
+
+.ca-root-period-label {
+  margin-inline-end: 8px;
+}
+
+.ca-root-row-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+
+  :deep(.el-button) {
+    min-height: 32px;
+    margin: 0;
+  }
+}
+
 .dialog-footer {
   display: flex;
   justify-content: flex-end;

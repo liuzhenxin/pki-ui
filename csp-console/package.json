@@ -3,8 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "vite build --config vite.config.ts",
-    "typecheck": "vue-tsc --noEmit -p tsconfig.json",
-    "test:ui": "node ui-check.mjs"
+    "build": "npm --prefix .. run build:csp",
+    "typecheck": "npm --prefix .. run typecheck:csp",
+    "test:ui": "cd .. && playwright test --config playwright.csp.config.ts tests/csp/e2e"
   }
 }

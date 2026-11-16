@@ -1,9 +1,9 @@
 <template>
-  <div class="p-2 signer-page">
+  <div class="p-2">
     <transition :enter-active-class="proxy?.animate.searchAnimate.enter" :leave-active-class="proxy?.animate.searchAnimate.leave">
       <div v-show="showSearch" class="mb-10px">
         <el-card shadow="hover">
-          <el-form ref="queryFormRef" :model="queryParams" :inline="true">
+          <el-form ref="queryFormRef" class="ca-search-form" :model="queryParams" inline>
             <el-form-item label="签名者名称" prop="name">
               <el-input v-model="queryParams.name" placeholder="请输入签名者名称" clearable @keyup.enter="handleQuery" />
             </el-form-item>
@@ -17,7 +17,7 @@
                 <el-option v-for="item in categoryOptions" :key="item.value" :label="item.label" :value="item.value" />
               </el-select>
             </el-form-item>
-            <el-form-item>
+            <el-form-item class="ca-search-form__actions">
               <el-button type="primary" icon="Search" @click="handleQuery">搜索</el-button>
               <el-button icon="Refresh" @click="resetQuery">重置</el-button>
             </el-form-item>
@@ -47,7 +47,7 @@
         <el-table-column label="签名者名称" min-width="180" prop="name" :show-overflow-tooltip="true" />
         <el-table-column label="签名者类型" align="center" prop="signerType" width="120">
           <template #default="scope">
-            <el-tag :type="signerTypeTag(scope.row.signerType)">{{ scope.row.signerType || '-' }}</el-tag>
+            <el-tag :type="signerTypeTag(scope.row.signerType)">{{ scope.row.keyPairImported ? '指定密钥对' : scope.row.signerType || '-' }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="用途类别" align="center" prop="category" width="120">
@@ -94,7 +94,14 @@
     </el-card>
 
     <el-dialog class="signer-dialog" :title="title" v-model="open" width="820px" append-to-body @close="resetForm">
-      <el-form ref="signerFormRef" class="signer-form" :model="form" :rules="rules" label-width="96px" :disabled="readonly">
+      <el-form
+        ref="signerFormRef"
+        class="signer-form"
+        :model="form"
+        :rules="rules"
+        label-width="96px"
+        :disabled="readonly || submitLoading || testLoading"
+      >
         <el-row :gutter="16">
           <el-col :xs="24" :sm="12">
             <el-form-item label="签名者名称" prop="name">
@@ -103,8 +110,15 @@
           </el-col>
           <el-col :xs="24" :sm="12">
             <el-form-item label="签名者类型" prop="signerType">
-              <el-select v-model="form.signerType" placeholder="请选择签名者类型" style="width: 100%" @change="handleSignerTypeChange">
+              <el-select
+                v-model="form.signerType"
+                :disabled="form.keyPairImported"
+                placeholder="请选择签名者类型"
+                style="width: 100%"
+                @change="handleSignerTypeChange"
+              >
                 <el-option v-for="item in signerTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
+                <el-option v-if="!form.id || form.keyPairImported" label="指定密钥对" value="KEY_PAIR" />
               </el-select>
             </el-form-item>
           </el-col>
@@ -115,9 +129,15 @@
               </el-select>
             </el-form-item>
           </el-col>
-          <el-col :xs="24" :sm="12">
+          <el-col v-if="form.signerType !== 'KEY_PAIR' || form.keyPairImported" :xs="24" :sm="12">
             <el-form-item label="签名算法" prop="algo">
-              <el-select v-model="form.algo" placeholder="请选择签名算法" style="width: 100%" @change="handleAlgorithmChange">
+              <el-select
+                v-model="form.algo"
+                :disabled="form.keyPairImported"
+                placeholder="请选择签名算法"
+                style="width: 100%"
+                @change="handleAlgorithmChange"
+              >
                 <el-option
                   v-for="item in algorithmOptions"
                   :key="item.value"
@@ -128,7 +148,7 @@
               </el-select>
             </el-form-item>
           </el-col>
-          <el-col v-if="form.algo === 'RSA' && form.signerType !== 'SDF'" :xs="24" :sm="12">
+          <el-col v-if="form.algo === 'RSA' && form.signerType === 'PKCS12'" :xs="24" :sm="12">
             <el-form-item label="密钥长度" prop="keySize">
               <el-select v-model="form.keySize" placeholder="请选择密钥长度" style="width: 100%">
                 <el-option v-for="item in rsaKeySizeOptions" :key="item.value" :label="item.label" :value="item.value" />
@@ -140,20 +160,44 @@
               <el-input-number v-model="form.keyIndex" :min="1" :precision="0" controls-position="right" style="width: 100%" />
             </el-form-item>
           </el-col>
-          <el-col v-else :xs="24" :sm="12">
+          <el-col v-else-if="form.signerType === 'PKCS12'" :xs="24" :sm="12">
             <el-form-item label="密钥别名" prop="alias">
               <el-input v-model="form.alias" placeholder="请输入密钥别名" />
             </el-form-item>
           </el-col>
-          <el-col :xs="24" :sm="12">
+          <el-col v-if="form.signerType !== 'KEY_PAIR'" :xs="24" :sm="12">
             <el-form-item label="口令" prop="password">
               <el-input v-model="form.password" type="password" placeholder="请输入口令" show-password />
             </el-form-item>
           </el-col>
+          <template v-if="form.signerType === 'KEY_PAIR' && !form.id">
+            <el-col :xs="24" :sm="12">
+              <el-form-item label="私钥 PEM" prop="privateKeyFile">
+                <input aria-label="选择私钥 PEM 文件" type="file" :disabled="submitLoading || testLoading" @change="selectPrivateKey" />
+              </el-form-item>
+            </el-col>
+            <el-col :xs="24" :sm="12">
+              <el-form-item label="原私钥密码" prop="privateKeyPassword">
+                <el-input v-model="form.privateKeyPassword" type="password" autocomplete="new-password" placeholder="仅加密 PEM 需要" show-password />
+              </el-form-item>
+            </el-col>
+            <el-col :xs="24" :sm="12">
+              <el-form-item label="保存密码" prop="keyPairPassword">
+                <el-input
+                  v-model="form.keyPairPassword"
+                  type="password"
+                  autocomplete="new-password"
+                  :maxlength="64"
+                  placeholder="设置保存私钥的密码"
+                  show-password
+                />
+              </el-form-item>
+            </el-col>
+          </template>
         </el-row>
         <el-form-item class="cert-form-item" label="证书" prop="cert">
-          <el-input v-model="form.cert" type="textarea" placeholder="请输入证书 PEM 数据" :rows="8" />
-          <div class="form-tip">{{ form.signerType === 'SDF' ? 'SDF 签名者通常按密钥索引加载。' : 'PKCS12 签名者使用密钥别名定位私钥。' }}</div>
+          <el-input v-model="form.cert" :readonly="form.keyPairImported" type="textarea" placeholder="请输入证书 PEM 数据" :rows="8" />
+          <div v-if="form.signerType === 'KEY_PAIR' && !form.id" class="form-tip">粘贴与私钥配套的单张证书 PEM，系统会自动识别公钥算法。</div>
         </el-form-item>
       </el-form>
       <div v-if="readonly" class="public-key-block">
@@ -175,7 +219,9 @@
         <el-descriptions-item label="测试结论">
           <el-tag :type="testResult?.passed ? 'success' : 'danger'">{{ testResult?.passed ? '通过' : '未通过' }}</el-tag>
         </el-descriptions-item>
-        <el-descriptions-item label="签名者类型">{{ testResult?.signerType || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="签名者类型">{{
+          testResult?.signerType === 'KEY_PAIR' ? '指定密钥对' : testResult?.signerType || '-'
+        }}</el-descriptions-item>
         <el-descriptions-item label="签名算法">{{ testResult?.algorithm || '-' }}</el-descriptions-item>
       </el-descriptions>
       <el-table class="test-checks" border :data="testResult?.checks || []">
@@ -197,6 +243,7 @@
 <script setup name="CaSigner" lang="ts">
 import { getCurrentInstance, reactive, ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
+import type { FormRules } from 'element-plus';
 import { pageSigner, getSigner, saveSigner, modifySigner, removeSigner, testSigner } from '@/api/ca/signer';
 
 const { proxy } = getCurrentInstance() as any;
@@ -273,7 +320,15 @@ const validateAlgorithm = (_rule: any, value: any, callback: any) => {
   callback();
 };
 
-const rules = reactive({
+const keyPairRequired = (message: string) => (_rule: any, value: any, callback: any) => {
+  if (form.value.signerType === 'KEY_PAIR' && !form.value.id && (typeof value === 'string' ? !value.trim() : !value)) {
+    callback(new Error(message));
+    return;
+  }
+  callback();
+};
+
+const rules = reactive<FormRules>({
   name: [{ required: true, message: '签名者名称不能为空', trigger: 'blur' }],
   signerType: [{ required: true, message: '签名者类型不能为空', trigger: 'change' }],
   category: [{ required: true, message: '用途类别不能为空', trigger: 'change' }],
@@ -282,7 +337,10 @@ const rules = reactive({
     { validator: validateAlgorithm, trigger: 'change' }
   ],
   keyIndex: [{ validator: validateKeyIndex, trigger: 'change' }],
-  keySize: [{ validator: validateKeySize, trigger: 'change' }]
+  keySize: [{ validator: validateKeySize, trigger: 'change' }],
+  privateKeyFile: [{ validator: keyPairRequired('请选择私钥 PEM 文件'), trigger: 'change' }],
+  cert: [{ validator: keyPairRequired('请输入配套的证书 PEM'), trigger: 'blur' }],
+  keyPairPassword: [{ validator: keyPairRequired('请设置保存密码'), trigger: 'blur' }]
 });
 
 function getList() {
@@ -347,7 +405,7 @@ function loadSigner(row: any, viewOnly: boolean) {
     form.value = {
       ...form.value,
       ...response.data,
-      signerType: response.data?.signerType || response.data?.type || 'PKCS12',
+      signerType: response.data?.keyPairImported ? 'KEY_PAIR' : response.data?.signerType || response.data?.type || 'PKCS12',
       category: response.data?.category || 'ISSUER',
       algo: response.data?.algo || 'SM2',
       keySize:
@@ -370,6 +428,9 @@ function handleUpdate(row: any) {
 }
 
 function handleSignerTypeChange(value: string) {
+  form.value.privateKeyFile = undefined;
+  form.value.privateKeyPassword = undefined;
+  form.value.keyPairPassword = undefined;
   if (value === 'SDF') {
     // SDF 签名者按密钥索引定位，不选择密钥长度
     form.value.keySize = undefined;
@@ -386,6 +447,19 @@ function handleSignerTypeChange(value: string) {
   }
 }
 
+function selectPrivateKey(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  if (file && file.size > 64 * 1024) {
+    input.value = '';
+    form.value.privateKeyFile = undefined;
+    ElMessage.error('私钥 PEM 文件不能超过 64 KB');
+    return;
+  }
+  form.value.privateKeyFile = file;
+  void signerFormRef.value?.validateField('privateKeyFile').catch(() => {});
+}
+
 function handleAlgorithmChange(value: string) {
   if (value === 'RSA') {
     // SDF 的 RSA 密钥在设备中，无需选择密钥长度
@@ -400,6 +474,9 @@ function submitForm() {
     if (!valid) {
       return;
     }
+    if (submitLoading.value || testLoading.value) {
+      return;
+    }
     submitLoading.value = true;
     const action = form.value.id ? modifySigner(form.value) : saveSigner(form.value);
     action
@@ -408,6 +485,7 @@ function submitForm() {
         open.value = false;
         getList();
       })
+      .catch(() => {})
       .finally(() => {
         submitLoading.value = false;
       });
@@ -428,12 +506,16 @@ function handleTestForm() {
 }
 
 function runTest(payload: any) {
+  if (submitLoading.value || testLoading.value) {
+    return;
+  }
   testLoading.value = true;
   testSigner(payload)
     .then((response) => {
       testResult.value = response.data;
       testOpen.value = true;
     })
+    .catch(() => {})
     .finally(() => {
       testLoading.value = false;
     });
@@ -487,12 +569,6 @@ getList();
 
 .mb-10px {
   margin-bottom: 10px;
-}
-
-.signer-page {
-  :deep(.el-form--inline .el-form-item) {
-    margin-right: 14px;
-  }
 }
 
 .signer-dialog {

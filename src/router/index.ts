@@ -1,9 +1,12 @@
 import { kmsInitializationRoute } from '@/utils/kmsInitializationRoute';
 import { createWebHistory, createRouter, RouteRecordRaw } from 'vue-router';
 /* Layout */
+import { cspProduct } from '@/config/csp';
 import Layout from '@/layout/index.vue';
 import { svsConstantRoutes, svsInitializationRoute } from './svs';
 import { hsmConstantRoutes } from './hsm';
+import { cspRoutes } from './csp';
+import { isUcspProduct } from '@/config/ucsp';
 
 /**
  * Note: 路由配置项
@@ -87,9 +90,9 @@ const platformConstantRoutes: RouteRecordRaw[] = [
     children: [
       {
         path: '/index',
-        component: () => import('@/views/index.vue'),
+        component: isUcspProduct ? () => import('@/views/ucsp/overview/index.vue') : () => import('@/views/index.vue'),
         name: 'Index',
-        meta: { title: '首页', icon: 'dashboard', affix: true }
+        meta: { title: isUcspProduct ? '运行总览' : '首页', icon: 'dashboard', affix: true }
       }
     ]
   },
@@ -129,7 +132,7 @@ const platformConstantRoutes: RouteRecordRaw[] = [
         path: '',
         component: () => import('@/views/ops/alert/index.vue'),
         name: 'OpsAlertCenter',
-        meta: { title: '告警中心', activeMenu: '/ops/alert' }
+        meta: { title: '告警中心', icon: 'bell', activeMenu: '/ops/alert' }
       }
     ]
   },
@@ -274,13 +277,26 @@ const platformConstantRoutes: RouteRecordRaw[] = [
   }
 ];
 
+const tenantIds = (import.meta.env.VITE_APP_TENANT_IDS ?? '')
+  .split(',')
+  .map((id: string) => id.trim())
+  .filter(Boolean);
+const includesCspTenant = tenantIds.length === 0 || tenantIds.includes(cspProduct.tenantId);
+
 // 动态路由，基于用户权限动态去加载
 export const constantRoutes: RouteRecordRaw[] =
   import.meta.env.VITE_APP_TENANT_IDS === '7'
     ? hsmConstantRoutes
     : import.meta.env.VITE_APP_TENANT_IDS === '9'
       ? svsConstantRoutes
-      : platformConstantRoutes;
+      : isUcspProduct
+        ? [
+            { path: '/ucsp/setup', name: 'UcspSetup', component: () => import('@/views/ucsp/init/index.vue'), hidden: true },
+            ...platformConstantRoutes
+          ]
+        : includesCspTenant
+          ? [...cspRoutes, ...platformConstantRoutes]
+          : platformConstantRoutes;
 
 export const dynamicRoutes: RouteRecordRaw[] =
   import.meta.env.VITE_APP_TENANT_IDS === '9'

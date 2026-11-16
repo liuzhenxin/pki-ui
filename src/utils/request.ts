@@ -1,4 +1,4 @@
-import axios, { AxiosResponse, InternalAxiosRequestConfig } from 'axios';
+import axios, { AxiosError, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
 import { getToken, setToken, getRefreshToken, setRefreshToken, removeToken, removeRefreshToken } from '@/utils/auth';
 import { tansParams, blobValidate } from '@/utils/ruoyi';
 import cache from '@/plugins/cache';
@@ -106,6 +106,10 @@ service.interceptors.request.use(
     (config as any).hideErrorNotify = hideErrorNotify;
     if (config.headers?.hideErrorNotify !== undefined) {
       delete config.headers.hideErrorNotify;
+    }
+    if (config.headers?.sensitive === true || config.headers?.sensitive === 'true') {
+      (config as InternalAxiosRequestConfig & { sensitive?: boolean }).sensitive = true;
+      delete config.headers.sensitive;
     }
     // 对应国际化资源文件后缀
     config.headers['Content-Language'] = getLanguage();
@@ -240,6 +244,9 @@ service.interceptors.response.use(
       return Promise.reject(handleSessionExpired());
     }
     if (code === 401) {
+      if (config?.sensitive && config.method !== 'get') {
+        return Promise.reject(new AxiosError(msg, String(code), res.config, res.request, res));
+      }
       // 如果本身就是刷新令牌的请求返回了 401，说明 refresh_token 也过期了
       if (isRefreshTokenRequest(config) || config?._retry) {
         return Promise.reject(handleSessionExpired());
@@ -309,6 +316,7 @@ service.interceptors.response.use(
       if (!(res.config as any).hideErrorNotify) {
         ElNotification.error({ title: msg });
       }
+      if (config?.sensitive) return Promise.reject(new AxiosError(msg, String(code), res.config, res.request, res));
       return Promise.reject(String(res.config?.url || '').startsWith('/kms/v1/') ? new Error(msg) : 'error');
     } else {
       return Promise.resolve(res.data);
@@ -330,7 +338,7 @@ service.interceptors.response.use(
     if (String(error.config?.url || '').startsWith('/kms/v1/')) {
       return Promise.reject(new Error('KMS 请求失败，请检查网络、认证与服务可用性'));
     }
-    console.log(error);
+    if (!error.config?.sensitive) console.log(error);
     let { message } = error;
     const responseMsg = error.response?.data?.msg || error.response?.data?.Status?.Msg || error.response?.data?.message;
     if (error.response != null && error.response.data != null && error.response.data.error_description != null) {

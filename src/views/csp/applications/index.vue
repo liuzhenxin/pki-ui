@@ -2,8 +2,6 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { ElDialog, ElMessageBox } from 'element-plus';
 import {
-  ConsoleRequestError,
-  consoleRequest,
   type ConsoleCommands,
   type ConsoleResponses,
   type IssuedApplicationCredential,
@@ -14,6 +12,7 @@ import {
   type ServiceGrant,
   type ServiceResource
 } from '@/api/csp/console';
+import { consoleRequest, ConsoleRequestError } from '@/api/csp/gateway';
 import { useCspConsoleStore } from '@/store/modules/cspConsole';
 
 const session = useCspConsoleStore();
@@ -47,7 +46,7 @@ const operations = computed(() => {
 });
 
 function api<K extends keyof ConsoleResponses>(action: K, command: ConsoleCommands[K]) {
-  return consoleRequest(action, session.csrf, command);
+  return consoleRequest(action, command);
 }
 
 async function run(work: () => Promise<void>, writes = false) {

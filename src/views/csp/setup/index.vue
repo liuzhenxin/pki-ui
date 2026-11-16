@@ -9,20 +9,8 @@ import { useCspInstallationStore } from '@/store/modules/cspInstallation';
 const store = useCspInstallationStore();
 const router = useRouter();
 onMounted(() => store.refresh());
-const {
-  initialized,
-  completion,
-  setupStep,
-  setup,
-  initializationAttempted,
-  busy,
-  error,
-  environmentReady,
-  accountTransport,
-  secure,
-  certificateEnabled,
-  checkedAt
-} = storeToRefs(store);
+const { initialized, completion, setupStep, setup, initializationAttempted, busy, error, environmentReady, secure, certificateEnabled, checkedAt } =
+  storeToRefs(store);
 const accepted = ref(false);
 const accounts = [
   { role: 'SYSTEM_ADMIN', username: 'admin', password: ref(''), repeat: ref(''), certificate: ref('') },
@@ -121,7 +109,7 @@ async function logout() {
               ><input v-model="accepted" type="checkbox" :disabled="busy || !agreementAvailable" />我已阅读并同意公共用户协议</label
             >
             <div class="wizard-actions">
-              <el-button type="primary" :disabled="busy || !accepted || !agreementAvailable || !accountTransport" @click="store.advanceSetup('AGREE')"
+              <el-button type="primary" :disabled="busy || !accepted || !agreementAvailable || !secure" @click="store.advanceSetup('AGREE')"
                 >同意并继续</el-button
               >
             </div>
@@ -142,9 +130,7 @@ async function logout() {
               <li><strong>密码设备</strong><span>未核验，初始化后配置并执行真实自测</span></li>
             </ul>
             <div class="wizard-actions">
-              <el-button type="primary" :loading="busy" :disabled="busy || !accountTransport" @click="store.advanceSetup('CHECK_ENV')"
-                >检测并继续</el-button
-              >
+              <el-button type="primary" :loading="busy" :disabled="busy || !secure" @click="store.advanceSetup('CHECK_ENV')">检测并继续</el-button>
             </div>
           </template>
           <template v-else>
@@ -189,7 +175,7 @@ async function logout() {
               </section>
             </el-form>
             <div class="wizard-actions">
-              <el-button :disabled="busy || !accountTransport" @click="store.advanceSetup('CHECK_ENV')">重新检测</el-button>
+              <el-button :disabled="busy || !secure" @click="store.advanceSetup('CHECK_ENV')">重新检测</el-button>
               <el-button
                 type="primary"
                 native-type="submit"

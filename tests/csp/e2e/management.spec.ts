@@ -3,9 +3,38 @@ import AxeBuilder from '@axe-core/playwright';
 import { createServer, type Server } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { resolve, extname } from 'node:path';
+test.use({ video: 'off' });
+
 let server: Server;
 let origin: string;
 const appId = 'ba_' + 'a'.repeat(32);
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('tenantId', '10');
+    localStorage.setItem('tenantCode', 'csp');
+    localStorage.setItem('Admin-Token', 'fixture-platform-token');
+  });
+});
+
+function gatewayAction(path: string, method: string): string {
+  const resource = path.replace('/api-gateway/csp/v3/', '');
+  if (path.endsWith('/v1/console/session')) return 'session';
+  if (resource === 'services') return method === 'GET' ? 'service-list' : 'service-save';
+  if (resource === 'quotas') return method === 'GET' ? 'quota-list' : 'quota-save';
+  if (resource === 'applications') return 'application-list';
+  if (resource.endsWith('/onboarding')) return 'application-view';
+  if (resource.endsWith('/authorization-draft')) return 'application-draft';
+  if (resource.endsWith('/authorization-publish')) return 'application-publish';
+  if (resource === 'registered-applications') return method === 'GET' ? 'owned-application-list' : 'owned-application-register';
+  if (resource === 'registered-applications/services') return 'owned-service-list';
+  if (/^registered-applications\/app_[^/]+$/.test(resource)) return 'owned-application-view';
+  if (resource.endsWith('/policy')) return 'owned-application-save-policy';
+  if (resource.endsWith('/name')) return 'owned-application-rename';
+  if (resource.endsWith('/suspend')) return 'owned-application-suspend';
+  if (resource.endsWith('/remove')) return 'owned-application-remove';
+  return resource;
+}
+
 test.beforeAll(async () => {
   server = createServer((req, res) => {
     const path = req.url?.split('?')[0] || '/';
@@ -63,17 +92,18 @@ for (const width of [1440, 390])
         failures.push(url.origin);
         return route.abort();
       }
-      if (!url.pathname.startsWith('/console-api/')) return route.continue();
-      const action = url.pathname.split('/').at(-1)!;
+      if (!url.pathname.startsWith('/api-gateway/')) return route.continue();
+      expect(route.request().headers().authorization).toBe('Bearer fixture-platform-token');
+      const action = gatewayAction(url.pathname, route.request().method());
       const body = route.request().postDataJSON() || {};
       calls.push({ action, body });
       let result: unknown;
-      if (action === 'session') result = { csrf: 'public-test-csrf', authenticated: true, initialized: true };
+      if (action === 'session') result = { authenticated: true, initialized: true, canInitialize: false, canManageServices: true };
       else if (action === 'service-list') result = { items: [resource], hasMore: false };
       else if (action === 'service-save') {
         if (conflict) {
           conflict = false;
-          return route.fulfill({ status: 409, json: { message: '版本或审批条件已变化，请刷新后核对。未自动重试。' } });
+          return route.fulfill({ status: 409, json: { msg: '版本或审批条件已变化，请刷新后核对。未自动重试。' } });
         }
         result = { ...resource, ...body, version: '2' };
       } else if (action === 'application-list')
@@ -83,13 +113,13 @@ for (const width of [1440, 390])
         };
       else if (action === 'application-view') result = view;
       else if (action === 'application-draft') {
-        const { applicationId, expectedVersion, ...policy } = body;
-        expect(applicationId).toBe(appId);
+        const { expectedVersion, ...policy } = body;
+        expect(url.pathname).toContain('/' + appId + '/');
         expect(expectedVersion).toBe('0');
         view = { ...view, version: '1', state: 'DRAFT', platformVersion: '0', proposerId: '100', policy };
         result = view;
       } else if (action === 'application-publish') {
-        expect(body).toEqual({ applicationId: appId, expectedVersion: '1' });
+        expect(body).toEqual({ expectedVersion: '1' });
         view = { ...view, version: '2', state: 'PUBLISHED', approverId: '101' };
         result = view;
       } else if (action === 'quota-list') result = { items: [], hasMore: false };
@@ -98,7 +128,7 @@ for (const width of [1440, 390])
         failures.push(action);
         return route.abort();
       }
-      return route.fulfill({ json: result });
+      return route.fulfill({ json: { code: 'OK', data: result } });
     });
     await page.goto(origin + '/csp/management');
     await expect(page.getByRole('heading', { name: '服务与应用管理' })).toBeVisible();
@@ -150,8 +180,11 @@ test.describe('CSP-owned applications', () => {
     let registered = false;
     let saved = false;
     let version = '1';
-    await page.route('**/console-api/**', async (route) => {
-      const action = new URL(route.request().url()).pathname.split('/').at(-1);
+    await page.route('**/api-gateway/**', async (route) => {
+      const url = new URL(route.request().url());
+      const action = gatewayAction(url.pathname, route.request().method());
+      expect(route.request().headers().authorization).toBe('Bearer fixture-platform-token');
+      const ok = (data: unknown) => route.fulfill({ json: { code: 'OK', data } });
       const body = route.request().postDataJSON();
       const view = {
         application: { ...application, version },
@@ -160,40 +193,39 @@ test.describe('CSP-owned applications', () => {
       };
       switch (action) {
         case 'session':
-          return route.fulfill({ json: { csrf: 'test-csrf', authenticated: true, initialized: true, canOperateApplications: true } });
+          return ok({ authenticated: true, initialized: true, canInitialize: false, canOperateApplications: true });
         case 'owned-application-list':
-          return route.fulfill({ json: { items: registered ? [view.application] : [], hasMore: false } });
+          return ok({ items: registered ? [view.application] : [], hasMore: false });
         case 'owned-service-list':
-          return route.fulfill({ json: { items: [{ serviceId: grant.serviceId, family: 'SVS', enabled: true }], hasMore: false } });
+          return ok({ items: [{ serviceId: grant.serviceId, family: 'SVS', enabled: true }], hasMore: false });
         case 'owned-application-register':
           expect(body).toEqual({ name: application.name });
           registered = true;
-          return route.fulfill({ json: { ...application, appSecret } });
+          return ok({ ...application, appSecret });
         case 'owned-application-view':
-          return route.fulfill({ json: view });
+          return ok(view);
         case 'owned-application-save-policy':
           expect(body).toEqual({
-            applicationId: application.applicationId,
             expectedVersion: '1',
             policy: { grants: [grant], maxRequests: 100, windowSeconds: 60 }
           });
           saved = true;
           version = '2';
-          return route.fulfill({ json: { ...view, application: { ...application, version }, activeGrants: [grant] } });
+          return ok({ ...view, application: { ...application, version }, activeGrants: [grant] });
         case 'owned-application-rename':
-          expect(body).toEqual({ applicationId: application.applicationId, expectedVersion: '2', name: 'OA 生产系统' });
+          expect(body).toEqual({ expectedVersion: '2', name: 'OA 生产系统' });
           application.name = body.name;
           version = '3';
-          return route.fulfill({ json: { ...view, application: { ...application, version } } });
+          return ok({ ...view, application: { ...application, version } });
         case 'owned-application-suspend':
-          expect(body).toEqual({ applicationId: application.applicationId, expectedVersion: '3' });
+          expect(body).toEqual({ expectedVersion: '3' });
           application.enabled = false;
           version = '4';
-          return route.fulfill({ json: { ...view, application: { ...application, version }, activeGrants: [] } });
+          return ok({ ...view, application: { ...application, version }, activeGrants: [] });
         case 'owned-application-remove':
-          expect(body).toEqual({ applicationId: application.applicationId, expectedVersion: '4' });
+          expect(body).toEqual({ expectedVersion: '4' });
           registered = false;
-          return route.fulfill({ json: { applicationId: application.applicationId, version: '5' } });
+          return ok({ applicationId: application.applicationId, version: '5' });
         default:
           return route.abort();
       }

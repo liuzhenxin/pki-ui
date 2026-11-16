@@ -38,10 +38,10 @@
     <el-card shadow="hover">
       <template #header>
         <el-row :gutter="10">
-          <el-col :span="1.5">
+          <el-col v-if="!isUcspProduct" :span="1.5">
             <el-button type="danger" plain icon="Delete" :disabled="multiple" @click="handleDelete()">删除</el-button>
           </el-col>
-          <el-col :span="1.5">
+          <el-col v-if="!isUcspProduct" :span="1.5">
             <el-button type="warning" plain icon="Download" @click="handleExport">导出</el-button>
           </el-col>
           <right-toolbar v-model:show-search="showSearch" @query-table="getList"></right-toolbar>
@@ -49,7 +49,7 @@
       </template>
 
       <el-table v-loading="loading" border :data="loginLogList" @selection-change="handleSelectionChange">
-        <el-table-column type="selection" width="50" align="center" />
+        <el-table-column v-if="!isUcspProduct" type="selection" width="50" align="center" />
         <el-table-column type="index" label="序号" width="80" align="center" />
         <el-table-column label="访问编号" align="center" prop="id" width="180" />
         <el-table-column label="用户名称" align="center" prop="username" :show-overflow-tooltip="true" />
@@ -78,6 +78,7 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { Search, Refresh, Delete, Download } from '@element-plus/icons-vue';
 import { list, delLoginLog, exportLoginLog } from '@/api/system/loginlog';
 import { LoginLogForm, LoginLogQuery } from '@/api/system/loginlog/types';
+import { isUcspProduct } from '@/config/ucsp';
 
 const { proxy } = getCurrentInstance() as any;
 

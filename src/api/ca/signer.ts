@@ -1,5 +1,6 @@
 import request from '@/utils/request';
 import { Result } from '@/api/types';
+import { ElMessage } from 'element-plus';
 
 const parseConf = (conf: any) => {
   if (!conf || typeof conf !== 'string') {
@@ -21,6 +22,7 @@ const normalizeSigner = (item: any = {}) => {
     keyIndex: item.keyIndex || conf.keyIndex || 1,
     keySize: item.keySize || conf.keySize || conf.keyLength,
     publicKey: item.publicKey || conf.publicKey,
+    keyPairImported: conf.keyPairImported === true,
     certConfigured: item.certConfigured ?? Boolean(item.cert)
   };
 };
@@ -43,15 +45,17 @@ const normalizeResultPage = (res: any) => ({
   }
 });
 
-const toSignerCmd = (data: any = {}) => ({
+const toSignerCmd = (data: any = {}, privateKey?: string) => ({
   co: {
     id: data.id,
     name: data.name,
-    type: data.type || data.signerType,
+    type: data.signerType === 'KEY_PAIR' ? 'KEY_PAIR' : data.type || data.signerType,
     category: data.category || 'ISSUER',
     cert: data.cert,
     alias: data.alias,
-    password: data.password,
+    password: data.signerType === 'KEY_PAIR' ? data.keyPairPassword : data.password,
+    privateKey,
+    privateKeyPassword: privateKey === undefined ? undefined : data.privateKeyPassword,
     conf: JSON.stringify({
       ...parseConf(data.conf),
       algo: data.algo,
@@ -60,6 +64,20 @@ const toSignerCmd = (data: any = {}) => ({
     })
   }
 });
+
+const sensitiveSignerRequest = { sensitive: true, repeatSubmit: false };
+
+const readPrivateKey = async (data: any) => {
+  if (data.signerType !== 'KEY_PAIR') {
+    return undefined;
+  }
+  try {
+    return await (data.privateKeyFile as File).text();
+  } catch {
+    ElMessage.error('无法读取私钥 PEM 文件，请重新选择');
+    throw new Error('无法读取私钥 PEM 文件');
+  }
+};
 
 // 查询签名者列表
 export function listSigner(data?: any): Promise<Result<any[]>> {
@@ -91,11 +109,12 @@ export function getSigner(id: string | number): Promise<Result<any>> {
 }
 
 // 保存签名者
-export function saveSigner(data: any): Promise<Result<any>> {
+export async function saveSigner(data: any): Promise<Result<any>> {
   return request({
     url: '/ca/v1/signers',
     method: 'post',
-    data: toSignerCmd(data)
+    headers: sensitiveSignerRequest,
+    data: toSignerCmd(data, await readPrivateKey(data))
   }) as any;
 }
 
@@ -104,16 +123,18 @@ export function modifySigner(data: any): Promise<Result<any>> {
   return request({
     url: '/ca/v1/signers',
     method: 'put',
-    data: toSignerCmd(data)
+    headers: sensitiveSignerRequest,
+    data: data.keyPairImported ? { co: { id: data.id, name: data.name, category: data.category } } : toSignerCmd(data)
   }) as any;
 }
 
 // 测试签名者
-export function testSigner(data: any): Promise<Result<any>> {
-  const payload = data?.id ? { id: data.id } : { co: toSignerCmd(data).co };
+export async function testSigner(data: any): Promise<Result<any>> {
+  const payload = data?.id ? { id: data.id } : { co: toSignerCmd(data, await readPrivateKey(data)).co };
   return request({
     url: '/ca/v1/signers/test',
     method: 'post',
+    headers: sensitiveSignerRequest,
     data: payload
   }) as any;
 }
