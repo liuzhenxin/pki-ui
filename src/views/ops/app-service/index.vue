@@ -80,7 +80,7 @@
         </el-table-column>
         <el-table-column label="依赖" min-width="210" show-overflow-tooltip>
           <template #default="{ row }">
-            <span>{{ row.dependencies?.length ? row.dependencies.join(' / ') : '无' }}</span>
+            <span>{{ row.dependencies.length ? row.dependencies.join(' / ') : '无' }}</span>
           </template>
         </el-table-column>
         <el-table-column label="操作" width="110" fixed="right" align="center">
@@ -152,7 +152,8 @@
           <el-table-column label="依赖" min-width="200">
             <template #default="{ row }">
               <el-select v-model="row.dependencies" multiple filterable allow-create default-first-option placeholder="依赖组件" style="width: 100%">
-                <el-option v-for="dep in dependencyOptions" :key="dep" :label="dep" :value="dep" />
+                <el-option v-for="dep in dependencyOptions(row.dependencies)" :key="dep" :label="dependencyLabel(dep, overview)" :value="dep" />
+                <template #label="{ value }">{{ dependencyLabel(String(value), overview) }}</template>
               </el-select>
             </template>
           </el-table-column>
@@ -176,7 +177,7 @@
 import type { FormInstance, FormRules } from 'element-plus';
 import { getAppServiceConfig, getOpsOverview, getOpsServers, saveAppServiceConfig } from '@/api/ops';
 import type { AppServiceConfig, OpsOverview, OpsServer } from '@/api/ops/types';
-import { dateTimeText, flattenComponents, statusTagType, statusText } from '@/views/ops/utils';
+import { dateTimeText, dependencyLabel, flattenComponents, statusTagType, statusText } from '@/views/ops/utils';
 
 interface AppServiceRow {
   name: string;
@@ -229,7 +230,7 @@ const serviceRows = computed<AppServiceRow[]>(() =>
       name: service.code,
       displayName: component?.displayName || service.name,
       layerName: component?.layerName,
-      dependencies: component?.dependencies || service.dependencies || [],
+      dependencies: (component?.dependencies ?? service.dependencies ?? []).map((dependency) => dependencyLabel(dependency, overview.value)),
       running,
       statusKey,
       statusText: statusText(container?.state, container?.running, container?.present),
@@ -288,8 +289,8 @@ const configRules: FormRules = {
   code: [{ required: true, message: '请输入服务编码', trigger: 'blur' }],
   name: [{ required: true, message: '请输入服务名称', trigger: 'blur' }]
 };
-const dependencyOptions = [
-  'mysql8',
+const dependencyOptions = (dependencies: string[]) => [
+  dependencies.includes('database') && !dependencies.includes('mysql8') ? 'database' : 'mysql8',
   'redis8',
   'kafka',
   'pki-nacos',

@@ -1,10 +1,26 @@
 import { test, expect } from '@playwright/test';
+import { generateKeyPairSync } from 'node:crypto';
 import { createServer, type Server } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { extname, resolve } from 'node:path';
 import { CSP_AGREEMENT_VERSION } from '../../../src/products/csp/agreement';
 
 test.use({ video: 'off' });
+
+const fixtureToken = 'fixture-platform-token';
+const { publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+const loginPublicKey = publicKey.export({ type: 'spki', format: 'pem' });
+const captchaImage = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j6ysAAAAASUVORK5CYII=';
+
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript((token) => {
+    if (sessionStorage.getItem('fixture-platform-bootstrapped')) return;
+    localStorage.setItem('tenantId', '10');
+    localStorage.setItem('tenantCode', 'csp');
+    localStorage.setItem('Admin-Token', token);
+    sessionStorage.setItem('fixture-platform-bootstrapped', 'true');
+  }, fixtureToken);
+});
 
 let server: Server;
 let origin: string;
@@ -41,6 +57,7 @@ for (const width of [1440, 390])
     let initialized = false;
     let canInitialize = true;
     let authenticated = true;
+    let captchaUuid: string | undefined;
     const calls: string[] = [];
     const failures: string[] = [];
     page.on('pageerror', (error) => failures.push(error.message));
@@ -50,36 +67,61 @@ for (const width of [1440, 390])
         failures.push(url.origin);
         return route.abort();
       }
-      if (!url.pathname.startsWith('/console-api/')) return route.continue();
-      const action = url.pathname.split('/').at(-1)!;
-      calls.push(action);
-      if (action === 'session') return route.fulfill({ json: { csrf: 'test-csrf', authenticated, initialized, canInitialize } });
-      if (action === 'logout') {
+      if (url.pathname.startsWith('/console-api/')) {
+        failures.push(url.pathname);
+        return route.abort();
+      }
+      if (!url.pathname.startsWith('/api-gateway/')) return route.continue();
+      const path = url.pathname.replace('/api-gateway', '');
+      const ok = (data: unknown) => route.fulfill({ json: { code: 'OK', data } });
+      if (path.startsWith('/csp/')) {
+        expect(route.request().headers().authorization).toBe('Bearer ' + fixtureToken);
+      }
+      if (path === '/csp/v1/console/session') {
+        calls.push('session');
+        return authenticated
+          ? ok({ authenticated, initialized, canInitialize, canManageServices: true })
+          : route.fulfill({ status: 401, json: { code: 'Unauthorized' } });
+      }
+      if (path === '/auth/v1/tokens') {
         authenticated = false;
-        return route.fulfill({ json: { authenticated: false } });
+        return ok(null);
       }
-      if (action === 'login') {
+      if (path === '/auth/v1/oauth2/token') {
+        const body = new URLSearchParams(route.request().postData() || '');
+        expect(body.get('tenant_code')).toBe('csp');
+        expect(body.get('captcha')).toBe('A123');
+        expect(body.get('uuid')).toBe(captchaUuid);
+        calls.push('login');
         authenticated = true;
-        return route.fulfill({ json: { authenticated, initialized, canInitialize } });
+        return route.fulfill({ json: { access_token: fixtureToken } });
       }
-      if (action === 'installation')
-        return route.fulfill({
-          json: {
-            initialized,
-            draftVersion: 0,
-            step: initialized ? 3 : 0,
-            agreed: initialized,
-            attempted: false,
-            agreementVersion: CSP_AGREEMENT_VERSION,
-            companyName: '虚构 CSP 测试公司',
-            accounts: [],
-            checkedAt: null
-          }
+      if (path === '/auth/v1/secrets') return ok({ publicKey: loginPublicKey });
+      if (path === '/admin/v1/tenants/list') return ok([{ id: '10', code: 'csp', name: '密码服务平台' }]);
+      if (path === '/admin/v1/tenants/10') return ok({ id: '10', name: '密码服务平台' });
+      if (path === '/auth/v1/security/radius/status') return ok({ enabled: false });
+      if (path === '/auth/v1/iam-policy/login-hints') return ok({ captchaEnabled: true });
+      if (path.startsWith('/auth/v1/username-password/captchas/')) {
+        captchaUuid = path.split('/').at(-1);
+        return ok(captchaImage);
+      }
+      if (path === '/csp/v2/setup') {
+        calls.push('installation');
+        return ok({
+          initialized,
+          draftVersion: '0',
+          step: initialized ? 3 : 0,
+          agreed: initialized,
+          attempted: false,
+          agreementVersion: CSP_AGREEMENT_VERSION,
+          companyName: '虚构 CSP 测试公司',
+          accounts: [],
+          checkedAt: null
         });
-      if (action === 'setup') return route.fulfill({ status: 503, json: { message: '服务状态暂不可用' } });
-      if (action === 'service-list') return route.fulfill({ json: { items: [], hasMore: false } });
-      if (action === 'challenge') return route.fulfill({ json: { csrf: 'test-csrf', captchaEnabled: false, image: '' } });
-      failures.push(action);
+      }
+      if (path === '/csp/v3/setup') return route.fulfill({ status: 503, json: { msg: '服务状态暂不可用' } });
+      if (path === '/csp/v3/services') return ok({ items: [], hasMore: false });
+      failures.push(path);
       return route.abort();
     });
 
@@ -103,9 +145,12 @@ for (const width of [1440, 390])
     initialized = true;
     await page.getByRole('button', { name: '退出登录' }).click();
     await expect(page).toHaveURL(origin + '/login');
-    await page.getByLabel('账号', { exact: true }).fill('fixture-admin');
+    await page.getByLabel('用户名', { exact: true }).fill('fixture-admin');
     await page.getByLabel('密码', { exact: true }).fill('fixture-password');
-    await page.getByRole('button', { name: '登录', exact: true }).click();
+    await expect(page.getByRole('img', { name: '验证码' })).toBeVisible();
+    await page.getByLabel('验证码', { exact: true }).fill('A123');
+    await page.getByRole('button', { name: '登 录', exact: true }).click();
+    expect(calls.filter((action) => action === 'login')).toHaveLength(1);
     await expect(page).toHaveURL(origin + '/csp/overview');
     await page.goto(origin + '/csp/setup');
     await expect(page).toHaveURL(origin + '/csp/overview');
@@ -132,7 +177,7 @@ for (const width of [1440, 390])
 
     authenticated = false;
     await page.goto(origin + '/csp/setup');
-    await expect(page).toHaveURL(origin + '/login');
+    await expect(page).toHaveURL(/\/login(?:\?|$)/);
     expect(calls.filter((action) => action === 'installation')).toHaveLength(previousInstallations);
     expect(calls).not.toContain('setup-advance');
     expect(calls).not.toContain('setup-complete');
@@ -159,20 +204,20 @@ test('account initialization verifies the seeded accounts before submitting cred
       { role: 'AUDIT_ADMIN', valid: true }
     ]
   };
-  await page.route('**/console-api/**', async (route) => {
+  await page.route('**/api-gateway/**', async (route) => {
     const path = new URL(route.request().url()).pathname;
     if (path.endsWith('/session'))
-      return route.fulfill({ json: { authenticated: true, initialized: false, csrf: 'test', certificateLoginEnabled: true } });
-    if (path.endsWith('/installation-advance')) {
+      return route.fulfill({ json: { code: 'OK', data: { authenticated: true, initialized: completed, canInitialize: true } } });
+    if (path.endsWith('/setup/advance')) {
       verifications.push(route.request().postDataJSON());
       state.draftVersion = 3;
       state.step = 3;
     }
-    if (path.endsWith('/installation-complete')) {
+    if (path.endsWith('/setup/complete')) {
       submissions.push(route.request().postDataJSON());
       completed = true;
     }
-    return route.fulfill({ json: { ...state, initialized: completed } });
+    return route.fulfill({ json: { code: 'OK', data: { ...state, initialized: completed } } });
   });
   await page.goto(origin + '/csp/setup');
   const admin = page.getByRole('group', { name: '系统管理员' });
@@ -192,7 +237,6 @@ test('account initialization verifies the seeded accounts before submitting cred
   await auditor.getByLabel('登录密码', { exact: true }).fill('fixture-audit-password');
   await expect(auditor.getByText('两次输入的密码不一致')).toBeVisible();
   await auditor.getByLabel('确认密码', { exact: true }).fill('fixture-audit-password');
-  await auditor.getByLabel('证书 PEM（可选）').fill('public certificate fixture');
   await expect(finish).toBeEnabled();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await finish.click();
@@ -203,7 +247,7 @@ test('account initialization verifies the seeded accounts before submitting cred
       draftVersion: 3,
       confirm: true,
       admin: { password: 'fixture-system-password' },
-      auditor: { password: 'fixture-audit-password', certPem: 'public certificate fixture' }
+      auditor: { password: 'fixture-audit-password' }
     }
   ]);
 });
@@ -211,29 +255,29 @@ test('account initialization verifies the seeded accounts before submitting cred
 test('audit administrator and auditor land on separate menus and routes', async ({ page }) => {
   let isAuditAdmin = true;
   const calls: string[] = [];
-  await page.route('**/console-api/**', async (route) => {
-    const action = new URL(route.request().url()).pathname.split('/').at(-1);
-    calls.push(action || '');
+  await page.route('**/api-gateway/**', async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    const action = path.split('/').at(-1);
+    const ok = (data: unknown) => route.fulfill({ json: { code: 'OK', data } });
+    calls.push(path);
     if (action === 'session')
-      return route.fulfill({
-        json: {
-          authenticated: true,
-          initialized: true,
-          csrf: 'test',
-          canInitialize: false,
-          canManageServices: false,
-          canManageAuditors: isAuditAdmin,
-          canReadLoginLogs: !isAuditAdmin,
-          canReadOperationLogs: !isAuditAdmin
-        }
+      return ok({
+        authenticated: true,
+        initialized: true,
+        canInitialize: false,
+        canManageServices: false,
+        canManageAuditors: isAuditAdmin,
+        canReadLoginLogs: !isAuditAdmin,
+        canReadOperationLogs: !isAuditAdmin
       });
-    return route.fulfill({ json: { total: 1, items: [{ id: '901', username: 'fixture-auditor', operator: 'fixture-auditor', status: 0 }] } });
+    if (action === 'ui-context') return ok({ mode: 'ENFORCE', multiRoleEnabled: false });
+    return ok({ total: 1, records: [{ id: '901', username: 'fixture-auditor', operator: 'fixture-auditor', status: 0 }] });
   });
   await page.goto(origin + '/csp/login-logs');
   await expect(page).toHaveURL(origin + '/csp/auditors');
   await expect(page.getByRole('menuitem')).toHaveText(['审计员管理']);
   await expect(page.getByText('fixture-auditor')).toBeVisible();
-  expect(calls).not.toContain('login-log-list');
+  expect(calls).not.toContain('/api-gateway/admin/v1/login-logs/page');
   isAuditAdmin = false;
   await page.goto(origin + '/csp/auditors');
   await expect(page).toHaveURL(origin + '/csp/login-logs');
@@ -241,6 +285,6 @@ test('audit administrator and auditor land on separate menus and routes', async 
   await page.getByRole('menuitem', { name: '操作日志' }).click();
   await expect(page.getByRole('heading', { name: '操作日志' })).toBeVisible();
   await expect(page.getByText('fixture-auditor')).toBeVisible();
-  expect(calls).toContain('operation-log-list');
-  expect(calls).not.toContain('installation');
+  expect(calls).toContain('/api-gateway/admin/v1/operate-logs/page');
+  expect(calls).not.toContain('/api-gateway/csp/v2/setup');
 });

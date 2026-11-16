@@ -1,6 +1,75 @@
 import request from '@/utils/request';
 import { Result } from '@/api/types';
 
+export interface RootHierarchyEntry {
+  id: string | number;
+  name: string;
+  cert: string;
+  certchain?: string;
+  caStatus?: string;
+  parentRootId?: string | number;
+  selfSigned?: boolean;
+  imported?: boolean;
+  signerId?: string | number;
+}
+
+export interface ExistingCaImport {
+  name: string;
+  certificate: string;
+  subordinate: boolean;
+  parentRootId?: string | number;
+  signerId?: string | number;
+}
+
+export interface ExistingCaCertificate {
+  subject: string;
+  issuer: string;
+  serialNumber: string;
+  notBefore: string;
+  notAfter: string;
+  signatureAlgorithm: string;
+  sha256: string;
+}
+
+export interface ExistingCaSigner {
+  id: string | number;
+  name: string;
+  type: string;
+  matching: boolean;
+  keyIndex?: number | null;
+  publicKeyStatus?: 'MATCH' | 'MISMATCH' | 'UNVERIFIED';
+}
+
+export interface ExistingCaPreview {
+  certificate: ExistingCaCertificate;
+  parent?: ExistingCaCertificate;
+  signers: ExistingCaSigner[];
+  existingRootId?: string | number;
+}
+
+export function previewExistingCa(data: ExistingCaImport): Promise<Result<ExistingCaPreview>> {
+  return request({ url: '/ca/v1/roots/existing/preview', method: 'post', data }) as any;
+}
+
+export function importExistingCa(data: ExistingCaImport): Promise<Result<string | number>> {
+  return request({ url: '/ca/v1/roots/existing', method: 'post', data }) as any;
+}
+
+export function getExistingCaSigners(id: string | number): Promise<Result<ExistingCaSigner[]>> {
+  return request({ url: `/ca/v1/roots/${id}/existing-signers`, method: 'get' }) as any;
+}
+
+export function bindExistingCaSigner(id: string | number, signerId: string | number): Promise<Result<void>> {
+  return request({ url: `/ca/v1/roots/${id}/existing-signers/${signerId}`, method: 'put' }) as any;
+}
+
+export function listRootHierarchy(): Promise<Result<RootHierarchyEntry[]>> {
+  return request({
+    url: '/ca/v1/roots/tree',
+    method: 'get'
+  }) as any;
+}
+
 // 获取根证书分页列表
 export function listRootCa(query: any): Promise<Result<any>> {
   return request({

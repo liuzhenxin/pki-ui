@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
 import { ElMessageBox } from 'element-plus';
-import { consoleRequest, type ConsoleCommands, type ManagedDevice } from '@/api/csp/console';
+import { type ConsoleCommands, type ManagedDevice } from '@/api/csp/console';
+import { consoleRequest } from '@/api/csp/gateway';
 import { useCspConsoleStore } from '@/store/modules/cspConsole';
 
 const session = useCspConsoleStore();
@@ -35,7 +36,7 @@ function edit(device?: ManagedDevice) {
 }
 
 async function fetchPage(page: number) {
-  const result = await consoleRequest('device-list', session.csrf, { offset: page });
+  const result = await consoleRequest('device-list', { offset: page });
   devices.value = result.items;
   offset.value = page;
   hasMore.value = result.hasMore;
@@ -77,7 +78,7 @@ async function mutate(work: () => Promise<ManagedDevice>, message: string) {
 function save() {
   const command = editor.value;
   if (!command) return;
-  return mutate(() => consoleRequest('device-save', session.csrf, command), command.expectedVersion === '0' ? '设备已登记。' : '设备配置已保存。');
+  return mutate(() => consoleRequest('device-save', command), command.expectedVersion === '0' ? '设备已登记。' : '设备配置已保存。');
 }
 
 async function change(device: ManagedDevice, operation: 'SUSPEND' | 'RETIRE') {
@@ -94,7 +95,7 @@ async function change(device: ManagedDevice, operation: 'SUSPEND' | 'RETIRE') {
     return;
   }
   await mutate(
-    () => consoleRequest('device-state', session.csrf, { deviceKey: device.deviceKey, expectedVersion: device.version, operation }),
+    () => consoleRequest('device-state', { deviceKey: device.deviceKey, expectedVersion: device.version, operation }),
     retire ? '设备已退役。' : '设备已停用。'
   );
 }

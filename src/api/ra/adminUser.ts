@@ -10,8 +10,18 @@ import type { RaUserCertScopeSaveRoot } from './userCertScope';
 export const RA_BUSINESS_ROLE_OPTIONS = [
   { roleId: '503', roleName: '录入员', roleSort: 503 },
   { roleId: '504', roleName: '审核员', roleSort: 504 },
-  { roleId: '505', roleName: '制证员', roleSort: 505 }
+  { roleId: '505', roleName: '制证员', roleSort: 505 },
+  { roleId: '507', roleName: '机构（部门）管理员', roleSort: 507 }
 ];
+
+export async function getAssignableRaRoles() {
+  const response = await request<unknown, Result<Array<string | number>>>({
+    url: '/ra/v1/admin-users/assignable-roles',
+    method: 'get'
+  });
+  const ids = new Set((response.data || []).map(String));
+  return RA_BUSINESS_ROLE_OPTIONS.filter((role) => ids.has(role.roleId));
+}
 
 export const listAdminUser = (query: UserQuery): Promise<Result<UserPage> & UserPage> => {
   return request<UserPage, Result<UserPage> & UserPage>({
@@ -70,10 +80,10 @@ export const changeAdminUserStatus = (userId: number | string, status: string | 
 };
 
 export const getAdminUserAuthRole = async (userId: string | number): Promise<any> => {
-  const response: any = await getAdminUser(userId);
+  const [response, options]: [any, typeof RA_BUSINESS_ROLE_OPTIONS] = await Promise.all([getAdminUser(userId), getAssignableRaRoles()]);
   const user = response?.data ?? {};
   const selectedRoleIds = new Set((user.roleIds ?? []).map((id: string | number) => String(id)));
-  const roles = RA_BUSINESS_ROLE_OPTIONS.map((role) => ({
+  const roles = options.map((role) => ({
     ...role,
     roleKey: role.roleId,
     status: '0',

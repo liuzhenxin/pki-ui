@@ -41,7 +41,7 @@
         <div></div>
       </div>
     </div>
-    <div class="panel">
+    <div v-if="!organizationAdminSelected" class="panel">
       <h4 class="panel-title">可操作证书范围</h4>
       <div class="cert-scope">
         <div class="cert-scope-list">
@@ -124,6 +124,7 @@ const scopeLoading = ref(true);
 const submitting = ref(false);
 const roleIds = ref<Array<string | number>>([]);
 const roles = ref<RoleVO[]>([]);
+const organizationAdminSelected = computed(() => roleIds.value.map(String).includes('507'));
 const rootOptions = ref<RaUserCertScopeRoot[]>([]);
 const activeRootId = ref<string | number | undefined>(undefined);
 const form = ref<Partial<UserForm>>({
@@ -179,7 +180,11 @@ const submitForm = async () => {
   }
   submitting.value = true;
   try {
-    await updateAdminUserAuthority(userId, roleIds.value, buildScopePayload());
+    if (organizationAdminSelected.value && roleIds.value.length !== 1) {
+      proxy?.$modal.msgWarning('机构管理员须单独分配，并绑定独立机构');
+      return;
+    }
+    await updateAdminUserAuthority(userId, roleIds.value, organizationAdminSelected.value ? [] : buildScopePayload());
     proxy?.$modal.msgSuccess('授权成功');
     close();
   } finally {
@@ -195,7 +200,7 @@ const getList = async () => {
     try {
       const [res] = await Promise.all([getAdminUserAuthRole(userId as string), loadScopeOptions(userId as string)]);
       Object.assign(form.value, res.data.user);
-      Object.assign(roles.value, res.data.roles);
+      roles.value = res.data.roles;
       await nextTick(() => {
         roles.value.forEach((row) => {
           if (row?.flag) {
@@ -211,7 +216,7 @@ const getList = async () => {
 };
 
 async function loadScopeOptions(userId: string | number) {
-  const [optionsRes, scopesRes] = await Promise.all([listUserCertScopeOptions(), getUserCertScopes(userId)]);
+  const [optionsRes, scopesRes] = await Promise.all([listUserCertScopeOptions(userId), getUserCertScopes(userId)]);
   const selectedMap = new Map<string, Set<string>>();
   (scopesRes.data?.roots || []).forEach((root: RaUserCertScopeSaveRoot) => {
     selectedMap.set(String(root.rootId), new Set((root.profileIds || []).map((profileId) => String(profileId))));

@@ -8,6 +8,7 @@ WORKDIR /app
 # A UI image must select the tenant/client it serves. Leaving this unset would
 # silently consume a developer's .env.production.local override (for example OPS).
 ARG BUILD_TARGET
+ARG CSP_PLATFORM_CLIENT_ID
 
 # 安装 yarn
 RUN corepack enable && corepack prepare yarn@1.22.19 --activate
@@ -24,7 +25,8 @@ COPY . .
 # 生产构建：target is intentionally mandatory to prevent cross-tenant artifacts.
 RUN case "$BUILD_TARGET" in \
       ops|ca|kmc|ra|ocsp) yarn "build:$BUILD_TARGET" ;; \
-      *) echo >&2 "BUILD_TARGET must be one of: ops, ca, kmc, ra, ocsp"; exit 64 ;; \
+      csp) yarn build:csp --outDir dist ;; \
+      *) echo >&2 "BUILD_TARGET must be one of: ops, ca, kmc, ra, ocsp, csp"; exit 64 ;; \
     esac
 
 # ============================================

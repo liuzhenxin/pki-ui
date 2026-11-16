@@ -575,7 +575,7 @@ const auditEvents = computed(() => {
   const loginEvents = recentLoginLogs.value.map((item, index) => ({
     key: `login-${item.id || index}`,
     title: `${item.username || item.userName || item.loginName || '-'} 登录${isFailureStatus(item.status) ? '失败' : '成功'}`,
-    desc: item.ip || item.loginIp || item.address || item.browser || '登录日志',
+    desc: item.ipAddress || item.ip || item.loginIp || item.address || item.browser || '登录日志',
     time: item.createTime || item.loginTime,
     icon: 'Key',
     tone: isFailureStatus(item.status) ? 'orange' : 'blue',

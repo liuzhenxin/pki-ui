@@ -1,18 +1,13 @@
 import { ref, computed, watch } from 'vue';
 import { defineStore, storeToRefs } from 'pinia';
-import {
-  consoleRequest,
-  ConsoleRequestError,
-  type ConsoleResponses,
-  type ConsoleCommands,
-  type InstallationView,
-  type InstallationAccount
-} from '@/api/csp/console';
+import { type ConsoleResponses, type ConsoleCommands, type InstallationView, type InstallationAccount } from '@/api/csp/console';
+import { consoleRequest, ConsoleRequestError } from '@/api/csp/gateway';
 import { useCspConsoleStore } from './cspConsole';
 import { cspProduct } from '@/config/csp';
 export const useCspInstallationStore = defineStore('csp-installation', () => {
   const shared = useCspConsoleStore();
-  const { signedIn, httpTestMode, accountTransport, secure, certificateEnabled } = storeToRefs(shared);
+  const { signedIn, secure } = storeToRefs(shared);
+  const certificateEnabled = computed(() => import.meta.env.VITE_APP_CSP_CERTIFICATE_BINDING === 'true');
   const busy = ref(false),
     error = ref(''),
     initialized = ref<boolean | null>(null),
@@ -29,7 +24,7 @@ export const useCspInstallationStore = defineStore('csp-installation', () => {
       (['SYSTEM_ADMIN', 'AUDIT_ADMIN'] as const).every((role) => setup.value?.accounts.some((account) => account.role === role && account.valid))
   );
   function api<K extends keyof ConsoleResponses>(path: K, body?: ConsoleCommands[K]): Promise<ConsoleResponses[K]> {
-    return consoleRequest(path, shared.csrf, body);
+    return consoleRequest(path, body);
   }
   async function refresh() {
     if (busy.value) return;
@@ -61,10 +56,9 @@ export const useCspInstallationStore = defineStore('csp-installation', () => {
     try {
       const data = await api('installation');
       applySetup(data);
-      signedIn.value = true;
     } catch (failure) {
       initialized.value = null;
-      if (failure instanceof ConsoleRequestError && failure.status === 401) signedIn.value = false;
+      if (failure instanceof ConsoleRequestError && failure.status === 401) await shared.logout();
       error.value = (failure as Error).message;
     } finally {
       busy.value = false;
@@ -72,7 +66,7 @@ export const useCspInstallationStore = defineStore('csp-installation', () => {
   }
 
   async function advanceSetup(action: import('@/api/csp/console').InstallationAction) {
-    if (busy.value || !accountTransport.value || !setup.value || initializationAttempted.value) return;
+    if (busy.value || !secure.value || !setup.value || initializationAttempted.value) return;
     busy.value = true;
     error.value = '';
     try {
@@ -133,8 +127,6 @@ export const useCspInstallationStore = defineStore('csp-installation', () => {
   });
   return {
     signedIn,
-    httpTestMode,
-    accountTransport,
     secure,
     certificateEnabled,
     busy,

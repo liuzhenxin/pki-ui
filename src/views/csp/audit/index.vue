@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { ElDialog, ElLoading, ElPagination, ElTable, ElTableColumn } from 'element-plus';
-import { consoleRequest, type AuditPage } from '@/api/csp/console';
+import { type AuditPage } from '@/api/csp/console';
+import { consoleRequest } from '@/api/csp/gateway';
 import { useCspConsoleStore } from '@/store/modules/cspConsole';
 
 const props = defineProps<{ kind: 'auditors' | 'login' | 'operation' }>();
@@ -45,7 +46,7 @@ async function load() {
   rows.value = [];
   loading.value = true;
   try {
-    const result = await consoleRequest(table.value.action, store.csrf, { page: page.value });
+    const result = await consoleRequest(table.value.action, { page: page.value });
     if (request !== latest) return;
     rows.value = result.items;
     total.value = result.total;
@@ -72,7 +73,7 @@ async function create() {
   saving.value = true;
   error.value = '';
   try {
-    await consoleRequest('auditor-create', store.csrf, { username: username.value.trim(), password: password.value });
+    await consoleRequest('auditor-create', { username: username.value.trim(), password: password.value });
     dialogOpen.value = false;
     page.value = 1;
     await load();
@@ -89,7 +90,7 @@ async function setStatus(row: AuditPage['items'][number]) {
   saving.value = true;
   error.value = '';
   try {
-    await consoleRequest('auditor-status', store.csrf, { id: row.id, status: Number(row.status) === 0 ? 1 : 0 });
+    await consoleRequest('auditor-status', { id: row.id, status: Number(row.status) === 0 ? 1 : 0 });
     await load();
   } catch (failure) {
     error.value = (failure as Error).message;

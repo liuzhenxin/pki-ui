@@ -75,6 +75,12 @@ export interface OpsComponent {
   layer: string;
   dependencies: string[];
   container?: OpsContainer;
+  deployment?: 'INTERNAL' | 'EXTERNAL';
+  availability?: {
+    state: 'UP' | 'DOWN' | 'UNKNOWN' | 'DISABLED';
+    checkedAt?: string;
+    detail: string;
+  };
 }
 
 export interface OpsLayer {

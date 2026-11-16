@@ -5,6 +5,7 @@ import { getInitRouters, getRouters } from '@/api/menu';
 import auth from '@/plugins/auth';
 import { RouteRecordRaw } from 'vue-router';
 import Layout from '@/layout/index.vue';
+import sidebarIcons from '@/components/IconSelect/requireIcons';
 import ParentView from '@/components/ParentView/index.vue';
 import InnerLink from '@/layout/components/InnerLink/index.vue';
 import { ref } from 'vue';
@@ -125,6 +126,10 @@ export const usePermissionStore = defineStore('permission', () => {
       } else if (route.component?.toString() === 'InnerLink') {
         route.component = InnerLink;
       } else {
+        const view = String(route.component ?? '');
+        if ((view.replace(/\/index$/, '') === 'ops/alert' || route.path === '/ops/alert') && !sidebarIcons.includes(route.meta?.icon ?? '')) {
+          route.meta = { ...route.meta, icon: 'bell' };
+        }
         route.component = loadView(route.component, route.name as string);
       }
       if (route.children != null && route.children && route.children.length) {

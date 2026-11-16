@@ -131,21 +131,25 @@
             </el-form-item>
             <el-form-item v-if="captchaEnabled" prop="code" class="code-form-item">
               <el-input
-                v-model="loginForm.code"
+                v-model.trim="loginForm.code"
                 size="large"
                 auto-complete="off"
+                :disabled="loading || captchaLoading"
                 :placeholder="proxy.$t('login.code')"
                 :aria-label="proxy.$t('login.code')"
                 @keyup.enter="handleLogin"
               >
                 <template #prefix><svg-icon icon-class="validCode" class="el-input__icon input-icon" /></template>
               </el-input>
-              <button class="login-code" type="button" title="刷新验证码" :disabled="captchaLoading" @click="getCode()">
-                <img :src="codeUrl" class="login-code-img" alt="验证码" />
+              <button class="login-code" type="button" title="刷新验证码" :disabled="loading || captchaLoading" @click="getCode()">
+                <img v-if="codeUrl" :src="codeUrl" class="login-code-img" alt="验证码" />
+                <span v-else>{{ captchaLoading ? '加载中…' : '获取验证码' }}</span>
               </button>
             </el-form-item>
             <div class="form-options">
-              <el-checkbox v-model="loginForm.rememberMe">{{ proxy.$t('login.rememberPassword') }}</el-checkbox>
+              <el-checkbox v-if="loginForm.tenantId !== cspProduct.tenantId" v-model="loginForm.rememberMe">{{
+                proxy.$t('login.rememberPassword')
+              }}</el-checkbox>
               <span class="secure-note">
                 <svg-icon icon-class="lock" />
                 加密传输
@@ -169,7 +173,14 @@
             <!--        </el-button>-->
             <!--      </el-form-item>-->
             <el-form-item class="login-action">
-              <el-button :loading="loading" size="large" type="primary" class="login-button" @click.prevent="handleLogin">
+              <el-button
+                :loading="loading"
+                :disabled="captchaEnabled && (captchaLoading || !loginForm.uuid)"
+                size="large"
+                type="primary"
+                class="login-button"
+                @click.prevent="handleLogin"
+              >
                 <span v-if="!loading">{{ proxy.$t('login.login') }}</span>
                 <span v-else>{{ proxy.$t('login.logging') }}</span>
               </el-button>
@@ -263,6 +274,8 @@ import { calculateSm2SignatureDigest, normalizeSm2SignatureForApi } from '@/util
 import { X509 } from 'jsrsasign';
 
 import { getTenant } from '@/api/system/tenant';
+import { cspProduct } from '@/config/csp';
+import { isUcspProduct, ucspName } from '@/config/ucsp';
 import { getTenantList } from '@/api/login';
 
 import { authBinding } from '@/api/system/social/auth';
@@ -327,7 +340,6 @@ const loginRules: ElFormRules = {
   tenantId: [{ required: true, trigger: 'blur', message: t('login.rule.tenantId.required') }],
   username: [{ required: true, trigger: 'blur', message: t('login.rule.username.required') }],
   password: [{ required: true, trigger: 'blur', message: t('login.rule.password.required') }],
-  radiusPassword: [{ required: true, trigger: 'blur', message: '请输入 RADIUS 动态口令' }],
   code: [{ required: true, trigger: 'change', message: t('login.rule.code.required') }]
 };
 
@@ -338,6 +350,8 @@ const captchaEnabled = ref(true);
 const captchaLoading = ref(false);
 const CAPTCHA_REQUEST_INTERVAL_MS = 1200;
 let lastCaptchaRequestAt = 0;
+let captchaRequestId = 0;
+let loginHintsRequestId = 0;
 // 租户开关
 const tenantEnabled = ref(false);
 // 租户列表
@@ -462,7 +476,7 @@ const tenantLoginBackgrounds: Record<string, string> = {
   '5': raLoginBackground,
   '6': ocspLoginBackground,
   '9': svsLoginBackground,
-  '10': nasLoginBackground,
+  '20': nasLoginBackground,
   '100': licenseLoginBackground
 };
 const tenantLoginPanelThemes: Record<string, { panel: string; input: string; border: string }> = {
@@ -521,7 +535,13 @@ const tenantBrandProfiles: Record<string, typeof defaultTenantBrand> = {
     heading: '在线证书状态服务',
     subtitle: '实时响应证书有效性查询，保障验证链路可用可信'
   },
-  '10': {
+  [cspProduct.tenantId]: {
+    className: 'brand-panel--pki',
+    logo: isUcspProduct ? 'UCSP' : 'CSP',
+    heading: isUcspProduct ? ucspName : cspProduct.name,
+    subtitle: '统一管理密码设备、应用接入和密码服务'
+  },
+  '20': {
     className: 'brand-panel--nas',
     logo: 'NAS',
     heading: '网络存储管理系统',
@@ -573,16 +593,22 @@ async function svsPostLoginPath(): Promise<string | null> {
 }
 
 const handleLogin = () => {
+  if (loading.value || (captchaEnabled.value && (captchaLoading.value || !loginForm.value.uuid))) {
+    return;
+  }
   if (tenantWhitelistMissed.value) {
     ElMessage.error('当前系统租户未启用，无法登录，请联系管理员');
     return;
   }
   loginRef.value?.validate(async (valid: boolean, fields: any) => {
     if (valid) {
+      if (loading.value || (captchaEnabled.value && (captchaLoading.value || !loginForm.value.uuid))) {
+        return;
+      }
       loading.value = true;
 
       // 勾选了需要记住密码设置在 localStorage 中设置记住用户名和密码
-      if (loginForm.value.rememberMe) {
+      if (loginForm.value.rememberMe && loginForm.value.tenantId !== cspProduct.tenantId) {
         localStorage.setItem('tenantId', String(loginForm.value.tenantId));
         localStorage.setItem('tenantCode', String(loginForm.value.tenantCode));
         localStorage.setItem('username', String(loginForm.value.username));
@@ -607,12 +633,12 @@ const handleLogin = () => {
         loading.value = false;
       } else {
         loading.value = false;
-        const msg = String((err as any)?.message || (err as any)?.msg || '');
-        if (msg.includes('请输入验证码')) {
+        const oauthError = (err as any)?.response?.data?.error;
+        if (oauthError === 'P_OAuth2_CaptchaIsNull') {
           captchaEnabled.value = true;
-          await getCode();
-        } else if (captchaEnabled.value) {
-          await getCode();
+        }
+        if (captchaEnabled.value) {
+          await getCode(String(loginForm.value.tenantCode || ''), true);
         }
       }
     } else {
@@ -746,19 +772,22 @@ async function handleCertificateLogin() {
 /**
  * 获取验证码
  */
-const getCode = async (tenantCode = String(loginForm.value.tenantCode || '')) => {
+const getCode = async (tenantCode = String(loginForm.value.tenantCode || ''), force = false) => {
   const now = Date.now();
-  if (captchaLoading.value || now - lastCaptchaRequestAt < CAPTCHA_REQUEST_INTERVAL_MS) {
+  if (captchaLoading.value || (!force && now - lastCaptchaRequestAt < CAPTCHA_REQUEST_INTERVAL_MS)) {
     return;
   }
 
   captchaLoading.value = true;
+  const requestId = ++captchaRequestId;
   lastCaptchaRequestAt = now;
+  loginForm.value.code = '';
+  loginForm.value.uuid = '';
+  codeUrl.value = '';
   try {
-    loginForm.value.code = '';
     const uuid = uuidv4();
     const res = await getCodeImg(uuid, tenantCode);
-    if (tenantCode !== String(loginForm.value.tenantCode || '')) {
+    if (requestId !== captchaRequestId || tenantCode !== String(loginForm.value.tenantCode || '')) {
       return;
     }
     loginForm.value.uuid = uuid;
@@ -767,7 +796,9 @@ const getCode = async (tenantCode = String(loginForm.value.tenantCode || '')) =>
   } catch (err) {
     console.error('获取验证码请求异常', err);
   } finally {
-    captchaLoading.value = false;
+    if (requestId === captchaRequestId) {
+      captchaLoading.value = false;
+    }
   }
 };
 
@@ -776,23 +807,30 @@ const loadLoginHints = async () => {
   if (!tenantCode) {
     return;
   }
+  const requestId = ++loginHintsRequestId;
+  captchaRequestId++;
+  captchaLoading.value = false;
+  captchaEnabled.value = true;
+  loginForm.value.code = '';
+  loginForm.value.uuid = '';
+  codeUrl.value = '';
   try {
     const res = await getLoginHints(tenantCode);
-    const hints = (res as any)?.data ?? res;
-    if (tenantCode !== String(loginForm.value.tenantCode || '')) {
+    if (requestId !== loginHintsRequestId) {
       return;
     }
+    const hints = res.data;
     captchaEnabled.value = hints?.captchaEnabled !== false;
     sessionStorage.setItem('idleTimeoutMinutes', String(hints?.idleTimeoutMinutes || 240));
     if (captchaEnabled.value) {
-      await getCode(tenantCode);
+      await getCode(tenantCode, true);
     }
   } catch (_err) {
-    if (tenantCode !== String(loginForm.value.tenantCode || '')) {
+    if (requestId !== loginHintsRequestId) {
       return;
     }
     captchaEnabled.value = true;
-    await getCode(tenantCode);
+    await getCode(tenantCode, true);
   }
 };
 
@@ -815,12 +853,13 @@ const getLoginData = () => {
   // 避免缓存的上一个系统租户覆盖当前 UI 下拉选中的租户。
   const formTenantId = String(loginForm.value.tenantId || '');
   const formTenantCode = String(loginForm.value.tenantCode || '');
+  const rememberCredentials = (formTenantId || tenantId) !== cspProduct.tenantId;
   loginForm.value = {
     tenantId: formTenantId || tenantId || '',
     tenantCode: formTenantCode || tenantCode || '',
-    username: username === null ? String(loginForm.value.username) : username,
-    password: password === null ? String(loginForm.value.password) : String(password),
-    rememberMe: rememberMe === null ? false : rememberMe === 'true'
+    username: rememberCredentials ? (username ?? String(loginForm.value.username)) : '',
+    password: rememberCredentials ? (password ?? String(loginForm.value.password)) : '',
+    rememberMe: rememberCredentials && rememberMe === 'true'
   } as LoginData;
 };
 
@@ -847,9 +886,8 @@ const getTenantAppTitle = (tenantName: string, tenantId: string) => {
   if (tenantId === '6') {
     return `${tenantName} (在线证书状态服务)`;
   }
-  if (tenantId === '10') {
-    return `${tenantName} (NAS网络存储管理系统)`;
-  }
+  if (tenantId === cspProduct.tenantId) return isUcspProduct ? ucspName : cspProduct.name;
+  if (tenantId === '20') return `${tenantName} (NAS网络存储管理系统)`;
   if (tenantId === '21') {
     return `${tenantName} (密钥分发与终端接入系统)`;
   }
@@ -915,7 +953,12 @@ const initTenantList = async () => {
 const handleTenantChange = (val: string) => {
   const tenant = tenantList.value.find((item) => item.tenantId === val);
   if (tenant) {
+    if (tenant.tenantId === cspProduct.tenantId) {
+      loginForm.value.password = '';
+      loginForm.value.rememberMe = false;
+    }
     loginForm.value.tenantCode = tenant.tenantCode;
+    loginForm.value.radiusPassword = '';
     localStorage.setItem('tenantId', String(tenant.tenantId));
     localStorage.setItem('tenantCode', String(tenant.tenantCode));
     getTenantInfo(val);
@@ -927,13 +970,18 @@ const handleTenantChange = (val: string) => {
 const refreshRadiusStatus = async (tenantCode?: string) => {
   try {
     const response = await getRadiusStatus(tenantCode);
+    if (tenantCode !== loginForm.value.tenantCode) {
+      return;
+    }
     radiusRequired.value = Boolean(response.data?.enabled);
     radiusAuthMethod.value = response.data?.authMethod || 'PAP';
     if (!radiusRequired.value) {
       loginForm.value.radiusPassword = '';
     }
   } catch (error) {
-    radiusRequired.value = false;
+    if (tenantCode === loginForm.value.tenantCode) {
+      radiusRequired.value = false;
+    }
     console.error('获取 RADIUS 状态失败:', error);
   }
 };

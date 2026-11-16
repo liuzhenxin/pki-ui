@@ -94,7 +94,7 @@
 
       <div class="wizard-actions">
         <el-button :disabled="activeStep !== 1 || loading" @click="activeStep = 0">上一步</el-button>
-        <el-button v-if="activeStep === 0" type="primary" :disabled="!agree" @click="next">下一步</el-button>
+        <el-button v-if="activeStep === 0" type="primary" :disabled="!agree" :loading="loading" @click="next">下一步</el-button>
         <el-button v-else-if="activeStep === 1" type="primary" :disabled="!allEnvOk || envLoading" :loading="loading" @click="complete"
           >完成初始化</el-button
         >
@@ -109,7 +109,7 @@ import { computed, onMounted, ref } from 'vue';
 import { ElMessage } from 'element-plus';
 import { useRouter } from 'vue-router';
 import { QuestionFilled, Refresh } from '@element-plus/icons-vue';
-import { completeOcspInitialization, getOcspEnvInfo, getOcspInitStatus } from '@/api/ocsp/init';
+import { completeOcspInitialization, confirmOcspAgreement, getOcspEnvInfo, getOcspInitStatus, type OcspInitStatus } from '@/api/ocsp/init';
 import { unwrapOcspData } from '@/api/ocsp/common';
 import { getTenant } from '@/api/system/tenant';
 import { useUserStore } from '@/store/modules/user';
@@ -148,15 +148,30 @@ const loadEnvInfo = async () => {
   }
 };
 const next = async () => {
-  if (!agree.value) return;
-  activeStep.value = 1;
-  await loadEnvInfo();
+  if (!agree.value || loading.value) return;
+  loading.value = true;
+  try {
+    const status = unwrapOcspData<OcspInitStatus>(await confirmOcspAgreement());
+    if (status.initialized) {
+      userStore.setTenantInitStatus(-1);
+      activeStep.value = 2;
+      return;
+    }
+    if (status.tenantStatus !== 1) throw new Error('未能保存协议确认，请重试');
+    userStore.setTenantInitStatus(1);
+    activeStep.value = 1;
+    await loadEnvInfo();
+  } catch (error: any) {
+    ElMessage.error(error?.message || '协议确认失败，请重试');
+  } finally {
+    loading.value = false;
+  }
 };
 const complete = async () => {
   if (!allEnvOk.value || envLoading.value || loading.value) return;
   loading.value = true;
   try {
-    const result = unwrapOcspData<{ initialized: boolean }>(await completeOcspInitialization());
+    const result = unwrapOcspData<OcspInitStatus>(await completeOcspInitialization());
     if (!result?.initialized) throw new Error('初始化未完成，请重新检查环境');
     userStore.setTenantInitStatus(-1);
     activeStep.value = 2;
@@ -180,23 +195,23 @@ onMounted(async () => {
   try {
     const tenantId = userStore.tenantId || localStorage.getItem('tenantId') || '';
     if (tenantId) {
-      const tenantRes = await getTenant(tenantId);
-      if (tenantRes.data) {
+      const tenantRes = await getTenant(tenantId).catch(() => undefined);
+      if (tenantRes?.data) {
         const tenant: any = tenantRes.data;
         tenantCode.value = tenant.code || 'ocsp';
         tenantName.value = tenant.name || '在线证书状态服务';
         companyName.value = tenant.companyName || '';
-        userStore.setTenantInitStatus(Number(tenant.status));
-        if (Number(tenant.status) === -1) {
-          await router.replace('/index');
-          return;
-        }
       }
     }
-    const status = unwrapOcspData<{ initialized: boolean }>(await getOcspInitStatus());
-    if (status?.initialized) {
+    const status = unwrapOcspData<OcspInitStatus>(await getOcspInitStatus());
+    if (status.initialized) {
+      userStore.setTenantInitStatus(-1);
       await router.replace('/index');
-      return;
+    } else if (status.tenantStatus === 1) {
+      userStore.setTenantInitStatus(1);
+      agree.value = true;
+      activeStep.value = 1;
+      await loadEnvInfo();
     }
   } catch {
     /* 页面保留在协议步骤，环境检查会在下一步重新执行。 */

@@ -57,10 +57,10 @@
             <el-button type="danger" plain icon="Delete" :disabled="multiple" @click="handleDelete" v-hasPermi="['ra:admin']">删除</el-button>
           </el-col>
           <el-col :span="1.5">
-            <el-button type="info" plain icon="Upload" @click="handleImport" v-hasPermi="['ra:admin']">导入</el-button>
+            <el-button type="info" plain v-if="isRaAdministrator" icon="Upload" @click="handleImport" v-hasPermi="['ra:admin']">导入</el-button>
           </el-col>
           <el-col :span="1.5">
-            <el-button type="warning" plain icon="Download" @click="handleExport" v-hasPermi="['ra:admin']">导出</el-button>
+            <el-button type="warning" plain v-if="isRaAdministrator" icon="Download" @click="handleExport" v-hasPermi="['ra:admin']">导出</el-button>
           </el-col>
           <right-toolbar v-model:showSearch="showSearch" @queryTable="getList" :columns="columns"></right-toolbar>
         </el-row>
@@ -106,7 +106,14 @@
                 <el-button link type="primary" icon="View" @click="handleDetail(scope.row)"></el-button>
               </el-tooltip>
               <el-tooltip content="签证" placement="top" v-if="scope.row.id !== 1 && !scope.row.certSn">
-                <el-button link type="success" icon="Ticket" @click="handleIssueCert(scope.row)" v-hasPermi="['ra:admin']"></el-button>
+                <el-button
+                  v-if="isRaAdministrator"
+                  link
+                  type="success"
+                  icon="Ticket"
+                  @click="handleIssueCert(scope.row)"
+                  v-hasPermi="['ra:admin']"
+                ></el-button>
               </el-tooltip>
               <el-tooltip content="修改" placement="top" v-if="scope.row.id !== 1">
                 <el-button link type="primary" icon="Edit" @click="handleUpdate(scope.row)" v-hasPermi="['ra:admin']"></el-button>
@@ -162,7 +169,7 @@
             <el-form-item label="所属部门" prop="deptId">
               <el-tree-select
                 v-model="form.deptId"
-                :data="deptOptions"
+                :data="writableDeptOptions"
                 :props="{ value: 'id', label: 'name', children: 'children' } as any"
                 value-key="id"
                 placeholder="请选择所属部门"
@@ -183,8 +190,15 @@
           <el-col :span="24">
             <el-form-item label="业务角色" prop="roleIds">
               <el-select v-model="form.roleIds" multiple filterable placeholder="请选择业务角色" style="width: 100%">
-                <el-option v-for="role in raBizRoleOptions" :key="role.value" :label="role.label" :value="role.value" />
+                <el-option
+                  v-for="role in raBizRoleOptions"
+                  :key="role.value"
+                  :label="role.label"
+                  :value="role.value"
+                  :disabled="role.value === '507' ? form.roleIds?.some((id) => String(id) !== '507') : form.roleIds?.map(String).includes('507')"
+                />
               </el-select>
+              <span v-if="form.roleIds?.map(String).includes('507')">请选择已设为独立机构的所属部门</span>
             </el-form-item>
           </el-col>
         </el-row>
@@ -346,6 +360,7 @@ import {
   resetAdminUserPwd as resetUserPwd,
   changeAdminUserStatus as changeStatus,
   addAdminUser as addUser,
+  getAssignableRaRoles,
   RA_BUSINESS_ROLE_OPTIONS
 } from '@/api/ra/adminUser';
 import { getToken } from '@/utils/auth';
@@ -353,7 +368,7 @@ import { UserForm, UserQuery, UserVO } from '@/api/system/user/types';
 import { ElMessageBox, FormInstance, FormRules } from 'element-plus';
 import X509Cert from '@/components/X509Cert/index.vue';
 import { listDeptSelectTree } from '@/api/ra/dept';
-import { RaDeptTreeOption } from '@/api/ra/dept/types';
+import { RaDeptTreeOption, writableRaDepartments } from '@/api/ra/dept/types';
 import { getAdminCertOptions, issueAdminAccountCert, unwrapRaData, RaAdminCertOptions, RaAdminCertRootOption } from '@/api/ra/init';
 import SKFClient from '@/api/skf/skf_api';
 import CertSubject, { typeMapping, sortSubjectItems } from '@/components/CertSubject/index.vue';
@@ -373,11 +388,14 @@ const title = ref('');
 const dateRange = ref<Array<Date | string>>();
 const initPassword = ref<string | undefined>(undefined);
 const isDataLoaded = ref(false);
-const raBizRoleOptions = RA_BUSINESS_ROLE_OPTIONS.map(({ roleId, roleName }) => ({ label: roleName, value: roleId }));
-const RA_BIZ_ROLE_IDS = raBizRoleOptions.map((role) => role.value);
+const assignableRoles = ref<typeof RA_BUSINESS_ROLE_OPTIONS>([]);
+const isRaAdministrator = computed(() => assignableRoles.value.some((role) => role.roleId === '507'));
+const raBizRoleOptions = computed(() => assignableRoles.value.map(({ roleId, roleName }) => ({ label: roleName, value: roleId })));
+const RA_BIZ_ROLE_IDS = RA_BUSINESS_ROLE_OPTIONS.map((role) => role.roleId);
 const RA_DEFAULT_BIZ_ROLE_IDS = ['503'];
 const ALL_DEPT_ID = '__ALL__';
 const deptOptions = ref<RaDeptTreeOption[]>([]);
+const writableDeptOptions = computed(() => writableRaDepartments(deptOptions.value));
 const deptName = ref('');
 const deptTreeRef = ref<any>();
 const deptTreeProps = { label: 'name', children: 'children' };
@@ -494,6 +512,10 @@ const { queryParams, form, rules } = toRefs(data);
 function normalizeUserForm() {
   form.value.mail = form.value.mail?.trim() || undefined;
   form.value.mobile = form.value.mobile?.trim() || undefined;
+  if (!isRaAdministrator.value) {
+    delete form.value.certSn;
+    delete form.value.cert;
+  }
 }
 
 function formatStatus(status: string | number | undefined) {
@@ -818,7 +840,7 @@ async function handleUpdate(row: any) {
     form.value.deptId = form.value.deptId == null ? undefined : String(form.value.deptId);
     form.value.postIds = [];
     const roleIds = (form.value.roleIds || []).map((roleId: any) => String(roleId));
-    const bizRoleIds = roleIds.filter((roleId) => raBizRoleOptions.some((role) => role.value === roleId));
+    const bizRoleIds = roleIds.filter((roleId) => raBizRoleOptions.value.some((role) => role.value === roleId));
     form.value.roleIds = bizRoleIds.length > 0 ? bizRoleIds : [...RA_DEFAULT_BIZ_ROLE_IDS];
     open.value = true;
     title.value = '修改业务管理员';
@@ -1005,22 +1027,14 @@ async function submitCertForm() {
       }
 
       ElMessage.info('正在将证书写入 USB KEY...');
-      await skf.importCertificate(
-        certForm.provider,
-        certForm.device,
-        certForm.appName,
-        csrRes.container,
-        true,
-        issuedCertPem,
-        certForm.pin
-      );
+      await skf.importCertificate(certForm.provider, certForm.device, certForm.appName, csrRes.container, true, issuedCertPem, certForm.pin);
 
       ElMessage.info('正在更新业务管理员证书信息...');
       const userDataRes = await getUser(certForm.userId);
       const userData = userDataRes.data as any;
       const userRoleIds = (userData.roleIds || [])
         .map((roleId: any) => String(roleId))
-        .filter((roleId: string) => raBizRoleOptions.some((role) => role.value === roleId));
+        .filter((roleId: string) => raBizRoleOptions.value.some((role) => role.value === roleId));
       await updateUser({
         id: userData.id,
         userId: userData.id,
@@ -1055,6 +1069,7 @@ function closeCertDialog() {
 }
 
 async function initPage() {
+  assignableRoles.value = await getAssignableRaRoles();
   await loadDeptOptions();
   nextTick(() => {
     deptTreeRef.value?.setCurrentKey(ALL_DEPT_ID);

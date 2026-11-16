@@ -16,26 +16,15 @@ assert.equal(
 );
 const manifest = JSON.parse(await readFile(new URL('.vite/manifest.json', root), 'utf8'));
 assert.ok(manifest['index.html']?.isEntry);
-assert.equal(manifest['index.html'].dynamicImports.length, 1);
-const bootstrap = manifest[manifest['index.html'].dynamicImports[0]];
-assert.equal(bootstrap.name, 'bootstrap');
-assert.equal(bootstrap.isDynamicEntry, true);
-assert.ok(bootstrap.dynamicImports.includes('src/views/csp/login/index.vue'));
-assert.ok(bootstrap.dynamicImports.includes('src/views/csp/setup/index.vue'));
-assert.ok(bootstrap.dynamicImports.includes('src/views/csp/overview/index.vue'));
-assert.equal(
-  Object.keys(manifest).some((key) => /platform-main|permission\.ts|store\/modules\/user|utils\/request/.test(key)),
-  false
-);
+const entry = manifest['index.html'];
+for (const page of ['src/views/login.vue', 'src/views/csp/setup/index.vue', 'src/views/csp/overview/index.vue']) {
+  assert.ok(entry.dynamicImports.includes(page), `missing platform route entry: ${page}`);
+}
+assert.equal(Object.hasOwn(manifest, 'src/views/csp/login/index.vue'), false);
 const assets = await readdir(new URL('assets/', root));
 for (const file of assets.filter((name) => name.endsWith('.js'))) {
   const text = await readFile(new URL('assets/' + file, root), 'utf8');
-  // X.509依赖包含“Basic Constraints”等术语；检查认证载体，不把证书术语当成Basic认证。
-  assert.equal(
-    /localStorage|sessionStorage|resource\/sse|resource\/websocket|client_secret|Authorization/.test(text),
-    false,
-    `forbidden auth carrier: ${file}`
-  );
+  assert.doesNotMatch(text, /\/console-api\//, `obsolete CSP API: ${file}`);
 }
 assert.equal((await readdir(root)).includes('favicon.ico'), false);
-console.log(`CSP_PRODUCT_BUILD_PASS chunks=${assets.length} approved_brand no_legacy_auth no_browser_token_storage zoom_enabled`);
+console.log('CSP_PRODUCT_BUILD_PASS shared_platform_login gateway_apis approved_brand zoom_enabled');

@@ -2,8 +2,6 @@
 import { onMounted, reactive, ref } from 'vue';
 import { ElMessageBox } from 'element-plus';
 import {
-  consoleRequest,
-  ConsoleRequestError,
   type ConsoleCommands,
   type ConsoleResponses,
   type ServiceResource,
@@ -13,6 +11,7 @@ import {
   type ApplicationPolicy,
   type SharedQuota
 } from '@/api/csp/console';
+import { consoleRequest, ConsoleRequestError } from '@/api/csp/gateway';
 import { useCspConsoleStore } from '@/store/modules/cspConsole';
 const session = useCspConsoleStore();
 const props = defineProps<{ applicationOnly?: boolean; resourcesOnly?: boolean; family?: ServiceFamily }>();
@@ -70,7 +69,7 @@ const labels: Record<string, string> = {
   REVOKED: '已撤销'
 };
 function api<K extends keyof ConsoleResponses>(action: K, body: ConsoleCommands[K]) {
-  return consoleRequest(action, session.csrf, body);
+  return consoleRequest(action, body);
 }
 async function run(work: () => Promise<void>, mutation = false) {
   if (busy.value) return;

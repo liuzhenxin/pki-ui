@@ -60,7 +60,7 @@
         </el-row>
 
         <el-table v-loading="loading" :data="userList" @selection-change="handleSelectionChange">
-          <el-table-column type="selection" width="50" align="center" />
+          <el-table-column type="selection" width="50" align="center" :selectable="canManageUser" />
           <el-table-column label="用户编号" align="center" key="id" prop="id" v-if="columns[0].visible" width="110" />
           <el-table-column label="用户名称" align="center" key="username" prop="username" v-if="columns[1].visible" show-overflow-tooltip />
           <el-table-column label="邮箱" align="center" key="mail" prop="mail" v-if="columns[2].visible" show-overflow-tooltip />
@@ -72,7 +72,13 @@
           </el-table-column>
           <el-table-column label="状态" align="center" key="status" v-if="columns[5].visible" width="100">
             <template #default="{ row }">
-              <el-switch v-model="row.status" :active-value="0" :inactive-value="1" @change="(val) => handleStatusChange(row, val as number)" />
+              <el-switch
+                :disabled="!canManageUser(row)"
+                v-model="row.status"
+                :active-value="0"
+                :inactive-value="1"
+                @change="(val) => handleStatusChange(row, val as number)"
+              />
             </template>
           </el-table-column>
           <el-table-column label="创建时间" align="center" prop="createTime" v-if="columns[6].visible" width="160">
@@ -85,13 +91,13 @@
               <el-tooltip content="详情" placement="top">
                 <el-button link type="primary" icon="View" @click="handleDetail(row)" />
               </el-tooltip>
-              <el-tooltip content="修改" placement="top">
+              <el-tooltip v-if="canManageUser(row)" content="修改" placement="top">
                 <el-button link type="primary" icon="Edit" @click="handleUpdate(row)" />
               </el-tooltip>
-              <el-tooltip content="删除" placement="top">
+              <el-tooltip v-if="canManageUser(row)" content="删除" placement="top">
                 <el-button link type="primary" icon="Delete" @click="handleDelete(row)" />
               </el-tooltip>
-              <el-tooltip content="重置密码" placement="top">
+              <el-tooltip v-if="canManageUser(row)" content="重置密码" placement="top">
                 <el-button link type="primary" icon="Key" @click="handleResetPwd(row)" />
               </el-tooltip>
             </template>
@@ -133,7 +139,7 @@
             <el-form-item label="所属部门" prop="deptId">
               <el-tree-select
                 v-model="form.deptId"
-                :data="deptOptions"
+                :data="writableDeptOptions"
                 :props="{ value: 'id', label: 'name', children: 'children' } as any"
                 value-key="id"
                 placeholder="请选择所属部门"
@@ -183,7 +189,7 @@
 <script setup name="RaUser" lang="ts">
 import { listUser, getUser, delUser, updateUser, resetUserPwd, changeStatus, addUser } from '@/api/ra/user';
 import { listDeptSelectTree } from '@/api/ra/dept';
-import { RaDeptTreeOption } from '@/api/ra/dept/types';
+import { RaDeptTreeOption, raDepartmentIsWritable, writableRaDepartments } from '@/api/ra/dept/types';
 import { UserForm, UserQuery, UserVO } from '@/api/system/user/types';
 import { FormInstance } from 'element-plus';
 
@@ -199,6 +205,8 @@ const userCategoryOptions = [
 
 const userList = ref<UserVO[]>([]);
 const deptOptions = ref<RaDeptTreeOption[]>([]);
+const writableDeptOptions = computed(() => writableRaDepartments(deptOptions.value));
+const canManageUser = (row: { deptId?: string | number }) => raDepartmentIsWritable(deptOptions.value, row.deptId);
 const deptName = ref('');
 const open = ref(false);
 const loading = ref(true);
@@ -385,7 +393,7 @@ function cancel() {
 async function handleAdd() {
   reset();
   await loadDeptOptions();
-  if (queryParams.value.deptId) {
+  if (raDepartmentIsWritable(deptOptions.value, queryParams.value.deptId)) {
     form.value.deptId = normalizeDeptId(queryParams.value.deptId);
   }
   open.value = true;
