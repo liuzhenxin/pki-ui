@@ -313,7 +313,6 @@ const agree = ref(false);
 const loading = ref(true);
 const envLoading = ref(false);
 const identityLoading = ref(false);
-const initialized = ref(false);
 const showEnvHelp = ref(false);
 const envRows = ref<EnvRow[]>([]);
 const tenantCode = ref('');
@@ -467,23 +466,6 @@ const loadIdentityInfo = async () => {
   } catch (error) {
     applyIdentity({ configured: false, source: 'NONE' });
   }
-};
-
-const loadInitInfo = async () => {
-  try {
-    const res = await getInitStatus();
-    const data: any = unwrapKmcData(res);
-    initialized.value = Boolean(data?.initialized ?? data?.init ?? data);
-    if (data?.identity) {
-      applyIdentity(data.identity);
-    } else {
-      await loadIdentityInfo();
-    }
-  } catch (error) {
-    initialized.value = false;
-    await loadIdentityInfo();
-  }
-  await loadEnvInfo();
 };
 
 const loadEnvInfo = async () => {
@@ -703,40 +685,42 @@ const enterSystem = async () => {
 };
 
 onMounted(async () => {
-  // 优先使用后端 InitController 状态判断是否已完成初始化
-  try {
-    const statusRes = await getInitStatus();
-    if (statusRes && (statusRes as any).data?.tenantStatus === -1) {
-      router.replace('/index');
-      return;
+  const status = await getInitStatus()
+    .then((res) => unwrapKmcData<{ tenantStatus?: number; identity?: unknown }>(res))
+    .catch(() => undefined);
+  let tenantStatus = status?.tenantStatus;
+
+  const tenantId = userStore.tenantId || localStorage.getItem('tenantId') || '';
+  if (tenantStatus !== -1 && tenantId) {
+    const tenantInfo = (await getTenant(tenantId).catch(() => undefined))?.data;
+    if (tenantInfo) {
+      tenantCode.value = tenantInfo.code || 'kmc';
+      tenantName.value = tenantInfo.name || '密钥管理中心';
+      companyName.value = tenantInfo.companyName || '';
+      tenantStatus ??= tenantInfo.status == null ? undefined : Number(tenantInfo.status);
     }
-  } catch (e) {}
+  }
 
-  try {
-    const tenantId = userStore.tenantId || localStorage.getItem('tenantId') || '';
-    if (tenantId) {
-      const tenantRes = await getTenant(tenantId);
-      if (tenantRes.data) {
-        const tenantInfo: any = tenantRes.data;
-        tenantCode.value = tenantInfo.code || 'kmc';
-        tenantName.value = tenantInfo.name || '密钥管理中心';
-        companyName.value = tenantInfo.companyName || '';
-        userStore.setTenantInitStatus(Number(tenantInfo.status));
+  if (tenantStatus === -1) {
+    userStore.setTenantInitStatus(-1);
+    await router.replace('/index');
+    return;
+  }
 
-        if (Number(tenantInfo.status) === -1) {
-          router.replace('/index');
-          return;
-        }
+  if (status?.identity) {
+    applyIdentity(status.identity);
+  } else {
+    await loadIdentityInfo();
+  }
 
-        const parsedStatus = Number(tenantInfo.status);
-        if (!Number.isNaN(parsedStatus) && parsedStatus >= 0 && parsedStatus <= 4) {
-          activeStep.value = parsedStatus;
-        }
-      }
-    }
-  } catch (error) {}
+  if (tenantStatus !== undefined && Number.isInteger(tenantStatus) && tenantStatus >= 0 && tenantStatus <= 4) {
+    userStore.setTenantInitStatus(tenantStatus);
+    // 租户状态 1 表示身份已激活时，向导应恢复到账号初始化。
+    activeStep.value = tenantStatus === 1 && identityConfigured.value ? 3 : tenantStatus;
+  }
+
   loading.value = false;
-  await loadInitInfo();
+  await loadEnvInfo();
 });
 </script>
 
