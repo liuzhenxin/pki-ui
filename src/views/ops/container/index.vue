@@ -80,7 +80,7 @@
               </template>
             </el-table-column>
             <el-table-column label="当前镜像版本" prop="image" min-width="230" show-overflow-tooltip />
-            <el-table-column label="最新正式版本" width="140">
+            <el-table-column label="仓库版本" width="140">
               <template #default="{ row }">
                 <el-tag v-if="versionOf(row).status === 'ERROR'" type="danger">扫描失败</el-tag>
                 <el-tag v-else-if="versionOf(row).status === 'NOT_FOUND'" type="info">仓库无版本</el-tag>
@@ -161,7 +161,7 @@
             ></el-table-column
           >
           <el-table-column label="当前镜像版本" prop="image" min-width="220" show-overflow-tooltip />
-          <el-table-column label="最新正式版本" width="150">
+          <el-table-column label="仓库版本" width="150">
             <template #default="{ row }">
               <el-tag v-if="versionOf(row).status === 'ERROR'" type="danger">扫描失败</el-tag>
               <el-tag v-else-if="versionOf(row).status === 'NOT_FOUND'" type="info">仓库无版本</el-tag>
@@ -367,13 +367,13 @@ const versionOf = (row?: Row) => (row ? versions.value[keyOf(row)] || versionFro
 const manageable = (row: Row) => row.manageable === true;
 const canUpgrade = (row: Row) => manageable(row) && row.health !== 'none' && row.health !== 'unknown' && versionOf(row).updateAvailable;
 const disabledReason = (row: Row) =>
-  ['none', 'unknown'].includes(row.health) ? '缺少有效 Docker healthcheck' : !versionOf(row).updateAvailable ? '没有更高的正式版本' : '';
+  ['none', 'unknown'].includes(row.health) ? '缺少有效 Docker healthcheck' : !versionOf(row).updateAvailable ? '没有可用的升级版本' : '';
 const healthText = (health: string) =>
   ({ healthy: '健康', unhealthy: '异常', starting: '启动中', none: '无检查', unknown: '未知' })[health] || health || '未知';
 const healthType = (health: string) => (health === 'healthy' ? 'success' : health === 'starting' ? 'warning' : health === 'none' ? 'info' : 'danger');
 const shortDigest = (digest?: string) => (digest ? `${digest.slice(0, 18)}…` : '-');
 const registryStatusText = (status?: string) =>
-  ({ AVAILABLE: '可用', NOT_FOUND: '仓库或正式版本不存在', ERROR: '扫描失败' })[status || ''] || '尚未扫描';
+  ({ AVAILABLE: '可用', NOT_FOUND: '仓库或可用版本不存在', ERROR: '扫描失败' })[status || ''] || '尚未扫描';
 const filteredContainers = computed(() =>
   containers.value.filter(
     (row) =>
