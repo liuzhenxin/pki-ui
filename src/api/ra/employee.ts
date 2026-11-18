@@ -1,5 +1,6 @@
 import request from '@/utils/request';
 import { Result } from '@/api/types';
+import type { RaApplicantUserInfo } from './user';
 
 export interface FawvwEmployeeQuery {
   pageNum: number;
@@ -45,6 +46,73 @@ export interface FawvwEmployee {
   departmentPath?: string;
   departmentNamePath?: string;
   lastSeenTime?: string;
+  recordSource?: 'API' | 'MANUAL' | 'IMPORT' | 'LOCAL_USER';
+  localEnabled?: boolean;
+  raUserId?: number | string;
+}
+
+export interface EmployeeInput {
+  employeeNo?: string;
+  gender?: string;
+  jobName?: string;
+  domainAccount: string;
+  birthday: string;
+  cnName: string;
+  email?: string;
+  departmentId?: string;
+}
+
+export function createFawvwEmployee(data: EmployeeInput): Promise<Result<number>> {
+  return request({ url: '/ra/v1/employees', method: 'post', data }) as any;
+}
+
+export function deleteFawvwEmployee(id: number | string): Promise<Result<void>> {
+  return request({ url: `/ra/v1/employees/${id}`, method: 'delete' }) as any;
+}
+
+export function downloadFawvwEmployeeImportTemplate(): Promise<Blob> {
+  return request({ url: '/ra/v1/employees/import-template', method: 'get', responseType: 'blob' }) as unknown as Promise<Blob>;
+}
+
+export function importFawvwEmployees(data: EmployeeInput[]): Promise<Result<number>> {
+  return request({ url: '/ra/v1/employees/import', method: 'post', data }) as any;
+}
+
+export function importFawvwEmployeeFile(file: File): Promise<Result<number>> {
+  const data = new FormData();
+  data.append('file', file);
+  return request({ url: '/ra/v1/employees/import-file', method: 'post', data }) as any;
+}
+
+export function previewFawvwEmployeeFile(file: File): Promise<Result<EmployeeInput[]>> {
+  const data = new FormData();
+  data.append('file', file);
+  return request({ url: '/ra/v1/employees/import-preview', method: 'post', data }) as any;
+}
+
+export interface EmployeeActivity {
+  applies: Array<{ id: number | string; status: number; create_time: string }>;
+  employeeCertificates: Array<{ id: number | string; task_no?: string; serial_number?: string; issue_status: string; create_time: string }>;
+}
+
+export function getFawvwEmployeeActivity(id: number | string): Promise<Result<EmployeeActivity>> {
+  return request({ url: `/ra/v1/employees/${id}/activity`, method: 'get' }) as any;
+}
+
+export function setFawvwEmployeeEnabled(id: number | string, enabled: boolean): Promise<Result<void>> {
+  return request({ url: `/ra/v1/employees/${id}/enabled`, method: 'patch', data: enabled }) as any;
+}
+
+export function confirmFawvwAccountOwner(id: number | string): Promise<Result<void>> {
+  return request({ url: `/ra/v1/employees/sync-conflicts/${id}/confirm`, method: 'post' }) as any;
+}
+
+export function getFawvwEmployeeApplicant(id: number | string): Promise<Result<RaApplicantUserInfo>> {
+  return request({ url: `/ra/v1/employees/${id}/applicant`, method: 'get' }) as any;
+}
+
+export function getFawvwEmployeeIdByApplicant(userId: number | string): Promise<Result<number | string | null>> {
+  return request({ url: `/ra/v1/employees/applicant-links/${userId}`, method: 'get', headers: { hideErrorNotify: true } }) as any;
 }
 
 export interface FawvwOrgNode {
@@ -58,14 +126,27 @@ export interface FawvwOrgNode {
 }
 
 export interface FawvwEmployeeSummary {
-  totalEmployees: number;
+  localEmployees: number;
   activeEmployees: number;
   foreignEmployees: number;
+  chineseEmployees: number;
   departments: number;
   latestSyncStatus?: string;
   latestSyncTime?: string;
   latestSyncEmployees?: number;
   demoEnabled: boolean;
+}
+
+export interface FawvwEmployeeDataExplanation {
+  summary: FawvwEmployeeSummary;
+  totalRecords: number;
+  apiRecords: number;
+  localRecords: number;
+  leftRecords: number;
+  disabledRecords: number;
+  activeUnlinkedRecords: number;
+  leftUnlinkedRecords: number;
+  chineseTypeMissing: number;
 }
 
 export interface FawvwSyncConfig {
@@ -121,6 +202,23 @@ export function pageFawvwEmployees(query: FawvwEmployeeQuery): Promise<Result<an
   }) as any;
 }
 
+export type EmployeeDirectoryRow = { employee?: FawvwEmployee; applicant: RaApplicantUserInfo; name: string; source: 'API' | 'LOCAL'; eligible: boolean };
+
+export function getEmployeeDirectoryDetails(userId: number | string): Promise<Result<{ person: EmployeeDirectoryRow; activity: EmployeeActivity }>> {
+  return request({ url: `/ra/v1/employees/directory/${userId}`, method: 'get' }) as any;
+}
+
+export function pageEmployeeDirectory(query: FawvwEmployeeQuery & { source?: string; userCategory?: string; mobile?: string }, signal?: AbortSignal):
+  Promise<Result<{ records: EmployeeDirectoryRow[]; total: number }>> {
+  return request({
+    url: '/ra/v1/employees/directory/page',
+    method: 'post',
+    headers: { repeatSubmit: false },
+    signal,
+    data: { ...query, departmentId: query.departmentId || undefined }
+  }) as any;
+}
+
 export function getFawvwEmployee(id: number | string): Promise<Result<FawvwEmployee>> {
   return request({
     url: `/ra/v1/employees/${id}`,
@@ -131,8 +229,13 @@ export function getFawvwEmployee(id: number | string): Promise<Result<FawvwEmplo
 export function getFawvwEmployeeSummary(): Promise<Result<FawvwEmployeeSummary>> {
   return request({
     url: '/ra/v1/employees/summary',
-    method: 'get'
+    method: 'get',
+    headers: { hideErrorNotify: true }
   }) as any;
+}
+
+export function getFawvwEmployeeDataExplanation(): Promise<Result<FawvwEmployeeDataExplanation>> {
+  return request({ url: '/ra/v1/employees/data-explanation', method: 'get' }) as any;
 }
 
 export function getFawvwOrgTree(): Promise<Result<FawvwOrgNode[]>> {

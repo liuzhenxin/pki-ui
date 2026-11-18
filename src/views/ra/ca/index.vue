@@ -2,7 +2,7 @@
   <div class="p-2">
     <el-card shadow="hover">
       <el-form ref="queryFormRef" :model="queryParams" :inline="true">
-        <el-form-item label="名称/编码" prop="keyword">
+        <el-form-item label="名称/编码" label-width="88px" prop="keyword">
           <el-input v-model="queryParams.keyword" placeholder="请输入CA名称或编码" clearable @keyup.enter="handleQuery" />
         </el-form-item>
         <el-form-item label="业务状态" prop="status">
@@ -208,6 +208,7 @@
 </template>
 
 <script setup name="RaCaInstance" lang="ts">
+import { useRaListRefreshOnReturn } from '@/hooks/useRaListRefreshOnReturn';
 import { reactive, ref } from 'vue';
 import { ArrowDown } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox, FormInstance, FormRules } from 'element-plus';
@@ -389,6 +390,7 @@ function modeLabel(mode?: string) {
 }
 
 getList();
+useRaListRefreshOnReturn(getList);
 </script>
 
 <style scoped>

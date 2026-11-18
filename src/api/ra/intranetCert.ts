@@ -1,7 +1,7 @@
 import request from '@/utils/request';
 import { Result } from '@/api/types';
 
-export type IntranetCertStatus = 'VALID' | 'EXPIRED' | 'NOT_YET_VALID' | 'REVOKED' | 'UNKNOWN';
+export type IntranetCertStatus = 'VALID' | 'EXPIRED' | 'NOT_YET_VALID' | 'REVOKED' | 'HOLD' | 'UNKNOWN';
 export type IntranetApplicantStatus = 'ACTIVE' | 'LEFT' | 'UNKNOWN';
 
 export interface IntranetCertQuery {
@@ -11,6 +11,8 @@ export interface IntranetCertQuery {
   systemName?: string;
   applicantKeyword?: string;
   deptName?: string;
+  profileName?: string;
+  issuer?: string;
   certStatus?: IntranetCertStatus | '';
   reminderEnabled?: boolean | null;
   applicantStatus?: IntranetApplicantStatus | '';
@@ -64,14 +66,19 @@ export interface IntranetCertPrefill {
     id: string | number;
     serialNumber: string;
     subject?: string;
+    issuer?: string;
     rootId?: string | number;
     rootName?: string;
     profileId?: string | number;
     profileName?: string;
     notBefore?: string;
     notAfter?: string;
+    certStatus?: IntranetCertStatus;
   };
 }
+
+export const downloadIntranetCert = (id: number | string, format: 'cer' | 'pem' | 'p7b'): Promise<Blob> =>
+  request({ url: `/ra/v1/intranet-certs/${id}/download/${format}`, method: 'get', responseType: 'blob' }) as any;
 
 export interface IntranetReminderTemplate {
   id?: string | number;
@@ -90,6 +97,8 @@ function cleanQuery(query: IntranetCertQuery) {
     systemName: query.systemName || undefined,
     applicantKeyword: query.applicantKeyword || undefined,
     deptName: query.deptName || undefined,
+    profileName: query.profileName?.trim() || undefined,
+    issuer: query.issuer?.trim() || undefined,
     certStatus: query.certStatus || undefined,
     reminderEnabled: query.reminderEnabled === null ? undefined : query.reminderEnabled,
     applicantStatus: query.applicantStatus || undefined,

@@ -1,11 +1,11 @@
 <template>
   <div class="app-container ra-apply-page">
-    <el-form ref="queryFormRef" v-show="showSearch" :model="queryParams" :inline="true" label-width="80px">
+    <el-form ref="queryFormRef" v-show="showSearch" :model="queryParams" label-width="80px" class="apply-query" @submit.prevent="handleQuery">
       <el-form-item label="申请用户" prop="userName">
-        <el-input v-model="queryParams.userName" placeholder="请输入申请用户" clearable style="width: 220px" @keyup.enter="handleQuery" />
+        <el-input v-model="queryParams.userName" placeholder="请输入申请用户" clearable @keyup.enter="handleQuery" />
       </el-form-item>
       <el-form-item label="申请状态" prop="status">
-        <el-select v-model="queryParams.status" placeholder="请选择状态" clearable style="width: 180px">
+        <el-select v-model="queryParams.status" placeholder="请选择状态" clearable>
           <el-option v-for="item in applyStatusOptions" :key="item.value" :label="item.label" :value="item.value" />
         </el-select>
       </el-form-item>
@@ -17,21 +17,21 @@
           range-separator="-"
           start-placeholder="开始日期"
           end-placeholder="结束日期"
-          style="width: 240px"
         />
       </el-form-item>
-      <el-form-item>
-        <el-button type="primary" icon="Search" @click="handleQuery">搜索</el-button>
+      <el-form-item class="apply-query-actions">
+        <el-button type="primary" icon="Search" native-type="submit">搜索</el-button>
         <el-button icon="Refresh" @click="resetQuery">重置</el-button>
       </el-form-item>
     </el-form>
 
-    <el-row :gutter="10" class="mb8">
-      <el-col :span="1.5">
+    <div class="apply-toolbar">
+      <div class="apply-actions">
         <el-button type="primary" plain icon="Plus" @click="handleAdd">新增申请</el-button>
-      </el-col>
+        <el-button v-hasPermi="['ra:admin']" icon="FolderChecked" @click="openUnresolved">核定存量归属</el-button>
+      </div>
       <right-toolbar v-model:showSearch="showSearch" @queryTable="getList" />
-    </el-row>
+    </div>
 
     <el-table v-loading="loading" :data="applyList" border>
       <el-table-column label="申请编号" prop="id" align="center" width="170" />
@@ -63,16 +63,19 @@
           <span>{{ parseTime(row.createTime) }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="操作" align="center" width="90" fixed="right">
+      <el-table-column label="操作" align="center" width="130" fixed="right">
         <template #default="{ row }">
           <el-tooltip content="详情" placement="top">
             <el-button link type="primary" icon="View" @click="handleDetail(row)" />
+          </el-tooltip>
+          <el-tooltip v-if="Number(row.status) === 0" content="转办" placement="top">
+            <el-button v-hasPermi="['ra:admin']" link type="primary" icon="Switch" @click="openTransfer(row)" />
           </el-tooltip>
         </template>
       </el-table-column>
     </el-table>
 
-    <pagination v-show="total > 0" :total="total" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" @pagination="getList" />
+    <pagination v-show="total > 0" :total="total" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" :auto-scroll="false" @pagination="getList" />
 
     <el-dialog v-model="open" title="新增证书申请" width="620px" append-to-body>
       <el-form ref="applyFormRef" :model="form" :rules="rules" label-width="96px">
@@ -141,33 +144,37 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="userPickerOpen" title="选择申请用户" width="980px" append-to-body destroy-on-close class="ra-user-picker-dialog">
+    <el-dialog v-model="userPickerOpen" title="选择申请用户" width="min(1060px, 96vw)" append-to-body destroy-on-close class="ra-user-picker-dialog" @close="clearPickerRequests">
       <div class="user-picker-layout">
         <aside class="user-picker-dept">
-          <el-input v-model="deptFilter" placeholder="请输入部门名称" prefix-icon="Search" clearable />
+          <el-input v-model="deptFilter" placeholder="搜索组织科室或部门" prefix-icon="Search" clearable />
           <el-tree
             ref="deptTreeRef"
             class="user-picker-tree"
             node-key="id"
-            :data="deptOptions"
+            :data="pickerTree"
             :props="deptTreeProps"
             :expand-on-click-node="false"
             :filter-node-method="filterDeptNode"
+            :current-node-key="userPickerQuery.deptId || allPickerDepartments"
+            :default-expanded-keys="[allPickerDepartments]"
             highlight-current
-            default-expand-all
             @node-click="handlePickerDeptClick"
           />
         </aside>
         <section class="user-picker-main">
           <el-form :model="userPickerQuery" :inline="true" label-width="72px" class="user-picker-query">
-            <el-form-item label="用户名称">
+            <el-form-item label="关键词">
               <el-input
                 v-model="userPickerQuery.username"
-                placeholder="请输入用户名称"
+                placeholder="姓名 / 工号 / 域账号"
                 clearable
                 style="width: 180px"
                 @keyup.enter="handleUserPickerQuery"
               />
+            </el-form-item>
+            <el-form-item label="域账号">
+              <el-input v-model="userPickerQuery.domainAccount" clearable placeholder="请输入域账号" style="width: 180px" @keyup.enter="handleUserPickerQuery" />
             </el-form-item>
             <el-form-item label="手机号码">
               <el-input
@@ -189,23 +196,26 @@
             </el-form-item>
           </el-form>
 
-          <el-table v-loading="userPickerLoading" :data="userPickerList" border height="360" highlight-current-row @row-dblclick="selectPickerUser">
-            <el-table-column label="用户名称" prop="username" min-width="150" show-overflow-tooltip />
+          <el-table v-loading="userPickerLoading" :data="userPickerList" border height="360" highlight-current-row @row-dblclick="selectPickerRow">
+            <el-table-column label="姓名 / 用户名" prop="name" min-width="116" show-overflow-tooltip />
+            <el-table-column label="来源" width="100"><template #default="{ row }">{{ row.source === 'API' ? '大众同步' : '本地创建' }}</template></el-table-column>
+            <el-table-column label="域账号" prop="domainAccount" min-width="110" show-overflow-tooltip />
             <el-table-column label="所属部门" min-width="150" show-overflow-tooltip>
               <template #default="{ row }">
-                <span>{{ userDeptName(row) }}</span>
+                <span>{{ row.department || '-' }}</span>
               </template>
             </el-table-column>
-            <el-table-column label="用户类别" width="110" align="center">
+            <el-table-column label="用户类别" width="100" align="center">
               <template #default="{ row }">
-                <el-tag type="info">{{ userCategoryLabel(row.userCategory) }}</el-tag>
+                <el-tag type="info">{{ userCategoryLabel(row.applicant?.userCategory) }}</el-tag>
               </template>
             </el-table-column>
-            <el-table-column label="手机号" prop="mobile" width="130" show-overflow-tooltip />
-            <el-table-column label="邮箱" prop="mail" min-width="170" show-overflow-tooltip />
-            <el-table-column label="操作" width="90" align="center" fixed="right">
+            <el-table-column label="手机号" prop="applicant.mobile" width="120" show-overflow-tooltip />
+            <el-table-column label="邮箱" prop="email" min-width="145" show-overflow-tooltip />
+            <el-table-column label="操作" width="126" align="center" fixed="right">
               <template #default="{ row }">
-                <el-button link type="primary" @click="selectPickerUser(row)">选择</el-button>
+                <span v-if="pickerBlockReason(row)" class="picker-blocked">{{ pickerBlockReason(row) }}</span>
+                <el-button v-else link type="primary" @click="selectPickerRow(row)">选择</el-button>
               </template>
             </el-table-column>
           </el-table>
@@ -215,6 +225,7 @@
             v-model:page="userPickerQuery.pageNum"
             v-model:limit="userPickerQuery.pageSize"
             :total="userPickerTotal"
+            :auto-scroll="false"
             @pagination="loadPickerUsers"
           />
         </section>
@@ -242,12 +253,44 @@
         <el-descriptions-item label="申请时间">{{ parseTime(detail.createTime) || '-' }}</el-descriptions-item>
       </el-descriptions>
     </el-dialog>
+
+    <el-dialog v-model="unresolvedOpen" title="待核定申请归属" width="760px" append-to-body>
+      <el-table :data="unresolvedRows" v-loading="unresolvedLoading" max-height="380" border>
+        <el-table-column label="申请编号" prop="id" min-width="155" />
+        <el-table-column label="申请用户ID" prop="user_id" min-width="145" />
+        <el-table-column label="申请时间" prop="create_time" min-width="180" />
+        <el-table-column label="操作" width="100">
+          <template #default="{ row }"><el-button link type="primary" @click="openTransfer(row, true)">核定</el-button></template>
+        </el-table-column>
+      </el-table>
+    </el-dialog>
+
+    <el-dialog v-model="transferOpen" :title="transferResolve ? '核定申请归属' : '转办申请'" width="500px" append-to-body>
+      <el-form label-width="90px">
+        <el-form-item label="申请编号">{{ transferId }}</el-form-item>
+        <el-form-item label="接手部门" required>
+          <el-tree-select v-model="transferDepartmentId" :data="deptOptions" :props="{ label: 'name', children: 'children', value: 'id' }" node-key="id" check-strictly filterable style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="核定依据" required>
+          <el-input v-model="transferReason" type="textarea" :rows="3" maxlength="500" show-word-limit placeholder="填写历史记录依据或转办原因" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="transferOpen = false">取消</el-button>
+        <el-button type="primary" :loading="transferSaving" @click="saveTransfer">确定</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup name="RaApply" lang="ts">
-import { pageRaApply, getRaApply, saveRaApply, RaApplyForm, RaApplyVO } from '@/api/ra/apply';
-import { listUser } from '@/api/ra/user';
+import { useRaListRefreshOnReturn } from '@/hooks/useRaListRefreshOnReturn';
+import { pageRaApply, getRaApply, saveRaApply, transferRaApplyDepartment, listUnresolvedApplyDepartments, resolveRaApplyDepartment, RaApplyForm, RaApplyVO } from '@/api/ra/apply';
+import type { RaApplicantUserInfo } from '@/api/ra/user';
+import { getEmployeeDirectoryDetails, getFawvwEmployee, getFawvwEmployeeApplicant, pageEmployeeDirectory, type EmployeeDirectoryRow, type FawvwEmployee } from '@/api/ra/employee';
+import auth from '@/plugins/auth';
+import { isFawvwEmployeeSourceActive } from '@/utils/fawvwEmployeeStatus';
+import { useRoute } from 'vue-router';
 import { listDeptSelectTree } from '@/api/ra/dept';
 import { RaDeptTreeOption } from '@/api/ra/dept/types';
 import { listMyUserCertScopeOptions, RaUserCertScopeDualPair, RaUserCertScopeProfile, RaUserCertScopeRoot } from '@/api/ra/userCertScope';
@@ -255,11 +298,24 @@ import { parseJson } from '@/utils/json';
 import { FormInstance, FormRules } from 'element-plus';
 
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
+const route = useRoute();
 
 const applyList = ref<RaApplyVO[]>([]);
 const rootOptions = ref<RaUserCertScopeRoot[]>([]);
 const deptOptions = ref<RaDeptTreeOption[]>([]);
 const deptFilter = ref('');
+type PickerDepartment = { id: string; name: string; children?: PickerDepartment[] };
+type PickerDepartmentInput = { id: string | number; name?: string; label?: string; children?: PickerDepartmentInput[] };
+type PickerRow = {
+  name?: string; domainAccount?: string; department?: string; email?: string;
+  employee?: FawvwEmployee; applicant?: RaApplicantUserInfo; source?: string; eligible?: boolean;
+};
+const allPickerDepartments = 'all';
+let pickerRequest = 0;
+const pickerTree = computed<PickerDepartment[]>(() => [{
+  id: allPickerDepartments, name: '全部部门',
+  children: mapPickerDepartments(deptOptions.value)
+}]);
 const open = ref(false);
 const userPickerOpen = ref(false);
 const detailOpen = ref(false);
@@ -271,7 +327,16 @@ const total = ref(0);
 const userPickerTotal = ref(0);
 const dateRange = ref<string[]>([]);
 const detail = ref<Partial<RaApplyVO>>({});
-const userPickerList = ref<any[]>([]);
+const userPickerList = ref<PickerRow[]>([]);
+const unresolvedOpen = ref(false);
+const unresolvedLoading = ref(false);
+const unresolvedRows = ref<Array<{ id: string | number; user_id: string | number; create_time: string }>>([]);
+const transferOpen = ref(false);
+const transferResolve = ref(false);
+const transferId = ref<string | number>('');
+const transferDepartmentId = ref<string | number>();
+const transferReason = ref('');
+const transferSaving = ref(false);
 
 const queryFormRef = ref<FormInstance>();
 const applyFormRef = ref<FormInstance>();
@@ -303,10 +368,10 @@ const userPickerQuery = reactive({
   pageNum: 1,
   pageSize: 10,
   username: '',
+  domainAccount: '',
   mobile: '',
   userCategory: undefined as string | undefined,
-  deptId: undefined as string | number | undefined,
-  superAdmin: 0
+  deptId: undefined as string | undefined
 });
 
 const form = reactive<RaApplyForm>({
@@ -415,17 +480,21 @@ const deptNameMap = computed(() => {
   return map;
 });
 
+let listVersion = 0;
+
 async function getList() {
+  const version = ++listVersion;
   loading.value = true;
   try {
     queryParams.startTime = dateRange.value?.[0];
     queryParams.endTime = dateRange.value?.[1];
     const res = await pageRaApply(queryParams);
+    if (version !== listVersion) return;
     const page = parsePage(res);
     applyList.value = page.rows;
     total.value = page.total;
   } finally {
-    loading.value = false;
+    if (version === listVersion) loading.value = false;
   }
 }
 
@@ -475,8 +544,10 @@ async function loadDeptOptions() {
 }
 
 async function handleAdd() {
+  const entryPath = route.fullPath;
   resetForm();
   await Promise.all([loadDeptOptions(), loadRootOptions()]);
+  if (entryPath !== route.fullPath) return;
   open.value = true;
 }
 
@@ -490,72 +561,87 @@ function handleUserCategoryChange() {
   }
 }
 
+function mapPickerDepartments(nodes: PickerDepartmentInput[]): PickerDepartment[] {
+  return nodes.map((node) => ({
+    id: String(node.id), name: node.label || node.name || String(node.id), children: mapPickerDepartments(node.children || [])
+  }));
+}
+
 async function openUserPicker() {
   await loadDeptOptions();
-  userPickerQuery.pageNum = 1;
-  userPickerQuery.username = '';
-  userPickerQuery.mobile = '';
-  userPickerQuery.userCategory = form.userCategory;
-  userPickerQuery.deptId = undefined;
-  deptFilter.value = '';
   userPickerOpen.value = true;
-  await nextTick();
-  deptTreeRef.value?.setCurrentKey(undefined);
-  await loadPickerUsers();
+  await resetUserPickerQuery();
 }
 
 async function loadPickerUsers() {
+  const request = ++pickerRequest;
   userPickerLoading.value = true;
+  userPickerList.value = [];
   try {
-    const query = {
-      pageNum: userPickerQuery.pageNum,
-      pageSize: userPickerQuery.pageSize,
-      username: userPickerQuery.username,
-      mobile: userPickerQuery.mobile,
-      userCategory: userPickerQuery.userCategory,
-      deptId: userPickerQuery.deptId,
-      superAdmin: 0
-    };
-    const res = await listUser(query as any);
+    const { pageNum, pageSize, username, domainAccount, mobile, userCategory, deptId } = userPickerQuery;
+    const res = await pageEmployeeDirectory({ pageNum, pageSize, keyword: username.trim(), domainAccount: domainAccount.trim(),
+      mobile: mobile.trim(), userCategory, departmentId: deptId });
+    if (request !== pickerRequest || !userPickerOpen.value) return;
     const page = parsePage(res);
-    userPickerList.value = page.rows;
+    userPickerList.value = (page.rows as EmployeeDirectoryRow[]).map(({ employee, applicant, name, source, eligible }) => ({
+      employee, applicant, name, source, eligible, domainAccount: applicant?.domainAccount,
+      email: applicant?.mail, department: applicant ? userDeptName(applicant) : undefined
+    }));
     userPickerTotal.value = Number(page.total || 0);
+  } catch {
+    if (request === pickerRequest) userPickerTotal.value = 0;
   } finally {
-    userPickerLoading.value = false;
+    if (request === pickerRequest) userPickerLoading.value = false;
   }
 }
 
 function handleUserPickerQuery() {
   userPickerQuery.pageNum = 1;
-  loadPickerUsers();
+  return loadPickerUsers();
 }
 
 function resetUserPickerQuery() {
   userPickerQuery.pageNum = 1;
   userPickerQuery.username = '';
+  userPickerQuery.domainAccount = '';
   userPickerQuery.mobile = '';
   userPickerQuery.userCategory = form.userCategory;
   userPickerQuery.deptId = undefined;
   deptFilter.value = '';
-  deptTreeRef.value?.setCurrentKey(undefined);
-  loadPickerUsers();
+  deptTreeRef.value?.setCurrentKey(allPickerDepartments);
+  return loadPickerUsers();
 }
 
-function filterDeptNode(value: string, data: RaDeptTreeOption) {
-  if (!value) {
-    return true;
+function filterDeptNode(value: string, data: PickerDepartment) {
+  return data.id === allPickerDepartments || data.name.toLowerCase().includes(value.trim().toLowerCase());
+}
+
+function handlePickerDeptClick(data: PickerDepartment) {
+  userPickerQuery.deptId = data.id === allPickerDepartments ? undefined : data.id;
+  return handleUserPickerQuery();
+}
+
+function pickerBlockReason(row: PickerRow) {
+  if (row.eligible === false) return '不可办理';
+  const employee = row.employee;
+  if (employee) {
+    if (employee.identityStatus !== 'VALID' || employee.localEnabled === false
+        || (employee.recordSource === 'API' && !isFawvwEmployeeSourceActive(employee.sourceStatus))) return '不可办理';
   }
-  return data.name?.includes(value);
+  if (row.applicant?.status != null && Number(row.applicant.status) !== 0) {
+    return '账号已停用';
+  }
+  return '';
 }
 
-function handlePickerDeptClick(data: RaDeptTreeOption) {
-  userPickerQuery.deptId = data.id;
-  handleUserPickerQuery();
+function selectPickerRow(row: PickerRow) {
+  if (userPickerLoading.value || pickerBlockReason(row) || row.applicant?.id == null) return;
+  selectPickerUser(row.applicant, row.name);
 }
 
-function selectPickerUser(user: any) {
+function selectPickerUser(user: RaApplicantUserInfo, employeeName?: string) {
   form.userId = String(user.id);
-  form.userName = user.username || user.userName || '';
+  form.userName = employeeName || user.username || user.userName || '';
   form.deptName = userDeptName(user);
   form.userCategory = user.userCategory || form.userCategory;
   userPickerQuery.userCategory = form.userCategory;
@@ -565,6 +651,11 @@ function selectPickerUser(user: any) {
 
 function closeUserPicker() {
   userPickerOpen.value = false;
+}
+
+function clearPickerRequests() {
+  pickerRequest++;
+  userPickerLoading.value = false;
 }
 
 function handleRootChange(rootId?: string | number) {
@@ -706,6 +797,44 @@ async function handleDetail(row: RaApplyVO) {
   detailOpen.value = true;
 }
 
+async function openUnresolved() {
+  unresolvedOpen.value = true;
+  unresolvedLoading.value = true;
+  try {
+    unresolvedRows.value = (await listUnresolvedApplyDepartments()).data || [];
+  } finally {
+    unresolvedLoading.value = false;
+  }
+}
+
+async function openTransfer(row: { id: string | number }, resolve = false) {
+  await loadDeptOptions();
+  transferId.value = row.id;
+  transferResolve.value = resolve;
+  transferDepartmentId.value = undefined;
+  transferReason.value = '';
+  transferOpen.value = true;
+}
+
+async function saveTransfer() {
+  if (!transferDepartmentId.value || !transferReason.value.trim()) {
+    proxy?.$modal.msgError('请填写接手部门和核定依据');
+    return;
+  }
+  transferSaving.value = true;
+  try {
+    const payload = { departmentId: transferDepartmentId.value, reason: transferReason.value.trim() };
+    if (transferResolve.value) await resolveRaApplyDepartment(transferId.value, payload);
+    else await transferRaApplyDepartment(transferId.value, payload);
+    transferOpen.value = false;
+    proxy?.$modal.msgSuccess('操作成功');
+    if (transferResolve.value) await openUnresolved();
+    await getList();
+  } finally {
+    transferSaving.value = false;
+  }
+}
+
 function userDeptName(user: any) {
   return user.deptName || user.dept?.name || deptNameMap.value.get(String(user.deptId)) || '-';
 }
@@ -759,6 +888,54 @@ onMounted(() => {
   getList();
 });
 
+watch(() => route.fullPath, async (entryPath, _, onCleanup) => {
+  if (!/^\/ra-certificate\/ra-cert-apply\/?$/.test(route.path)) {
+    open.value = false;
+    userPickerOpen.value = false;
+    return;
+  }
+  const employeeId = route.query.employeeId;
+  const applicantId = route.query.applicantId;
+  if (typeof employeeId !== 'string' && typeof applicantId !== 'string') return;
+  let cancelled = false;
+  onCleanup(() => { cancelled = true; });
+  const isCurrent = () => !cancelled && entryPath === route.fullPath;
+  try {
+    let selectedApplicant: RaApplicantUserInfo;
+    let selectedName: string | undefined;
+    if (typeof employeeId === 'string') {
+      const { data: employee } = await getFawvwEmployee(employeeId);
+      if (!isCurrent()) return;
+      if (!employee || pickerBlockReason({ employee })) {
+        proxy?.$modal.msgError('当前员工不可办理证书申请');
+        return;
+      }
+      const { data: applicant } = await getFawvwEmployeeApplicant(employeeId);
+      if (!isCurrent() || applicant?.id == null || pickerBlockReason({ applicant })) return;
+      selectedApplicant = applicant;
+      selectedName = employee.cnName;
+    } else if (typeof applicantId === 'string') {
+      const { data: { person } } = await getEmployeeDirectoryDetails(applicantId);
+      if (!isCurrent()) return;
+      if (pickerBlockReason(person)) {
+        proxy?.$modal.msgError('当前人员不可办理证书申请');
+        return;
+      }
+      selectedApplicant = person.applicant;
+      selectedName = person.name;
+    } else {
+      return;
+    }
+    resetForm();
+    await Promise.all([loadDeptOptions(), loadRootOptions()]);
+    if (!isCurrent()) return;
+    selectPickerUser(selectedApplicant, selectedName);
+    open.value = true;
+  } catch {
+    if (isCurrent()) proxy?.$modal.msgError('无法加载员工申请资格');
+  }
+}, { immediate: true });
+
 watch(
   deptFilter,
   (value) => {
@@ -766,12 +943,91 @@ watch(
   },
   { flush: 'post' }
 );
+useRaListRefreshOnReturn(getList);
 </script>
 
 <style scoped lang="scss">
 .ra-apply-page {
   .el-table {
     width: 100%;
+  }
+}
+
+.apply-query,
+.apply-toolbar,
+.apply-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.apply-query {
+  padding: 14px 16px 0;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 6px;
+  background: var(--el-fill-color-extra-light);
+  gap: 0 16px;
+  margin-bottom: 12px;
+
+  :deep(.el-form-item) {
+    flex: 1 1 240px;
+    min-width: 0;
+    margin: 0 0 14px;
+  }
+
+  :deep(.el-form-item__label) {
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  :deep(.el-form-item__content) {
+    min-width: 0;
+  }
+
+  :deep(.el-input),
+  :deep(.el-select),
+  :deep(.el-date-editor) {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
+.apply-query-actions {
+  flex: 0 0 auto !important;
+  margin-left: auto !important;
+
+  :deep(.el-form-item__content) {
+    flex-wrap: nowrap;
+  }
+
+  :deep(.el-button + .el-button) {
+    margin-left: 8px;
+  }
+}
+
+@media (max-width: 560px) {
+  .apply-query :deep(.el-form-item) {
+    display: block;
+  }
+  .apply-query :deep(.el-form-item__label) {
+    justify-content: flex-start;
+  }
+  .apply-query :deep(.el-form-item__content) {
+    margin-left: 0 !important;
+  }
+}
+
+.apply-toolbar {
+  justify-content: space-between;
+  gap: 8px 12px;
+  margin-bottom: 8px;
+}
+
+.apply-actions {
+  gap: 8px;
+
+  :deep(.el-button + .el-button) {
+    margin-left: 0;
   }
 }
 
@@ -792,6 +1048,10 @@ watch(
   margin-top: 10px;
   height: 420px;
   overflow: auto;
+
+  :deep(.el-tree-node__label) {
+    white-space: nowrap;
+  }
 }
 
 .user-picker-main {
@@ -800,6 +1060,10 @@ watch(
 
 .user-picker-query {
   margin-bottom: 8px;
+}
+
+.picker-blocked {
+  color: var(--el-text-color-secondary);
 }
 
 :deep(.ra-user-picker-dialog .el-dialog__body) {

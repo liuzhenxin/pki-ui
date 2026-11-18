@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { PublicCert, PublicCertAttachment, PublicCertDetail, PublicCertQuery, PublicCertType, SelfAccess } from '@/api/ra/publicCert';
+import { PublicCert, PublicCertAttachment, PublicCertDetail, PublicCertEmployee, PublicCertQuery, PublicCertType, SelfAccess } from '@/api/ra/publicCert';
 
 const portalClient = axios.create({
   // Employee portal calls bypass the gateway's RA-token filter. Nginx forwards
@@ -28,11 +28,19 @@ function unwrap<T>(response: any): T {
 }
 
 async function portalRequest<T>(request: Promise<any>): Promise<T> {
+  let response: any;
   try {
-    return unwrap<T>(await request);
+    response = await request;
+    return unwrap<T>(response);
   } catch (error: any) {
     const body = error?.response?.data;
-    throw new Error(body?.msg || body?.message || error?.message || '请求失败');
+    const message = body?.msg || body?.message || error?.message || '请求失败';
+    if (typeof window !== 'undefined' && (/登录已失效|录入权限已被取消/.test(message) || error?.response?.status === 401)) {
+      const headers = (response?.config || error?.config)?.headers;
+      const token = headers?.get?.('X-FAW-VW-Portal-Token') || headers?.['X-FAW-VW-Portal-Token'];
+      window.dispatchEvent(new CustomEvent('fawvw-portal-expired', { detail: { token } }));
+    }
+    throw new Error(message);
   }
 }
 
@@ -84,6 +92,9 @@ export const pagePublicCertPortal = async (token: string, query: PublicCertQuery
 export const listPublicCertPortalTypes = async (token: string): Promise<PublicCertType[]> =>
   portalRequest(portalClient.get('/v1/public-certs/portal/types', { headers: portalHeaders(token) }));
 
+export const searchPublicCertPortalEmployees = async (token: string, keyword: string): Promise<PublicCertEmployee[]> =>
+  portalRequest(portalClient.get('/v1/public-certs/portal/employees', { headers: portalHeaders(token), params: { keyword } }));
+
 export const getPublicCertPortal = async (token: string, id: number | string): Promise<PublicCertDetail> =>
   portalRequest(portalClient.get(`/v1/public-certs/portal/${id}`, { headers: portalHeaders(token) }));
 
@@ -96,5 +107,5 @@ export const submitPublicCertPortal = async (token: string, id: number | string)
 export const uploadPublicCertPortalAttachment = async (token: string, id: number | string, file: File): Promise<PublicCertAttachment> => {
   const form = new FormData();
   form.append('file', file);
-  return portalRequest(portalClient.post(`/v1/public-certs/portal/${id}/attachments`, form, { headers: portalHeaders(token) }));
+  return portalRequest(portalClient.post(`/v1/public-certs/portal/${id}/attachments`, form, { headers: portalHeaders(token), timeout: 120_000 }));
 };

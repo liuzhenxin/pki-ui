@@ -156,6 +156,7 @@ const ensureTenantBoundary = async (path: string) => {
 
 router.beforeEach(async (to, from, next) => {
   NProgress.start();
+  if (to.name === 'RaPublicCertSelf' && to.meta.title) useSettingsStore().setTitle(String(to.meta.title));
   if (getToken()) {
     to.meta.title && useSettingsStore().setTitle(to.meta.title as string);
     /* has token*/

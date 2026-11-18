@@ -1,36 +1,65 @@
 <template>
   <div class="app-container intranet-cert-page">
-    <el-card shadow="never" class="query-card">
-      <el-form :model="queryParams" inline>
+    <el-card v-show="showSearch" shadow="never" class="query-card">
+      <el-form :model="queryParams" label-width="100px" class="query-form">
         <el-form-item label="序列号">
-          <el-input v-model="queryParams.serialNumber" clearable placeholder="证书序列号" style="width: 190px" @keyup.enter="handleQuery" />
+          <el-input v-model="queryParams.serialNumber" clearable placeholder="证书序列号" @keyup.enter="handleQuery" />
         </el-form-item>
         <el-form-item label="系统名称">
-          <el-input v-model="queryParams.systemName" clearable placeholder="系统名称" style="width: 180px" @keyup.enter="handleQuery" />
+          <el-input v-model="queryParams.systemName" clearable placeholder="系统名称" @keyup.enter="handleQuery" />
         </el-form-item>
         <el-form-item label="申请人">
-          <el-input v-model="queryParams.applicantKeyword" clearable placeholder="姓名/域账号" style="width: 160px" @keyup.enter="handleQuery" />
+          <el-input v-model="queryParams.applicantKeyword" clearable placeholder="姓名/域账号" @keyup.enter="handleQuery" />
         </el-form-item>
         <el-form-item label="科室">
-          <el-input v-model="queryParams.deptName" clearable placeholder="申请科室" style="width: 160px" @keyup.enter="handleQuery" />
+          <el-input v-model="queryParams.deptName" clearable placeholder="申请科室" @keyup.enter="handleQuery" />
+        </el-form-item>
+        <el-form-item label="证书模板">
+          <el-input v-model="queryParams.profileName" clearable placeholder="模板名称" @keyup.enter="handleQuery" />
+        </el-form-item>
+        <el-form-item label="颁发机构">
+          <el-input v-model="queryParams.issuer" clearable placeholder="颁发者或 CA 名称" @keyup.enter="handleQuery" />
         </el-form-item>
         <el-form-item label="证书状态">
-          <el-select v-model="queryParams.certStatus" clearable placeholder="全部" style="width: 130px">
+          <el-select v-model="queryParams.certStatus" clearable placeholder="全部">
             <el-option label="有效" value="VALID" />
             <el-option label="未生效" value="NOT_YET_VALID" />
             <el-option label="已过期" value="EXPIRED" />
             <el-option label="已吊销" value="REVOKED" />
+            <el-option label="已冻结" value="HOLD" />
             <el-option label="未知" value="UNKNOWN" />
           </el-select>
         </el-form-item>
         <el-form-item label="人员状态">
-          <el-select v-model="queryParams.applicantStatus" clearable placeholder="全部" style="width: 120px">
+          <el-select v-model="queryParams.applicantStatus" clearable placeholder="全部">
             <el-option label="在职" value="ACTIVE" />
             <el-option label="离职" value="LEFT" />
             <el-option label="未知" value="UNKNOWN" />
           </el-select>
         </el-form-item>
-        <el-form-item>
+        <el-form-item label="提醒状态">
+          <el-select v-model="queryParams.reminderEnabled" clearable :value-on-clear="null" placeholder="全部">
+            <el-option label="开启" :value="true" />
+            <el-option label="关闭" :value="false" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="负责人变更">
+          <el-select v-model="queryParams.ownerChangeRequired" clearable :value-on-clear="null" placeholder="全部">
+            <el-option label="需处理" :value="true" />
+            <el-option label="正常" :value="false" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="到期日期">
+          <el-date-picker
+            v-model="expiryRange"
+            type="daterange"
+            value-format="YYYY-MM-DD"
+            start-placeholder="开始日期"
+            end-placeholder="结束日期"
+            unlink-panels
+          />
+        </el-form-item>
+        <el-form-item class="query-actions">
           <el-button type="primary" icon="Search" @click="handleQuery">搜索</el-button>
           <el-button icon="Refresh" @click="resetQuery">重置</el-button>
         </el-form-item>
@@ -92,57 +121,61 @@
             <el-tag v-else type="info" effect="plain">正常</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" fixed="right" width="150" align="center">
+        <el-table-column label="操作" fixed="right" width="156" align="center">
           <template #default="{ row }">
-            <el-tooltip content="详情" placement="top">
-              <el-button link type="primary" icon="View" @click="openDetail(row)" />
-            </el-tooltip>
-            <el-tooltip content="修改" placement="top">
-              <el-button v-hasPermi="['ra:intranet-cert:edit']" link type="primary" icon="Edit" @click="openEdit(row)" />
-            </el-tooltip>
-            <el-tooltip content="作废" placement="top">
-              <el-button v-hasPermi="['ra:intranet-cert:remove']" link type="danger" icon="Delete" @click="handleRemove(row)" />
-            </el-tooltip>
+            <CertRowAction label="查看详情" icon="View" @click="openDetail(row)" />
+            <CertRowAction v-if="row.sourceType === 'ISSUED' && row.sourceCertId" label="下载证书" icon="Download"
+              @command="(format) => downloadCertificate(row, format as 'cer' | 'pem' | 'p7b')">
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="cer">CER 证书</el-dropdown-item>
+                  <el-dropdown-item command="pem">PEM 证书</el-dropdown-item>
+                  <el-dropdown-item command="p7b">P7B 证书链</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </CertRowAction>
+            <CertRowAction v-hasPermi="['ra:intranet-cert:edit']" label="修改" icon="Edit" @click="openEdit(row)" />
+            <CertRowAction v-hasPermi="['ra:intranet-cert:remove']" label="作废" type="danger" icon="Delete" @click="handleRemove(row)" />
           </template>
         </el-table-column>
       </el-table>
 
-      <pagination v-show="total > 0" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" :total="total" @pagination="loadList" />
+      <pagination v-show="total > 0" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" :total="total" :auto-scroll="false" @pagination="loadList" />
     </el-card>
 
-    <el-drawer v-model="formOpen" :title="form.id ? '修改内网证书台账' : '新增内网证书台账'" size="680px" append-to-body>
+    <el-drawer v-model="formOpen" :title="form.id ? '修改内网证书台账' : form.sourceCertId ? '同步到内网证书管理' : '新增内网证书台账'" size="680px" append-to-body>
       <el-form ref="formRef" :model="form" :rules="rules" label-width="112px">
         <el-divider content-position="left">证书信息</el-divider>
         <el-form-item label="证书来源">
           <el-tag :type="form.sourceCertId ? 'success' : 'info'" effect="plain">{{ form.sourceCertId ? '已签发证书' : '手工录入' }}</el-tag>
         </el-form-item>
         <el-form-item label="证书序列号" prop="serialNumber">
-          <el-input v-model="form.serialNumber" clearable placeholder="请输入证书序列号" />
+          <el-input v-model="form.serialNumber" :readonly="!!form.id || !!form.sourceCertId" clearable placeholder="请输入证书序列号" />
         </el-form-item>
         <el-form-item label="证书主题">
-          <el-input v-model="form.subject" type="textarea" :rows="2" placeholder="证书主题" />
+          <el-input v-model="form.subject" :readonly="!!form.id || !!form.sourceCertId" type="textarea" :rows="2" placeholder="证书主题" />
         </el-form-item>
         <el-row :gutter="12">
           <el-col :span="12">
-            <el-form-item label="根证书">
-              <el-input v-model="form.rootName" clearable placeholder="根证书名称" />
+            <el-form-item label="颁发者">
+              <el-input v-model="form.issuer" :readonly="!!form.id || !!form.sourceCertId" clearable placeholder="证书颁发者" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item label="证书模板">
-              <el-input v-model="form.profileName" clearable placeholder="证书模板名称" />
+              <el-input v-model="form.profileName" :readonly="!!form.id || !!form.sourceCertId" clearable placeholder="证书模板名称" />
             </el-form-item>
           </el-col>
         </el-row>
         <el-row :gutter="12">
           <el-col :span="12">
             <el-form-item label="生效时间">
-              <el-date-picker v-model="form.notBefore" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" placeholder="生效时间" style="width: 100%" />
+              <el-date-picker v-model="form.notBefore" :disabled="!!form.id || !!form.sourceCertId" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" placeholder="生效时间" style="width: 100%" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item label="到期时间">
-              <el-date-picker v-model="form.notAfter" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" placeholder="到期时间" style="width: 100%" />
+              <el-date-picker v-model="form.notAfter" :disabled="!!form.id || !!form.sourceCertId" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" placeholder="到期时间" style="width: 100%" />
             </el-form-item>
           </el-col>
         </el-row>
@@ -205,12 +238,15 @@
       <el-descriptions :column="1" border>
         <el-descriptions-item label="序列号">{{ detail.serialNumber || '-' }}</el-descriptions-item>
         <el-descriptions-item label="证书主题">{{ detail.subject || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="颁发者">{{ detail.issuer || '-' }}</el-descriptions-item>
         <el-descriptions-item label="系统名称">{{ detail.systemName || '-' }}</el-descriptions-item>
         <el-descriptions-item label="使用场景">{{ detail.usageScenario || '-' }}</el-descriptions-item>
         <el-descriptions-item label="申请人">{{ detail.applicantName || '-' }}</el-descriptions-item>
         <el-descriptions-item label="域账号">{{ detail.applicantAccount || '-' }}</el-descriptions-item>
         <el-descriptions-item label="邮箱">{{ detail.applicantEmail || '-' }}</el-descriptions-item>
         <el-descriptions-item label="申请科室">{{ detail.applicantDeptPath || detail.applicantDeptName || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="证书管理员">{{ detail.managerName || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="管理员邮箱">{{ detail.managerEmail || '-' }}</el-descriptions-item>
         <el-descriptions-item label="有效期">{{ parseDateTime(detail.notBefore) }} 至 {{ parseDateTime(detail.notAfter) }}</el-descriptions-item>
         <el-descriptions-item label="提醒天数">{{ detail.reminderEnabled ? detail.reminderDays : '关闭' }}</el-descriptions-item>
         <el-descriptions-item label="负责人变更">{{ detail.ownerChangeRequired ? '需要处理' : '正常' }}</el-descriptions-item>
@@ -241,7 +277,7 @@
         <el-table-column label="科室" prop="departmentName" min-width="150" show-overflow-tooltip />
         <el-table-column label="状态" width="90" align="center">
           <template #default="{ row }">
-            <el-tag :type="row.sourceStatus === 'A' ? 'success' : 'danger'" effect="plain">{{ row.sourceStatusName || '-' }}</el-tag>
+            <el-tag :type="employeeIsActive(row) ? 'success' : 'danger'" effect="plain">{{ row.sourceStatusName || '-' }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="操作" width="90" align="center">
@@ -265,7 +301,7 @@
         </el-table-column>
         <el-table-column label="操作" width="90" align="center">
           <template #default="{ row }">
-            <el-button link type="primary" icon="Edit" @click="editTemplate(row)" />
+            <CertRowAction label="编辑提醒模板" icon="Edit" @click="editTemplate(row)" />
           </template>
         </el-table-column>
       </el-table>
@@ -298,12 +334,18 @@
 </template>
 
 <script setup name="RaIntranetCert" lang="ts">
+import CertRowAction from '../components/CertRowAction.vue';
+import { useRaListRefreshOnReturn } from '@/hooks/useRaListRefreshOnReturn';
 import FileSaver from 'file-saver';
+import { certificateDownloadBlob } from '@/utils/raCertificateDownload';
+import { isFawvwEmployeeSourceActive } from '@/utils/fawvwEmployeeStatus';
 import { ElMessage, ElMessageBox, FormInstance, FormRules } from 'element-plus';
 import {
+  downloadIntranetCert,
   exportIntranetCerts,
   getIntranetCert,
   IntranetCert,
+  IntranetCertPrefill,
   IntranetCertQuery,
   IntranetReminderTemplate,
   listIntranetCertTemplates,
@@ -338,13 +380,14 @@ const queryParams = reactive<IntranetCertQuery>({
   systemName: '',
   applicantKeyword: '',
   deptName: '',
+  profileName: '',
+  issuer: '',
   certStatus: '',
   reminderEnabled: null,
   applicantStatus: '',
-  ownerChangeRequired: null,
-  notAfterStart: '',
-  notAfterEnd: ''
+  ownerChangeRequired: null
 });
+const expiryRange = ref<[string, string] | null>(null);
 
 const emptyForm = (): Partial<IntranetCert> => ({
   sourceType: 'MANUAL',
@@ -409,14 +452,22 @@ function unwrap<T>(res: any): T {
   return (body?.data ?? body) as T;
 }
 
+function queryPayload(): IntranetCertQuery {
+  return { ...queryParams, notAfterStart: expiryRange.value?.[0], notAfterEnd: expiryRange.value?.[1] };
+}
+
+let listVersion = 0;
+
 async function loadList() {
+  const version = ++listVersion;
   loading.value = true;
   try {
-    const page = unwrap<any>(await pageIntranetCerts(queryParams));
+    const page = unwrap<any>(await pageIntranetCerts(queryPayload()));
+    if (version !== listVersion) return;
     rows.value = page.records || page.rows || [];
     total.value = Number(page.total || 0);
   } finally {
-    loading.value = false;
+    if (version === listVersion) loading.value = false;
   }
 }
 
@@ -433,17 +484,19 @@ function resetQuery() {
     systemName: '',
     applicantKeyword: '',
     deptName: '',
+    profileName: '',
+    issuer: '',
     certStatus: '',
     reminderEnabled: null,
     applicantStatus: '',
-    ownerChangeRequired: null,
-    notAfterStart: '',
-    notAfterEnd: ''
+    ownerChangeRequired: null
   });
+  expiryRange.value = null;
   loadList();
 }
 
 function resetForm() {
+  Object.keys(form).forEach((key) => Reflect.deleteProperty(form, key));
   Object.assign(form, emptyForm());
   formRef.value?.clearValidate();
 }
@@ -463,6 +516,16 @@ async function openEdit(row: IntranetCert) {
 async function openDetail(row: IntranetCert) {
   detail.value = unwrap<IntranetCert>(await getIntranetCert(row.id!));
   detailOpen.value = true;
+}
+
+async function downloadCertificate(row: IntranetCert, format: 'cer' | 'pem' | 'p7b') {
+  try {
+    const response = await downloadIntranetCert(row.id!, format);
+    const blob = await certificateDownloadBlob(response, 'application/octet-stream');
+    FileSaver.saveAs(blob, `${row.serialNumber.replace(/[^A-Za-z0-9_-]/g, '_')}.${format}`);
+  } catch (error: any) {
+    ElMessage.error(error?.message || '证书下载失败');
+  }
 }
 
 async function submitForm() {
@@ -510,6 +573,10 @@ async function loadEmployees() {
   }
 }
 
+function employeeIsActive(row: FawvwEmployee) {
+  return row.identityStatus !== 'LEFT' && isFawvwEmployeeSourceActive(row.sourceStatus);
+}
+
 function selectEmployee(row: FawvwEmployee) {
   Object.assign(form, {
     applicantEmployeeId: row.id,
@@ -520,13 +587,13 @@ function selectEmployee(row: FawvwEmployee) {
     applicantDeptId: row.departmentId,
     applicantDeptName: row.departmentName,
     applicantDeptPath: row.departmentNamePath,
-    applicantStatus: row.sourceStatus === 'A' ? 'ACTIVE' : 'LEFT'
+    applicantStatus: employeeIsActive(row) ? 'ACTIVE' : 'LEFT'
   });
   employeeOpen.value = false;
 }
 
 async function handleExport() {
-  const response: any = await exportIntranetCerts(queryParams);
+  const response: any = await exportIntranetCerts(queryPayload());
   const blob = response?.data instanceof Blob ? response.data : response;
   FileSaver.saveAs(blob, `fawvw_intranet_certs_${Date.now()}.csv`);
 }
@@ -562,30 +629,31 @@ async function saveTemplate(row: IntranetReminderTemplate) {
   templateEditOpen.value = false;
 }
 
-async function loadPrefillFromRoute() {
-  const sourceCertId = route.query.sourceCertId as string | undefined;
-  const serialNumber = route.query.serialNumber as string | undefined;
-  if (!sourceCertId && !serialNumber) return;
-  const data = unwrap<any>(await prefillIntranetCert({ sourceCertId, serialNumber }));
-  if (data?.existing?.id) {
-    Object.assign(form, data.existing);
-    ElMessage.info('该证书已录入台账，已打开现有记录');
-  } else if (data?.cert) {
-    Object.assign(form, emptyForm(), {
-      sourceType: 'ISSUED',
-      sourceCertId: data.cert.id,
-      serialNumber: data.cert.serialNumber,
-      subject: data.cert.subject,
-      rootId: data.cert.rootId,
-      rootName: data.cert.rootName,
-      profileId: data.cert.profileId,
-      profileName: data.cert.profileName,
-      notBefore: data.cert.notBefore,
-      notAfter: data.cert.notAfter
-    });
+async function loadPrefillFromRoute(path: string, source: unknown, serial: unknown) {
+  const sourceCertId = typeof source === 'string' ? source : undefined;
+  const serialNumber = typeof serial === 'string' ? serial : undefined;
+  if (!path.endsWith('/ra-intranet-cert') || (!sourceCertId && !serialNumber)) return;
+  const isCurrent = () => path === route.path && source === route.query.sourceCertId && serial === route.query.serialNumber;
+  try {
+    const data = unwrap<IntranetCertPrefill>(await prefillIntranetCert({ sourceCertId, serialNumber }));
+    if (!isCurrent()) return;
+    if (data.existing?.id) {
+      formOpen.value = false;
+      detail.value = data.existing;
+      detailOpen.value = true;
+      ElMessage.info('该证书已录入台账，已打开现有记录');
+    } else if (data.cert) {
+      detailOpen.value = false;
+      resetForm();
+      const { id, ...cert } = data.cert;
+      Object.assign(form, cert, { sourceType: 'ISSUED', sourceCertId: id });
+      formOpen.value = true;
+    }
+  } catch {
+    // The request interceptor displays the error.
+  } finally {
+    if (isCurrent()) router.replace({ path, query: { ...route.query, sourceCertId: undefined, serialNumber: undefined } });
   }
-  formOpen.value = true;
-  router.replace({ path: route.path, query: {} });
 }
 
 function certStatusTag(status?: string) {
@@ -593,6 +661,7 @@ function certStatusTag(status?: string) {
     VALID: 'success',
     NOT_YET_VALID: 'warning',
     EXPIRED: 'info',
+    HOLD: 'warning',
     REVOKED: 'danger',
     UNKNOWN: 'info'
   };
@@ -607,10 +676,10 @@ function normalizeDateTime(value?: string) {
   return value ? String(value).replace('T', ' ').slice(0, 19) : '';
 }
 
-onMounted(async () => {
-  await loadList();
-  await loadPrefillFromRoute();
-});
+watch(() => [route.path, route.query.sourceCertId, route.query.serialNumber] as const,
+  ([path, source, serial]) => loadPrefillFromRoute(path, source, serial), { immediate: true });
+onMounted(loadList);
+useRaListRefreshOnReturn(loadList);
 </script>
 
 <style scoped lang="scss">
@@ -622,6 +691,37 @@ onMounted(async () => {
 
   .query-card {
     margin-bottom: 12px;
+  }
+  .query-form {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 310px), 1fr));
+    gap: 12px 16px;
+
+    :deep(.el-form-item) {
+      min-width: 0;
+      margin-bottom: 0;
+    }
+
+    :deep(.el-select),
+    :deep(.el-date-editor) {
+      width: 100%;
+      min-width: 0;
+    }
+
+    .query-actions :deep(.el-form-item__content) {
+      justify-content: flex-end;
+    }
+  }
+  @media (max-width: 560px) {
+    .query-form :deep(.el-form-item:not(.query-actions)) {
+      display: block;
+    }
+    .query-form :deep(.el-form-item__label) {
+      justify-content: flex-start;
+    }
+    .query-form :deep(.el-form-item__content) {
+      margin-left: 0 !important;
+    }
   }
 
   .toolbar-row {

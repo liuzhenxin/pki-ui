@@ -11,7 +11,7 @@
         </div>
       </template>
 
-      <el-form :model="queryParams" class="query-form" inline>
+      <el-form :model="queryParams" class="query-form" label-width="96px">
         <el-form-item label="证书序列号">
           <el-input v-model="queryParams.serialNumber" clearable placeholder="请输入证书序列号" />
         </el-form-item>
@@ -19,17 +19,17 @@
           <el-input v-model="queryParams.subject" clearable placeholder="请输入主体名称" />
         </el-form-item>
         <el-form-item label="状态">
-          <el-select v-model="queryParams.status" clearable placeholder="请选择状态" style="width: 160px">
+          <el-select v-model="queryParams.status" clearable placeholder="请选择状态">
             <el-option v-for="item in statusOptions" :key="item.value" :label="item.label" :value="item.value" />
           </el-select>
         </el-form-item>
-        <el-form-item>
+        <el-form-item class="query-actions">
           <el-button type="primary" icon="Search" @click="handleQuery">查询</el-button>
           <el-button icon="Refresh" @click="resetQuery">重置</el-button>
         </el-form-item>
       </el-form>
 
-      <el-table ref="tableRef" v-loading="loading" :data="rows" border height="420" @selection-change="handleSelectionChange">
+      <el-table ref="tableRef" v-loading="loading" :data="rows" border @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="48" align="center" />
         <el-table-column prop="serialNumber" label="证书序列号" min-width="180" show-overflow-tooltip />
         <el-table-column prop="subject" label="主体名称" min-width="180" show-overflow-tooltip />
@@ -42,7 +42,7 @@
         </el-table-column>
         <el-table-column v-if="action === 'renewal'" label="操作" width="100" align="center" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" icon="Timer" @click="handleSingleRenewal(row)">续签</el-button>
+            <CertRowAction label="续签" icon="Timer" @click="handleSingleRenewal(row)" />
           </template>
         </el-table-column>
       </el-table>
@@ -121,6 +121,8 @@
 </template>
 
 <script setup lang="ts">
+import CertRowAction from './CertRowAction.vue';
+import { useRaListRefreshOnReturn } from '@/hooks/useRaListRefreshOnReturn';
 import { computed, reactive, ref } from 'vue';
 import { pageRaOperationCert, submitRaOperation, RaOperationCert } from '@/api/ra/workflowTask';
 
@@ -237,7 +239,10 @@ function parsePage(res: any) {
   };
 }
 
+let listVersion = 0;
+
 async function getList() {
+  const version = ++listVersion;
   loading.value = true;
   try {
     const res = await pageRaOperationCert({
@@ -248,6 +253,7 @@ async function getList() {
       subject: queryParams.subject || undefined,
       status: queryParams.status || undefined
     });
+    if (version !== listVersion) return;
     const page = parsePage(res);
     rows.value = page.rows.map((item: RaOperationCert) => ({
       ...item,
@@ -257,7 +263,7 @@ async function getList() {
     }));
     total.value = page.total;
   } finally {
-    loading.value = false;
+    if (version === listVersion) loading.value = false;
   }
 }
 
@@ -351,6 +357,7 @@ async function confirmSubmit() {
 onMounted(() => {
   getList();
 });
+useRaListRefreshOnReturn(getList);
 </script>
 
 <style scoped lang="scss">
@@ -377,7 +384,41 @@ onMounted(() => {
   }
 
   .query-form {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 310px), 1fr));
+    gap: 12px 16px;
     margin-bottom: 12px;
+
+    :deep(.el-form-item) {
+      min-width: 0;
+      margin: 0;
+    }
+
+    :deep(.el-form-item__content) {
+      min-width: 0;
+    }
+
+    :deep(.el-input),
+    :deep(.el-select) {
+      width: 100%;
+      min-width: 0;
+    }
+
+    .query-actions :deep(.el-form-item__content) {
+      justify-content: flex-end;
+    }
+
+    @media (max-width: 560px) {
+      :deep(.el-form-item:not(.query-actions)) {
+        display: block;
+      }
+      :deep(.el-form-item__label) {
+        justify-content: flex-start;
+      }
+      :deep(.el-form-item__content) {
+        margin-left: 0 !important;
+      }
+    }
   }
 }
 </style>

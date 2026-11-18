@@ -241,6 +241,7 @@
 </template>
 
 <script setup name="RaAuditManager" lang="ts">
+import { useRaListRefreshOnReturn } from '@/hooks/useRaListRefreshOnReturn';
 import { ref, reactive, toRefs, getCurrentInstance, ComponentInternalInstance, onMounted, nextTick, computed, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 import { FormInstance, FormRules } from 'element-plus';
@@ -803,6 +804,7 @@ function closeCertDialog() {
 onMounted(() => {
   getList();
 });
+useRaListRefreshOnReturn(getList);
 </script>
 
 <style scoped lang="scss">

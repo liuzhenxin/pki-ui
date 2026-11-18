@@ -3,6 +3,7 @@
     <template v-for="(item, index) in modelValue" :key="item.type + index">
       <!-- Handle standard single values -->
       <el-form-item
+        v-if="!isFileSubjectSerialNumber(item.type) || item.minOccurs !== 0"
         :label="getFieldMeta(item.type).label"
         :prop="propPrefix ? `${propPrefix}.${index}.value` : `${index}.value`"
         :rules="getRules(item)"
@@ -17,6 +18,9 @@
         </template>
         <template v-else>
           <el-input v-model="item.value" :placeholder="`请输入${getFieldMeta(item.type).label}`" clearable />
+          <div v-if="isFileSubjectSerialNumber(item.type)" class="subject-field-tip">
+            请填写模板要求的设备编号等标识。证书序列号由 CA 签发时分配。
+          </div>
         </template>
       </el-form-item>
     </template>
@@ -88,12 +92,16 @@ import { computed } from 'vue';
 const props = defineProps<{
   modelValue: Array<SubjectItem>;
   propPrefix?: string;
+  fileIssuance?: boolean;
 }>();
 
 const emit = defineEmits(['update:modelValue']);
 
+const isFileSubjectSerialNumber = (type: string) => props.fileIssuance && type === 'serialNumber';
+
 const getFieldMeta = (type: string) => {
-  return typeMapping[type] || { label: type, key: type.toUpperCase() };
+  const meta = typeMapping[type] || { label: type, key: type.toUpperCase() };
+  return isFileSubjectSerialNumber(type) ? { ...meta, label: '主题序列号' } : meta;
 };
 
 const getRules = (item: SubjectItem) => {
@@ -162,5 +170,13 @@ const getRules = (item: SubjectItem) => {
 <style scoped>
 .cert-subject-container {
   width: 100%;
+}
+
+.subject-field-tip {
+  flex-basis: 100%;
+  margin-top: 4px;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  line-height: 1.5;
 }
 </style>

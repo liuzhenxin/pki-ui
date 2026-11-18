@@ -1,5 +1,5 @@
 <template>
-  <section class="app-main">
+  <section class="app-main" :class="{ 'ra-workspace': route.meta.raWorkspace }">
     <router-view v-slot="{ Component, route }">
       <transition :enter-active-class="animate" mode="out-in">
         <keep-alive :include="tagsViewStore.cachedViews">

@@ -10,6 +10,7 @@ import { getLanguage } from '@/lang';
 import { encryptBase64, encryptWithAes, generateAesKey, decryptWithAes, decryptBase64 } from '@/utils/crypto';
 import { encrypt, decrypt } from '@/utils/jsencrypt';
 import router from '@/router';
+import { assertLoginResult, isLoginTokenRequest } from '@/utils/loginResponse';
 
 const encryptHeader = 'encrypt-key';
 const oauthBasicAuthorization = import.meta.env.VITE_APP_OAUTH_BASIC_AUTH || 'Basic OTVUeFNzVFBGQTN0RjEyVEJTTW1VVkswZGE6RnBId0lmdzR3WTkyZE8=';
@@ -216,6 +217,15 @@ service.interceptors.response.use(
         res.data = JSON.parse(decryptData);
       }
     }
+    // Login errors must never refresh an old session or be treated as token results.
+    if (isLoginTokenRequest(res.config)) {
+      try {
+        return Promise.resolve(assertLoginResult(res.data));
+      } catch (error: any) {
+        if (!(res.config as any).hideErrorNotify) ElMessage({ message: error.message, type: 'error' });
+        return Promise.reject(error);
+      }
+    }
     // SVS management returns domain objects; `code` is the product code, not a platform status.
     if (String(res.config?.url || '').startsWith('/admin/svs/')) {
       return Promise.resolve(res.data);
@@ -323,6 +333,7 @@ service.interceptors.response.use(
     }
   },
   (error: any) => {
+    if (axios.isCancel(error)) return Promise.reject(error);
     const status = error.response?.status;
     const refreshFailed =
       isRefreshTokenRequest(error.config) &&

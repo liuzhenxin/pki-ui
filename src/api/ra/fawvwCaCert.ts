@@ -12,6 +12,10 @@ export interface FawvwCaCertQuery {
   validityStatus?: FawvwCaValidityStatus | '';
   managementStatus?: 'ACTIVE' | 'DISABLED' | '';
   rootId?: string | number;
+  issuer?: string;
+  sourceType?: FawvwCaCertificate['sourceType'] | '';
+  expiresFrom?: string;
+  expiresTo?: string;
 }
 
 export interface FawvwCaCertificate {
@@ -30,12 +34,24 @@ export interface FawvwCaCertificate {
   notAfter: string;
   validityStatus: FawvwCaValidityStatus;
   validityStatusName: string;
+  expiryWarning?: string;
   managementStatus: 'ACTIVE' | 'DISABLED';
   sourceActive: boolean;
   remark?: string;
   createTime?: string;
   updateTime?: string;
 }
+
+export interface FawvwCaExpiryTemplate {
+  days: number;
+  message: string;
+}
+
+export const getFawvwCaExpiryTemplate = (): Promise<Result<FawvwCaExpiryTemplate>> =>
+  request({ url: '/ra/v1/fawvw-ca-certificates/expiry-template', method: 'get' });
+
+export const saveFawvwCaExpiryTemplate = (data: FawvwCaExpiryTemplate): Promise<Result<FawvwCaExpiryTemplate>> =>
+  request({ url: '/ra/v1/fawvw-ca-certificates/expiry-template', method: 'put', data });
 
 function cleanQuery(query: FawvwCaCertQuery) {
   return {
@@ -44,6 +60,8 @@ function cleanQuery(query: FawvwCaCertQuery) {
     certificateType: query.certificateType || undefined,
     validityStatus: query.validityStatus || undefined,
     managementStatus: query.managementStatus || undefined,
+    issuer: query.issuer?.trim() || undefined,
+    sourceType: query.sourceType || undefined,
     pageNum: Number(query.pageNum || 1),
     pageSize: Number(query.pageSize || 10)
   };
@@ -53,8 +71,26 @@ export function pageFawvwCaCertificates(query: FawvwCaCertQuery): Promise<Result
   return request({ url: '/ra/v1/fawvw-ca-certificates/page', method: 'post', data: cleanQuery(query) }) as any;
 }
 
+export function pageFawvwCaCertificateTree(query: FawvwCaCertQuery): Promise<Result<any>> {
+  return request({ url: '/ra/v1/fawvw-ca-certificates/tree/page', method: 'post', data: cleanQuery(query) }) as any;
+}
+
 export function getFawvwCaCertificate(id: string | number): Promise<Result<FawvwCaCertificate>> {
   return request({ url: `/ra/v1/fawvw-ca-certificates/${id}`, method: 'get' }) as any;
+}
+
+export interface FawvwCaCertificateDetail {
+  certificate: FawvwCaCertificate;
+  version?: number;
+  signatureAlgorithm?: string;
+  publicKeyAlgorithm?: string;
+  pathLength?: number | null;
+  keyUsages: string[];
+  parseWarning?: string;
+}
+
+export function getFawvwCaCertificateDetail(id: string | number): Promise<Result<FawvwCaCertificateDetail>> {
+  return request({ url: `/ra/v1/fawvw-ca-certificates/${id}/detail`, method: 'get' }) as any;
 }
 
 export interface FawvwCaChainEntry {

@@ -9,18 +9,22 @@ export interface RaCertQuery {
   serialNumber?: string;
   subject?: string;
   status?: RaCertStatus | '';
+  profileName?: string;
+  issuer?: string;
+  validFrom?: string;
+  validTo?: string;
 }
 
 export interface RaCertSummary {
   id: string | number;
   serialNumber: string;
   subject: string;
-  userId: string | number;
+  userId?: string | number | null;
   deptId?: string | number;
   deptName?: string;
-  rootId: string | number;
+  rootId?: string | number | null;
   rootName?: string;
-  profileId: string | number;
+  profileId?: string | number | null;
   profileName?: string;
   notBefore?: string;
   notAfter?: string;
@@ -29,6 +33,7 @@ export interface RaCertSummary {
   statusName: string;
   keySource?: string;
   pkcs12Available?: boolean;
+  keyRecoveryAvailable?: boolean;
 }
 
 export interface RaCertDetail {
@@ -39,6 +44,18 @@ export interface RaCertDetail {
   revoked: boolean;
   revocationReason?: number;
   revocationTime?: string;
+  x509?: {
+    version: number;
+    issuerDn: string;
+    subjectDn: string;
+    signatureAlgorithm: string;
+    publicKeyAlgorithm: string;
+    sha256: string;
+    keyUsages: string[];
+    extendedKeyUsages: string[];
+    subjectAlternativeNames: string[];
+  };
+  parseWarning?: string;
 }
 
 export function pageRaCert(query: RaCertQuery): Promise<Result<any>> {

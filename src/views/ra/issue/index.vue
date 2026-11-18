@@ -56,17 +56,14 @@
       </el-table-column>
       <el-table-column label="操作" align="center" width="130" fixed="right">
         <template #default="{ row }">
-          <el-tooltip :content="isReissueRevocationPending(row) ? '继续吊销旧证' : isExecuteType(row.businessType) ? '执行' : '签发'" placement="top">
-            <el-button link type="primary" :icon="isExecuteType(row.businessType) ? 'VideoPlay' : 'Stamp'" @click="handleIssue(row)" />
-          </el-tooltip>
-          <el-tooltip content="详情" placement="top">
-            <el-button link type="primary" icon="View" @click="handleDetail(row)" />
-          </el-tooltip>
+          <CertRowAction :label="isReissueRevocationPending(row) ? '继续吊销旧证' : isExecuteType(row.businessType) ? '执行' : '签发'"
+            :icon="isExecuteType(row.businessType) ? 'VideoPlay' : 'Stamp'" @click="handleIssue(row)" />
+          <CertRowAction label="查看详情" icon="View" @click="handleDetail(row)" />
         </template>
       </el-table-column>
     </el-table>
 
-    <pagination v-show="total > 0" :total="total" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" @pagination="getList" />
+    <pagination v-show="total > 0" :total="total" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" :auto-scroll="false" @pagination="getList" />
 
     <el-dialog
       v-model="issueOpen"
@@ -205,7 +202,7 @@
                 <div class="section-subtitle">证书主题</div>
                 <template v-if="issueForm.issueType !== 'csr'">
                   <div v-if="issueForm.subjectItems.length > 0" class="subject-scroll-area">
-                    <CertSubject v-model="issueForm.subjectItems" propPrefix="subjectItems" />
+                    <CertSubject v-model="issueForm.subjectItems" propPrefix="subjectItems" :file-issuance="issueForm.issueType === 'file'" />
                   </div>
                   <el-form-item v-else label="证书主题" prop="subject">
                     <el-input v-model="issueForm.subject" clearable placeholder="请输入证书主题，例如：CN=user,O=org,C=CN" />
@@ -468,8 +465,16 @@
       />
       <div class="result-actions">
         <el-button icon="CopyDocument" @click="copyCert(issueResult.cert)">复制证书</el-button>
-        <el-button type="primary" icon="Download" @click="downloadCert(issueResult)">下载证书</el-button>
-        <el-button type="warning" plain icon="DocumentAdd" @click="openIntranetCertLedger(issueResult)">录入证书管理系统</el-button>
+        <el-dropdown v-if="issueResult.cert" trigger="click"
+          @command="(format) => downloadResultCertificate(issueResult.cert, issueResult.serialNumber || 'ra-cert', format)">
+          <el-button type="primary" icon="Download">下载证书 <el-icon class="el-icon--right"><ArrowDown /></el-icon></el-button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item v-for="item in resultDownloadFormats" :key="item.format" :command="item.format">{{ item.label }}</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
+        <el-button v-if="canSyncIntranet" type="warning" plain icon="DocumentAdd" @click="openIntranetCertLedger(issueResult)">同步到内网证书管理</el-button>
         <el-button v-if="issueResult.certificateChain" icon="Download" @click="downloadCertPem(issueResult.certificateChain, 'certificate-chain')">
           下载证书链
         </el-button>
@@ -486,9 +491,15 @@
         </el-descriptions>
         <div class="encryption-actions">
           <el-button icon="CopyDocument" @click="copyCert(issueResult.encCert)">复制加密证书</el-button>
-          <el-button type="primary" icon="Download" @click="downloadCertPem(issueResult.encCert, issueResult.encSerialNumber || 'enc-cert')"
-            >下载加密证书</el-button
-          >
+          <el-dropdown trigger="click"
+            @command="(format) => downloadResultCertificate(issueResult.encCert, issueResult.encSerialNumber || 'enc-cert', format)">
+            <el-button type="primary" icon="Download">下载加密证书 <el-icon class="el-icon--right"><ArrowDown /></el-icon></el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item v-for="item in resultDownloadFormats" :key="item.format" :command="item.format">{{ item.label }}</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
         </div>
         <el-input v-model="issueResult.encCert" type="textarea" :rows="8" readonly class="cert-result-textarea" />
       </div>
@@ -519,6 +530,8 @@
 </template>
 
 <script setup name="RaCertIssue" lang="ts">
+import CertRowAction from '../components/CertRowAction.vue';
+import { useRaListRefreshOnReturn } from '@/hooks/useRaListRefreshOnReturn';
 import { ElMessage, FormInstance, FormRules } from 'element-plus';
 import {
   confirmRaRenewalDistribution,
@@ -535,9 +548,13 @@ import CertSubject, { typeMapping, sortSubjectItems } from '@/components/CertSub
 import { parseJson } from '@/utils/json';
 import { resolveTemplateUsages } from '@/utils/raCertUsage';
 import SKFClient from '@/api/skf/skf_api';
+import auth from '@/plugins/auth';
+import { intranetCertSyncLocation } from '@/utils/raIntranetCertNavigation';
+import { issuedCertificateBlob, type IssuedCertificateFormat } from '@/utils/raCertificateDownload';
 
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
 const router = useRouter();
+const canSyncIntranet = computed(() => auth.hasPermiAnd(['ra:cert', 'ra:intranet-cert', 'ra:intranet-cert:add']));
 
 const businessTypeOptions = [
   { label: '证书申请', value: 'cert_apply' },
@@ -809,7 +826,10 @@ function updateKindTag(row: RaCertIssue) {
   return '';
 }
 
+let listVersion = 0;
+
 async function getList() {
+  const version = ++listVersion;
   loading.value = true;
   try {
     const res = await pageRaCertIssue({
@@ -818,11 +838,12 @@ async function getList() {
       businessType: queryParams.businessType || undefined,
       keyword: queryParams.keyword || undefined
     });
+    if (version !== listVersion) return;
     const page = parsePage(res);
     rows.value = page.rows;
     total.value = page.total;
   } finally {
-    loading.value = false;
+    if (version === listVersion) loading.value = false;
   }
 }
 
@@ -1804,11 +1825,21 @@ async function copyCert(cert?: string) {
   proxy?.$modal.msgSuccess('证书已复制');
 }
 
-function downloadCert(result: Partial<RaCertIssueResult>) {
-  if (!result.cert) {
-    return;
+const resultDownloadFormats: { format: IssuedCertificateFormat; label: string }[] = [
+  { format: 'pem', label: 'PEM 证书' },
+  { format: 'cer', label: 'CER 证书（DER）' },
+  { format: 'crt', label: 'CRT 证书（PEM）' },
+  { format: 'p7b', label: 'P7B 证书包' }
+];
+
+async function downloadResultCertificate(certPem: string | undefined, fileName: string, format: IssuedCertificateFormat) {
+  if (!certPem) return;
+  try {
+    const blob = await issuedCertificateBlob(certPem, format, issueResult.value.certificateChain);
+    saveResultDownload(blob, `${fileName}.${format}`);
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '证书下载失败');
   }
-  downloadCertPem(result.cert, result.serialNumber || 'ra-cert');
 }
 
 function openIntranetCertLedger(result: Partial<RaCertIssueResult>) {
@@ -1816,13 +1847,9 @@ function openIntranetCertLedger(result: Partial<RaCertIssueResult>) {
     proxy?.$modal.msgWarning('缺少证书信息，无法录入台账');
     return;
   }
-  router.push({
-    path: '/ra-certificate/ra-intranet-cert',
-    query: {
-      sourceCertId: result.certId ? String(result.certId) : undefined,
-      serialNumber: result.serialNumber || undefined
-    }
-  });
+  const location = intranetCertSyncLocation(router, result.certId, result.serialNumber);
+  if (!location) return ElMessage.warning('未找到内网证书管理入口');
+  router.push(location);
 }
 
 function downloadCertPem(certPem?: string, fileName?: string) {
@@ -1832,10 +1859,14 @@ function downloadCertPem(certPem?: string, fileName?: string) {
 
 function downloadPemContent(content: string, fileName: string) {
   const blob = new Blob([content], { type: 'application/x-pem-file;charset=utf-8' });
+  saveResultDownload(blob, `${fileName}.pem`);
+}
+
+function saveResultDownload(blob: Blob, fileName: string) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = `${fileName}.pem`;
+  link.download = fileName;
   link.click();
   URL.revokeObjectURL(url);
 }
@@ -1861,6 +1892,7 @@ function downloadKeyStore(result: Partial<RaCertIssueResult>) {
 onMounted(() => {
   getList();
 });
+useRaListRefreshOnReturn(getList);
 </script>
 
 <style scoped lang="scss">

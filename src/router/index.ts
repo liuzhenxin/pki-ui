@@ -260,7 +260,7 @@ const platformConstantRoutes: RouteRecordRaw[] = [
     component: () => import('@/views/ra/public-cert/self.vue'),
     name: 'RaPublicCertSelf',
     hidden: true,
-    meta: { title: '公网证书录入' }
+    meta: { title: '证书统一管理' }
   },
   {
     path: '/license/admin',

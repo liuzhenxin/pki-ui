@@ -34,8 +34,10 @@ function pageHarness(initial: any = { status: 'RUNNING', taskNo: 'EMP-test' }) {
   const module = { exports: {} as any };
   const requireMock = (name: string) => {
     if (name === 'vue') return { ...vue, onMounted: () => {}, onUnmounted: (callback: () => void) => (unmount = callback) };
+    if (name === '@/hooks/useRaListRefreshOnReturn') return { useRaListRefreshOnReturn: () => {} };
     if (name === 'element-plus') return { ElMessage: message };
     if (name === '@/api/ra/employee') return api;
+    if (name === '@/api/ra/employeeCert') return { listEmployeePublicKeys: async () => ({ data: [] }) };
     throw new Error(`Unexpected import: ${name}`);
   };
   new Function('require', 'module', 'exports', 'setTimeout', 'clearTimeout', code)(

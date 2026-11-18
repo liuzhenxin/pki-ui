@@ -16,9 +16,6 @@
     </el-form>
 
     <el-row :gutter="10" class="mb8">
-      <el-col :span="1.5">
-        <el-button icon="Refresh" @click="getList">刷新</el-button>
-      </el-col>
       <right-toolbar v-model:showSearch="showSearch" @queryTable="getList" />
     </el-row>
 
@@ -61,7 +58,7 @@
       </el-table-column>
     </el-table>
 
-    <pagination v-show="total > 0" :total="total" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" @pagination="getList" />
+    <pagination v-show="total > 0" :total="total" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" :auto-scroll="false" @pagination="getList" />
 
     <el-dialog v-model="detailOpen" title="审核任务详情" width="720px" append-to-body>
       <el-descriptions :column="1" border>
@@ -99,6 +96,7 @@
 </template>
 
 <script setup name="RaWorkflowTodo" lang="ts">
+import { useRaListRefreshOnReturn } from '@/hooks/useRaListRefreshOnReturn';
 import { approveRaWorkflowTask, getRaWorkflowTask, pageRaWorkflowTodo, rejectRaWorkflowTask, RaWorkflowTask } from '@/api/ra/workflowTask';
 import { FormInstance, FormRules } from 'element-plus';
 
@@ -162,7 +160,10 @@ function parsePage(res: any) {
   };
 }
 
+let listVersion = 0;
+
 async function getList() {
+  const version = ++listVersion;
   loading.value = true;
   try {
     const res = await pageRaWorkflowTodo({
@@ -170,11 +171,12 @@ async function getList() {
       businessType: queryParams.businessType || undefined,
       keyword: queryParams.keyword || undefined
     });
+    if (version !== listVersion) return;
     const page = parsePage(res);
     taskList.value = page.rows;
     total.value = page.total;
   } finally {
-    loading.value = false;
+    if (version === listVersion) loading.value = false;
   }
 }
 
@@ -226,6 +228,7 @@ async function submitAudit() {
 onMounted(() => {
   getList();
 });
+useRaListRefreshOnReturn(getList);
 </script>
 
 <style scoped lang="scss">

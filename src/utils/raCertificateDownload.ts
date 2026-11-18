@@ -13,3 +13,27 @@ export async function certificateDownloadBlob(response: unknown, mimeType: strin
   }
   return blob;
 }
+
+export type IssuedCertificateFormat = 'pem' | 'cer' | 'crt' | 'p7b';
+
+const certificateBlocks = (pem: string) => [...pem.matchAll(/-----BEGIN CERTIFICATE-----\s*([A-Za-z0-9+/=\s]+?)\s*-----END CERTIFICATE-----/g)]
+  .map(([, base64]) => base64.replace(/\s/g, ''));
+
+const base64Bytes = (base64: string) => Uint8Array.from(atob(base64), (character) => character.charCodeAt(0));
+
+const certificatePem = (base64: string) =>
+  `-----BEGIN CERTIFICATE-----\n${base64.match(/.{1,64}/g)?.join('\n')}\n-----END CERTIFICATE-----\n`;
+
+export async function issuedCertificateBlob(pem: string, format: IssuedCertificateFormat, chain?: string | null): Promise<Blob> {
+  const [leaf] = certificateBlocks(pem);
+  if (!leaf) throw new Error('签发结果未返回有效的证书内容');
+  const der = base64Bytes(leaf);
+  if (format === 'cer') return new Blob([der], { type: 'application/pkix-cert' });
+  if (format !== 'p7b') return new Blob([certificatePem(leaf)], { type: 'application/x-pem-file' });
+
+  const certs = [...new Set([leaf, ...certificateBlocks(chain || '')])].map(certificatePem);
+  const { KJUR, hextob64 } = await import('jsrsasign');
+  // A certificate-only PKCS#7 has no content, digest algorithms or signers.
+  const signedData = new KJUR.asn1.cms.SignedData({ fixed: true, version: 1, hashalgs: [], econtent: { type: 'data' }, certs, sinfos: [] });
+  return new Blob([base64Bytes(hextob64(signedData.getContentInfoEncodedHex()))], { type: 'application/x-pkcs7-certificates' });
+}

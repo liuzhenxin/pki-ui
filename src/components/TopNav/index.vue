@@ -66,12 +66,8 @@ const childrenMenus = computed(() => {
   routers.value.map((router) => {
     router.children?.forEach((item) => {
       if (item.parentPath === undefined) {
-        if (router.path === '/') {
-          item.path = '/' + item.path;
-        } else {
-          if (!isHttp(item.path)) {
-            item.path = router.path + '/' + item.path;
-          }
+        if (!item.path.startsWith('/') && !isHttp(item.path)) {
+          item.path = `${router.path === '/' ? '' : router.path}/${item.path}`;
         }
         item.parentPath = router.path;
       }
@@ -91,7 +87,7 @@ const activeMenu = computed(() => {
   if (path !== undefined && path.lastIndexOf('/') > 0 && hideList.indexOf(path) === -1) {
     const tmpPath = path.substring(1, path.length);
     if (!route.meta.link) {
-      activePath = '/' + tmpPath.substring(0, tmpPath.indexOf('/'));
+      activePath = childrenMenus.value.find((item) => item.path === path)?.parentPath || '/' + tmpPath.substring(0, tmpPath.indexOf('/'));
       appStore.toggleSideBarHide(false);
     }
   } else if (!route.children) {

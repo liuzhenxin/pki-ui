@@ -38,6 +38,7 @@ export function login(data: LoginData): Promise<LoginResult> {
       isToken: false,
       isEncrypt: false,
       repeatSubmit: false,
+      hideErrorNotify: true,
       Authorization: oauthBasicAuthorization,
       'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
     },
@@ -166,7 +167,8 @@ export function getCodeImg(uuid: string | number, tenantCode?: string): Promise<
   return request({
     url: '/auth/v1/username-password/captchas' + '/' + uuid,
     headers: {
-      isToken: false
+      isToken: false,
+      hideErrorNotify: true
     },
     method: 'get',
     params: tenantCode ? { tenantCode } : undefined,

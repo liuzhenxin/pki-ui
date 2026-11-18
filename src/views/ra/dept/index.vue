@@ -23,52 +23,56 @@
             <el-button v-hasPermi="['sys:dept:save', 'ra:dept']" type="primary" plain icon="Plus" @click="handleAdd()">新增</el-button>
           </el-col>
           <el-col :span="1.5">
-            <el-button type="info" plain icon="Sort" @click="handleToggleExpandAll">展开/折叠</el-button>
+            <el-button type="info" plain icon="Sort" @click="toggleAllDepartments">展开/折叠</el-button>
           </el-col>
           <right-toolbar v-model:show-search="showSearch" @query-table="getList" />
         </el-row>
       </template>
 
       <el-table
-        v-if="refreshTable"
-        ref="deptTableRef"
         v-loading="loading"
-        :data="deptList"
+        :data="departmentRows"
         row-key="id"
         border
-        :tree-props="{ children: 'children' }"
-        :default-expand-all="isExpandAll"
       >
-        <el-table-column prop="name" label="部门名称" min-width="220" show-overflow-tooltip>
+        <el-table-column label="部门名称" min-width="220">
           <template #default="{ row }">
-            {{ row.name }}
-            <el-tag v-if="row.organization" size="small" class="ml-2">独立机构</el-tag>
-            <el-tag v-if="!row.writable" type="info" size="small" class="ml-2">只读</el-tag>
+            <div class="flex min-w-0 items-center gap-1" :style="{ paddingInlineStart: Math.min(row.depth * 16, 120) + 'px' }">
+              <el-button v-if="row.hasChildren" class="w-5 shrink-0" link :icon="row.expanded ? 'ArrowDown' : 'ArrowRight'"
+                :aria-expanded="row.expanded" :aria-label="row.expanded ? '折叠下级部门' : '展开下级部门'" @click="toggleDepartment(row.id)" />
+              <span v-else class="w-5 shrink-0" aria-hidden="true" />
+              <span class="truncate" :title="row.dept.name">{{ row.dept.name }}</span>
+              <el-tag v-if="row.dept.organization" size="small" class="shrink-0">独立机构</el-tag>
+              <el-tag v-if="!row.dept.writable" type="info" size="small" class="shrink-0">只读</el-tag>
+            </div>
           </template>
         </el-table-column>
-        <el-table-column prop="sort" align="center" label="排序" width="90" />
+        <el-table-column prop="dept.sort" align="center" label="排序" width="90" />
         <el-table-column label="创建时间" align="center" prop="createTime" width="180">
           <template #default="{ row }">
-            <span>{{ proxy?.parseTime(row.createTime) }}</span>
+            <span>{{ proxy?.parseTime(row.dept.createTime) }}</span>
           </template>
         </el-table-column>
-        <el-table-column fixed="right" align="center" label="操作" width="150">
+        <el-table-column fixed="right" align="center" label="操作" :width="applicantPath ? 232 : 150">
           <template #default="{ row }">
-            <el-tooltip v-if="row.writable" content="修改" placement="top">
-              <el-button v-hasPermi="['sys:dept:modify', 'ra:dept']" link type="primary" icon="Edit" @click="handleUpdate(row)" />
+            <el-button v-if="applicantPath" link type="primary" icon="User" @click="openDepartmentApplicants(row.dept)">申请用户</el-button>
+            <el-tooltip v-if="row.dept.writable" content="修改" placement="top">
+              <el-button v-hasPermi="['sys:dept:modify', 'ra:dept']" link type="primary" icon="Edit" @click="handleUpdate(row.dept)" />
             </el-tooltip>
-            <el-tooltip v-if="row.writable" content="新增下级" placement="top">
-              <el-button v-hasPermi="['sys:dept:save', 'ra:dept']" link type="primary" icon="Plus" @click="handleAdd(row)" />
+            <el-tooltip v-if="row.dept.writable" content="新增下级" placement="top">
+              <el-button v-hasPermi="['sys:dept:save', 'ra:dept']" link type="primary" icon="Plus" @click="handleAdd(row.dept)" />
             </el-tooltip>
-            <el-tooltip v-if="row.writable && !row.organization" content="删除" placement="top">
-              <el-button v-hasPermi="['sys:dept:remove', 'ra:dept']" link type="primary" icon="Delete" @click="handleDelete(row)" />
+            <el-tooltip v-if="row.dept.writable && !row.dept.organization" content="删除" placement="top">
+              <el-button v-hasPermi="['sys:dept:remove', 'ra:dept']" link type="primary" icon="Delete" @click="handleDelete(row.dept)" />
             </el-tooltip>
-            <el-tooltip v-if="isRaAdmin && row.organization" content="机构 CA 和模板" placement="top">
-              <el-button link type="primary" icon="CircleCheck" @click="openScope(row)" />
+            <el-tooltip v-if="isRaAdmin && row.dept.organization" content="机构 CA 和模板" placement="top">
+              <el-button link type="primary" icon="CircleCheck" @click="openScope(row.dept)" />
             </el-tooltip>
           </template>
         </el-table-column>
       </el-table>
+      <pagination v-if="departmentTotal > departmentPageSize" v-model:page="departmentPage" :limit="departmentPageSize"
+        :total="departmentTotal" layout="total, prev, pager, next" />
     </el-card>
 
     <el-dialog v-model="dialog.visible" :title="dialog.title" destroy-on-close append-to-body width="560px">
@@ -119,6 +123,7 @@
 </template>
 
 <script setup name="RaDept" lang="ts">
+import { useRaListRefreshOnReturn } from '@/hooks/useRaListRefreshOnReturn';
 import { getDept, listDeptSelectTree, listDeptTree, modifyDept, removeDept, saveDept } from '@/api/ra/dept';
 import { RaDeptForm, RaDeptQuery, RaDeptTreeOption, RaDeptVO, writableRaDepartments } from '@/api/ra/dept/types';
 
@@ -126,8 +131,18 @@ import { getAssignableRaRoles } from '@/api/ra/adminUser';
 import { getOrganizationCertScopes, listUserCertScopeOptions, saveOrganizationCertScopes } from '@/api/ra/userCertScope';
 import type { RaUserCertScopeRoot } from '@/api/ra/userCertScope';
 import { useUserStore } from '@/store/modules/user';
+import { useRouter } from 'vue-router';
+import { shallowRef } from 'vue';
+import { applicantDirectoryPath } from '@/utils/fawvwEmployeeNavigation';
+import { usePagedDepartmentTree } from '@/hooks/usePagedDepartmentTree';
 
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
+const router = useRouter();
+const applicantPath = computed(() => applicantDirectoryPath(router));
+
+function openDepartmentApplicants(row: RaDeptVO) {
+  if (applicantPath.value && row.id != null) void router.push({ path: applicantPath.value, query: { deptId: String(row.id) } });
+}
 
 const isRaAdmin = ref(false);
 const organizationLocked = ref(false);
@@ -180,19 +195,20 @@ async function submitScope() {
   }
 }
 
-const deptList = ref<RaDeptVO[]>([]);
+const deptList = shallowRef<RaDeptVO[]>([]);
+const {
+  rows: departmentRows, page: departmentPage, total: departmentTotal, pageSize: departmentPageSize,
+  toggle: toggleDepartment, toggleAll: toggleAllDepartments, reset: resetDepartmentTree
+} = usePagedDepartmentTree(deptList, (dept) => dept.id);
 const deptOptions = ref<RaDeptTreeOption[]>([]);
 const loading = ref(false);
 const showSearch = ref(true);
-const isExpandAll = ref(true);
-const refreshTable = ref(true);
 
 const dialog = reactive<DialogOption>({
   visible: false,
   title: ''
 });
 
-const deptTableRef = ref<ElTableInstance>();
 const queryFormRef = ref<ElFormInstance>();
 const deptFormRef = ref<ElFormInstance>();
 
@@ -250,7 +266,7 @@ const getList = async () => {
   loading.value = true;
   try {
     const res = await listDeptTree({ name: queryParams.value.name });
-    deptList.value = normalizeTree(unwrapData<RaDeptVO[]>(res, []));
+    deptList.value = unwrapData<RaDeptVO[]>(res, []);
   } finally {
     loading.value = false;
   }
@@ -276,6 +292,7 @@ const reset = () => {
 };
 
 const handleQuery = () => {
+  resetDepartmentTree(Boolean(queryParams.value.name?.trim()));
   getList();
 };
 
@@ -345,18 +362,11 @@ const handleDelete = async (row: RaDeptVO) => {
   await getList();
 };
 
-const handleToggleExpandAll = () => {
-  refreshTable.value = false;
-  isExpandAll.value = !isExpandAll.value;
-  nextTick(() => {
-    refreshTable.value = true;
-  });
-};
-
 onMounted(async () => {
   if (useUserStore().permissions.includes('ra:admin')) {
     isRaAdmin.value = (await getAssignableRaRoles()).some((role) => role.roleId === '507');
   }
   getList();
 });
+useRaListRefreshOnReturn(getList);
 </script>

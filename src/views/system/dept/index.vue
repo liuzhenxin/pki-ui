@@ -31,48 +31,56 @@
             <el-button v-hasPermi="['system:dept:add']" type="primary" plain icon="Plus" @click="handleAdd()">新增 </el-button>
           </el-col>
           <el-col :span="1.5">
-            <el-button type="info" plain icon="Sort" @click="handleToggleExpandAll">展开/折叠</el-button>
+            <el-button type="info" plain icon="Sort" @click="toggleAllDepartments">展开/折叠</el-button>
           </el-col>
           <right-toolbar v-model:show-search="showSearch" @query-table="getList"></right-toolbar>
         </el-row>
       </template>
 
       <el-table
-        ref="deptTableRef"
         v-loading="loading"
-        :data="deptList"
-        row-key="deptId"
+        :data="departmentRows"
+        row-key="id"
         border
-        :tree-props="{ children: 'children', hasChildren: 'hasChildren' }"
-        :default-expand-all="isExpandAll"
       >
-        <el-table-column prop="deptName" label="部门名称" width="260"></el-table-column>
-        <el-table-column prop="deptCategory" align="center" label="类别编码" width="200"></el-table-column>
-        <el-table-column prop="orderNum" align="center" label="排序" width="200"></el-table-column>
-        <el-table-column prop="status" align="center" label="状态" width="100">
+        <el-table-column label="部门名称" width="260">
+          <template #default="{ row }">
+            <div class="flex min-w-0 items-center gap-1" :style="{ paddingInlineStart: Math.min(row.depth * 16, 120) + 'px' }">
+              <el-button v-if="row.hasChildren" class="w-5 shrink-0" link :icon="row.expanded ? 'ArrowDown' : 'ArrowRight'"
+                :aria-expanded="row.expanded" :aria-label="row.expanded ? '折叠下级部门' : '展开下级部门'" @click="toggleDepartment(row.id)" />
+              <span v-else class="w-5 shrink-0" aria-hidden="true" />
+              <span class="truncate" :title="row.dept.deptName">{{ row.dept.deptName }}</span>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column prop="dept.deptCategory" align="center" label="类别编码" width="200"></el-table-column>
+        <el-table-column prop="dept.orderNum" align="center" label="排序" width="200"></el-table-column>
+        <el-table-column prop="dept.status" align="center" label="状态" width="100">
           <template #default="scope">
-            <dict-tag :options="sys_normal_disable" :value="scope.row.status" />
+            <dict-tag :options="sys_normal_disable" :value="scope.row.dept.status" />
           </template>
         </el-table-column>
         <el-table-column label="创建时间" align="center" prop="createTime" width="200">
           <template #default="scope">
-            <span>{{ proxy.parseTime(scope.row.createTime) }}</span>
+            <span>{{ proxy.parseTime(scope.row.dept.createTime) }}</span>
           </template>
         </el-table-column>
         <el-table-column fixed="right" align="center" label="操作">
           <template #default="scope">
             <el-tooltip content="修改" placement="top">
-              <el-button v-hasPermi="['system:dept:edit']" link type="primary" icon="Edit" @click="handleUpdate(scope.row)" />
+              <el-button v-hasPermi="['system:dept:edit']" link type="primary" icon="Edit" @click="handleUpdate(scope.row.dept)" />
             </el-tooltip>
             <el-tooltip content="新增" placement="top">
-              <el-button v-hasPermi="['system:dept:add']" link type="primary" icon="Plus" @click="handleAdd(scope.row)" />
+              <el-button v-hasPermi="['system:dept:add']" link type="primary" icon="Plus" @click="handleAdd(scope.row.dept)" />
             </el-tooltip>
             <el-tooltip content="删除" placement="top">
-              <el-button v-hasPermi="['system:dept:remove']" link type="primary" icon="Delete" @click="handleDelete(scope.row)" />
+              <el-button v-hasPermi="['system:dept:remove']" link type="primary" icon="Delete" @click="handleDelete(scope.row.dept)" />
             </el-tooltip>
           </template>
         </el-table-column>
       </el-table>
+      <pagination v-if="departmentTotal > departmentPageSize" v-model:page="departmentPage" :limit="departmentPageSize"
+        :total="departmentTotal" layout="total, prev, pager, next" />
     </el-card>
 
     <el-dialog v-model="dialog.visible" :title="dialog.title" destroy-on-close append-to-body width="600px">
@@ -146,6 +154,8 @@ import { listDept, getDept, delDept, addDept, updateDept, listDeptExcludeChild }
 import { DeptForm, DeptQuery, DeptVO } from '@/api/system/dept/types';
 import { UserVO } from '@/api/system/user/types';
 import { listUserByDeptId } from '@/api/system/user';
+import { shallowRef } from 'vue';
+import { usePagedDepartmentTree } from '@/hooks/usePagedDepartmentTree';
 
 interface DeptOptionsType {
   deptId: number | string;
@@ -156,11 +166,14 @@ interface DeptOptionsType {
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
 const { sys_normal_disable } = toRefs<any>(proxy?.useDict('sys_normal_disable'));
 
-const deptList = ref<DeptVO[]>([]);
+const deptList = shallowRef<DeptVO[]>([]);
+const {
+  rows: departmentRows, page: departmentPage, total: departmentTotal, pageSize: departmentPageSize,
+  toggle: toggleDepartment, toggleAll: toggleAllDepartments, reset: resetDepartmentTree
+} = usePagedDepartmentTree(deptList, (dept) => dept.deptId);
 const loading = ref(true);
 const showSearch = ref(true);
 const deptOptions = ref<DeptOptionsType[]>([]);
-const isExpandAll = ref(true);
 const deptUserList = ref<UserVO[]>([]);
 
 const dialog = reactive<DialogOption>({
@@ -168,7 +181,6 @@ const dialog = reactive<DialogOption>({
   title: ''
 });
 
-const deptTableRef = ref<ElTableInstance>();
 const queryFormRef = ref<ElFormInstance>();
 const deptFormRef = ref<ElFormInstance>();
 
@@ -207,12 +219,12 @@ const { queryParams, form, rules } = toRefs<PageData<DeptForm, DeptQuery>>(data)
 /** 查询菜单列表 */
 const getList = async () => {
   loading.value = true;
-  const res = await listDept(queryParams.value);
-  const data = proxy?.handleTree<DeptVO>(res.data, 'deptId');
-  if (data) {
-    deptList.value = data;
+  try {
+    const res = await listDept(queryParams.value);
+    deptList.value = proxy?.handleTree<DeptVO>(res.data, 'deptId') || [];
+  } finally {
+    loading.value = false;
   }
-  loading.value = false;
 };
 
 /** 查询当前部门的所有用户 */
@@ -236,25 +248,14 @@ const reset = () => {
 
 /** 搜索按钮操作 */
 const handleQuery = () => {
+  const { deptName, deptCategory, status } = queryParams.value;
+  resetDepartmentTree(Boolean(deptName?.trim() || deptCategory?.trim() || (status != null && String(status) !== '')));
   getList();
 };
 /** 重置按钮操作 */
 const resetQuery = () => {
   queryFormRef.value?.resetFields();
   handleQuery();
-};
-
-/** 展开/折叠操作 */
-const handleToggleExpandAll = () => {
-  isExpandAll.value = !isExpandAll.value;
-  toggleExpandAll(deptList.value, isExpandAll.value);
-};
-/** 展开/折叠所有 */
-const toggleExpandAll = (data: DeptVO[], status: boolean) => {
-  data.forEach((item) => {
-    deptTableRef.value?.toggleRowExpansion(item, status);
-    if (item.children && item.children.length > 0) toggleExpandAll(item.children, status);
-  });
 };
 
 /** 新增按钮操作 */

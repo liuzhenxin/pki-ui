@@ -4,7 +4,7 @@
       <el-col :xs="24" :sm="24" :md="6" :lg="5" :xl="4">
         <el-card shadow="never" class="dept-tree-card">
           <template #header>
-            <div class="dept-tree-title">部门</div>
+            <div class="dept-tree-title">RA 权限部门</div>
           </template>
           <el-input v-model="deptName" placeholder="请输入部门名称" prefix-icon="Search" clearable />
           <el-tree
@@ -13,6 +13,7 @@
             node-key="id"
             :data="deptTreeOptions"
             :props="deptTreeProps"
+            :current-node-key="queryParams.deptId || ALL_DEPT_ID"
             :expand-on-click-node="false"
             :filter-node-method="filterDeptNode"
             highlight-current
@@ -89,7 +90,7 @@
           <el-table-column label="操作" align="center" width="180" class-name="small-padding fixed-width">
             <template #default="{ row }">
               <el-tooltip content="详情" placement="top">
-                <el-button link type="primary" icon="View" @click="handleDetail(row)" />
+                <el-button link type="primary" icon="View" aria-label="申请用户详情" @click="handleDetail(row)" />
               </el-tooltip>
               <el-tooltip v-if="canManageUser(row)" content="修改" placement="top">
                 <el-button link type="primary" icon="Edit" @click="handleUpdate(row)" />
@@ -175,12 +176,17 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="detailOpen" title="用户详情" width="520px" append-to-body>
+    <el-dialog v-model="detailOpen" title="申请用户详情" width="min(520px, 96vw)" append-to-body>
       <el-descriptions :column="1" border>
         <el-descriptions-item label="用户名称">{{ detail.username || '-' }}</el-descriptions-item>
         <el-descriptions-item label="用户类别">{{ userCategoryLabel(detail.userCategory) }}</el-descriptions-item>
         <el-descriptions-item label="手机号码">{{ detail.mobile || '-' }}</el-descriptions-item>
         <el-descriptions-item label="邮箱">{{ detail.mail || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="RA 权限部门">{{ detail.deptName || '-' }}</el-descriptions-item>
+        <el-descriptions-item v-if="canViewEmployee && detail.userCategory === 'individual'" label="关联员工">
+          <el-button v-if="linkedEmployeeId" link type="primary" @click="openLinkedEmployee">查看关联员工</el-button>
+          <span v-else>{{ employeeLinkLoading ? '加载中' : employeeLinkFailed ? '未能读取关联' : '未关联' }}</span>
+        </el-descriptions-item>
       </el-descriptions>
     </el-dialog>
   </div>
@@ -192,9 +198,16 @@ import { listDeptSelectTree } from '@/api/ra/dept';
 import { RaDeptTreeOption, raDepartmentIsWritable, writableRaDepartments } from '@/api/ra/dept/types';
 import { UserForm, UserQuery, UserVO } from '@/api/system/user/types';
 import { FormInstance } from 'element-plus';
+import { useRoute, useRouter } from 'vue-router';
+import { getFawvwEmployeeIdByApplicant } from '@/api/ra/employee';
+import { directoryQueryId, employeeDirectoryPath } from '@/utils/fawvwEmployeeNavigation';
+import auth from '@/plugins/auth';
 
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
 const { sys_common_status } = toRefs<any>(proxy!.useDict('sys_common_status'));
+const route = useRoute();
+const router = useRouter();
+const canViewEmployee = computed(() => auth.hasPermi('ra:employee') && router.getRoutes().some((item) => item.path === employeeDirectoryPath));
 
 const ALL_DEPT_ID = '__ALL__';
 const userCategoryOptions = [
@@ -219,6 +232,11 @@ const title = ref('');
 const isDataLoaded = ref(false);
 const detailOpen = ref(false);
 const detail = ref<any>({});
+const linkedEmployeeId = ref<number | string>();
+const employeeLinkLoading = ref(false);
+const employeeLinkFailed = ref(false);
+let detailVersion = 0;
+let listVersion = 0;
 
 const deptTreeRef = ref<any>();
 const queryFormRef = ref<FormInstance>();
@@ -331,18 +349,26 @@ function handleDeptNodeClick(data: RaDeptTreeOption) {
   handleQuery();
 }
 
-function getList() {
+async function getList() {
+  const requestId = ++listVersion;
   loading.value = true;
   isDataLoaded.value = false;
-  listUser(queryParams.value).then((res) => {
-    const page = parsePage(res);
+  try {
+    const page = parsePage(await listUser({ ...queryParams.value }));
+    if (requestId !== listVersion) return;
     userList.value = page.rows;
     total.value = page.total;
-    loading.value = false;
     nextTick(() => {
-      isDataLoaded.value = true;
+      if (requestId === listVersion) isDataLoaded.value = true;
     });
-  });
+  } catch {
+    if (requestId === listVersion) {
+      userList.value = [];
+      total.value = 0;
+    }
+  } finally {
+    if (requestId === listVersion) loading.value = false;
+  }
 }
 
 function handleQuery() {
@@ -480,17 +506,54 @@ function handleResetPwd(row: any) {
     .catch(() => {});
 }
 
-async function handleDetail(row: any) {
-  const response = await getUser(row.id);
-  detail.value = response.data || {};
-  detailOpen.value = true;
+async function handleDetail(row: { id: string | number }) {
+  const version = ++detailVersion;
+  linkedEmployeeId.value = undefined;
+  employeeLinkFailed.value = false;
+  employeeLinkLoading.value = false;
+  try {
+    const response = await getUser(row.id);
+    if (version !== detailVersion) return;
+    detail.value = response.data || {};
+    detailOpen.value = true;
+    if (!canViewEmployee.value || detail.value.userCategory !== 'individual') return;
+    employeeLinkLoading.value = true;
+    try {
+      const binding = await getFawvwEmployeeIdByApplicant(row.id);
+      if (version === detailVersion) linkedEmployeeId.value = binding.data ?? undefined;
+    } catch {
+      if (version === detailVersion) employeeLinkFailed.value = true;
+    }
+  } catch {
+    if (version === detailVersion) detailOpen.value = false;
+  } finally {
+    if (version === detailVersion) employeeLinkLoading.value = false;
+  }
 }
 
-onMounted(async () => {
-  await loadDeptOptions();
-  deptTreeRef.value?.setCurrentKey(ALL_DEPT_ID);
-  getList();
-});
+function openLinkedEmployee() {
+  if (!canViewEmployee.value || linkedEmployeeId.value == null) return;
+  detailOpen.value = false;
+  void router.push({ path: employeeDirectoryPath, query: { employeeId: String(linkedEmployeeId.value), entry: String(Date.now()) } });
+}
+
+watch(
+  () => [route.meta.fawvwApplicantDirectory, route.query.deptId, route.query.applicantId, route.query.entry],
+  ([directory, department, applicant]) => {
+    detailVersion++;
+    detailOpen.value = false;
+    if (directory !== true) return;
+    queryFormRef.value?.resetFields();
+    queryParams.value.deptId = directoryQueryId(department);
+    deptTreeRef.value?.setCurrentKey(queryParams.value.deptId || ALL_DEPT_ID);
+    handleQuery();
+    const id = directoryQueryId(applicant);
+    if (id) void handleDetail({ id });
+  },
+  { immediate: true }
+);
+
+onMounted(loadDeptOptions);
 </script>
 
 <style scoped lang="scss">

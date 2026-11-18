@@ -14,11 +14,49 @@ export interface EmployeeCertEmployee {
   jobName?: string;
   positionName?: string;
   sourceStatus?: string;
+  recordSource?: string;
+  raUserId?: number | string;
 }
 
 export interface AccountResolveResult {
   employees: EmployeeCertEmployee[];
   missingAccounts: string[];
+  blockedAccounts?: { domainAccount: string; reason: string }[];
+  duplicateCount?: number;
+}
+
+export type EmployeeMailType = 'MIXED' | 'TEXT';
+
+export interface EmployeeDistributionSelection {
+  ids?: (number | string)[];
+  taskNo?: string;
+  resend?: boolean;
+}
+
+export interface EmployeeDistributionBatch {
+  batchNo: string;
+  createTime: string;
+  totalCount: number;
+  successCount: number;
+  failedCount: number;
+}
+
+export interface EmployeeDistributionBatchItem {
+  certId: number | string;
+  taskNo: string;
+  employeeName: string;
+  domainAccount: string;
+  messageType: EmployeeMailType;
+  sendStatus: number;
+  emailStatus?: string;
+  dingtalkStatus?: string;
+  errorMessage?: string;
+  createTime: string;
+}
+
+export interface EmployeeDistributionOptions {
+  messageType: EmployeeMailType;
+  maxAttachmentBytes: number;
 }
 
 export interface EmployeeCertTask {
@@ -30,6 +68,7 @@ export interface EmployeeCertTask {
   rootId?: number | string;
   profileId?: number | string;
   profileNameSnapshot?: string;
+  validityYears?: number | null;
   totalCount: number;
   successCount: number;
   failedCount: number;
@@ -64,9 +103,12 @@ export interface EmployeeCert {
   rootId?: number | string;
   profileId?: number | string;
   raApplyId?: number | string;
+  profileNameSnapshot?: string;
   raCertId?: number | string;
   issueStatus?: string;
   issueMessage?: string;
+  issueHistory?: EmployeeCertIssueAttempt[];
+  issueTime?: string;
   distributionStatus: string;
   distributionStatusName?: string;
   distributionTime?: string;
@@ -74,6 +116,13 @@ export interface EmployeeCert {
   emailStatus?: string;
   dingtalkStatus?: string;
   createTime?: string;
+}
+
+export interface EmployeeCertIssueAttempt {
+  startedAt: string;
+  finishedAt?: string;
+  status: string;
+  message?: string;
 }
 
 export interface EmployeeCertTaskDetail {
@@ -94,6 +143,10 @@ export interface EmployeeCertKey {
   enabled?: boolean;
   createTime?: string;
 }
+
+export type EmployeePublicKey = Pick<EmployeeCertKey, 'id' | 'keyName' | 'keyAlgorithm' | 'keySource' | 'enabled' | 'createTime'> & {
+  publicKey?: string | null;
+};
 
 export interface EmployeeCertTemplate {
   id?: number | string;
@@ -124,11 +177,15 @@ export interface EmployeeEmailCertProfile {
   profileId: number | string;
   profileName: string;
   profileType?: string;
+  extendedKeyUsages?: string[];
   profileUpdatedTime?: string;
   enabled: boolean;
+  algorithmRestriction?: string | null;
+  maxValidityYears?: number;
 }
 
 export interface DistributionLog {
+  gatewayTraceId?: string;
   id: number | string;
   channel: string;
   status: string;
@@ -172,11 +229,12 @@ export const importEmployeeCertAccounts = (file: File): Promise<Result<AccountRe
 };
 
 export const createEmployeeCertTask = (data: {
-  accounts: string;
+  employeeIds: Array<number | string>;
+  identityKeys: string[];
+  userIds?: Array<number | string | null>;
   rootId: number | string;
   profileId: number | string;
-  notBefore?: string;
-  notAfter?: string;
+  validityYears: number;
   selectionMode?: string;
   remark?: string;
 }): Promise<Result<EmployeeCertTaskDetail>> =>
@@ -216,10 +274,12 @@ export const getEmployeeCertTask = (taskNo: string): Promise<Result<EmployeeCert
     method: 'get'
   }) as any;
 
-export const issueEmployeeCertTask = (taskNo: string): Promise<Result<EmployeeCertTaskDetail>> =>
+export const issueEmployeeCertTask = (taskNo: string, certIds: string[]): Promise<Result<EmployeeCertTaskDetail>> =>
   request({
-    url: `/ra/v1/employee-certs/tasks/${taskNo}/issue`,
-    method: 'post'
+    url: `/ra/v1/employee-certs/tasks/${encodeURIComponent(taskNo)}/issue-selected`,
+    method: 'post',
+    data: { certIds },
+    timeout: 120_000
   }) as any;
 
 export const distributeEmployeeCertTask = (taskNo: string): Promise<Result<EmployeeCertTaskDetail>> =>
@@ -228,9 +288,23 @@ export const distributeEmployeeCertTask = (taskNo: string): Promise<Result<Emplo
     method: 'post'
   }) as any;
 
+export const downloadEmployeeCertTaskPackage = (taskNo: string): Promise<Blob> =>
+  request({
+    url: `/ra/v1/employee-certs/tasks/${encodeURIComponent(taskNo)}/download`,
+    method: 'get',
+    responseType: 'blob',
+    timeout: 120_000,
+    headers: { hideErrorNotify: true }
+  }) as any;
+
+export const downloadEmployeeCertPackage = (id: string | number): Promise<Blob> =>
+  request({ url: `/ra/v1/employee-certs/${encodeURIComponent(String(id))}/download`, method: 'get',
+    responseType: 'blob', timeout: 120_000, headers: { hideErrorNotify: true } }) as any;
+
 export const pageEmployeeCerts = (query: {
   pageNum: number;
   pageSize: number;
+  taskNo?: string;
   serialNumber?: string;
   domainAccount?: string;
   employeeName?: string;
@@ -253,6 +327,33 @@ export const distributeEmployeeCert = (id: number | string): Promise<Result<Empl
   request({
     url: `/ra/v1/employee-certs/${id}/distribute`,
     method: 'post'
+  }) as any;
+
+export const distributeSelectedEmployeeCerts = (ids: (number | string)[]): Promise<Result<number>> =>
+  request({ url: '/ra/v1/employee-certs/distribute-batch', method: 'post', data: ids }) as any;
+
+export const getEmployeeDistributionOptions = (): Promise<Result<EmployeeDistributionOptions>> =>
+  request({ url: '/ra/v1/employee-certs/distribution-options', method: 'get' }) as any;
+
+export function submitEmployeeDistribution(selection: EmployeeDistributionSelection, messageType: EmployeeMailType, files: File[]): Promise<Result<{ batchNo: string; count: number }>> {
+  const data = new FormData();
+  data.append('selection', new Blob([JSON.stringify({ ...selection, messageType })], { type: 'application/json' }));
+  files.forEach((file) => data.append('files', file));
+  return request({ url: '/ra/v1/employee-certs/distributions', method: 'post', data, timeout: 120_000 }) as any;
+}
+
+export const pageEmployeeDistributionBatches = (params: { taskNo?: string; pageNum: number; pageSize: number }):
+  Promise<Result<{ records: EmployeeDistributionBatch[]; total: number }>> =>
+  request({ url: '/ra/v1/employee-certs/distribution-batches', method: 'get', params }) as any;
+
+export const getEmployeeDistributionBatch = (batchNo: string): Promise<Result<EmployeeDistributionBatchItem[]>> =>
+  request({ url: `/ra/v1/employee-certs/distribution-batches/${encodeURIComponent(batchNo)}`, method: 'get' }) as any;
+
+export const listEmployeePublicKeys = (employeeId: number | string): Promise<Result<EmployeePublicKey[]>> =>
+  request({
+    url: `/ra/v1/employee-certs/employees/${employeeId}/public-keys`,
+    method: 'get',
+    headers: { hideErrorNotify: true }
   }) as any;
 
 export const listEmployeeCertKeys = (employeeId: number | string): Promise<Result<EmployeeCertKey[]>> =>

@@ -55,6 +55,7 @@
 </template>
 
 <script setup name="RaProfile" lang="ts">
+import { useRaListRefreshOnReturn } from '@/hooks/useRaListRefreshOnReturn';
 import { onMounted, reactive, ref } from 'vue';
 import { ElMessage } from 'element-plus';
 import { pageRaProfile, saveRaProfileApprovalMode } from '@/api/ra/profile';
@@ -123,6 +124,7 @@ const handleApprovalChange = (row: RaProfileCO, value: string) => {
 onMounted(() => {
   getList();
 });
+useRaListRefreshOnReturn(getList);
 </script>
 
 <style scoped>

@@ -77,3 +77,20 @@ export function saveRaApply(data: RaApplyForm): Promise<Result<void>> {
     data
   }) as any;
 }
+
+export interface ApplyDepartmentTransfer {
+  departmentId: number | string;
+  reason: string;
+}
+
+export function transferRaApplyDepartment(id: number | string, data: ApplyDepartmentTransfer): Promise<Result<void>> {
+  return request({ url: `/ra/v1/applies/${id}/transfer-department`, method: 'post', data }) as any;
+}
+
+export function listUnresolvedApplyDepartments(): Promise<Result<Array<{ id: number | string; user_id: number | string; status: number; create_time: string }>>> {
+  return request({ url: '/ra/v1/applies/unresolved-departments', method: 'get' }) as any;
+}
+
+export function resolveRaApplyDepartment(id: number | string, data: ApplyDepartmentTransfer): Promise<Result<void>> {
+  return request({ url: `/ra/v1/applies/${id}/resolve-department`, method: 'post', data }) as any;
+}

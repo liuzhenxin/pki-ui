@@ -1,36 +1,55 @@
 <template>
   <div class="app-container fawvw-ca-cert-page">
-    <el-card shadow="never" class="query-card">
-      <el-form :model="queryParams" inline>
+    <el-card v-show="showSearch" shadow="never" class="query-card">
+      <el-form :model="queryParams" label-width="100px" class="query-form">
         <el-form-item label="所属根证书">
-          <el-select v-model="queryParams.rootId" clearable filterable placeholder="全部根证书" style="width: 240px" @change="handleQuery">
+          <el-select v-model="queryParams.rootId" clearable filterable placeholder="全部根证书">
             <el-option v-for="root in rootOptions" :key="root.id" :value="root.id" :label="`${root.displayName} · ${root.fingerprint.slice(-17)}`" />
           </el-select>
         </el-form-item>
         <el-form-item label="关键词">
-          <el-input v-model="queryParams.keyword" clearable placeholder="名称、主题、序列号、指纹" style="width: 230px" @keyup.enter="handleQuery" />
+          <el-input v-model="queryParams.keyword" clearable placeholder="名称、主题、序列号、指纹" @keyup.enter="handleQuery" />
         </el-form-item>
         <el-form-item label="证书类型">
-          <el-select v-model="queryParams.certificateType" clearable placeholder="全部" style="width: 130px">
+          <el-select v-model="queryParams.certificateType" clearable placeholder="全部">
             <el-option label="根证书" value="ROOT" />
             <el-option label="中间证书" value="INTERMEDIATE" />
           </el-select>
         </el-form-item>
         <el-form-item label="有效期状态">
-          <el-select v-model="queryParams.validityStatus" clearable placeholder="全部" style="width: 140px">
+          <el-select v-model="queryParams.validityStatus" clearable placeholder="全部">
             <el-option label="有效" value="VALID" />
-            <el-option label="30天内到期" value="EXPIRING" />
+            <el-option label="临近到期" value="EXPIRING" />
             <el-option label="已过期" value="EXPIRED" />
             <el-option label="未生效" value="NOT_YET_VALID" />
           </el-select>
         </el-form-item>
         <el-form-item label="管理状态">
-          <el-select v-model="queryParams.managementStatus" clearable placeholder="全部" style="width: 120px">
+          <el-select v-model="queryParams.managementStatus" clearable placeholder="全部">
             <el-option label="启用" value="ACTIVE" />
             <el-option label="停用" value="DISABLED" />
           </el-select>
         </el-form-item>
-        <el-form-item>
+        <el-form-item label="颁发者">
+          <el-input v-model="queryParams.issuer" clearable placeholder="颁发者名称或 DN" @keyup.enter="handleQuery" />
+        </el-form-item>
+        <el-form-item label="来源">
+          <el-select v-model="queryParams.sourceType" clearable placeholder="全部">
+            <el-option label="RA同步" value="RA_SYNC" />
+            <el-option label="手工导入" value="IMPORTED" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="到期日期" class="expiry-item">
+          <el-date-picker
+            v-model="expiryRange"
+            type="daterange"
+            value-format="YYYY-MM-DD"
+            start-placeholder="开始日期"
+            end-placeholder="结束日期"
+            unlink-panels
+          />
+        </el-form-item>
+        <el-form-item class="query-actions">
           <el-button type="primary" icon="Search" @click="handleQuery">搜索</el-button>
           <el-button icon="Refresh" @click="resetQuery">重置</el-button>
         </el-form-item>
@@ -43,7 +62,10 @@
           <el-button v-hasPermi="['ra:fawvw-ca-cert:sync']" plain icon="RefreshRight" @click="handleSync">同步当前RA证书</el-button>
         </el-col>
         <el-col :span="1.5">
-          <el-button v-hasPermi="['ra:fawvw-ca-cert:import']" type="primary" plain icon="Upload" @click="importOpen = true">导入证书</el-button>
+          <el-button v-hasPermi="['ra:fawvw-ca-cert:import']" type="primary" plain icon="Upload" @click="importOpen = true">导入根证书</el-button>
+        </el-col>
+        <el-col :span="1.5">
+          <el-button v-hasPermi="['ra:fawvw-ca-cert:edit']" plain icon="Bell" @click="openExpiryTemplate">到期预警模板</el-button>
         </el-col>
         <right-toolbar v-model:showSearch="showSearch" @queryTable="loadList" />
       </el-row>
@@ -56,8 +78,15 @@
         class="mb12"
       />
 
-      <el-table v-loading="loading" :data="rows" border stripe empty-text="暂无根证书或中间证书记录">
-        <el-table-column label="证书名称" prop="displayName" min-width="190" show-overflow-tooltip />
+      <el-table ref="treeTable" v-loading="loading" :data="rows" row-key="id" default-expand-all border stripe empty-text="暂无根证书或中间证书记录">
+        <el-table-column label="证书名称" prop="displayName" min-width="240" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span>{{ row.displayName }}</span>
+            <el-tooltip v-if="!row.linked" :content="row.warning" placement="top">
+              <el-tag type="danger" size="small" class="ml8">链路异常</el-tag>
+            </el-tooltip>
+          </template>
+        </el-table-column>
         <el-table-column label="所属根证书" min-width="180" show-overflow-tooltip>
           <template #default="{ row }"
             ><el-button link type="primary" @click="openChain(row)">{{ rootName(row) }}</el-button></template
@@ -77,11 +106,11 @@
         >
         <el-table-column label="有效期" width="112" align="center"
           ><template #default="{ row }"
-            ><el-tag :type="validityTag(row.validityStatus)" effect="light">{{ row.validityStatusName }}</el-tag></template
+            ><el-tooltip :disabled="!row.expiryWarning" :content="row.expiryWarning" placement="top"><el-tag :type="validityTag(row.validityStatus)" effect="light">{{ row.validityStatusName }}</el-tag></el-tooltip></template
           ></el-table-column
         >
-        <el-table-column label="来源" width="100" align="center"
-          ><template #default="{ row }">{{ row.sourceType === 'RA_SYNC' ? 'RA同步' : '手工导入' }}</template></el-table-column
+        <el-table-column label="来源" width="115" align="center"
+          ><template #default="{ row }">{{ row.sourceType === 'RA_SYNC' ? (row.sourceActive === false ? '历史同步' : 'RA同步') : '手工导入' }}</template></el-table-column
         >
         <el-table-column label="管理状态" width="100" align="center"
           ><template #default="{ row }"
@@ -90,29 +119,33 @@
             }}</el-tag></template
           ></el-table-column
         >
-        <el-table-column label="操作" fixed="right" width="245" align="center">
+        <el-table-column label="操作" fixed="right" width="188" align="center">
           <template #default="{ row }">
-            <el-tooltip content="详情" placement="top"><el-button link type="primary" icon="View" @click="openDetail(row)" /></el-tooltip>
-            <el-tooltip content="维护" placement="top"
-              ><el-button v-hasPermi="['ra:fawvw-ca-cert:edit']" link type="primary" icon="Edit" @click="openEdit(row)"
-            /></el-tooltip>
-            <el-tooltip content="证书链" placement="top"><el-button link type="primary" icon="Connection" @click="openChain(row)" /></el-tooltip>
-            <el-dropdown @command="(format: 'cer' | 'p7b') => downloadCertificate(row, format)">
-              <el-button link type="primary" icon="Download" aria-label="下载证书" />
-              <template #dropdown
-                ><el-dropdown-menu>
+            <CertRowAction label="查看详情" icon="View" @click="openDetail(row)" />
+            <CertRowAction v-hasPermi="['ra:fawvw-ca-cert:edit']" label="维护" icon="Edit" @click="openEdit(row)" />
+            <CertRowAction label="查看证书链" icon="Connection" @click="openChain(row)" />
+            <CertRowAction label="下载证书" icon="Download" @command="(format) => downloadCertificate(row, format as 'cer' | 'p7b')">
+              <template #dropdown>
+                <el-dropdown-menu>
                   <el-dropdown-item command="cer">单张证书 CER</el-dropdown-item>
                   <el-dropdown-item command="p7b">证书链 P7B</el-dropdown-item>
-                </el-dropdown-menu></template
-              >
-            </el-dropdown>
-            <el-tooltip v-if="row.sourceType === 'IMPORTED' && !row.sourceRootId" content="移除导入证书" placement="top">
-              <el-button v-hasPermi="['ra:fawvw-ca-cert:edit']" link type="danger" icon="Delete" @click="removeCertificate(row)" />
-            </el-tooltip>
+                </el-dropdown-menu>
+              </template>
+            </CertRowAction>
+            <CertRowAction v-if="canRemoveCertificate(row)" v-hasPermi="['ra:fawvw-ca-cert:edit']" label="移除证书" type="danger" icon="Delete" @click="removeCertificate(row)" />
           </template>
         </el-table-column>
       </el-table>
-      <pagination v-show="total > 0" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" :total="total" @pagination="loadList" />
+      <div v-if="total > 0" class="mt12">共 {{ total }} 组</div>
+      <pagination
+        v-show="total > 0"
+        v-model:page="queryParams.pageNum"
+        v-model:limit="queryParams.pageSize"
+        :total="total"
+        :auto-scroll="false"
+        layout="sizes, prev, pager, next, jumper"
+        @pagination="loadList"
+      />
     </el-card>
 
     <el-drawer v-model="chainOpen" title="证书链" size="min(900px, 95vw)" append-to-body>
@@ -133,7 +166,7 @@
       </el-table>
     </el-drawer>
 
-    <el-dialog v-model="importOpen" title="导入根证书及中间证书链" width="650px" append-to-body @closed="resetImport">
+    <el-dialog v-model="importOpen" title="导入根证书及中间证书链" width="min(650px, 96vw)" append-to-body @closed="resetImport">
       <el-alert
         title="根证书文件必须是一张自签名 CA 证书；证书链可选，链中的中间证书会自动关联到该根证书。单个文件最大 5MB。"
         type="info"
@@ -169,19 +202,45 @@
       >
     </el-dialog>
 
-    <el-drawer v-model="detailOpen" title="证书详情" size="680px" append-to-body>
-      <el-descriptions :column="1" border>
-        <el-descriptions-item label="证书名称">{{ detail.displayName || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="证书类型">{{ detail.certificateType === 'ROOT' ? '根证书' : '中间证书' }}</el-descriptions-item>
-        <el-descriptions-item label="主题">{{ detail.subjectDn || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="颁发者">{{ detail.issuerDn || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="序列号">{{ detail.serialNumber || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="SHA-256指纹">{{ detail.fingerprint || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="有效期">{{ dateTime(detail.notBefore) }} 至 {{ dateTime(detail.notAfter) }}</el-descriptions-item>
-        <el-descriptions-item label="来源">{{ detail.sourceType === 'RA_SYNC' ? '当前RA同步' : '手工导入' }}</el-descriptions-item>
-        <el-descriptions-item label="管理状态">{{ detail.managementStatus === 'ACTIVE' ? '启用' : '停用' }}</el-descriptions-item>
-        <el-descriptions-item label="备注">{{ detail.remark || '-' }}</el-descriptions-item>
-      </el-descriptions>
+    <el-drawer v-model="detailOpen" title="证书详情" size="min(760px, 95vw)" append-to-body>
+      <template v-if="detail">
+        <el-alert v-if="detail.parseWarning" :title="detail.parseWarning" type="warning" :closable="false" show-icon class="mb12" />
+        <el-descriptions title="基本信息" :column="1" border class="ca-detail">
+          <el-descriptions-item label="证书名称">{{ detail.certificate.displayName }}</el-descriptions-item>
+          <el-descriptions-item label="证书类型">{{ detail.certificate.certificateType === 'ROOT' ? '根证书' : '中间证书' }}</el-descriptions-item>
+          <el-descriptions-item label="所属根证书">{{ rootName(detail.certificate) }}</el-descriptions-item>
+          <el-descriptions-item label="链路校验">
+            <el-tag :type="detailChain?.linked ? 'success' : 'danger'">{{ detailChain?.linked ? '签名匹配' : '链路异常' }}</el-tag>
+            <span v-if="detailChain?.warning" class="ml8">{{ detailChain.warning }}</span>
+          </el-descriptions-item>
+          <el-descriptions-item label="主题 DN">{{ detail.certificate.subjectDn }}</el-descriptions-item>
+          <el-descriptions-item label="颁发者 DN">{{ detail.certificate.issuerDn }}</el-descriptions-item>
+          <el-descriptions-item label="序列号">{{ detail.certificate.serialNumber }}</el-descriptions-item>
+          <el-descriptions-item label="生效时间">{{ dateTime(detail.certificate.notBefore) }}</el-descriptions-item>
+          <el-descriptions-item label="到期时间">{{ dateTime(detail.certificate.notAfter) }}</el-descriptions-item>
+          <el-descriptions-item label="有效期状态">
+            <el-tag :type="validityTag(detail.certificate.validityStatus)">{{ detail.certificate.validityStatusName }}</el-tag>
+            <div v-if="detail.certificate.expiryWarning">{{ detail.certificate.expiryWarning }}</div>
+          </el-descriptions-item>
+          <el-descriptions-item label="来源">{{ detail.certificate.sourceType === 'RA_SYNC' ? '当前RA同步' : '手工导入' }}</el-descriptions-item>
+          <el-descriptions-item label="管理状态">{{ detail.certificate.managementStatus === 'ACTIVE' ? '启用' : '停用' }}</el-descriptions-item>
+          <el-descriptions-item label="更新时间">{{ dateTime(detail.certificate.updateTime) }}</el-descriptions-item>
+          <el-descriptions-item label="备注">{{ detail.certificate.remark || '-' }}</el-descriptions-item>
+        </el-descriptions>
+        <el-descriptions title="X.509 属性" :column="1" border class="ca-detail mt12">
+          <el-descriptions-item label="版本">{{ detail.version == null ? '-' : `V${detail.version}` }}</el-descriptions-item>
+          <el-descriptions-item label="签名算法">{{ detail.signatureAlgorithm || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="公钥算法">{{ detail.publicKeyAlgorithm || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="密钥用途">{{ detail.keyUsages.join('、') || '未声明' }}</el-descriptions-item>
+          <el-descriptions-item label="路径长度约束">{{ detail.parseWarning ? '-' : (detail.pathLength ?? '未限制') }}</el-descriptions-item>
+          <el-descriptions-item label="SHA-256 指纹">{{ detail.certificate.fingerprint }}</el-descriptions-item>
+        </el-descriptions>
+        <el-collapse v-if="detail.certificate.certificatePem" class="mt12">
+          <el-collapse-item name="pem" title="PEM 证书正文">
+            <el-input :model-value="detail.certificate.certificatePem" type="textarea" :rows="8" readonly />
+          </el-collapse-item>
+        </el-collapse>
+      </template>
     </el-drawer>
 
     <el-drawer v-model="editOpen" title="维护证书管理信息" size="560px" append-to-body>
@@ -205,19 +264,36 @@
         ><el-button @click="editOpen = false">取消</el-button><el-button type="primary" :loading="saving" @click="saveEdit">保存</el-button></template
       >
     </el-drawer>
+    <el-dialog v-model="expiryTemplateOpen" title="根及中间证书台账预警模板" width="min(550px, 96vw)" append-to-body>
+      <el-form label-width="100px">
+        <el-form-item label="提前天数"><el-input-number v-model="expiryTemplate.days" :min="1" :max="365" :precision="0" /></el-form-item>
+        <el-form-item label="台账提示"><el-input v-model="expiryTemplate.message" type="textarea" :rows="3" maxlength="500" show-word-limit /></el-form-item>
+        <el-form-item label="可用变量"><code>${certificateName} &nbsp; ${notAfter} &nbsp; ${days}</code></el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="expiryTemplateOpen = false">取消</el-button>
+        <el-button type="primary" :loading="expiryTemplateSaving" @click="saveExpiryTemplate">保存模板</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup name="FawvwCaCert" lang="ts">
-import { ElMessage, ElMessageBox } from 'element-plus';
-import { ref, reactive, onMounted } from 'vue';
+import CertRowAction from '../components/CertRowAction.vue';
+import { useRaListRefreshOnReturn } from '@/hooks/useRaListRefreshOnReturn';
+import { ElMessage, ElMessageBox, type TableInstance } from 'element-plus';
+import { ref, reactive, onMounted, onActivated, nextTick } from 'vue';
 import { saveAs } from 'file-saver';
 import {
   FawvwCaCertificate,
   FawvwCaCertQuery,
-  getFawvwCaCertificate,
+  type FawvwCaCertificateDetail,
+  type FawvwCaExpiryTemplate,
+  getFawvwCaExpiryTemplate,
+  getFawvwCaCertificateDetail,
   importFawvwCaCertificate,
-  pageFawvwCaCertificates,
+  pageFawvwCaCertificateTree,
+  saveFawvwCaExpiryTemplate,
   syncFawvwCaCertificates,
   updateFawvwCaCertificate
 } from '@/api/ra/fawvwCaCert';
@@ -227,6 +303,40 @@ const rootOptions = ref<{ id: string | number; displayName: string; fingerprint:
 type ChainNode = FawvwCaCertificate & { linked: boolean; warning: string; children: ChainNode[] };
 const chainRows = ref<ChainNode[]>([]);
 const chainOpen = ref(false);
+const treeTable = ref<TableInstance>();
+const expiryTemplateOpen = ref(false);
+const expiryTemplateSaving = ref(false);
+const expiryTemplate = reactive<FawvwCaExpiryTemplate>({ days: 30, message: '' });
+
+async function openExpiryTemplate() {
+  Object.assign(expiryTemplate, unwrap<FawvwCaExpiryTemplate>(await getFawvwCaExpiryTemplate()));
+  expiryTemplateOpen.value = true;
+}
+
+async function saveExpiryTemplate() {
+  if (expiryTemplateSaving.value || !expiryTemplate.days || !expiryTemplate.message.trim()) return;
+  expiryTemplateSaving.value = true;
+  try {
+    await saveFawvwCaExpiryTemplate(expiryTemplate);
+    expiryTemplateOpen.value = false;
+    ElMessage.success('预警模板已保存');
+    await loadList();
+  } finally {
+    expiryTemplateSaving.value = false;
+  }
+}
+
+async function expandTree() {
+  await nextTick();
+  const expand = (nodes: ChainNode[]) =>
+    nodes.forEach((node) => {
+      if (node.children.length) {
+        treeTable.value?.toggleRowExpansion(node, true);
+        expand(node.children);
+      }
+    });
+  expand(rows.value);
+}
 
 function rootName(row: FawvwCaCertificate) {
   const id = row.certificateType === 'ROOT' ? row.id : row.parentId;
@@ -236,6 +346,11 @@ function rootName(row: FawvwCaCertificate) {
 
 async function openChain(row: FawvwCaCertificate) {
   const entries = unwrap<FawvwCaChainEntry[]>(await getFawvwCaChain(row.id));
+  chainRows.value = buildTree(entries);
+  chainOpen.value = true;
+}
+
+function buildTree(entries: FawvwCaChainEntry[]): ChainNode[] {
   const nodes = new Map(
     entries.map((entry) => [
       String(entry.certificate.id),
@@ -249,8 +364,7 @@ async function openChain(row: FawvwCaCertificate) {
     if (parent) parent.children.push(node);
     else top.push(node);
   }
-  chainRows.value = top;
-  chainOpen.value = true;
+  return top;
 }
 
 async function downloadCertificate(row: FawvwCaCertificate, format: 'cer' | 'p7b') {
@@ -263,12 +377,20 @@ async function downloadCertificate(row: FawvwCaCertificate, format: 'cer' | 'p7b
   saveAs(blob, `ca-${row.id}.${format}`);
 }
 
+function canRemoveCertificate(row: ChainNode): boolean {
+  return row.certificateType === 'ROOT' ? isRemovableChainMember(row) : row.children.length === 0 && isRemovableChainMember(row);
+}
+
+function isRemovableChainMember(row: ChainNode): boolean {
+  return row.sourceType === 'IMPORTED' && row.sourceRootId == null && row.children.every(isRemovableChainMember);
+}
+
 async function removeCertificate(row: FawvwCaCertificate) {
   const message =
     row.certificateType === 'ROOT'
-      ? '移除该导入根证书及其全部导入中间证书？仅移除本台账，不撤销证书，也不修改admin根证书。'
-      : '移除该导入中间证书？不会撤销证书或修改admin根证书。';
-  await ElMessageBox.confirm(message, '移除导入证书', { type: 'warning' });
+      ? '移除该根证书及其整条证书链？仅移除本台账，不吊销已签发证书，也不修改管理员根证书。'
+      : '从本台账移除该中间证书？不会吊销证书或修改管理员根证书。';
+  if (!await ElMessageBox.confirm(message, '移除证书', { type: 'warning' }).then(() => true, () => false)) return;
   await removeFawvwCaCertificate(row.id);
   ElMessage.success('已移除');
   detailOpen.value = false;
@@ -282,7 +404,7 @@ async function loadRoots() {
   if (queryParams.rootId != null && !rootOptions.value.some((root) => String(root.id) === String(queryParams.rootId))) queryParams.rootId = undefined;
 }
 
-const rows = ref<FawvwCaCertificate[]>([]);
+const rows = ref<ChainNode[]>([]);
 const loading = ref(false);
 const total = ref(0);
 const showSearch = ref(true);
@@ -291,7 +413,8 @@ const importing = ref(false);
 const detailOpen = ref(false);
 const editOpen = ref(false);
 const saving = ref(false);
-const detail = ref<Partial<FawvwCaCertificate>>({});
+const detail = ref<FawvwCaCertificateDetail>();
+const detailChain = ref<Pick<ChainNode, 'linked' | 'warning'>>();
 const rootFile = ref<File>();
 const chainFile = ref<File>();
 const editForm = reactive({
@@ -308,6 +431,7 @@ const queryParams = reactive<FawvwCaCertQuery>({
   validityStatus: '',
   managementStatus: ''
 });
+const expiryRange = ref<[string, string] | null>(null);
 
 function unwrap<T>(res: any): T {
   const body = res?.data ?? res;
@@ -317,9 +441,13 @@ function unwrap<T>(res: any): T {
 async function loadList() {
   loading.value = true;
   try {
-    const page = unwrap<any>(await pageFawvwCaCertificates(queryParams));
-    rows.value = page.records || page.rows || [];
+    const page = unwrap<any>(
+      await pageFawvwCaCertificateTree({ ...queryParams, expiresFrom: expiryRange.value?.[0], expiresTo: expiryRange.value?.[1] })
+    );
+    const families: FawvwCaChainEntry[][] = page.records || page.rows || [];
+    rows.value = families.flatMap(buildTree);
     total.value = Number(page.total || 0);
+    await expandTree();
   } finally {
     loading.value = false;
   }
@@ -337,8 +465,11 @@ function resetQuery() {
     certificateType: '',
     validityStatus: '',
     managementStatus: '',
+    issuer: '',
+    sourceType: '',
     rootId: undefined
   });
+  expiryRange.value = null;
   loadList();
 }
 function resetImport() {
@@ -379,8 +510,9 @@ async function handleImport() {
   }
 }
 
-async function openDetail(row: FawvwCaCertificate) {
-  detail.value = unwrap<FawvwCaCertificate>(await getFawvwCaCertificate(row.id));
+async function openDetail(row: ChainNode) {
+  detail.value = unwrap<FawvwCaCertificateDetail>(await getFawvwCaCertificateDetail(row.id));
+  detailChain.value = { linked: row.linked, warning: row.warning };
   detailOpen.value = true;
 }
 function openEdit(row: FawvwCaCertificate) {
@@ -410,7 +542,12 @@ function validityTag(status?: string) {
   return ({ VALID: 'success', EXPIRING: 'warning', EXPIRED: 'danger', NOT_YET_VALID: 'info' } as Record<string, string>)[status || ''] || 'info';
 }
 
+onActivated(expandTree);
 onMounted(async () => {
+  await loadRoots();
+  await loadList();
+});
+useRaListRefreshOnReturn(async () => {
   await loadRoots();
   await loadList();
 });
@@ -421,8 +558,51 @@ onMounted(async () => {
   .query-card {
     margin-bottom: 12px;
   }
+  .query-form {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 310px), 1fr));
+    gap: 12px 16px;
+
+    :deep(.el-form-item) {
+      min-width: 0;
+      margin-bottom: 0;
+    }
+
+    :deep(.el-select),
+    :deep(.el-date-editor) {
+      width: 100%;
+      min-width: 0;
+    }
+
+    .query-actions :deep(.el-form-item__content) {
+      justify-content: flex-end;
+    }
+  }
+
+  @media (max-width: 560px) {
+    .query-form :deep(.el-form-item:not(.query-actions)) {
+      display: block;
+    }
+    .query-form :deep(.el-form-item__label) {
+      justify-content: flex-start;
+    }
+    .query-form :deep(.el-form-item__content) {
+      margin-left: 0 !important;
+    }
+  }
   .toolbar-row {
     align-items: center;
   }
 }
+
+.ca-detail {
+  :deep(.el-descriptions__label) {
+    width: 120px;
+  }
+
+  :deep(.el-descriptions__content) {
+    overflow-wrap: anywhere;
+  }
+}
+
 </style>

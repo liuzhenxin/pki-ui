@@ -27,8 +27,19 @@ export interface PublicCertUsage {
   remark?: string;
 }
 
+export interface PublicCertEmployee {
+  id: number | string;
+  cnName: string;
+  domainAccount: string;
+  email?: string;
+  departmentId?: string;
+  departmentName?: string;
+  departmentNamePath?: string;
+}
+
 export interface PublicCert {
   id?: number | string;
+  version?: number;
   certTypeId?: number | string;
   certTypeName?: string;
   domainName: string;
@@ -92,6 +103,7 @@ export interface PublicCertDetail {
   usages: PublicCertUsage[];
   attachments: PublicCertAttachment[];
   auditLogs: PublicCertAuditLog[];
+  recorderDisplay?: string;
 }
 
 export interface PublicCertType {
@@ -118,6 +130,7 @@ export interface PublicCertPermission {
 
 export interface PublicCertPortalConfig {
   iamEnabled?: boolean;
+  requireIam?: boolean;
   iamBaseUrl?: string;
   authorizePath?: string;
   tokenPath?: string;
@@ -139,7 +152,31 @@ export interface SelfAccess {
   identityKey?: string;
   domainAccount?: string;
   employeeName?: string;
+  idleMinutes?: number;
 }
+
+export interface PublicNoticeConfig {
+  automatic: boolean;
+  email: boolean;
+  dingtalk: boolean;
+  days: string;
+  time: string;
+  portalUrl: string;
+  subject: string;
+  emailContent: string;
+  dingContent: string;
+}
+export interface PublicNoticeState { id: number | string; emailStatus?: number; dingtalkStatus?: number }
+export interface PublicNoticeLog { id: number | string; channel: string; status: number; sendTime?: string; message?: string; gatewayTraceId?: string }
+export const getPublicNoticeConfig = (): Promise<Result<PublicNoticeConfig>> => request({ url: '/ra/v1/public-certs/notice-config', method: 'get' }) as any;
+export const savePublicNoticeConfig = (data: PublicNoticeConfig): Promise<Result<PublicNoticeConfig>> => request({ url: '/ra/v1/public-certs/notice-config', method: 'put', data }) as any;
+export const getPublicNoticeStates = (ids: (number | string)[]): Promise<Result<PublicNoticeState[]>> => request({ url: '/ra/v1/public-certs/notice-states', method: 'post', data: ids }) as any;
+export const getPublicNoticeLogs = (id: number | string): Promise<Result<PublicNoticeLog[]>> => request({ url: `/ra/v1/public-certs/${id}/notice-logs`, method: 'get' }) as any;
+export const notifyPublicCerts = (ids: (number | string)[]): Promise<Result<number>> => request({ url: '/ra/v1/public-certs/notify', method: 'post', data: ids }) as any;
+export const auditPublicCerts = (ids: (number | string)[], approve: boolean, comment: string): Promise<Result<number>> => request({ url: '/ra/v1/public-certs/audit-batch', method: 'post', data: { ids, approve, comment } }) as any;
+export const togglePublicCertReminder = (id: number | string, enabled: boolean): Promise<Result<PublicCert>> => request({ url: `/ra/v1/public-certs/${id}/reminder`, method: 'put', data: { enabled } }) as any;
+export const getPublicPortalSessionPolicy = (): Promise<Result<{ idleMinutes: number }>> => request({ url: '/ra/v1/public-certs/session-policy', method: 'get' }) as any;
+export const savePublicPortalSessionPolicy = (idleMinutes: number): Promise<Result<{ idleMinutes: number }>> => request({ url: '/ra/v1/public-certs/session-policy', method: 'put', data: { idleMinutes } }) as any;
 
 const cleanQuery = (query: PublicCertQuery) => ({
   ...query,
@@ -175,12 +212,6 @@ export const savePublicCert = (data: PublicCert): Promise<Result<PublicCertDetai
     url: '/ra/v1/public-certs',
     method: 'post',
     data
-  }) as any;
-
-export const submitPublicCert = (id: number | string): Promise<Result<PublicCert>> =>
-  request({
-    url: `/ra/v1/public-certs/${id}/submit`,
-    method: 'post'
   }) as any;
 
 export const approvePublicCert = (id: number | string, comment?: string): Promise<Result<PublicCert>> =>
@@ -248,6 +279,9 @@ export const grantPublicCertPermission = (data: PublicCertPermission): Promise<R
     data
   }) as any;
 
+export const revokePublicCertPermission = (id: number | string): Promise<Result<void>> =>
+  request({ url: `/ra/v1/public-certs/permissions/${id}`, method: 'delete' }) as any;
+
 export const getPublicCertPortalConfig = (): Promise<Result<PublicCertPortalConfig>> =>
   request({
     url: '/ra/v1/public-certs/portal/config',
@@ -261,44 +295,13 @@ export const savePublicCertPortalConfig = (data: PublicCertPortalConfig): Promis
     data
   }) as any;
 
-export const uploadPublicCertAttachment = (id: number | string, file: File, self = false): Promise<Result<PublicCertAttachment>> => {
+export const uploadPublicCertAttachment = (id: number | string, file: File): Promise<Result<PublicCertAttachment>> => {
   const form = new FormData();
   form.append('file', file);
   return request({
-    url: `/ra/v1/public-certs/${self ? 'my/' : ''}${id}/attachments`,
+    url: `/ra/v1/public-certs/${id}/attachments`,
     method: 'post',
-    data: form
+    data: form,
+    timeout: 120_000
   }) as any;
 };
-
-export const getSelfPublicCertAccess = (): Promise<Result<SelfAccess>> =>
-  request({
-    url: '/ra/v1/public-certs/my/access',
-    method: 'get'
-  }) as any;
-
-export const pageMyPublicCerts = (query: PublicCertQuery): Promise<Result<any>> =>
-  request({
-    url: '/ra/v1/public-certs/my/page',
-    method: 'post',
-    data: cleanQuery(query)
-  }) as any;
-
-export const getMyPublicCert = (id: number | string): Promise<Result<PublicCertDetail>> =>
-  request({
-    url: `/ra/v1/public-certs/my/${id}`,
-    method: 'get'
-  }) as any;
-
-export const saveMyPublicCert = (data: PublicCert): Promise<Result<PublicCertDetail>> =>
-  request({
-    url: '/ra/v1/public-certs/my',
-    method: 'post',
-    data
-  }) as any;
-
-export const submitMyPublicCert = (id: number | string): Promise<Result<PublicCert>> =>
-  request({
-    url: `/ra/v1/public-certs/my/${id}/submit`,
-    method: 'post'
-  }) as any;

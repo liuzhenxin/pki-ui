@@ -74,7 +74,7 @@
               </el-table-column>
               <el-table-column label="操作" width="96" align="center" fixed="right">
                 <template #default="profileScope">
-                  <el-button link type="primary" icon="View" @click.stop="handleViewProfile(profileScope.row)">详情</el-button>
+                  <CertRowAction label="查看模板详情" icon="View" @click.stop="handleViewProfile(profileScope.row)" />
                 </template>
               </el-table-column>
             </el-table>
@@ -109,13 +109,13 @@
       </el-table-column>
       <el-table-column label="操作" align="center" class-name="small-padding" width="150">
         <template #default="scope">
-          <el-button link type="primary" icon="View" @click.stop="handleView(scope.row)" v-hasPermi="['ra:root']">详情</el-button>
-          <el-button link type="primary" icon="Download" @click.stop="handleDownload(scope.row)" v-hasPermi="['ra:root']">下载</el-button>
+          <CertRowAction v-hasPermi="['ra:root']" label="查看详情" icon="View" @click.stop="handleView(scope.row)" />
+          <CertRowAction v-hasPermi="['ra:root']" label="下载证书" icon="Download" @click.stop="handleDownload(scope.row)" />
         </template>
       </el-table-column>
     </el-table>
 
-    <pagination v-show="total > 0" :total="total" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" @pagination="getList" />
+    <pagination v-show="total > 0" :total="total" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" :auto-scroll="false" @pagination="getList" />
 
     <!-- 创建证书对话框 -->
     <el-dialog :title="title" v-model="open" width="600px" append-to-body>
@@ -328,6 +328,8 @@
 </template>
 
 <script setup name="RootCert" lang="ts">
+import CertRowAction from '../components/CertRowAction.vue';
+import { useRaListRefreshOnReturn } from '@/hooks/useRaListRefreshOnReturn';
 import { ref, reactive, toRefs, getCurrentInstance, ComponentInternalInstance, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox, FormInstance, UploadInstance, UploadProps } from 'element-plus';
@@ -1286,6 +1288,7 @@ function onParentCaChange(val: any) {
 }
 
 getList();
+useRaListRefreshOnReturn(getList);
 </script>
 
 <style scoped lang="scss">

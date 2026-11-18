@@ -779,6 +779,7 @@ import { getAdminCertOptions, getInitStatus, unwrapRaData, type RaInitStatus, ty
 import { pageRaWorkflowTodo } from '@/api/ra/workflowTask';
 import * as echarts from 'echarts';
 import { useUserStore } from '@/store/modules/user';
+import { employeeDirectoryPath } from '@/utils/fawvwEmployeeNavigation';
 import { getTenant } from '@/api/system/tenant';
 import { getKmcDashboardStats } from '@/api/kmc/dashboard';
 import { readKmcPage, unwrapKmcData } from '@/api/kmc/common';
@@ -1054,6 +1055,23 @@ const raFlowSteps = [
 const raActions = [
   { title: '证书申请', desc: '提交普通证书申请并选择授权模板', path: '/ra-certificate/ra-cert-apply', icon: 'EditPen', permission: 'ra:apply' },
   { title: '证书查询', desc: '查询申请记录、签发状态和证书详情', path: '/ra-certificate/ra-cert-list', icon: 'Search', permission: 'ra:cert' },
+  { title: '员工信息', desc: '查询员工和组织科室', path: employeeDirectoryPath, icon: 'User', permission: 'ra:employee', requiresRoute: true },
+  {
+    title: '员工证书制作',
+    desc: '创建制作任务和执行签发',
+    path: '/ra-cert-management/ra-employee-cert-issue',
+    icon: 'Key',
+    permission: 'ra:employee-cert:issue',
+    requiresRoute: true
+  },
+  {
+    title: '员工证书管理',
+    desc: '查询和分发已签发的员工证书',
+    path: '/ra-cert-management/ra-employee-cert',
+    icon: 'Document',
+    permission: 'ra:employee-cert',
+    requiresRoute: true
+  },
   { title: '待办审核', desc: '处理待审核的证书业务流程', path: '/ra-workflow/ra-workflow-todo', icon: 'Checked', permission: 'ra:workflow:todo' },
   {
     title: '已办记录',
@@ -1086,7 +1104,11 @@ const hasPermission = (permission: string) => {
   const permissions = userStore.permissions || [];
   return permissions.includes('*:*:*') || permissions.includes(permission);
 };
-const filteredRaActions = computed(() => raActions.filter((action) => hasPermission(action.permission)));
+const filteredRaActions = computed(() =>
+  raActions.filter((action) =>
+    hasPermission(action.permission) && (!action.requiresRoute || router.getRoutes().some((route) => route.path === action.path))
+  )
+);
 
 const kdsMetrics = [
   { label: '运营', value: '状态与告警', icon: 'Monitor', type: 'primary' },

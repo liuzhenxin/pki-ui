@@ -1,7 +1,34 @@
 <template>
   <div class="app-container fawvw-employee-page">
-    <el-row :gutter="16">
-      <el-col :xs="24" :sm="24" :md="6" :lg="5" :xl="4">
+    <div class="summary-strip">
+      <div class="metric">
+        <span class="metric-label">可办理员工</span>
+        <strong>{{ summaryReady ? summary.activeEmployees : '—' }}</strong>
+      </div>
+      <div class="metric">
+        <span class="metric-label">中方员工</span>
+        <strong>{{ summaryReady ? summary.chineseEmployees : '—' }}</strong>
+      </div>
+      <div class="metric">
+        <span class="metric-label">外方员工</span>
+        <strong>{{ summaryReady ? summary.foreignEmployees : '—' }}</strong>
+      </div>
+      <div class="metric">
+        <span class="metric-label">本地员工</span>
+        <strong>{{ summaryReady ? summary.localEmployees : '—' }}</strong>
+      </div>
+      <div class="metric wide">
+        <span class="metric-label">最近同步</span>
+        <strong>{{ syncText }}</strong>
+        <small v-if="summaryReady && summary.latestSyncTime">{{ summary.latestSyncTime.replace('T', ' ').slice(0, 19) }}</small>
+        <el-button v-if="summaryFailed" link type="primary" @click="loadSummary()">重试统计</el-button>
+        <el-tag :type="syncConfig.sourceMode === 'API' ? 'success' : 'warning'" effect="plain" size="small">
+          {{ syncConfig.sourceMode === 'API' ? '接口数据' : '演示数据' }}
+        </el-tag>
+      </div>
+    </div>
+    <div ref="employeeLayout" class="employee-layout" :style="{ '--org-width': `${orgWidth}px` }">
+      <aside class="org-column">
         <el-card shadow="never" class="org-panel">
           <template #header>
             <div class="panel-header">
@@ -9,137 +36,187 @@
               <el-tag size="small" type="info" effect="plain">{{ summary.departments || 0 }}</el-tag>
             </div>
           </template>
-          <el-input v-model="orgKeyword" placeholder="搜索部门" prefix-icon="Search" clearable />
-          <el-tree
-            ref="orgTreeRef"
-            class="org-tree"
-            node-key="id"
-            :data="orgTreeData"
-            :props="orgTreeProps"
-            :expand-on-click-node="false"
-            :filter-node-method="filterOrgNode"
-            highlight-current
-            default-expand-all
-            @node-click="handleOrgClick"
-          />
+          <el-input v-model="orgKeyword" placeholder="搜索科室或组织路径" aria-label="搜索组织科室" prefix-icon="Search" clearable />
+          <div v-loading="orgLoading" class="org-body">
+            <div v-if="orgLoadFailed" class="org-empty">
+              <span>组织科室加载失败</span><el-button link type="primary" @click="loadOrgTree">重试</el-button>
+            </div>
+              <div v-show="!orgSearchTerm" class="org-viewport" tabindex="0" aria-label="组织科室树">
+                <el-tree
+                  class="org-tree"
+                  node-key="id"
+                  :data="orgTreeData"
+                  :props="orgTreeProps"
+                  :indent="14"
+                  :expand-on-click-node="false"
+                  :current-node-key="selectedDirectoryNode"
+                  :default-expanded-keys="defaultOrgExpanded"
+                  highlight-current
+                  @node-click="handleOrgClick"
+                >
+                  <template #default="{ data }"><span :title="data.path || data.label">{{ data.label }}</span></template>
+                </el-tree>
+              </div>
+              <template v-if="orgSearchTerm">
+                <div class="org-result-count" aria-live="polite">
+                  {{ orgMatches.length }} 个匹配科室<span v-if="orgMatches.length > orgSearchLimit">，显示前 {{ orgSearchLimit }} 个</span>
+                </div>
+                <div v-if="!orgMatches.length" class="org-empty">未找到匹配科室</div>
+                <ul v-else class="org-results">
+                  <li v-for="item in orgMatches.slice(0, orgSearchLimit)" :key="item.node.id">
+                    <button type="button" :aria-pressed="selectedDirectoryNode === item.node.id" @click="handleOrgClick(item.node)">
+                      <strong>{{ item.node.label }}</strong>
+                      <span v-if="item.path !== item.node.label">{{ item.path }}</span>
+                    </button>
+                  </li>
+                </ul>
+              </template>
+          </div>
         </el-card>
-      </el-col>
+        <div
+          class="org-resize-handle"
+          role="separator"
+          aria-label="调整组织科室宽度"
+          aria-orientation="vertical"
+          :aria-valuemin="240"
+          :aria-valuemax="maxOrgWidth"
+          :aria-valuenow="Math.min(orgWidth, maxOrgWidth)"
+          tabindex="0"
+          @pointerdown="startOrgResize"
+          @pointermove="moveOrgResize"
+          @lostpointercapture="orgResizeStart = undefined"
+          @keydown.left.prevent="resizeOrgBy(-24)"
+          @keydown.right.prevent="resizeOrgBy(24)"
+        />
+      </aside>
 
-      <el-col :xs="24" :sm="24" :md="18" :lg="19" :xl="20">
-        <div class="summary-strip">
-          <div class="metric">
-            <span class="metric-label">员工总数</span>
-            <strong>{{ summary.totalEmployees || 0 }}</strong>
-          </div>
-          <div class="metric">
-            <span class="metric-label">已确认在职</span>
-            <strong>{{ summary.activeEmployees || 0 }}</strong>
-          </div>
-          <div class="metric">
-            <span class="metric-label">外方员工</span>
-            <strong>{{ summary.foreignEmployees || 0 }}</strong>
-          </div>
-          <div class="metric wide">
-            <span class="metric-label">最近同步</span>
-            <strong>{{ syncText }}</strong>
-          </div>
-          <el-tag :type="syncConfig.sourceMode === 'API' ? 'success' : 'warning'" effect="plain">
-            {{ syncConfig.sourceMode === 'API' ? '接口数据' : '演示数据' }}
-          </el-tag>
-        </div>
-
+      <div class="employee-column">
         <el-card shadow="never" class="employee-panel">
-          <el-form :model="queryParams" inline class="query-form">
-            <el-form-item label="关键词">
-              <el-input v-model="queryParams.keyword" clearable placeholder="姓名/域账号/工号" style="width: 210px" @keyup.enter="handleQuery" />
-            </el-form-item>
-            <el-form-item label="域账号">
-              <el-input v-model="queryParams.domainAccount" clearable placeholder="请输入域账号" style="width: 180px" @keyup.enter="handleQuery" />
-            </el-form-item>
-            <el-form-item label="员工类型">
-              <el-select v-model="queryParams.employeeTypeId" clearable placeholder="全部类型" style="width: 150px">
-                <el-option label="类型 1" value="1" />
-                <el-option label="类型 3" value="3" />
-                <el-option label="类型 4" value="4" />
-                <el-option label="类型 5" value="5" />
-                <el-option label="外方" value="6" />
-              </el-select>
-            </el-form-item>
-            <el-form-item label="外方">
-              <el-select v-model="queryParams.foreignFlag" clearable placeholder="全部" style="width: 120px">
-                <el-option label="是" :value="true" />
-                <el-option label="否" :value="false" />
-              </el-select>
-            </el-form-item>
-            <el-form-item label="状态">
-              <el-select v-model="queryParams.status" clearable placeholder="全部状态" style="width: 120px">
-                <el-option label="在职（接口 A）" value="A" />
-                <el-option label="离职（接口 I）" value="I" />
-                <el-option label="接口状态 3" value="3" />
-              </el-select>
-            </el-form-item>
-            <el-form-item>
-              <el-button type="primary" icon="Search" @click="handleQuery">搜索</el-button>
-              <el-button icon="Refresh" @click="resetQuery">重置</el-button>
-            </el-form-item>
-          </el-form>
+          <div v-if="selectedOrg" class="org-selection">
+            <span class="org-selection-label">当前部门</span>
+            <span class="org-selection-path">{{ selectedOrg.path }}</span>
+            <el-tooltip content="清除科室筛选" placement="top">
+              <el-button link icon="Close" aria-label="清除科室筛选" @click="clearOrgSelection" />
+            </el-tooltip>
+          </div>
+          <div v-show="showSearch" class="query-panel">
+            <el-form :model="queryParams" :inline="true" label-width="96px" class="query-form" @submit.prevent="handleQuery">
+              <el-form-item label="关键词" prop="keyword">
+                <el-input v-model="queryParams.keyword" clearable placeholder="姓名 / 域账号 / 工号" />
+              </el-form-item>
+              <el-form-item label="域账号" prop="domainAccount">
+                <el-input v-model="queryParams.domainAccount" clearable placeholder="请输入域账号" />
+              </el-form-item>
+              <el-form-item label="数据来源">
+                <el-select v-model="queryParams.source" clearable placeholder="全部来源">
+                  <el-option label="大众同步" value="API" />
+                  <el-option label="本地创建" value="LOCAL" />
+                </el-select>
+              </el-form-item>
+              <el-form-item label="中方 / 外方" prop="foreignFlag">
+                <el-select v-model="queryParams.foreignFlag" clearable :value-on-clear="null" placeholder="全部">
+                  <el-option label="中方" :value="false" />
+                  <el-option label="外方" :value="true" />
+                </el-select>
+              </el-form-item>
+              <el-form-item label="在职状态" prop="status">
+                <template #label="{ label }">
+                  {{ label }}
+                  <el-tooltip content="以大众同步名册为准，离职标记与 RA 本地启停独立" placement="top">
+                    <el-icon class="query-help"><InfoFilled /></el-icon>
+                  </el-tooltip>
+                </template>
+                <el-select v-model="queryParams.status" clearable placeholder="全部状态">
+                  <el-option label="在职" value="A" />
+                  <el-option label="离职" value="I" />
+                </el-select>
+              </el-form-item>
+              <el-form-item class="query-actions">
+                <el-button type="primary" icon="Search" native-type="submit">搜索</el-button>
+                <el-button icon="RefreshLeft" @click="resetQuery">重置</el-button>
+              </el-form-item>
+            </el-form>
+          </div>
 
           <el-row :gutter="10" class="mb8 toolbar-row">
-            <el-col :span="1.5">
+            <el-col v-if="!localSelected" :span="1.5">
+              <el-button v-hasPermi="['ra:employee:manage']" type="primary" plain icon="Plus" @click="openCreate">新增员工</el-button>
+            </el-col>
+            <el-col v-if="!localSelected" :span="1.5">
+              <el-button v-hasPermi="['ra:employee:manage']" plain icon="Upload" @click="openImport">外部导入</el-button>
+            </el-col>
+            <el-col v-if="canReadApplicants" :span="1.5">
+              <el-button plain type="primary" icon="Plus" @click="localDialogs?.openAccount(selectedLocalDeptId)">新增用户</el-button>
+            </el-col>
+            <el-col v-if="selectedDirectoryNode === ALL_ORG_ID && auth.hasPermiAnd(['sys:dept:save', 'ra:admin'])" :span="1.5">
+              <el-button plain icon="OfficeBuilding" @click="localDialogs?.openDepartment('0')">新增部门</el-button>
+            </el-col>
+            <el-col v-if="selectedLocalDeptId && auth.hasPermi('sys:dept:save')" :span="1.5">
+              <el-button plain icon="Plus" @click="localDialogs?.openDepartment(selectedLocalDeptId)">新增下级</el-button>
+            </el-col>
+            <el-col v-if="selectedLocalDeptId && auth.hasPermiAnd(['sys:dept:detail', 'sys:dept:modify', 'ra:admin'])" :span="1.5">
+              <el-button plain icon="Edit" @click="localDialogs?.openDepartment(selectedLocalDeptId, true)">修改部门</el-button>
+            </el-col>
+            <el-col v-if="selectedLocalDeptId && canRemoveSelectedDept" :span="1.5">
+              <el-button type="danger" plain icon="Delete" :loading="removingDept" @click="removeLocalDepartment">删除部门</el-button>
+            </el-col>
+            <el-col v-if="!localSelected" :span="1.5">
               <el-button v-hasPermi="['ra:employee:sync']" type="primary" plain icon="Refresh" :loading="syncing" @click="handleSync">{{
                 syncing ? '同步中' : '立即同步'
               }}</el-button>
             </el-col>
-            <el-col :span="1.5">
+            <el-col v-if="!localSelected" :span="1.5">
               <el-button v-hasPermi="['ra:employee:config']" plain icon="Setting" @click="openConfig">同步配置</el-button>
             </el-col>
-            <el-col :span="1.5">
+            <el-col v-if="!localSelected" :span="1.5">
               <el-button plain icon="Clock" @click="openLogs">同步记录</el-button>
             </el-col>
             <right-toolbar v-model:showSearch="showSearch" @queryTable="loadEmployees" />
           </el-row>
 
-          <el-table v-loading="loading" :data="employeeList" border stripe class="employee-table" empty-text="暂无员工数据">
-            <el-table-column label="姓名" prop="cnName" min-width="130" fixed show-overflow-tooltip />
+          <el-table v-loading="loading" :data="employeeList" border stripe class="employee-table" :empty-text="employeeListFailed ? '列表加载失败，请重试' : localSelected ? '暂无本地申请用户' : '暂无人员数据'">
+            <el-table-column :label="localSelected ? '用户名' : '姓名 / 用户名'" prop="cnName" min-width="130" fixed show-overflow-tooltip />
             <el-table-column label="性别" prop="genderName" width="76" align="center" />
             <el-table-column label="工号" prop="employeeNo" min-width="112" show-overflow-tooltip />
             <el-table-column label="域账号" prop="domainAccount" min-width="120" show-overflow-tooltip />
             <el-table-column label="邮箱" prop="email" min-width="210" show-overflow-tooltip />
-            <el-table-column label="入职时间" prop="enterTime" width="116" align="center" />
-            <el-table-column label="职级/职别" prop="jobGrade" width="110" align="center" />
+            <el-table-column v-if="!localSelected" label="入职时间" prop="enterTime" width="116" align="center" />
+            <el-table-column v-if="!localSelected" label="职级/职别" prop="jobGrade" width="110" align="center" />
             <el-table-column label="岗位" prop="jobName" min-width="140" show-overflow-tooltip />
-            <el-table-column label="科室" prop="departmentName" min-width="130" show-overflow-tooltip />
-            <el-table-column label="外方" width="82" align="center">
-              <template #default="{ row }">
-                <el-tag :type="row.foreignFlag ? 'warning' : 'info'" effect="plain">{{ row.foreignFlag ? '是' : '否' }}</el-tag>
-              </template>
+            <el-table-column :label="localSelected ? '所属部门' : '科室 / 部门'" prop="departmentName" min-width="130" show-overflow-tooltip />
+            <el-table-column v-if="!localSelected" label="经理级别" prop="managerLevel" width="110" align="center" />
+            <el-table-column :label="localSelected ? '用户类别' : '人员类别'" prop="employeeTypeName" width="118" show-overflow-tooltip />
+            <el-table-column label="数据来源" width="100" align="center">
+              <template #default="{ row }">{{ row.recordSource === 'API' ? '大众同步' : '本地创建' }}</template>
             </el-table-column>
-            <el-table-column label="经理级别" prop="managerLevel" width="110" align="center" />
-            <el-table-column label="员工类型" prop="employeeTypeName" width="118" show-overflow-tooltip />
-            <el-table-column label="同步状态" width="90" align="center">
+            <el-table-column v-if="!localSelected" label="在职状态" width="120" align="center">
               <template #default="{ row }">
-                <el-tag :type="row.sourceStatus === 'A' ? 'success' : row.sourceStatus === 'I' ? 'danger' : 'info'" effect="plain">{{
-                  row.sourceStatusName || row.employeeStatus
+                <el-tag :type="row.sourceStatusName === '离职' ? 'danger' : row.sourceStatusName === '在职' ? 'success' : 'info'" effect="plain">{{
+                  row.recordSource === 'API' ? (row.sourceStatusName || row.employeeStatus) : '-'
                 }}</el-tag>
               </template>
             </el-table-column>
-            <el-table-column label="本地状态" width="90" align="center">
+            <el-table-column label="本地状态" width="120" align="center">
               <template #default="{ row }">
-                <el-tag :type="row.identityStatus === 'LEFT' ? 'danger' : 'success'" effect="plain">
-                  {{ row.identityStatus === 'LEFT' ? '已离职' : '在册' }}
+                <el-tag :type="isLocallyDisabled(row) ? 'warning' : 'success'" effect="plain">
+                  {{ isLocallyDisabled(row) ? '已停用' : '启用' }}
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column label="操作" fixed="right" width="80" align="center">
+            <el-table-column label="操作" fixed="right" width="154" align="center">
               <template #default="{ row }">
                 <el-tooltip content="详情" placement="top">
-                  <el-button link type="primary" icon="View" @click="openDetail(row)" />
+                  <el-button link type="primary" icon="View" aria-label="员工详情" @click="openDetail(row)" />
+                </el-tooltip>
+                <el-tooltip v-if="canDeleteEmployee(row)" content="删除员工" placement="top">
+                  <el-button v-hasPermi="['ra:employee:manage']" link type="danger" icon="Delete" aria-label="删除员工" :disabled="deletingEmployee" @click="removeEmployee(row)" />
                 </el-tooltip>
               </template>
             </el-table-column>
           </el-table>
 
           <pagination
+            :auto-scroll="false"
             v-show="total > 0"
             v-model:page="queryParams.pageNum"
             v-model:limit="queryParams.pageSize"
@@ -147,10 +224,13 @@
             @pagination="loadEmployees"
           />
         </el-card>
-      </el-col>
-    </el-row>
+      </div>
+    </div>
 
-    <el-drawer v-model="detailOpen" title="员工详情" size="520px" append-to-body>
+    <LocalDirectoryDialogs ref="localDialogs" :departments="localDepartments" @departments-changed="refreshLocalDirectory" @accounts-changed="refreshApplicants" />
+    <el-drawer v-model="detailOpen" title="员工详情" size="min(700px, 95vw)" append-to-body>
+      <el-tabs v-model="detailTab">
+        <el-tab-pane label="基本资料" name="profile">
       <el-descriptions :column="1" border>
         <el-descriptions-item label="姓名">{{ detail.cnName || '-' }}</el-descriptions-item>
         <el-descriptions-item label="域账号">{{ detail.domainAccount || '-' }}</el-descriptions-item>
@@ -161,13 +241,117 @@
         <el-descriptions-item label="所属组织路径">{{ detail.departmentNamePath || detail.departmentName || '-' }}</el-descriptions-item>
         <el-descriptions-item label="岗位">{{ detail.jobName || '-' }}</el-descriptions-item>
         <el-descriptions-item label="职级/职别">{{ detail.jobGrade || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="员工类型">{{ detail.employeeTypeName || '-' }}</el-descriptions-item>
+        <el-descriptions-item :label="isLocalAccount(detail) ? '用户类别' : '员工类型'">{{ detail.employeeTypeName || '-' }}</el-descriptions-item>
         <el-descriptions-item label="经理级别">{{ detail.managerLevel || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="自然人识别键">
+        <el-descriptions-item v-if="detail.identityKey && !isLocalAccount(detail)">
+          <template #label>
+            <el-tooltip content="系统根据规范化后的域账号与出生日期生成，用于区分人员身份，不是工号或证书序列号。" placement="top">
+              <span tabindex="0">自然人识别键 <el-icon><QuestionFilled /></el-icon></span>
+            </el-tooltip>
+          </template>
           <span class="identity-key">{{ detail.identityKey || '-' }}</span>
         </el-descriptions-item>
       </el-descriptions>
+      <el-divider content-position="left">公钥信息</el-divider>
+      <section v-loading="publicKeysLoading" class="employee-public-keys">
+        <el-alert v-if="publicKeysFailed" type="error" :closable="false" title="公钥信息加载失败" />
+        <el-collapse v-else-if="publicKeys.length">
+          <el-collapse-item v-for="key in publicKeys" :key="key.id" :name="key.id" :title="key.keyName">
+            <el-descriptions :column="1" border size="small">
+              <el-descriptions-item label="算法">{{ key.keyAlgorithm || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="来源">{{ key.keySource === 'MANUAL' ? '手工录入' : key.keySource || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="状态">{{ key.enabled ? '启用' : '停用' }}</el-descriptions-item>
+              <el-descriptions-item label="录入时间">{{ key.createTime?.replace('T', ' ').slice(0, 19) || '-' }}</el-descriptions-item>
+            </el-descriptions>
+            <el-input v-if="key.publicKey" :model-value="key.publicKey" type="textarea" readonly :rows="6" class="mt12" aria-label="公钥正文" />
+            <el-alert v-else type="warning" :closable="false" title="该记录的正文无法解析为公钥" class="mt12" />
+          </el-collapse-item>
+        </el-collapse>
+        <el-empty v-else-if="!publicKeysLoading" description="暂无已登记公钥" :image-size="48" />
+      </section>
+        </el-tab-pane>
+        <el-tab-pane label="办理状态" name="qualification">
+          <el-descriptions :column="1" border>
+            <el-descriptions-item label="数据来源">{{ sourceLabel(detail.recordSource) }}</el-descriptions-item>
+            <el-descriptions-item label="本地状态">{{ detail.localEnabled === false || applicantDisabled ? '已停用' : '启用' }}</el-descriptions-item>
+            <el-descriptions-item label="申请用户">
+              {{ detail.raUserId ? '已就绪' : '未同步到系统用户' }}
+            </el-descriptions-item>
+            <el-descriptions-item v-if="linkedApplicant" label="办理部门">{{ linkedApplicant.deptName || '-' }}</el-descriptions-item>
+            <el-descriptions-item v-if="linkedApplicant?.status != null" label="申请账号状态">
+              {{ Number(linkedApplicant.status) === 0 ? '启用' : '停用' }}
+            </el-descriptions-item>
+            <el-descriptions-item v-if="isLocalAccount(detail) && !detail.domainAccount" label="员工制证">{{ linkedApplicant?.userCategory === 'individual' ? '缺少域账号' : '仅限个人用户' }}</el-descriptions-item>
+          </el-descriptions>
+          <div class="mt12">
+            <el-button v-if="isLocalAccount(detail) && canReadApplicants" @click="localDialogs?.openAccount(undefined, detail.raUserId, detail)">管理本地账号</el-button>
+            <el-button v-if="!isLocalAccount(detail) && detail.localEnabled !== false" v-hasPermi="['ra:employee:manage']" type="warning" plain @click="changeEmployeeEnabled(false)">停用员工</el-button>
+            <el-button v-if="!isLocalAccount(detail) && detail.localEnabled === false" v-hasPermi="['ra:employee:manage']" type="success" plain @click="changeEmployeeEnabled(true)">恢复员工</el-button>
+          </div>
+        </el-tab-pane>
+        <el-tab-pane label="申请与证书" name="activity">
+          <div class="mb8">
+            <el-button v-if="canStartBusiness && detail.raUserId" v-hasPermi="['ra:apply']" type="primary" @click="startStandardApply">发起标准证书申请</el-button>
+            <el-button v-if="canStartBusiness && detail.id && detail.domainAccount && detail.identityKey" v-hasPermi="['ra:employee-cert:issue']" @click="startEmployeeCert">员工证书制作</el-button>
+          </div>
+          <el-table v-loading="activityLoading" :data="activity.applies" size="small" empty-text="暂无标准申请">
+            <el-table-column label="申请编号" prop="id" min-width="130" />
+            <el-table-column label="状态" prop="status" width="100" />
+            <el-table-column label="提交时间" prop="create_time" min-width="170" />
+          </el-table>
+          <el-divider content-position="left">员工证书</el-divider>
+          <el-table v-loading="activityLoading" :data="activity.employeeCertificates" size="small" empty-text="暂无员工证书">
+            <el-table-column label="证书序列号" prop="serial_number" min-width="170" show-overflow-tooltip />
+            <el-table-column label="签发状态" prop="issue_status" width="120" />
+            <el-table-column label="制作任务" prop="task_no" min-width="170" show-overflow-tooltip />
+          </el-table>
+        </el-tab-pane>
+      </el-tabs>
+      <section class="mt12" aria-label="用户关联说明">
+        <el-alert type="info" :closable="false" show-icon title="用户关联说明">
+          <p>同步人员和本地用户统一按系统部门办理。管理员可直接选人申请，无需开通员工登录。</p>
+          <p>办理流程：选择员工 → 提交申请 → 审核 → 上传 CSR 并签发 → 下载证书。标准申请和签发记录归到该员工关联的用户下。</p>
+        </el-alert>
+      </section>
     </el-drawer>
+
+    <el-dialog v-model="createOpen" title="新增员工" width="min(560px, 96vw)" :show-close="!creating" :close-on-click-modal="!creating" :close-on-press-escape="!creating" append-to-body>
+      <el-form :model="createForm" :disabled="creating" label-width="90px">
+        <el-form-item label="域账号" required for="new-employee-account"><el-input id="new-employee-account" v-model="createForm.domainAccount" maxlength="128" /></el-form-item>
+        <el-form-item label="生日" required for="new-employee-birthday"><el-date-picker id="new-employee-birthday" v-model="createForm.birthday" type="date" value-format="YYYY-MM-DD" style="width: 100%" /></el-form-item>
+        <el-form-item label="姓名" required for="new-employee-name"><el-input id="new-employee-name" v-model="createForm.cnName" maxlength="128" /></el-form-item>
+        <el-form-item label="工号"><el-input v-model="createForm.employeeNo" maxlength="64" /></el-form-item>
+        <el-form-item label="性别"><el-select v-model="createForm.gender" clearable style="width: 100%"><el-option label="男" value="1" /><el-option label="女" value="2" /></el-select></el-form-item>
+        <el-form-item label="岗位"><el-input v-model="createForm.jobName" maxlength="128" /></el-form-item>
+        <el-form-item label="邮箱"><el-input v-model="createForm.email" maxlength="255" /></el-form-item>
+        <el-form-item label="所属部门" required>
+          <el-tree-select v-model="createForm.departmentId" :data="orgTree" :props="orgTreeProps" node-key="id" check-strictly filterable style="width: 100%" placeholder="请选择部门" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button :disabled="creating" @click="createOpen = false">取消</el-button>
+        <el-button type="primary" :loading="creating" @click="saveEmployee">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="importPreviewOpen" title="外部导入员工" width="min(760px, 96vw)" :show-close="!importing" :close-on-click-modal="!importing" :close-on-press-escape="!importing" append-to-body>
+      <div class="mb8">
+        <el-button icon="Download" :loading="downloadingImportTemplate" @click="downloadImportTemplate">下载模板</el-button>
+        <el-button icon="Upload" :disabled="importing" @click="importPicker?.click()">选择 Excel 文件</el-button>
+        <input ref="importPicker" type="file" accept=".xlsx" aria-label="员工导入文件" hidden @change="handleImportFile" />
+      </div>
+      <el-table v-loading="importing" :data="importPreviewRows.slice(0, 20)" border max-height="420" empty-text="请选择 XLSX 文件（最多 1000 人，5 MB）">
+        <el-table-column label="域账号" prop="domainAccount" min-width="140" />
+        <el-table-column label="生日" prop="birthday" min-width="115" />
+        <el-table-column label="姓名" prop="cnName" min-width="110" />
+        <el-table-column label="工号" prop="employeeNo" min-width="110" />
+        <el-table-column label="邮箱" prop="email" min-width="170" show-overflow-tooltip />
+      </el-table>
+      <p v-if="importPreviewRows.length">共 {{ importPreviewRows.length }} 人，预览前 {{ Math.min(20, importPreviewRows.length) }} 人</p>
+      <template #footer>
+        <el-button :disabled="importing" @click="importPreviewOpen = false">取消</el-button><el-button type="primary" :disabled="!importPreviewRows.length" :loading="importing" @click="confirmImport">确认导入</el-button>
+      </template>
+    </el-dialog>
 
     <el-dialog v-model="configOpen" title="同步配置" width="520px" append-to-body>
       <el-form :model="syncConfig" label-width="100px">
@@ -220,8 +404,14 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="logsOpen" title="同步记录" width="860px" append-to-body>
-      <el-table v-loading="logsLoading" :data="syncLogs" border>
+    <el-dialog v-model="logsOpen" width="860px" append-to-body>
+      <template #header>
+        <div class="flex items-center justify-between pr-6">
+          <span>同步记录</span>
+          <el-button icon="InfoFilled" @click="openDataExplanation">用户数据说明</el-button>
+        </div>
+      </template>
+      <el-table v-loading="logsLoading" :data="syncLogs" height="min(420px, 55dvh)" border>
         <el-table-column label="任务号" prop="taskNo" min-width="160" show-overflow-tooltip />
         <el-table-column label="触发方式" prop="triggerType" width="110" />
         <el-table-column label="状态" prop="status" width="96" align="center">
@@ -235,8 +425,19 @@
         <el-table-column label="员工" prop="totalEmployees" width="90" align="right" />
         <el-table-column label="新增" prop="createdCount" width="80" align="right" />
         <el-table-column label="更新" prop="updatedCount" width="80" align="right" />
-        <el-table-column label="离职标记" prop="disabledCount" width="94" align="right" />
-        <el-table-column label="无效数据" width="100" align="center">
+        <el-table-column label="本轮离职标记" prop="disabledCount" width="126" align="right">
+          <template #header="{ column }">
+            <el-tooltip content="本轮未出现在大众名册中、因此新标记为离职的员工。不含历史离职员工。" placement="top">
+              <span>{{ column.label }}</span>
+            </el-tooltip>
+          </template>
+        </el-table-column>
+        <el-table-column label="本轮异常记录" width="126" align="center">
+          <template #header="{ column }">
+            <el-tooltip content="本轮未通过同步校验的记录。点击数量查看原因，不计为离职。" placement="top">
+              <span>{{ column.label }}</span>
+            </el-tooltip>
+          </template>
           <template #default="{ row }">
             <el-button v-if="row.invalidCount > 0" link type="danger" @click="openInvalidRecords(row)">{{ row.invalidCount }}</el-button>
             <span v-else>0</span>
@@ -247,6 +448,7 @@
         </el-table-column>
       </el-table>
       <pagination
+        :auto-scroll="false"
         v-show="logsTotal > 0"
         v-model:page="logQuery.pageNum"
         v-model:limit="logQuery.pageSize"
@@ -255,14 +457,48 @@
       />
     </el-dialog>
 
+    <el-dialog v-model="dataExplanationOpen" title="用户数据说明" width="min(780px, 96vw)" append-to-body>
+      <div v-loading="dataExplanationLoading">
+        <template v-if="dataExplanation">
+          <el-descriptions title="员工信息页当前统计" :column="1" border>
+            <el-descriptions-item label="可办理员工">{{ dataExplanation.summary.activeEmployees }}：非本地档案中，身份有效、本地启用；接口来源还须处于 3/A 状态并关联有效的个人申请用户。重复域账号不计入；已关联用户须未停用且无后台角色。</el-descriptions-item>
+            <el-descriptions-item label="中方员工">{{ dataExplanation.summary.chineseEmployees }}：非本地档案、非外方且员工类型不为空；包含离职或停用档案。</el-descriptions-item>
+            <el-descriptions-item label="外方员工">{{ dataExplanation.summary.foreignEmployees }}：非本地档案且标记为外方；包含离职或停用档案。</el-descriptions-item>
+            <el-descriptions-item label="本地员工">{{ dataExplanation.summary.localEmployees }}：按系统用户表统计当前管理员可见部门内、未关联接口档案的本地用户；不含已删除用户、超级管理员及有后台角色的用户。</el-descriptions-item>
+            <el-descriptions-item label="组织科室">{{ dataExplanation.summary.departments }}：已保存的大众组织科室数，不含本地自建部门。</el-descriptions-item>
+            <el-descriptions-item label="最近同步">{{ dataExplanation.summary.latestSyncStatus || '未同步' }}，{{ dataExplanation.summary.latestSyncTime?.replace('T', ' ').slice(0, 19) || '暂无时间' }}；本轮处理 {{ dataExplanation.summary.latestSyncEmployees ?? '—' }} 人。这是最近任务的处理量，不是当前档案数。</el-descriptions-item>
+          </el-descriptions>
+          <el-descriptions title="当前档案拆解" :column="2" border class="mt-4">
+            <el-descriptions-item label="档案总数">{{ dataExplanation.totalRecords }}</el-descriptions-item>
+            <el-descriptions-item label="接口档案">{{ dataExplanation.apiRecords }}</el-descriptions-item>
+            <el-descriptions-item label="本地员工档案">{{ dataExplanation.localRecords }}</el-descriptions-item>
+            <el-descriptions-item label="其他来源档案">{{ dataExplanation.totalRecords - dataExplanation.apiRecords - dataExplanation.localRecords }}</el-descriptions-item>
+            <el-descriptions-item label="离职档案">{{ dataExplanation.leftRecords }}</el-descriptions-item>
+            <el-descriptions-item label="本地停用档案">{{ dataExplanation.disabledRecords }}</el-descriptions-item>
+            <el-descriptions-item label="有效未关联用户">{{ dataExplanation.activeUnlinkedRecords }}：接口档案有效、启用且状态为 3/A，但未关联系统用户；不能进入以系统用户为基础的列表。</el-descriptions-item>
+            <el-descriptions-item label="离职未关联用户">{{ dataExplanation.leftUnlinkedRecords }}：离职的接口档案未关联系统用户；不能进入以系统用户为基础的列表。</el-descriptions-item>
+            <el-descriptions-item label="中方类型缺失">{{ dataExplanation.chineseTypeMissing }}：未计入中方员工。</el-descriptions-item>
+          </el-descriptions>
+          <p class="mt-3 text-sm text-gray-500">拆解项可能交叉；员工列表分页还受所选部门、搜索条件和管理员权限范围影响。</p>
+        </template>
+      </div>
+    </el-dialog>
+
     <el-dialog v-model="invalidOpen" title="无效员工记录" width="720px" append-to-body>
-      <el-table v-loading="invalidLoading" :data="invalidRecords" border empty-text="当前同步任务没有无效记录">
+      <el-table v-loading="invalidLoading" :data="invalidRecords" height="min(420px, 55dvh)" border empty-text="当前同步任务没有无效记录">
         <el-table-column label="员工号" prop="employeeNo" min-width="130" />
         <el-table-column label="域账号" prop="domainAccount" min-width="150" />
         <el-table-column label="姓名" prop="cnName" min-width="120" />
+        <el-table-column label="出生日期" prop="birthday" min-width="110" />
         <el-table-column label="无效原因" prop="reason" min-width="220" />
+        <el-table-column label="操作" width="100">
+          <template #default="{ row }">
+            <el-button v-if="row.candidateConfirmable" v-hasPermi="['ra:employee:manage']" link type="primary" @click="confirmAccountOwner(row)">核验归属</el-button>
+          </template>
+        </el-table-column>
       </el-table>
       <pagination
+        :auto-scroll="false"
         v-show="invalidTotal > 0"
         v-model:page="invalidQuery.pageNum"
         v-model:limit="invalidQuery.pageSize"
@@ -274,30 +510,99 @@
 </template>
 
 <script setup name="RaEmployee" lang="ts">
-import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
-import { ElMessage } from 'element-plus';
+import { useRaListRefreshOnReturn } from '@/hooks/useRaListRefreshOnReturn';
+import { computed, onMounted, onUnmounted, reactive, ref, shallowRef, watch } from 'vue';
+import { ElMessage, ElMessageBox } from 'element-plus';
+import { useRoute, useRouter } from 'vue-router';
+import FileSaver from 'file-saver';
+import { listEmployeePublicKeys, type EmployeePublicKey } from '@/api/ra/employeeCert';
+import { listDeptSelectTree, removeDept } from '@/api/ra/dept';
+import { getUser, type RaApplicantUserInfo } from '@/api/ra/user';
+import type { RaDeptTreeOption } from '@/api/ra/dept/types';
+import auth from '@/plugins/auth';
+import LocalDirectoryDialogs from './LocalDirectoryDialogs.vue';
+import { directoryQueryId, employeeDirectoryPath } from '@/utils/fawvwEmployeeNavigation';
+import { isFawvwEmployeeSourceActive } from '@/utils/fawvwEmployeeStatus';
 import {
   FawvwEmployee,
   FawvwEmployeeQuery,
   FawvwEmployeeSummary,
+  type FawvwEmployeeDataExplanation,
   FawvwOrgNode,
   FawvwSyncConfig,
   FawvwSyncLog,
+  type EmployeeInput,
+  type EmployeeActivity,
+  createFawvwEmployee,
+  deleteFawvwEmployee,
+  downloadFawvwEmployeeImportTemplate,
+  importFawvwEmployees,
+  previewFawvwEmployeeFile,
+  setFawvwEmployeeEnabled,
+  confirmFawvwAccountOwner,
+  getFawvwEmployeeActivity,
   getFawvwEmployee,
   getFawvwEmployeeSummary,
-  getFawvwOrgTree,
+  getFawvwEmployeeDataExplanation,
   getFawvwSyncConfig,
   getFawvwSyncTask,
-  pageFawvwEmployees,
+  pageEmployeeDirectory,
+  getEmployeeDirectoryDetails,
+  type EmployeeDirectoryRow,
   pageFawvwInvalidEmployees,
   pageFawvwSyncLogs,
   saveFawvwSyncConfig,
   syncFawvwEmployees
 } from '@/api/ra/employee';
 
+const router = useRouter();
+const route = useRoute();
+const canReadApplicants = computed(() => auth.hasPermi('ra:user'));
+const localDialogs = ref<InstanceType<typeof LocalDirectoryDialogs>>();
+const localDepartments = shallowRef<RaDeptTreeOption[]>([]);
+const removingDept = ref(false);
+
 const ALL_ORG_ID = '__ALL__';
+const selectedDirectoryNode = ref(ALL_ORG_ID);
+const selectedLocalDeptId = computed(() => selectedDirectoryNode.value === ALL_ORG_ID ? undefined : selectedDirectoryNode.value);
+const localSelected = computed(() => queryParams.source === 'LOCAL');
+const defaultOrgExpanded = [ALL_ORG_ID];
+const orgSearchLimit = 100;
+const employeeLayout = ref<HTMLElement>();
+const orgWidth = ref(300);
+const maxOrgWidth = ref(640);
+let orgResizeStart: { x: number; width: number } | undefined;
+let layoutObserver: ResizeObserver | undefined;
+
+function setOrgWidth(width: number) {
+  orgWidth.value = Math.max(240, Math.min(maxOrgWidth.value, Math.round(width)));
+}
+
+function resizeOrgBy(delta: number) {
+  setOrgWidth(Math.min(orgWidth.value, maxOrgWidth.value) + delta);
+}
+
+function startOrgResize(event: PointerEvent) {
+  if (event.button !== 0) return;
+  const handle = event.currentTarget as HTMLElement;
+  handle.focus();
+  handle.setPointerCapture(event.pointerId);
+  orgResizeStart = { x: event.clientX, width: Math.min(orgWidth.value, maxOrgWidth.value) };
+  event.preventDefault();
+}
+
+function moveOrgResize(event: PointerEvent) {
+  if (orgResizeStart && (event.currentTarget as HTMLElement).hasPointerCapture(event.pointerId)) {
+    setOrgWidth(orgResizeStart.width + event.clientX - orgResizeStart.x);
+  }
+}
 
 const loading = ref(false);
+const employeeListFailed = ref(false);
+let employeeRequestId = 0;
+let employeeListRequest: AbortController | undefined;
+const orgLoading = ref(false);
+const orgLoadFailed = ref(false);
 const syncing = ref(false);
 let syncPollTimer: ReturnType<typeof setTimeout> | undefined;
 let syncPollVersion = 0;
@@ -309,25 +614,58 @@ const total = ref(0);
 const logsTotal = ref(0);
 const orgKeyword = ref('');
 const detailOpen = ref(false);
+const detailTab = ref('profile');
+const activityLoading = ref(false);
+const activity = ref<EmployeeActivity>({ applies: [], employeeCertificates: [] });
+const createOpen = ref(false);
+const creating = ref(false);
+const deletingEmployee = ref(false);
+const importing = ref(false);
+const downloadingImportTemplate = ref(false);
+const importPreviewOpen = ref(false);
+const importPreviewRows = ref<EmployeeInput[]>([]);
+const importPicker = ref<HTMLInputElement>();
+const createForm = reactive<EmployeeInput>({ employeeNo: '', domainAccount: '', birthday: '', cnName: '', email: '', departmentId: '', gender: '', jobName: '' });
+const publicKeys = ref<EmployeePublicKey[]>([]);
+const publicKeysLoading = ref(false);
+const publicKeysFailed = ref(false);
+let detailRequestId = 0;
 const configOpen = ref(false);
 const logsOpen = ref(false);
+const dataExplanationOpen = ref(false);
+const dataExplanationLoading = ref(false);
+const dataExplanation = ref<FawvwEmployeeDataExplanation>();
 const invalidOpen = ref(false);
 const invalidLoading = ref(false);
-const employeeList = ref<FawvwEmployee[]>([]);
+type EmployeeListRow = Partial<FawvwEmployee> & { applicant?: RaApplicantUserInfo };
+const employeeList = ref<EmployeeListRow[]>([]);
 const syncLogs = ref<FawvwSyncLog[]>([]);
 const invalidRecords = ref<any[]>([]);
 const invalidTotal = ref(0);
 const invalidTaskNo = ref('');
-const orgTree = ref<FawvwOrgNode[]>([]);
-const detail = ref<Partial<FawvwEmployee>>({});
-const orgTreeRef = ref<any>();
+const orgTree = computed(() => directoryDepartments(localDepartments.value, 1));
+const detail = ref<EmployeeListRow>({});
+const fetchedApplicant = ref<RaApplicantUserInfo>();
+const linkedApplicant = computed(() => detail.value.applicant || fetchedApplicant.value);
+const applicantDisabled = computed(() => linkedApplicant.value?.status != null && Number(linkedApplicant.value.status) !== 0);
+const isLocalAccount = (row: EmployeeListRow) => row.recordSource === 'LOCAL_USER' && row.raUserId != null;
+const isLocallyDisabled = (row: EmployeeListRow) => row.localEnabled === false || (row.applicant?.status != null && Number(row.applicant.status) !== 0);
+const employeeCanStartBusiness = (employee: Partial<FawvwEmployee>) => employee.identityStatus === 'VALID' && employee.localEnabled !== false
+  && (employee.recordSource !== 'API' || isFawvwEmployeeSourceActive(employee.sourceStatus));
+const canStartBusiness = computed(() => !applicantDisabled.value && (detail.value.id != null
+  ? employeeCanStartBusiness(detail.value) : isLocalAccount(detail.value)));
+const canDeleteEmployee = (employee: Partial<FawvwEmployee>) => ['MANUAL', 'IMPORT'].includes(employee.recordSource || '');
 const summary = reactive<FawvwEmployeeSummary>({
-  totalEmployees: 0,
+  localEmployees: 0,
   activeEmployees: 0,
   foreignEmployees: 0,
+  chineseEmployees: 0,
   departments: 0,
   demoEnabled: true
 });
+const summaryReady = ref(false);
+const summaryFailed = ref(false);
+let summaryRequestId = 0;
 const syncConfig = reactive<FawvwSyncConfig>({
   enabled: true,
   scheduleType: 'DAILY',
@@ -336,15 +674,15 @@ const syncConfig = reactive<FawvwSyncConfig>({
   pageSize: 1000,
   sourceMode: 'MOCK'
 });
-const queryParams = reactive<FawvwEmployeeQuery>({
+const queryParams = reactive<FawvwEmployeeQuery & { source?: string }>({
   pageNum: 1,
   pageSize: 10,
   keyword: '',
   domainAccount: '',
   departmentId: '',
-  employeeTypeId: '',
   foreignFlag: null,
-  status: ''
+  status: '',
+  source: ''
 });
 const logQuery = reactive({
   pageNum: 1,
@@ -354,15 +692,48 @@ const logQuery = reactive({
 const invalidQuery = reactive({ pageNum: 1, pageSize: 10 });
 
 const orgTreeProps = { label: 'label', children: 'children' };
+function directoryDepartments(nodes: RaDeptTreeOption[], depth: number): FawvwOrgNode[] {
+  return nodes.map((node) => ({
+    id: String(node.id), label: node.name, depth, childCount: node.children?.length || 0,
+    children: directoryDepartments(node.children || [], depth + 1)
+  }));
+}
 const orgTreeData = computed<FawvwOrgNode[]>(() => [
   {
     id: ALL_ORG_ID,
     label: '全部部门',
     depth: 0,
-    childCount: orgTree.value.length,
+    childCount: localDepartments.value.length,
     children: orgTree.value
   }
 ]);
+const orgIndex = computed(() => {
+  const entries = new Map<string, { node: FawvwOrgNode; path: string }>();
+  const visit = (nodes: FawvwOrgNode[], parentPath = '') => {
+    for (const node of nodes) {
+      const path = node.path?.trim() || (parentPath ? `${parentPath} / ${node.label}` : node.label);
+      entries.set(node.id, { node, path });
+      if (node.children?.length) visit(node.children, path);
+    }
+  };
+  visit(orgTreeData.value[0].children || []);
+  return entries;
+});
+const orgSearchTerm = computed(() => orgKeyword.value.trim().toLowerCase());
+const orgMatches = computed(() => {
+  const keyword = orgSearchTerm.value;
+  if (!keyword) return [];
+  const entries = Array.from(orgIndex.value.values());
+  return entries
+    .map((item) => ({ item, rank: item.node.id.toLowerCase() === keyword || item.node.label.toLowerCase() === keyword ? 0
+      : item.node.label.toLowerCase().includes(keyword) ? 1 : item.path.toLowerCase().includes(keyword) ? 2 : -1 }))
+    .filter(({ rank }) => rank >= 0)
+    .sort((a, b) => a.rank - b.rank)
+    .map(({ item }) => item);
+});
+const selectedOrg = computed(() => orgIndex.value.get(selectedDirectoryNode.value));
+const canRemoveSelectedDept = computed(() => (selectedOrg.value?.node.depth ?? 0) > 1
+  && auth.hasPermiAnd(['sys:dept:remove', 'ra:admin']));
 const dailyTimeValue = computed({
   get: () => syncConfig.dailyTime || '02:00:00',
   set: (value: string) => {
@@ -370,15 +741,15 @@ const dailyTimeValue = computed({
   }
 });
 const syncText = computed(() => {
-  if (!summary.latestSyncTime) {
+  if (summaryFailed.value) return '统计加载失败';
+  if (!summaryReady.value) return '加载中';
+  if (!summary.latestSyncStatus && !summary.latestSyncTime) {
     return '未同步';
   }
-  const totalText = summary.latestSyncEmployees ? ` / ${summary.latestSyncEmployees}人` : '';
-  return `${summary.latestSyncStatus || '-'}${totalText}`;
-});
-
-watch(orgKeyword, (value) => {
-  orgTreeRef.value?.filter(value);
+  const statusLabels: Record<string, string> = { RUNNING: '同步中', SUCCESS: '同步成功', FAILED: '同步失败' };
+  const status = summary.latestSyncStatus || '';
+  const totalText = status !== 'RUNNING' && summary.latestSyncEmployees != null ? ` / ${summary.latestSyncEmployees}人` : '';
+  return `${statusLabels[status] || status || '已同步'}${totalText}`;
 });
 
 const unwrap = (response: any) => {
@@ -386,30 +757,78 @@ const unwrap = (response: any) => {
   return body?.data ?? body;
 };
 
-const loadSummary = () => {
-  getFawvwEmployeeSummary().then((response) => {
-    Object.assign(summary, unwrap(response) || {});
-  });
+const loadSummary = async () => {
+  const requestId = ++summaryRequestId;
+  summaryFailed.value = false;
+  try {
+    const data = unwrap(await getFawvwEmployeeSummary()) as FawvwEmployeeSummary | undefined;
+    if (pageDisposed || requestId !== summaryRequestId) return;
+    if (typeof data?.activeEmployees !== 'number') {
+      summaryFailed.value = true;
+      return;
+    }
+    Object.assign(summary, data);
+    summaryReady.value = true;
+  } catch {
+    if (!pageDisposed && requestId === summaryRequestId) summaryFailed.value = true;
+  }
 };
 
-const loadOrgTree = () => {
-  getFawvwOrgTree().then((response) => {
-    orgTree.value = unwrap(response) || [];
-  });
+const loadOrgTree = async () => {
+  if (orgLoading.value) return;
+  orgLoading.value = true;
+  orgLoadFailed.value = false;
+  try {
+    const { data } = await listDeptSelectTree();
+    if (!pageDisposed) {
+      localDepartments.value = data || [];
+      if (queryParams.departmentId && !selectedOrg.value) clearOrgSelection();
+    }
+  } catch {
+    if (!pageDisposed) orgLoadFailed.value = true;
+  } finally {
+    orgLoading.value = false;
+  }
 };
 
 const loadEmployees = () => {
+  const requestId = ++employeeRequestId;
+  employeeListRequest?.abort();
+  const request = employeeListRequest = new AbortController();
+  const isCurrent = () => requestId === employeeRequestId && !pageDisposed;
   loading.value = true;
-  pageFawvwEmployees(queryParams)
+  employeeListFailed.value = false;
+  const filters = localSelected.value ? { status: '', foreignFlag: null } : {};
+  return pageEmployeeDirectory({ ...queryParams, ...filters, departmentId: selectedLocalDeptId.value }, request.signal)
     .then((response) => {
+      if (!isCurrent()) return;
       const page = unwrap(response) || {};
-      employeeList.value = page.records || page.rows || [];
+      employeeList.value = (page.records || []).map(toEmployeeListRow);
       total.value = Number(page.total || 0);
     })
+    .catch(() => {
+      if (!isCurrent()) return;
+      employeeList.value = [];
+      total.value = 0;
+      employeeListFailed.value = true;
+    })
     .finally(() => {
-      loading.value = false;
+      if (isCurrent()) {
+        employeeListRequest = undefined;
+        loading.value = false;
+      }
     });
 };
+
+function toEmployeeListRow({ employee, applicant }: EmployeeDirectoryRow): EmployeeListRow {
+  const categories: Record<string, string> = { individual: '个人用户', organization: '企业用户', device: '设备用户' };
+  if (employee && employee.recordSource !== 'LOCAL_USER') {
+    return { ...employee, applicant, departmentName: applicant?.deptName || employee.departmentName };
+  }
+  return { ...employee, applicant, recordSource: 'LOCAL_USER', raUserId: applicant.id, cnName: applicant.username,
+    domainAccount: applicant.domainAccount, email: applicant.mail, departmentName: applicant.deptName,
+    employeeTypeName: categories[applicant.userCategory || ''] || '-' };
+}
 
 const handleQuery = () => {
   queryParams.pageNum = 1;
@@ -419,33 +838,267 @@ const handleQuery = () => {
 const resetQuery = () => {
   queryParams.keyword = '';
   queryParams.domainAccount = '';
-  queryParams.departmentId = '';
-  queryParams.employeeTypeId = '';
   queryParams.foreignFlag = null;
   queryParams.status = '';
-  orgTreeRef.value?.setCurrentKey(ALL_ORG_ID);
+  queryParams.source = '';
   handleQuery();
 };
 
-const filterOrgNode = (value: string, data: FawvwOrgNode) => {
-  if (!value) {
-    return true;
-  }
-  return data.label?.includes(value) || data.path?.includes(value);
+const clearOrgSelection = () => {
+  selectedDirectoryNode.value = ALL_ORG_ID;
+  queryParams.departmentId = '';
+  handleQuery();
 };
 
 const handleOrgClick = (node: FawvwOrgNode) => {
-  queryParams.departmentId = node.id === ALL_ORG_ID ? '' : node.id;
+  selectedDirectoryNode.value = node.id;
+  queryParams.departmentId = selectedLocalDeptId.value || '';
   handleQuery();
 };
 
-const openDetail = (row: FawvwEmployee) => {
+async function refreshLocalDirectory() {
+  await loadOrgTree();
+  loadEmployees();
+}
+
+async function removeLocalDepartment() {
+  const id = selectedLocalDeptId.value;
+  if (!id || !canRemoveSelectedDept.value || removingDept.value) return;
+  removingDept.value = true;
+  try {
+    const confirmed = await ElMessageBox.confirm(
+      `确认删除「${selectedOrg.value?.node.label}」？有用户、下级部门或历史申请的部门不能删除。`,
+      '删除部门', { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' }
+    ).then(() => true, () => false);
+    if (!confirmed) return;
+    await removeDept([id]);
+    if (selectedLocalDeptId.value === id) {
+      selectedDirectoryNode.value = ALL_ORG_ID;
+      queryParams.pageNum = 1;
+    }
+    await refreshLocalDirectory();
+    ElMessage.success('部门已删除');
+  } finally {
+    removingDept.value = false;
+  }
+}
+
+const applicantRefresh = ref(0);
+function refreshApplicants(deletedId?: string | number) {
+  applicantRefresh.value++;
+  handleQuery();
+  loadSummary();
+  if (!detailOpen.value || !isLocalAccount(detail.value)) return;
+  if (deletedId != null && String(detail.value.raUserId) === String(deletedId)) {
+    ++detailRequestId;
+    detailOpen.value = false;
+  } else {
+    openDetail(detail.value, detailTab.value);
+  }
+}
+
+const openDetail = (row: EmployeeListRow, tab = 'profile', refresh = true) => {
+  const requestId = ++detailRequestId;
+  const isCurrent = () => requestId === detailRequestId && !pageDisposed;
   detail.value = row;
   detailOpen.value = true;
-  getFawvwEmployee(row.id).then((response) => {
-    detail.value = unwrap(response) || row;
-  });
+  detailTab.value = tab;
+  activity.value = { applies: [], employeeCertificates: [] };
+  publicKeys.value = [];
+  publicKeysFailed.value = false;
+  publicKeysLoading.value = false;
+  const loadKeys = (id: string | number) => {
+    publicKeysLoading.value = true;
+    listEmployeePublicKeys(id)
+      .then((response) => { if (isCurrent()) publicKeys.value = unwrap(response) || []; })
+      .catch(() => { if (isCurrent()) publicKeysFailed.value = true; })
+      .finally(() => { if (isCurrent()) publicKeysLoading.value = false; });
+  };
+  const loadActivity = (request: Promise<unknown>) => {
+    activityLoading.value = true;
+    request.catch(() => { if (isCurrent()) ElMessage.error('申请与证书记录加载失败'); })
+      .finally(() => { if (isCurrent()) activityLoading.value = false; });
+  };
+  activityLoading.value = false;
+  if (isLocalAccount(row) && row.raUserId != null) {
+    loadActivity(getEmployeeDirectoryDetails(row.raUserId).then(({ data }) => {
+      if (!isCurrent()) return;
+      detail.value = toEmployeeListRow(data.person);
+      activity.value = data.activity;
+      if (detail.value.id != null) loadKeys(detail.value.id);
+    }));
+    return;
+  }
+  if (row.id == null) return;
+  loadActivity(getFawvwEmployeeActivity(row.id).then((response) => {
+    if (isCurrent()) activity.value = unwrap(response) || { applies: [], employeeCertificates: [] };
+  }));
+  if (refresh) {
+    getFawvwEmployee(row.id).then((response) => {
+      const employee = unwrap(response);
+      if (isCurrent() && employee) detail.value = { ...row, ...employee, departmentName: row.applicant?.deptName || employee.departmentName };
+    }).catch(() => {
+      // Keep the selected list record when the detail refresh fails.
+    });
+  }
+  loadKeys(row.id);
 };
+
+watch(() => [detailOpen.value && canReadApplicants.value && !detail.value.applicant ? detail.value.raUserId : undefined, applicantRefresh.value] as const, async ([userId], _, onCleanup) => {
+  fetchedApplicant.value = undefined;
+  if (!userId) return;
+  let current = true;
+  onCleanup(() => { current = false; });
+  try {
+    const response = await getUser(userId, true);
+    if (current) fetchedApplicant.value = response.data;
+  } catch {
+    // Association is retained even when this operator cannot read the applicant's department.
+  }
+});
+
+watch(() => [route.path, route.query.employeeId, route.query.entry], async ([path, employeeId], _, onCleanup) => {
+  const id = directoryQueryId(employeeId);
+  if (path !== employeeDirectoryPath || !id) return;
+  const version = detailRequestId;
+  let current = true;
+  onCleanup(() => { current = false; });
+  try {
+    const employee = unwrap(await getFawvwEmployee(id));
+    if (current && version === detailRequestId && employee?.id) openDetail(employee, 'qualification', false);
+  } catch {
+    // Request errors are handled by the shared client.
+  }
+}, { immediate: true });
+
+const sourceLabel = (source?: string) => ({ API: '大众接口', MANUAL: '手工创建', IMPORT: '外部导入', LOCAL_USER: '本地创建' } as Record<string, string>)[source || ''] || '-';
+
+function openCreate() {
+  Object.assign(createForm, { employeeNo: '', domainAccount: '', birthday: '', cnName: '', email: '', departmentId: selectedLocalDeptId.value || '', gender: '', jobName: '' });
+  createOpen.value = true;
+}
+
+async function saveEmployee() {
+  if (creating.value) return;
+  if (!createForm.domainAccount.trim() || !createForm.birthday || !createForm.cnName.trim() || !createForm.departmentId) {
+    ElMessage.warning('请填写域账号、生日、姓名和所属部门');
+    return;
+  }
+  creating.value = true;
+  try {
+    await createFawvwEmployee({ ...createForm });
+    createOpen.value = false;
+    ElMessage.success('员工已创建');
+    await Promise.all([loadEmployees(), loadSummary()]);
+  } finally {
+    creating.value = false;
+  }
+}
+
+function openImport() {
+  importPreviewRows.value = [];
+  importPreviewOpen.value = true;
+}
+
+async function downloadImportTemplate() {
+  if (downloadingImportTemplate.value) return;
+  downloadingImportTemplate.value = true;
+  try {
+    const blob = await downloadFawvwEmployeeImportTemplate();
+    if (!blob.type.includes('spreadsheetml')) {
+      ElMessage.error('员工导入模板下载失败');
+      return;
+    }
+    FileSaver.saveAs(blob, '员工导入模板.xlsx');
+  } finally {
+    downloadingImportTemplate.value = false;
+  }
+}
+
+async function handleImportFile(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = '';
+  if (!file || importing.value) return;
+  importPreviewRows.value = [];
+  if (!file.name.toLowerCase().endsWith('.xlsx') || file.size > 5_000_000) {
+    ElMessage.warning('只能导入不超过5MB的xlsx文件');
+    return;
+  }
+  importing.value = true;
+  try {
+    importPreviewRows.value = unwrap(await previewFawvwEmployeeFile(file)) || [];
+    if (!importPreviewRows.value.length) ElMessage.warning('文件中没有可导入的员工');
+  } finally {
+    importing.value = false;
+  }
+}
+
+async function confirmImport() {
+  if (importing.value || !importPreviewRows.value.length) return;
+  importing.value = true;
+  try {
+    const count = unwrap(await importFawvwEmployees(importPreviewRows.value));
+    importPreviewOpen.value = false;
+    importPreviewRows.value = [];
+    ElMessage.success(`已导入 ${count} 名员工`);
+    await Promise.all([loadEmployees(), loadSummary()]);
+  } finally {
+    importing.value = false;
+  }
+}
+
+async function removeEmployee(row: FawvwEmployee) {
+  if (deletingEmployee.value || !canDeleteEmployee(row)) return;
+  deletingEmployee.value = true;
+  try {
+    try {
+      await ElMessageBox.confirm(`确定删除员工 ${row.cnName}（${row.domainAccount}）？`, '删除员工', {
+        type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消'
+      });
+    } catch { return; }
+    await deleteFawvwEmployee(row.id);
+    if (String(detail.value.id) === String(row.id)) detailOpen.value = false;
+    if (employeeList.value.length === 1 && queryParams.pageNum > 1) queryParams.pageNum--;
+    ElMessage.success('员工已删除');
+    await Promise.all([loadEmployees(), loadSummary()]);
+  } finally {
+    deletingEmployee.value = false;
+  }
+}
+
+async function changeEmployeeEnabled(enabled: boolean) {
+  if (!detail.value.id) return;
+  try {
+    await ElMessageBox.confirm(enabled ? '确认恢复该员工？' : '停用后将禁止新业务，历史记录仍保留。确认停用？', '员工状态');
+  } catch { return; }
+  await setFawvwEmployeeEnabled(detail.value.id, enabled);
+  detail.value.localEnabled = enabled;
+  ElMessage.success(enabled ? '已恢复' : '已停用');
+  await Promise.all([loadEmployees(), loadSummary()]);
+}
+
+async function confirmAccountOwner(row: any) {
+  if (!row.id) return;
+  try {
+    await ElMessageBox.confirm(`请核实 ${row.cnName}（${row.domainAccount}，出生日期 ${row.birthday || '-'}）为该账号当前持有人。确认后其他身份保持停用，不会继承其自助授权。`, '核验账号归属', { type: 'warning' });
+  } catch { return; }
+  await confirmFawvwAccountOwner(row.id);
+  ElMessage.success('已确认账号归属');
+  loadInvalidRecords();
+  await Promise.all([loadEmployees(), loadSummary()]);
+}
+
+function startStandardApply() {
+  const { id, raUserId } = detail.value;
+  if (raUserId == null || !canStartBusiness.value) return;
+  const person = id == null ? { applicantId: String(raUserId) } : { employeeId: String(id) };
+  void router.push({ path: '/ra-certificate/ra-cert-apply', query: { ...person, entry: String(Date.now()) } });
+}
+
+function startEmployeeCert() {
+  if (detail.value.id && detail.value.identityKey) void router.push({ path: '/ra-cert-management/ra-employee-cert-issue', query: { employeeId: String(detail.value.id), identityKey: detail.value.identityKey, entry: String(Date.now()) } });
+}
 
 const stopSyncPolling = () => {
   syncPollVersion++;
@@ -535,6 +1188,23 @@ const openLogs = () => {
   loadLogs();
 };
 
+const openDataExplanation = async () => {
+  dataExplanation.value = undefined;
+  dataExplanationOpen.value = true;
+  dataExplanationLoading.value = true;
+  try {
+    dataExplanation.value = unwrap(await getFawvwEmployeeDataExplanation());
+    if (dataExplanation.value?.summary) {
+      summaryRequestId++;
+      Object.assign(summary, dataExplanation.value.summary);
+      summaryReady.value = true;
+      summaryFailed.value = false;
+    }
+  } finally {
+    dataExplanationLoading.value = false;
+  }
+};
+
 const loadLogs = () => {
   logsLoading.value = true;
   pageFawvwSyncLogs(logQuery)
@@ -572,6 +1242,12 @@ const loadInvalidRecords = () => {
 };
 
 onMounted(() => {
+  if (employeeLayout.value) {
+    layoutObserver = new ResizeObserver(([entry]) => {
+      maxOrgWidth.value = Math.max(240, Math.min(640, Math.floor(entry.contentRect.width - 436)));
+    });
+    layoutObserver.observe(employeeLayout.value);
+  }
   loadSummary();
   loadSyncConfig();
   loadOrgTree();
@@ -580,16 +1256,80 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  layoutObserver?.disconnect();
   pageDisposed = true;
+  employeeListRequest?.abort();
   stopSyncPolling();
+});
+useRaListRefreshOnReturn(() => {
+  loadSummary();
+  return refreshLocalDirectory();
 });
 </script>
 
 <style scoped lang="scss">
+.employee-public-keys {
+  min-height: 56px;
+}
+
 .fawvw-employee-page {
+  .employee-layout {
+    display: grid;
+    grid-template-columns: clamp(240px, var(--org-width), min(640px, calc(100% - 436px))) minmax(0, 1fr);
+    gap: 16px;
+    align-items: stretch;
+  }
+
+  .org-column,
+  .employee-column {
+    min-width: 0;
+  }
+
   .org-panel,
   .employee-panel {
     border-radius: 6px;
+  }
+
+  .org-column {
+    position: relative;
+  }
+
+  .org-panel {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+
+    :deep(.el-card__body) {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      flex: 1;
+    }
+  }
+
+  .org-resize-handle {
+    position: absolute;
+    z-index: 1;
+    inset: 0 -14px 0 auto;
+    width: 14px;
+    display: grid;
+    place-items: center;
+    cursor: col-resize;
+    touch-action: none;
+
+    &::before {
+      content: '';
+      width: 3px;
+      height: 34px;
+      border-radius: 2px;
+      background: var(--el-border-color);
+    }
+
+    &:hover::before,
+    &:focus-visible::before {
+      background: var(--el-color-primary);
+    }
   }
 
   .panel-header {
@@ -600,34 +1340,116 @@ onUnmounted(() => {
     font-weight: 600;
   }
 
-  .org-tree {
+  .org-body {
     margin-top: 12px;
-    max-height: calc(100vh - 230px);
-    overflow: auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+  }
 
-    :deep(.el-tree-node),
-    :deep(.el-tree-node__content) {
-      width: max-content;
-      min-width: 100%;
-    }
+  .org-viewport,
+  .org-results {
+    min-height: 0;
+    overflow: auto;
+    scrollbar-gutter: stable;
+  }
+
+  .org-viewport:focus-visible {
+    outline: 2px solid var(--el-color-primary);
+    outline-offset: 2px;
+  }
+
+  .org-tree {
+    width: max-content;
+    min-width: 100%;
 
     :deep(.el-tree-node__content) {
       padding-right: 12px;
-    }
-
-    :deep(.el-tree-node__label) {
-      overflow: visible;
-      text-overflow: clip;
       white-space: nowrap;
     }
   }
 
+  .org-empty,
+  .org-result-count {
+    padding: 8px 0;
+    color: var(--el-text-color-secondary);
+    font-size: 13px;
+  }
+
+  .org-empty {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .org-results {
+    padding: 0;
+    margin: 0;
+    list-style: none;
+
+    li + li {
+      border-top: 1px solid var(--el-border-color-lighter);
+    }
+
+    button {
+      display: grid;
+      gap: 4px;
+      width: 100%;
+      padding: 8px;
+      border: 0;
+      background: none;
+      color: var(--el-text-color-primary);
+      text-align: left;
+      cursor: pointer;
+      overflow-wrap: anywhere;
+    }
+
+    button:hover,
+    button[aria-pressed='true'] {
+      background: var(--el-color-primary-light-9);
+    }
+
+    button:focus-visible {
+      outline: 2px solid var(--el-color-primary);
+      outline-offset: -2px;
+    }
+
+    span {
+      font-size: 12px;
+      color: var(--el-text-color-secondary);
+    }
+  }
+
+  .org-selection {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+    padding: 8px 10px;
+    margin-bottom: 12px;
+    border-radius: 4px;
+    background: var(--el-color-primary-light-9);
+    line-height: 22px;
+  }
+
+  .org-selection-label {
+    flex: none;
+    color: var(--el-text-color-secondary);
+  }
+
+  .org-selection-path {
+    flex: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
   .summary-strip {
     display: grid;
-    grid-template-columns: repeat(4, minmax(120px, 1fr)) auto;
+    grid-template-columns: repeat(auto-fit, minmax(min(115px, 100%), 1fr));
     gap: 10px;
     align-items: stretch;
     margin-bottom: 12px;
+
   }
 
   .metric {
@@ -657,13 +1479,65 @@ onUnmounted(() => {
     font-size: 15px;
   }
 
+  .metric.wide :deep(.el-tag) {
+    margin-top: 4px;
+  }
+
+  .query-panel {
+    margin-bottom: 16px;
+    padding: 14px 16px;
+    border: 1px solid var(--el-border-color-lighter);
+    border-radius: 6px;
+    background: var(--el-fill-color-extra-light);
+  }
+
   .query-form {
-    margin-bottom: 4px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 14px 18px;
+
+    :deep(.el-form-item) {
+      flex: 0 1 296px;
+      display: flex;
+      max-width: 100%;
+      min-width: 0;
+      margin: 0;
+    }
+
+    :deep(.el-form-item__label) {
+      white-space: nowrap;
+    }
+
+    :deep(.el-form-item__content) {
+      min-width: 0;
+    }
+
+    :deep(.el-input),
+    :deep(.el-select) {
+      width: 100%;
+    }
+
+    :deep(.query-actions) {
+      flex: 0 0 auto;
+      margin-left: auto;
+
+      .el-form-item__content {
+        flex-wrap: nowrap;
+      }
+    }
+  }
+
+  .query-help {
+    margin-left: 2px;
+    vertical-align: middle;
+    color: var(--el-text-color-secondary);
   }
 
   .toolbar-row {
     display: flex;
     align-items: center;
+    row-gap: 8px;
   }
 
   .employee-table {
@@ -679,10 +1553,23 @@ onUnmounted(() => {
   }
 }
 
-@media (max-width: 1200px) {
+@media (max-width: 1060px) {
   .fawvw-employee-page {
-    .summary-strip {
-      grid-template-columns: repeat(2, minmax(140px, 1fr));
+    .employee-layout {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .org-panel {
+      position: static;
+    }
+
+    .org-resize-handle {
+      display: none;
+    }
+
+    .org-viewport,
+    .org-results {
+      max-height: 280px;
     }
   }
 }

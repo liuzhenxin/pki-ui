@@ -1,29 +1,33 @@
 <template>
   <div class="app-container public-cert-page">
+    <el-tabs v-model="managementTab" @tab-change="handleTabChange">
+      <el-tab-pane label="证书台账" name="records" />
+      <el-tab-pane v-if="auth.hasPermi('ra:public-cert:audit')" label="审核中心" name="audit" />
+      <el-tab-pane label="已办记录" name="handled" />
+    </el-tabs>
     <el-card shadow="never" class="query-card">
-      <el-form :model="queryParams" inline>
+      <el-form :model="queryParams" label-width="100px" class="public-cert-query">
         <el-form-item label="域名">
-          <el-input v-model="queryParams.domainName" clearable placeholder="域名" style="width: 190px" @keyup.enter="handleQuery" />
+          <el-input v-model="queryParams.domainName" clearable placeholder="域名" @keyup.enter="handleQuery" />
         </el-form-item>
         <el-form-item label="序列号">
-          <el-input v-model="queryParams.serialNumber" clearable placeholder="序列号" style="width: 170px" @keyup.enter="handleQuery" />
+          <el-input v-model="queryParams.serialNumber" clearable placeholder="序列号" @keyup.enter="handleQuery" />
         </el-form-item>
         <el-form-item label="系统">
-          <el-input v-model="queryParams.systemName" clearable placeholder="使用系统" style="width: 160px" @keyup.enter="handleQuery" />
+          <el-input v-model="queryParams.systemName" clearable placeholder="使用系统" @keyup.enter="handleQuery" />
         </el-form-item>
-        <el-form-item label="负责人">
-          <el-input v-model="queryParams.ownerKeyword" clearable placeholder="姓名/账号" style="width: 150px" @keyup.enter="handleQuery" />
+        <el-form-item label="证书维护人">
+          <el-input v-model="queryParams.ownerKeyword" clearable placeholder="姓名/账号" @keyup.enter="handleQuery" />
         </el-form-item>
-        <el-form-item label="审核状态">
-          <el-select v-model="queryParams.approvalStatus" clearable placeholder="全部" style="width: 120px">
+        <el-form-item v-if="managementTab === 'handled'" label="审核状态">
+          <el-select v-model="queryParams.approvalStatus" clearable placeholder="全部">
             <el-option label="草稿" value="DRAFT" />
-            <el-option label="待审核" value="PENDING" />
             <el-option label="已通过" value="APPROVED" />
             <el-option label="已驳回" value="REJECTED" />
           </el-select>
         </el-form-item>
         <el-form-item label="证书状态">
-          <el-select v-model="queryParams.certStatus" clearable placeholder="全部" style="width: 120px">
+          <el-select v-model="queryParams.certStatus" clearable placeholder="全部">
             <el-option label="正常" value="NORMAL" />
             <el-option label="30天内过期" value="EXPIRING" />
             <el-option label="已过期" value="EXPIRED" />
@@ -36,10 +40,9 @@
             value-format="YYYY-MM-DD"
             start-placeholder="开始日期"
             end-placeholder="结束日期"
-            style="width: 240px"
           />
         </el-form-item>
-        <el-form-item>
+        <el-form-item class="query-actions">
           <el-button type="primary" icon="Search" @click="handleQuery">搜索</el-button>
           <el-button icon="Refresh" @click="resetQuery">重置</el-button>
         </el-form-item>
@@ -48,34 +51,40 @@
 
     <el-card shadow="never" class="table-card">
       <el-row :gutter="10" class="mb8 toolbar-row">
-        <el-col :span="1.5">
-          <el-button v-hasPermi="['ra:public-cert:add']" type="primary" plain icon="Plus" @click="openCreate">新增</el-button>
+        <el-col v-if="managementTab === 'audit'" :span="1.5"><el-button type="success" icon="Check" :disabled="loading || auditing || !selectedRows.length" @click="batchAudit(true)">通过选中</el-button></el-col>
+        <el-col v-if="managementTab === 'audit'" :span="1.5"><el-button type="warning" icon="Close" :disabled="loading || auditing || !selectedRows.length" @click="batchAudit(false)">驳回选中</el-button></el-col>
+        <el-col v-if="managementTab === 'handled'" :span="1.5">
+          <el-button v-hasPermi="['ra:public-cert:add']" type="primary" plain icon="Plus" @click="openCreate">新增草稿</el-button>
         </el-col>
         <el-col :span="1.5">
           <el-button v-hasPermi="['ra:public-cert:export']" type="success" plain icon="Download" @click="handleExport">导出</el-button>
         </el-col>
-        <el-col :span="1.5">
+        <el-col v-if="managementTab === 'records'" :span="1.5">
           <el-button v-hasPermi="['ra:public-cert:type']" plain icon="Collection" @click="openTypes">证书类型</el-button>
         </el-col>
-        <el-col :span="1.5">
+        <el-col v-if="managementTab === 'records'" :span="1.5">
           <el-button v-hasPermi="['ra:public-cert:grant']" plain icon="UserFilled" @click="openGrants">录入授权</el-button>
         </el-col>
+        <el-col v-if="managementTab === 'records'" :span="1.5"><el-button v-hasPermi="['ra:public-cert:type']" icon="Message" @click="openNoticeConfig">通知模板</el-button></el-col>
         <right-toolbar v-model:showSearch="showSearch" @queryTable="loadList" />
       </el-row>
 
-      <el-table v-loading="loading" :data="rows" border stripe empty-text="暂无公网证书台账">
+      <el-table v-loading="loading" :data="rows" border stripe
+        :empty-text="managementTab === 'audit' ? '暂无待审核证书' : managementTab === 'handled' ? '暂无办理记录' : '暂无已通过证书'"
+        @selection-change="selectedRows = $event">
+        <el-table-column v-if="managementTab === 'audit'" type="selection" width="48" :selectable="(row) => row.approvalStatus === 'PENDING'" />
         <el-table-column label="域名" prop="domainName" min-width="190" fixed show-overflow-tooltip />
         <el-table-column label="证书类型" prop="certTypeName" width="110" />
         <el-table-column label="序列号" prop="serialNumber" min-width="150" show-overflow-tooltip />
         <el-table-column label="使用系统" prop="systemName" min-width="150" show-overflow-tooltip />
-        <el-table-column label="业务负责人" prop="businessOwnerName" width="110" show-overflow-tooltip />
+        <el-table-column label="证书维护人" prop="businessOwnerName" width="120" show-overflow-tooltip />
         <el-table-column label="科室" prop="departmentName" min-width="140" show-overflow-tooltip />
         <el-table-column label="到期时间" prop="notAfter" width="166" align="center">
           <template #default="{ row }">{{ formatDateTime(row.notAfter) }}</template>
         </el-table-column>
-        <el-table-column label="证书状态" width="112" align="center">
+        <el-table-column label="证书状态" width="146" align="center">
           <template #default="{ row }">
-            <el-tag :type="certStatusType(row.certStatus)" effect="light">{{ row.certStatusName || '-' }}</el-tag>
+            <el-tag :type="certStatusType(row.certStatus)" effect="light">{{ certificateExpiryText(row.notAfter) }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="审核状态" width="100" align="center">
@@ -89,46 +98,31 @@
             <el-tag v-else type="info" effect="plain">正常</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" fixed="right" width="196" align="center">
+        <el-table-column v-if="managementTab === 'records'" label="通知状态" width="210">
+          <template #default="{ row }"><div>邮件：{{ publicNoticeStatus(noticeStates[String(row.id)]?.emailStatus) }}</div><div>钉钉：{{ publicNoticeStatus(noticeStates[String(row.id)]?.dingtalkStatus) }}</div></template>
+        </el-table-column>
+        <el-table-column v-if="managementTab === 'records'" label="过期提醒" width="100" align="center">
           <template #default="{ row }">
-            <el-tooltip content="详情" placement="top">
-              <el-button link type="primary" icon="View" @click="openDetail(row)" />
-            </el-tooltip>
-            <el-tooltip content="修改" placement="top">
-              <el-button v-hasPermi="['ra:public-cert:edit']" link type="primary" icon="Edit" @click="openEdit(row)" />
-            </el-tooltip>
-            <el-tooltip content="提交" placement="top">
-              <el-button
-                v-if="['DRAFT', 'REJECTED'].includes(row.approvalStatus || '')"
-                v-hasPermi="['ra:public-cert:add', 'ra:public-cert:edit']"
-                link
-                type="success"
-                icon="Promotion"
-                @click="handleSubmit(row)"
-              />
-            </el-tooltip>
-            <el-tooltip content="审核" placement="top">
-              <el-button
-                v-if="row.approvalStatus === 'PENDING'"
-                v-hasPermi="['ra:public-cert:audit']"
-                link
-                type="warning"
-                icon="Finished"
-                @click="openAudit(row)"
-              />
-            </el-tooltip>
-            <el-tooltip content="归档" placement="top">
-              <el-button v-hasPermi="['ra:public-cert:remove']" link type="danger" icon="Delete" @click="handleRemove(row)" />
-            </el-tooltip>
+            <el-switch :model-value="!!row.reminderEnabled" :loading="reminderSaving.has(row.id)" :disabled="!auth.hasPermi('ra:public-cert:edit')" @change="(value) => setReminder(row, !!value)" />
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" fixed="right" width="156" align="center">
+          <template #default="{ row }">
+            <CertRowAction label="查看详情" icon="View" @click="openDetail(row)" />
+            <template v-if="managementTab !== 'audit'">
+              <CertRowAction v-if="row.approvalStatus !== 'PENDING'" v-hasPermi="['ra:public-cert:edit']" label="修改" icon="Edit" @click="openEdit(row)" />
+              <CertRowAction v-if="managementTab === 'records' && row.approvalStatus === 'APPROVED'" v-hasPermi="['ra:public-cert:edit', 'ra:public-cert:audit']" label="发送通知" icon="Message" :disabled="sendingNotice" @click="sendNotice(row)" />
+              <CertRowAction v-hasPermi="['ra:public-cert:remove']" label="归档" icon="Delete" type="danger" @click="handleRemove(row)" />
+            </template>
           </template>
         </el-table-column>
       </el-table>
 
-      <pagination v-show="total > 0" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" :total="total" @pagination="loadList" />
+      <pagination v-show="total > 0" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" :total="total" :auto-scroll="false" @pagination="loadList" />
     </el-card>
 
-    <el-drawer v-model="formOpen" :title="form.id ? '修改公网证书' : '新增公网证书'" size="760px" append-to-body>
-      <el-form ref="formRef" :model="form" :rules="rules" label-width="116px">
+    <el-drawer v-model="formOpen" :title="form.id ? '修改录入证书' : '新增录入证书'" size="min(1040px, 100vw)" :close-on-click-modal="!saving" :close-on-press-escape="!saving" :show-close="!saving" append-to-body>
+      <el-form ref="formRef" :model="form" :rules="rules" :disabled="saving" label-width="116px">
         <el-divider content-position="left">证书信息</el-divider>
         <el-row :gutter="12">
           <el-col :span="12">
@@ -139,8 +133,8 @@
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="域名" prop="domainName">
-              <el-input v-model="form.domainName" clearable placeholder="example.faw-vw.com" />
+            <el-form-item label="域名" prop="domainName" :required="domainRequired">
+              <el-input v-model="form.domainName" type="textarea" :rows="3" maxlength="500" placeholder="多个域名按行填写" />
             </el-form-item>
           </el-col>
         </el-row>
@@ -182,88 +176,70 @@
         </el-row>
 
         <el-divider content-position="left">负责人</el-divider>
-        <el-form-item label="证书维护人">
+        <el-form-item label="证书维护人" prop="businessOwnerEmployeeId">
           <div class="inline-picker">
-            <el-input v-model="form.maintainerName" clearable placeholder="证书维护人" />
-            <el-button icon="User" @click="openEmployeePicker('maintainer')">选择</el-button>
-          </div>
-        </el-form-item>
-        <el-form-item label="业务负责人" prop="businessOwnerName">
-          <div class="inline-picker">
-            <el-input v-model="form.businessOwnerName" clearable placeholder="业务负责人" />
+            <el-input v-model="form.businessOwnerName" readonly placeholder="请选择证书维护人" />
             <el-button icon="User" @click="openEmployeePicker('owner')">选择</el-button>
           </div>
         </el-form-item>
         <el-row :gutter="12">
           <el-col :span="12">
-            <el-form-item label="负责人账号">
-              <el-input v-model="form.businessOwnerAccount" clearable />
+            <el-form-item label="维护人账号">
+              <el-input v-model="form.businessOwnerAccount" readonly />
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="负责人邮箱">
-              <el-input v-model="form.businessOwnerEmail" clearable />
+            <el-form-item label="维护人邮箱">
+              <el-input v-model="form.businessOwnerEmail" readonly />
             </el-form-item>
           </el-col>
         </el-row>
         <el-form-item label="科室">
-          <el-input v-model="form.departmentName" clearable />
+          <el-input v-model="form.departmentName" readonly />
         </el-form-item>
 
         <el-divider content-position="left">使用信息</el-divider>
-        <el-row :gutter="12">
-          <el-col :span="12">
-            <el-form-item label="使用系统" prop="systemName">
-              <el-input v-model="form.systemName" clearable />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="系统负责人">
-              <el-input v-model="form.systemOwnerName" clearable />
-            </el-form-item>
-          </el-col>
-        </el-row>
-        <div class="usage-head">
-          <span>使用详情</span>
-          <el-button type="primary" link icon="Plus" @click="addUsage">新增一条</el-button>
-        </div>
-        <div v-for="(item, index) in form.usages" :key="index" class="usage-row">
-          <el-input v-model="item.systemName" placeholder="系统名称" />
-          <el-input v-model="item.usageDomain" placeholder="使用域名" />
-          <el-input v-model="item.usageScene" placeholder="使用场景" />
-          <el-button link type="danger" icon="Delete" @click="removeUsage(index)" />
-        </div>
+        <el-form-item prop="usages" label-width="0"><UsageTable v-model="form.usages" :lookup="lookupEmployees" /></el-form-item>
+        <el-divider content-position="left">附件</el-divider>
+        <el-form-item label="压缩包">
+          <el-upload v-model:file-list="pendingAttachments" :auto-upload="false" accept=".zip,.rar" multiple
+            :on-change="(file) => { if (file.raw && !beforeUpload(file.raw)) pendingAttachments = pendingAttachments.filter((item) => item.uid !== file.uid); }">
+            <el-button icon="Upload">选择附件</el-button>
+            <template #tip><div class="el-upload__tip">选填，每个 ZIP/RAR 文件不超过 20 MB。</div></template>
+          </el-upload>
+        </el-form-item>
+        <el-form-item v-if="formAttachments.length" label="已有附件"><span>{{ formAttachments.map((item) => item.originalName).join('；') }}</span></el-form-item>
         <el-form-item label="备注">
           <el-input v-model="form.remark" type="textarea" :rows="2" />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="formOpen = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="submitForm(false)">保存草稿</el-button>
-        <el-button type="success" :loading="saving" @click="submitForm(true)">保存并提交</el-button>
+        <el-button :disabled="saving" @click="formOpen = false">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="submitForm">保存草稿</el-button>
       </template>
     </el-drawer>
 
-    <el-drawer v-model="detailOpen" title="公网证书详情" size="680px" append-to-body>
+    <el-drawer v-model="detailOpen" title="录入证书详情" size="680px" append-to-body>
       <el-descriptions :column="1" border>
-        <el-descriptions-item label="域名">{{ detail.cert?.domainName || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="域名"><span style="white-space: pre-line">{{ detail.cert?.domainName || '-' }}</span></el-descriptions-item>
         <el-descriptions-item label="证书类型">{{ detail.cert?.certTypeName || '-' }}</el-descriptions-item>
         <el-descriptions-item label="有效期"
           >{{ formatDateTime(detail.cert?.notBefore) }} 至 {{ formatDateTime(detail.cert?.notAfter) }}</el-descriptions-item
         >
         <el-descriptions-item label="审核状态">{{ detail.cert?.approvalStatusName || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="业务负责人">{{ detail.cert?.businessOwnerName || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="证书状态">{{ certificateExpiryText(detail.cert?.notAfter) }}</el-descriptions-item>
+        <el-descriptions-item label="证书维护人">{{ detail.cert?.businessOwnerName || '-' }}</el-descriptions-item>
         <el-descriptions-item label="科室">{{ detail.cert?.departmentName || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="使用系统">{{ detail.cert?.systemName || '-' }}</el-descriptions-item>
       </el-descriptions>
       <el-divider content-position="left">使用详情</el-divider>
       <el-table :data="detail.usages || []" border size="small">
         <el-table-column label="系统" prop="systemName" min-width="130" />
-        <el-table-column label="域名" prop="usageDomain" min-width="150" />
+        <el-table-column label="系统负责人" prop="businessOwnerName" min-width="120" />
+        <el-table-column label="域名" prop="usageDomain" min-width="150"><template #default="{ row }"><span style="white-space: pre-line">{{ row.usageDomain || '-' }}</span></template></el-table-column>
         <el-table-column label="场景" prop="usageScene" min-width="160" />
       </el-table>
       <el-divider content-position="left">附件</el-divider>
-      <el-upload v-hasPermi="['ra:public-cert:attachment']" :show-file-list="false" :before-upload="beforeUpload" :http-request="uploadAttachment">
+      <el-upload v-if="['DRAFT', 'REJECTED'].includes(detail.cert?.approvalStatus || '')" v-hasPermi="['ra:public-cert:attachment']" :show-file-list="false" :before-upload="beforeUpload" :http-request="uploadAttachment">
         <el-button icon="Upload">上传压缩包</el-button>
       </el-upload>
       <el-table :data="detail.attachments || []" border size="small" class="mt12">
@@ -278,29 +254,26 @@
           {{ log.operatorName || '-' }} {{ actionName(log.action) }}：{{ log.comment || '-' }}
         </el-timeline-item>
       </el-timeline>
+      <el-divider content-position="left">通知记录</el-divider>
+      <el-table :data="noticeLogs" border size="small" empty-text="暂无通知记录">
+        <el-table-column label="渠道" prop="channel" width="90" />
+        <el-table-column label="状态" width="110"><template #default="{ row }">{{ publicNoticeStatus(row.status) }}</template></el-table-column>
+        <el-table-column label="日志编号" prop="id" min-width="130" show-overflow-tooltip />
+        <el-table-column label="网关追踪 ID" min-width="150" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.gatewayTraceId || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="回执或错误" prop="message" min-width="230" show-overflow-tooltip />
+      </el-table>
     </el-drawer>
 
-    <el-dialog v-model="auditOpen" title="公网证书审核" width="520px" append-to-body>
-      <el-form label-width="80px">
-        <el-form-item label="域名">{{ auditRow?.domainName }}</el-form-item>
-        <el-form-item label="意见">
-          <el-input v-model="auditComment" type="textarea" :rows="4" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="auditOpen = false">取消</el-button>
-        <el-button type="danger" @click="handleReject">驳回</el-button>
-        <el-button type="primary" @click="handleApprove">通过</el-button>
-      </template>
-    </el-dialog>
-
-    <el-dialog v-model="employeeOpen" title="选择员工" width="940px" append-to-body>
-      <el-form :model="employeeQuery" inline>
+    <el-dialog v-model="employeeOpen" title="选择员工" width="min(940px, 96vw)" append-to-body
+      :close-on-click-modal="false" :close-on-press-escape="!employeeSelecting" :show-close="!employeeSelecting">
+      <el-form :model="employeeQuery" inline @submit.prevent="searchEmployees">
         <el-form-item label="关键词">
-          <el-input v-model="employeeQuery.keyword" clearable placeholder="姓名/域账号/工号" style="width: 220px" @keyup.enter="loadEmployees" />
+          <el-input v-model="employeeQuery.keyword" clearable placeholder="姓名/域账号/工号" style="width: 220px" />
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" icon="Search" @click="loadEmployees">搜索</el-button>
+          <el-button type="primary" icon="Search" native-type="submit">搜索</el-button>
         </el-form-item>
       </el-form>
       <el-table v-loading="employeeLoading" :data="employees" border stripe height="420" @row-dblclick="selectEmployee">
@@ -311,7 +284,7 @@
         <el-table-column label="科室" prop="departmentName" min-width="160" show-overflow-tooltip />
         <el-table-column label="操作" width="90" align="center">
           <template #default="{ row }">
-            <el-button link type="primary" @click="selectEmployee(row)">选择</el-button>
+            <el-button link type="primary" :disabled="employeeSelecting" @click="selectEmployee(row)">选择</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -362,13 +335,24 @@
         </el-table-column>
         <el-table-column label="操作" width="90" align="center">
           <template #default="{ row }">
-            <el-button link type="primary" icon="Check" @click="saveType(row)">保存</el-button>
+            <CertRowAction label="保存证书类型" icon="Check" @click="saveType(row)" />
           </template>
         </el-table-column>
       </el-table>
     </el-dialog>
 
-    <el-dialog v-model="grantOpen" title="公网证书录入授权" width="940px" append-to-body>
+    <el-dialog v-model="grantOpen" title="证书录入授权" width="min(940px, 96vw)" append-to-body>
+      <section class="portal-login-policy" aria-label="自助登录策略">
+        <el-form label-position="top" class="portal-login-policy-form">
+          <el-form-item label="登录空闲超时">
+            <div class="portal-policy-controls">
+              <el-input-number v-model="sessionIdleMinutes" aria-label="登录空闲超时（分钟）" :min="5" :max="1440" :precision="0" controls-position="right" />
+              <span>分钟</span>
+              <el-button icon="Check" :loading="sessionSaving" @click="saveSessionTimeout">保存时限</el-button>
+            </div>
+          </el-form-item>
+        </el-form>
+      </section>
       <el-card class="portal-config-card" shadow="never">
         <template #header>
           <div class="portal-config-header">
@@ -378,59 +362,59 @@
             </el-tag>
           </div>
         </template>
-        <el-form :model="portalConfig" label-width="120px" class="portal-config-form">
+        <el-form :model="portalConfig" label-position="top" class="portal-config-form">
           <el-row :gutter="16">
-            <el-col :span="8">
-              <el-form-item label="IAM认证">
+            <el-col :xs="12" :sm="8">
+              <el-form-item label="IAM 服务">
                 <el-switch v-model="portalConfig.iamEnabled" active-text="开启" inactive-text="关闭" />
               </el-form-item>
             </el-col>
-            <el-col :span="8">
+            <el-col :xs="12" :sm="8">
               <el-form-item label="AD SSO">
                 <el-switch v-model="portalConfig.isAdSso" active-text="开启" inactive-text="关闭" />
               </el-form-item>
             </el-col>
-            <el-col :span="8">
-              <el-form-item label="超时时间">
+            <el-col :xs="24" :sm="8">
+              <el-form-item label="接口超时秒数">
                 <el-input-number v-model="portalConfig.timeoutSeconds" :min="1" :max="120" controls-position="right" />
               </el-form-item>
             </el-col>
-            <el-col :span="12">
+            <el-col :xs="24" :sm="12">
               <el-form-item label="IAM地址">
                 <el-input v-model="portalConfig.iamBaseUrl" placeholder="https://iam.faw-vw.com" />
               </el-form-item>
             </el-col>
-            <el-col :span="12">
+            <el-col :xs="24" :sm="12">
               <el-form-item label="回调地址">
                 <el-input v-model="portalConfig.callbackUrl" placeholder="http://10.10.10.128:9085/ra-public-cert" />
               </el-form-item>
             </el-col>
-            <el-col :span="12">
+            <el-col :xs="24" :sm="12">
               <el-form-item label="Client ID">
                 <el-input v-model="portalConfig.clientId" placeholder="IAM分配的client_id" />
               </el-form-item>
             </el-col>
-            <el-col :span="12">
+            <el-col :xs="24" :sm="12">
               <el-form-item label="Client Secret">
                 <el-input v-model="portalConfig.clientSecret" show-password placeholder="留空则保持原密钥不变" />
               </el-form-item>
             </el-col>
-            <el-col :span="8">
+            <el-col :xs="24" :sm="8">
               <el-form-item label="授权地址">
                 <el-input v-model="portalConfig.authorizePath" />
               </el-form-item>
             </el-col>
-            <el-col :span="8">
+            <el-col :xs="24" :sm="8">
               <el-form-item label="Token地址">
                 <el-input v-model="portalConfig.tokenPath" />
               </el-form-item>
             </el-col>
-            <el-col :span="8">
+            <el-col :xs="24" :sm="8">
               <el-form-item label="Profile地址">
                 <el-input v-model="portalConfig.profilePath" />
               </el-form-item>
             </el-col>
-            <el-col :span="8">
+            <el-col :xs="12" :sm="8">
               <el-form-item label="Token方式">
                 <el-select v-model="portalConfig.tokenRequestMode">
                   <el-option label="FORM" value="FORM" />
@@ -439,7 +423,7 @@
                 </el-select>
               </el-form-item>
             </el-col>
-            <el-col :span="8">
+            <el-col :xs="12" :sm="8">
               <el-form-item label="Profile Token">
                 <el-select v-model="portalConfig.profileTokenMode">
                   <el-option label="BEARER" value="BEARER" />
@@ -447,7 +431,7 @@
                 </el-select>
               </el-form-item>
             </el-col>
-            <el-col :span="8">
+            <el-col :xs="24" :sm="8">
               <el-form-item label="账号字段">
                 <el-input
                   v-model="portalConfig.accountFieldPaths"
@@ -456,28 +440,35 @@
               </el-form-item>
             </el-col>
           </el-row>
+          <el-alert v-if="portalConfig.iamEnabled === false" type="warning" :closable="false" show-icon
+            title="仅用于内网联调：关闭 IAM 服务后，已获录入授权的员工可仅凭域账号登录。" />
           <div class="portal-config-actions">
-            <el-button type="primary" icon="Check" @click="savePortalConfig">保存录入端配置</el-button>
+            <el-button type="primary" icon="Check" :loading="portalConfigSaving" @click="savePortalConfig">保存录入端配置</el-button>
           </div>
         </el-form>
       </el-card>
-      <el-form :model="grantQuery" inline>
+      <el-form :model="grantQuery" inline @submit.prevent="searchGrants">
         <el-form-item label="关键词">
-          <el-input v-model="grantQuery.keyword" clearable placeholder="姓名/域账号" style="width: 220px" @keyup.enter="loadGrants" />
+          <el-input v-model="grantQuery.keyword" clearable placeholder="姓名/域账号" style="width: 220px" />
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" icon="Search" @click="loadGrants">搜索</el-button>
-          <el-button icon="User" @click="openEmployeePicker('grant')">新增授权</el-button>
+          <el-button type="primary" icon="Search" native-type="submit">搜索</el-button>
+          <el-button icon="User" :disabled="grantUpdating" @click="openEmployeePicker('grant')">新增授权</el-button>
         </el-form-item>
       </el-form>
-      <el-table :data="grants" border stripe>
+      <el-table v-loading="grantLoading" :data="grants" border stripe>
         <el-table-column label="姓名" prop="employeeName" min-width="120" />
         <el-table-column label="域账号" prop="domainAccount" min-width="120" />
         <el-table-column label="邮箱" prop="employeeEmail" min-width="180" />
         <el-table-column label="科室" prop="departmentName" min-width="160" />
         <el-table-column label="启用" width="90">
           <template #default="{ row }">
-            <el-switch v-model="row.enabled" @change="() => saveGrant(row)" />
+            <el-switch :model-value="!!row.enabled" :disabled="grantUpdating" @change="(enabled) => saveGrant(row, !!enabled)" />
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="84" align="center" fixed="right">
+          <template #default="{ row }">
+            <CertRowAction label="移除授权" icon="Delete" type="danger" :disabled="grantUpdating" @click="removeGrant(row)" />
           </template>
         </el-table-column>
       </el-table>
@@ -489,14 +480,34 @@
         @pagination="loadGrants"
       />
     </el-dialog>
+    <el-dialog v-model="noticeConfigOpen" title="证书通知模板" width="min(760px, 96vw)" append-to-body>
+      <el-form :model="noticeConfig" label-width="120px">
+        <el-form-item label="自动到期提醒"><el-switch v-model="noticeConfig.automatic" /></el-form-item>
+        <el-form-item label="通知渠道"><el-checkbox v-model="noticeConfig.email">邮件</el-checkbox><el-checkbox v-model="noticeConfig.dingtalk">钉钉</el-checkbox></el-form-item>
+        <el-form-item label="提前提醒天数"><el-input v-model="noticeConfig.days" placeholder="30,7,1,0" /></el-form-item>
+        <el-form-item label="每日检查时间"><el-time-select v-model="noticeConfig.time" start="00:00" step="00:30" end="23:30" /></el-form-item>
+        <el-form-item label="自助更新入口"><el-input v-model="noticeConfig.portalUrl" /></el-form-item>
+        <el-form-item label="邮件标题"><el-input v-model="noticeConfig.subject" maxlength="200" /></el-form-item>
+        <el-form-item label="邮件正文"><el-input v-model="noticeConfig.emailContent" type="textarea" :rows="5" maxlength="10000" /></el-form-item>
+        <el-form-item label="钉钉正文"><el-input v-model="noticeConfig.dingContent" type="textarea" :rows="4" maxlength="500" show-word-limit /></el-form-item>
+        <el-form-item label="变量"><el-tooltip content="${domainName} ${certTypeName} ${serialNumber} ${maintainerName} ${notAfter} ${expiryText} ${updateUrl}"><el-button icon="QuestionFilled" circle /></el-tooltip></el-form-item>
+      </el-form>
+      <template #footer><el-button @click="noticeConfigOpen = false">取消</el-button><el-button type="primary" :loading="noticeConfigSaving" @click="saveNoticeConfig">保存模板</el-button></template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup name="RaPublicCert" lang="ts">
+import CertRowAction from '../components/CertRowAction.vue';
+import { useRaListRefreshOnReturn } from '@/hooks/useRaListRefreshOnReturn';
 import FileSaver from 'file-saver';
-import { ElMessage, ElMessageBox, FormInstance, FormRules, UploadRequestOptions } from 'element-plus';
+import auth from '@/plugins/auth';
+import { isFawvwEmployeeSourceActive } from '@/utils/fawvwEmployeeStatus';
+import { ElMessage, ElMessageBox, FormInstance, FormRules, UploadRequestOptions, type UploadUserFile } from 'element-plus';
+import UsageTable from './UsageTable.vue';
+import { publicCertDomainRequired, publicCertUsageError, publicCertEditValues, selectCertificateMaintainer, certificateExpiryText, publicNoticeStatus } from '@/utils/publicCertForm';
+import { auditPublicCerts, getPublicNoticeConfig, savePublicNoticeConfig, getPublicNoticeStates, getPublicNoticeLogs, notifyPublicCerts, togglePublicCertReminder, getPublicPortalSessionPolicy, savePublicPortalSessionPolicy, type PublicNoticeConfig, type PublicNoticeState, type PublicNoticeLog } from '@/api/ra/publicCert';
 import {
-  approvePublicCert,
   exportPublicCerts,
   getPublicCert,
   getPublicCertPortalConfig,
@@ -506,37 +517,49 @@ import {
   pagePublicCerts,
   PublicCert,
   PublicCertDetail,
+  PublicCertAttachment,
+  PublicCertEmployee,
   PublicCertPermission,
   PublicCertPortalConfig,
   PublicCertQuery,
   PublicCertType,
-  rejectPublicCert,
   removePublicCert,
+  revokePublicCertPermission,
   savePublicCert,
   savePublicCertPortalConfig,
   savePublicCertType,
-  submitPublicCert,
   uploadPublicCertAttachment
 } from '@/api/ra/publicCert';
 import { FawvwEmployee, pageFawvwEmployees } from '@/api/ra/employee';
 
-type PickerTarget = 'maintainer' | 'owner' | 'grant';
+type PickerTarget = 'owner' | 'grant';
 
 const rows = ref<PublicCert[]>([]);
+const managementTab = ref<'records' | 'audit' | 'handled'>('records');
+const selectedRows = ref<PublicCert[]>([]);
+const noticeStates = ref<Record<string, PublicNoticeState>>({});
+const noticeLogs = ref<PublicNoticeLog[]>([]);
+const noticeConfigOpen = ref(false);
+const noticeConfigSaving = ref(false);
+const sendingNotice = ref(false);
+const reminderSaving = reactive(new Set<PublicCert['id']>());
+const noticeConfig = reactive<PublicNoticeConfig>({ automatic: false, email: true, dingtalk: false, days: '30,7,1,0', time: '09:00', portalUrl: '', subject: '', emailContent: '', dingContent: '' });
+const sessionIdleMinutes = ref(30);
+const sessionSaving = ref(false);
+const portalConfigSaving = ref(false);
 const total = ref(0);
 const loading = ref(false);
+let listVersion = 0;
 const showSearch = ref(true);
 const formOpen = ref(false);
 const detailOpen = ref(false);
-const auditOpen = ref(false);
+const auditing = ref(false);
 const employeeOpen = ref(false);
 const typeOpen = ref(false);
 const grantOpen = ref(false);
 const saving = ref(false);
 const formRef = ref<FormInstance>();
 const pickerTarget = ref<PickerTarget>('owner');
-const auditRow = ref<PublicCert>();
-const auditComment = ref('');
 
 const queryParams = reactive<PublicCertQuery>({
   pageNum: 1,
@@ -563,33 +586,32 @@ const emptyForm = (): PublicCert => ({
   vendor: '',
   notBefore: '',
   notAfter: '',
-  maintainerName: '',
-  maintainerAccount: '',
-  maintainerEmail: '',
   businessOwnerName: '',
   businessOwnerAccount: '',
   businessOwnerEmail: '',
   departmentName: '',
-  systemName: '',
-  systemOwnerName: '',
-  systemOwnerAccount: '',
-  systemOwnerEmail: '',
   reminderEnabled: true,
   remark: '',
-  usages: []
+  usages: [{ systemName: '', usageDomain: '', usageScene: '' }]
 });
 
 const form = reactive<PublicCert>(emptyForm());
+const pendingAttachments = ref<UploadUserFile[]>([]);
+const formAttachments = ref<PublicCertAttachment[]>([]);
 const rules: FormRules = {
   certTypeId: [{ required: true, message: '请选择证书类型', trigger: 'change' }],
-  domainName: [{ required: true, message: '请输入域名', trigger: 'blur' }],
-  businessOwnerName: [{ required: true, message: '请输入业务负责人', trigger: 'blur' }],
-  systemName: [{ required: true, message: '请输入使用系统', trigger: 'blur' }],
+  domainName: [{ validator: (_rule, value, done) => {
+    const code = types.value.find((item) => String(item.id) === String(form.certTypeId))?.typeCode;
+    done(publicCertDomainRequired(code) && !value?.trim() ? new Error('该证书类型必须填写域名') : undefined);
+  }, trigger: 'blur' }],
+  businessOwnerEmployeeId: [{ required: true, message: '请选择证书维护人', trigger: 'change' }],
+  usages: [{ validator: (_rule, value, done) => { const error = publicCertUsageError(value); done(error ? new Error(error) : undefined); }, trigger: 'change' }],
   notAfter: [{ required: true, message: '请选择到期时间', trigger: 'change' }]
 };
 
 const detail = ref<Partial<PublicCertDetail>>({ usages: [], attachments: [], auditLogs: [] });
 const types = ref<PublicCertType[]>([]);
+const domainRequired = computed(() => publicCertDomainRequired(types.value.find((item) => String(item.id) === String(form.certTypeId))?.typeCode));
 const typeDraft = reactive<PublicCertType>({
   typeCode: '',
   typeName: '',
@@ -598,6 +620,9 @@ const typeDraft = reactive<PublicCertType>({
 });
 const grants = ref<PublicCertPermission[]>([]);
 const grantTotal = ref(0);
+const grantLoading = ref(false);
+const grantUpdating = ref(false);
+let grantLoadVersion = 0;
 const grantQuery = reactive({ pageNum: 1, pageSize: 10, keyword: '', enabled: null as boolean | null });
 const portalConfig = reactive<PublicCertPortalConfig>({
   iamEnabled: false,
@@ -619,6 +644,8 @@ const portalConfig = reactive<PublicCertPortalConfig>({
 const employees = ref<FawvwEmployee[]>([]);
 const employeeTotal = ref(0);
 const employeeLoading = ref(false);
+const employeeSelecting = ref(false);
+let employeeLoadVersion = 0;
 const employeeQuery = reactive({ pageNum: 1, pageSize: 10, keyword: '', status: 'A' });
 
 function unwrap<T>(res: any): T {
@@ -626,16 +653,39 @@ function unwrap<T>(res: any): T {
   return (body?.data ?? body) as T;
 }
 
-async function loadList() {
+function queryPayload(): PublicCertQuery {
+  const approvalStatus = managementTab.value === 'records' ? 'APPROVED'
+    : managementTab.value === 'audit' ? 'PENDING' : queryParams.approvalStatus || 'HANDLED';
+  return { ...queryParams, approvalStatus,
+    notAfterStart: notAfterRange.value?.[0] || '', notAfterEnd: notAfterRange.value?.[1] || '' };
+}
+
+async function loadList(): Promise<void> {
+  const version = ++listVersion;
   loading.value = true;
   try {
-    queryParams.notAfterStart = notAfterRange.value?.[0] || '';
-    queryParams.notAfterEnd = notAfterRange.value?.[1] || '';
-    const page = unwrap<any>(await pagePublicCerts(queryParams));
+    const query = queryPayload();
+    const page = unwrap<any>(await pagePublicCerts(query));
+    if (version !== listVersion) return;
+    const nextTotal = Number(page.total || 0);
+    const lastPage = Math.max(1, Math.ceil(nextTotal / query.pageSize));
+    if (query.pageNum > lastPage) {
+      queryParams.pageNum = lastPage;
+      if (nextTotal > 0) {
+        await loadList();
+        return;
+      }
+    }
     rows.value = page.records || page.rows || [];
-    total.value = Number(page.total || 0);
+    selectedRows.value = [];
+    total.value = nextTotal;
+    noticeStates.value = {};
+    if (managementTab.value !== 'records' || !rows.value.length) return;
+    const states = unwrap<PublicNoticeState[]>(await getPublicNoticeStates(rows.value.map((row) => row.id!)));
+    if (version !== listVersion) return;
+    noticeStates.value = Object.fromEntries(states.map((state) => [String(state.id), state]));
   } finally {
-    loading.value = false;
+    if (version === listVersion) loading.value = false;
   }
 }
 
@@ -646,6 +696,14 @@ async function loadTypes(onlyEnabled = true) {
 function handleQuery() {
   queryParams.pageNum = 1;
   loadList();
+}
+
+function handleTabChange() {
+  queryParams.approvalStatus = '';
+  rows.value = [];
+  total.value = 0;
+  selectedRows.value = [];
+  handleQuery();
 }
 
 function resetQuery() {
@@ -668,7 +726,12 @@ function resetQuery() {
 }
 
 function resetForm() {
+  Object.keys(form).forEach((key) => Reflect.deleteProperty(form, key));
   Object.assign(form, emptyForm());
+  form.businessOwnerEmployeeId = undefined;
+  form.businessOwnerIdentityKey = undefined;
+  pendingAttachments.value = [];
+  formAttachments.value = [];
   formRef.value?.clearValidate();
 }
 
@@ -682,72 +745,60 @@ async function openEdit(row: PublicCert) {
   await loadTypes(true);
   const data = unwrap<PublicCertDetail>(await getPublicCert(row.id!));
   resetForm();
-  Object.assign(form, data.cert, { usages: data.usages || [] });
+  Object.assign(form, publicCertEditValues(data));
+  formAttachments.value = data.attachments || [];
   formOpen.value = true;
 }
 
 async function openDetail(row: PublicCert) {
-  detail.value = unwrap<PublicCertDetail>(await getPublicCert(row.id!));
+  const data = unwrap<PublicCertDetail>(await getPublicCert(row.id!));
+  detail.value = data;
+  noticeLogs.value = [];
   detailOpen.value = true;
+  try {
+    const logs = unwrap<PublicNoticeLog[]>(await getPublicNoticeLogs(row.id!));
+    if (detail.value.cert?.id === data.cert.id) noticeLogs.value = logs;
+  } catch {
+    // Attachment review must remain available even when the notification log fails to load.
+  }
 }
 
-async function submitForm(thenSubmit: boolean) {
+async function submitForm() {
   if (!(await formRef.value?.validate().catch(() => false))) return;
+  if (saving.value) return;
+  if (pendingAttachments.value.some((file) => !file.raw || !beforeUpload(file.raw))) return;
   saving.value = true;
   try {
     const saved = unwrap<PublicCertDetail>(await savePublicCert(form));
-    if (thenSubmit) {
-      await submitPublicCert(saved.cert.id!);
-      ElMessage.success('公网证书已提交审核');
-    } else {
-      ElMessage.success('公网证书已保存');
+    form.id = saved.cert.id;
+    form.version = saved.cert.version;
+    for (const file of [...pendingAttachments.value]) {
+      const uploaded = unwrap<PublicCertAttachment>(await uploadPublicCertAttachment(saved.cert.id!, file.raw!));
+      formAttachments.value.push(uploaded);
+      pendingAttachments.value = pendingAttachments.value.filter((item) => item.uid !== file.uid);
     }
+    ElMessage.success('已保存，证书维护人可在自助端提交审核');
     formOpen.value = false;
-    loadList();
+    if (saved.cert.approvalStatus === 'DRAFT') {
+      managementTab.value = 'handled';
+      handleTabChange();
+    } else {
+      loadList();
+    }
   } finally {
     saving.value = false;
   }
 }
 
-async function handleSubmit(row: PublicCert) {
-  await submitPublicCert(row.id!);
-  ElMessage.success('已提交审核');
-  loadList();
-}
-
-function openAudit(row: PublicCert) {
-  auditRow.value = row;
-  auditComment.value = '';
-  auditOpen.value = true;
-}
-
-async function handleApprove() {
-  await approvePublicCert(auditRow.value!.id!, auditComment.value || '审核通过');
-  ElMessage.success('已通过');
-  auditOpen.value = false;
-  loadList();
-}
-
-async function handleReject() {
-  if (!auditComment.value.trim()) {
-    ElMessage.warning('请输入驳回原因');
-    return;
-  }
-  await rejectPublicCert(auditRow.value!.id!, auditComment.value);
-  ElMessage.success('已驳回');
-  auditOpen.value = false;
-  loadList();
-}
-
 async function handleRemove(row: PublicCert) {
-  await ElMessageBox.confirm(`确认归档公网证书 ${row.domainName}？`, '提示', { type: 'warning' });
+  await ElMessageBox.confirm(`确认归档录入证书 ${row.domainName || row.serialNumber || row.certTypeName}？`, '提示', { type: 'warning' });
   await removePublicCert(row.id!);
   ElMessage.success('已归档');
   loadList();
 }
 
 async function handleExport() {
-  const res: any = await exportPublicCerts(queryParams);
+  const res: any = await exportPublicCerts(queryPayload());
   const blob = res?.data instanceof Blob ? res.data : new Blob([res?.data || res]);
   FileSaver.saveAs(blob, 'fawvw-public-certs.csv');
 }
@@ -755,73 +806,62 @@ async function handleExport() {
 function onTypeChange(value: string | number) {
   const type = types.value.find((item) => String(item.id) === String(value));
   form.certTypeName = type?.typeName || '';
+  formRef.value?.clearValidate('domainName');
 }
 
-function addUsage() {
-  form.usages = form.usages || [];
-  form.usages.push({ systemName: form.systemName || '', usageDomain: form.domainName || '', usageScene: '' });
-}
-
-function removeUsage(index: number) {
-  form.usages?.splice(index, 1);
+async function lookupEmployees(keyword: string): Promise<PublicCertEmployee[]> {
+  const page = unwrap<any>(await pageFawvwEmployees({ pageNum: 1, pageSize: 20, keyword, status: 'A' }));
+  return page.records || page.rows || [];
 }
 
 function openEmployeePicker(target: PickerTarget) {
   pickerTarget.value = target;
+  employees.value = [];
+  employeeTotal.value = 0;
   employeeOpen.value = true;
-  loadEmployees();
+  searchEmployees();
+}
+
+function searchEmployees() {
+  employeeQuery.pageNum = 1;
+  return loadEmployees();
 }
 
 async function loadEmployees() {
+  const version = ++employeeLoadVersion;
   employeeLoading.value = true;
   try {
-    const page = unwrap<any>(
-      await pageFawvwEmployees({
-        pageNum: employeeQuery.pageNum,
-        pageSize: employeeQuery.pageSize,
-        keyword: employeeQuery.keyword,
-        status: employeeQuery.status
-      })
-    );
+    const page = unwrap<any>(await pageFawvwEmployees({ ...employeeQuery }));
+    if (version !== employeeLoadVersion || !employeeOpen.value) return;
     employees.value = page.records || page.rows || [];
     employeeTotal.value = Number(page.total || 0);
   } finally {
-    employeeLoading.value = false;
+    if (version === employeeLoadVersion) employeeLoading.value = false;
   }
 }
 
 async function selectEmployee(row: FawvwEmployee) {
-  if (pickerTarget.value === 'maintainer') {
-    Object.assign(form, {
-      maintainerEmployeeId: row.id,
-      maintainerIdentityKey: row.identityKey,
-      maintainerName: row.cnName,
-      maintainerAccount: row.domainAccount,
-      maintainerEmail: row.email
-    });
-  } else if (pickerTarget.value === 'owner') {
-    Object.assign(form, {
-      businessOwnerEmployeeId: row.id,
-      businessOwnerIdentityKey: row.identityKey,
-      businessOwnerName: row.cnName,
-      businessOwnerAccount: row.domainAccount,
-      businessOwnerEmail: row.email,
-      departmentId: row.departmentId,
-      departmentName: row.departmentName,
-      departmentPath: row.departmentNamePath
-    });
+  if (!employeeOpen.value || employeeSelecting.value) return;
+  if (pickerTarget.value === 'owner') {
+    if (!isFawvwEmployeeSourceActive(row.sourceStatus)) { ElMessage.warning('请选择在职员工'); return; }
+    selectCertificateMaintainer(form, row);
   } else {
-    await grantPublicCertPermission({
-      employeeId: row.id,
-      employeeIdentityKey: row.identityKey,
-      domainAccount: row.domainAccount,
-      employeeName: row.cnName,
-      employeeEmail: row.email,
-      departmentName: row.departmentName,
-      enabled: true
-    });
-    ElMessage.success('授权已保存');
-    loadGrants();
+    employeeSelecting.value = true;
+    try {
+      await grantPublicCertPermission({
+        employeeId: row.id,
+        employeeIdentityKey: row.identityKey,
+        domainAccount: row.domainAccount,
+        employeeName: row.cnName,
+        employeeEmail: row.email,
+        departmentName: row.departmentName,
+        enabled: true
+      });
+      ElMessage.success('授权已保存');
+      loadGrants();
+    } finally {
+      employeeSelecting.value = false;
+    }
   }
   employeeOpen.value = false;
 }
@@ -852,6 +892,68 @@ function openGrants() {
   grantOpen.value = true;
   loadPortalConfig();
   loadGrants();
+  getPublicPortalSessionPolicy().then((result) => { sessionIdleMinutes.value = unwrap<{ idleMinutes: number }>(result).idleMinutes; });
+}
+
+async function saveSessionTimeout() {
+  sessionSaving.value = true;
+  try { sessionIdleMinutes.value = unwrap<{ idleMinutes: number }>(await savePublicPortalSessionPolicy(sessionIdleMinutes.value)).idleMinutes; ElMessage.success('登录时限已保存'); }
+  finally { sessionSaving.value = false; }
+}
+
+async function batchAudit(approve: boolean) {
+  if (managementTab.value !== 'audit' || auditing.value || loading.value) return;
+  const ids = selectedRows.value.filter((row) => row.approvalStatus === 'PENDING').map((row) => row.id!);
+  if (!ids.length) return;
+  auditing.value = true;
+  try {
+    const result = await ElMessageBox.prompt(`确认${approve ? '通过' : '驳回'}所选 ${ids.length} 条记录？`, '批量审核', {
+      inputPlaceholder: approve ? '审核意见（选填）' : '驳回原因（必填）',
+      inputValidator: (value) => approve || !!value?.trim() || '请输入驳回原因'
+    }).catch(() => undefined);
+    if (!result || managementTab.value !== 'audit') return;
+    await auditPublicCerts(ids, approve, result.value || '审核通过');
+    ElMessage.success('审核完成');
+    await loadList();
+  } finally {
+    auditing.value = false;
+  }
+}
+
+async function sendNotice(row: PublicCert) {
+  if (sendingNotice.value || row.id == null) return;
+  sendingNotice.value = true;
+  try {
+    const confirmed = await ElMessageBox.confirm(
+      `确认按已配置的渠道向 ${row.businessOwnerName || '证书维护人'} 发送 ${row.domainName || row.serialNumber || row.certTypeName} 的通知？`,
+      '通知确认', { type: 'warning', confirmButtonText: '确认发送', cancelButtonText: '取消', closeOnClickModal: false, autofocus: false }
+    ).then(() => true).catch(() => false);
+    if (!confirmed) return;
+    const count = unwrap<number>(await notifyPublicCerts([row.id]));
+    ElMessage.info(count ? '通知已入队，发送结果请查看通知状态' : '已有待发送通知，请勿重复提交');
+    loadList();
+  } finally {
+    sendingNotice.value = false;
+  }
+}
+
+async function setReminder(row: PublicCert, enabled: boolean) {
+  const id = row.id;
+  if (id == null || reminderSaving.has(id)) return;
+  reminderSaving.add(id);
+  try { Object.assign(row, unwrap<PublicCert>(await togglePublicCertReminder(id, enabled))); }
+  finally { reminderSaving.delete(id); }
+}
+
+async function openNoticeConfig() {
+  Object.assign(noticeConfig, unwrap<PublicNoticeConfig>(await getPublicNoticeConfig()));
+  noticeConfigOpen.value = true;
+}
+
+async function saveNoticeConfig() {
+  noticeConfigSaving.value = true;
+  try { Object.assign(noticeConfig, unwrap<PublicNoticeConfig>(await savePublicNoticeConfig(noticeConfig))); noticeConfigOpen.value = false; ElMessage.success('通知模板已保存'); }
+  finally { noticeConfigSaving.value = false; }
 }
 
 async function loadPortalConfig() {
@@ -878,21 +980,80 @@ async function loadPortalConfig() {
 }
 
 async function savePortalConfig() {
-  const saved = unwrap<PublicCertPortalConfig>(await savePublicCertPortalConfig(portalConfig));
-  Object.assign(portalConfig, saved, { clientSecret: '' });
-  ElMessage.success('录入端配置已保存');
+  if (portalConfigSaving.value) return;
+  portalConfigSaving.value = true;
+  try {
+    if (portalConfig.iamEnabled === false) {
+      const confirmed = await ElMessageBox.confirm(
+        '关闭后，任何知道已授权域账号的人都可用该账号进入证书统一管理。请仅在受控的内网联调环境使用。是否继续？',
+        '确认免 IAM 登录', { type: 'warning', confirmButtonText: '确认关闭', cancelButtonText: '取消' }
+      ).then(() => true, () => false);
+      if (!confirmed) return;
+    }
+    const saved = unwrap<PublicCertPortalConfig>(await savePublicCertPortalConfig(portalConfig));
+    Object.assign(portalConfig, saved, { clientSecret: '' });
+    ElMessage.success('录入端配置已保存');
+  } finally {
+    portalConfigSaving.value = false;
+  }
 }
 
-async function loadGrants() {
-  const page = unwrap<any>(await pagePublicCertPermissions(grantQuery));
-  grants.value = page.records || page.rows || [];
-  grantTotal.value = Number(page.total || 0);
+function searchGrants() {
+  grantQuery.pageNum = 1;
+  return loadGrants();
 }
 
-async function saveGrant(row: PublicCertPermission) {
-  await grantPublicCertPermission(row);
-  ElMessage.success('授权已保存');
-  loadGrants();
+async function loadGrants(): Promise<void> {
+  const version = ++grantLoadVersion;
+  const query = { ...grantQuery };
+  grantLoading.value = true;
+  try {
+    const page = unwrap<any>(await pagePublicCertPermissions(query));
+    if (version !== grantLoadVersion || !grantOpen.value) return;
+    const total = Number(page.total || 0);
+    const lastPage = Math.max(1, Math.ceil(total / query.pageSize));
+    if (query.pageNum > lastPage) {
+      grantQuery.pageNum = lastPage;
+      if (total > 0) {
+        await loadGrants();
+        return;
+      }
+    }
+    grants.value = page.records || page.rows || [];
+    grantTotal.value = total;
+  } finally {
+    if (version === grantLoadVersion) grantLoading.value = false;
+  }
+}
+
+async function saveGrant(row: PublicCertPermission, enabled: boolean) {
+  if (grantUpdating.value) return;
+  grantUpdating.value = true;
+  try {
+    await grantPublicCertPermission({ ...row, enabled });
+    row.enabled = enabled;
+    ElMessage.success('授权已保存');
+    await loadGrants();
+  } finally {
+    grantUpdating.value = false;
+  }
+}
+
+async function removeGrant(row: PublicCertPermission) {
+  if (row.id == null || grantUpdating.value) return;
+  grantUpdating.value = true;
+  try {
+    const confirmed = await ElMessageBox.confirm(
+      `确认移除「${row.employeeName || row.domainAccount || row.id}」的录入授权？不会删除员工或证书。`,
+      '移除录入授权', { type: 'warning' }
+    ).then(() => true).catch(() => false);
+    if (!confirmed) return;
+    await revokePublicCertPermission(row.id);
+    ElMessage.success('录入授权已移除');
+    await loadGrants();
+  } finally {
+    grantUpdating.value = false;
+  }
 }
 
 function beforeUpload(file: File) {
@@ -901,8 +1062,8 @@ function beforeUpload(file: File) {
     ElMessage.warning('附件仅支持 zip 或 rar');
     return false;
   }
-  if (file.size > 10 * 1024 * 1024) {
-    ElMessage.warning('附件不能超过 10MB');
+  if (!file.size || file.size > 20 * 1024 * 1024) {
+    ElMessage.warning('附件不能为空，且不能超过 20MB');
     return false;
   }
   return true;
@@ -957,6 +1118,7 @@ onMounted(() => {
   loadTypes(true);
   loadList();
 });
+useRaListRefreshOnReturn(loadList);
 </script>
 
 <style scoped lang="scss">
@@ -965,8 +1127,45 @@ onMounted(() => {
     margin-bottom: 12px;
   }
 
+  .public-cert-query {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 310px), 1fr));
+    gap: 12px 16px;
+
+    :deep(.el-form-item) {
+      min-width: 0;
+      margin: 0;
+    }
+
+    :deep(.el-form-item__content) {
+      min-width: 0;
+    }
+
+    :deep(.el-input),
+    :deep(.el-select),
+    :deep(.el-date-editor) {
+      width: 100%;
+      min-width: 0;
+    }
+
+    .query-actions :deep(.el-form-item__content) {
+      justify-content: flex-end;
+    }
+
+    @media (max-width: 560px) {
+      :deep(.el-form-item:not(.query-actions)) {
+        display: block;
+      }
+      :deep(.el-form-item__label) {
+        justify-content: flex-start;
+      }
+      :deep(.el-form-item__content) {
+        margin-left: 0 !important;
+      }
+    }
+  }
+
   .table-card {
-    min-height: 520px;
   }
 
   .toolbar-row {
@@ -980,54 +1179,77 @@ onMounted(() => {
     width: 100%;
   }
 
-  .usage-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 8px;
-    color: #303133;
-    font-weight: 600;
-  }
-
-  .usage-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr auto;
-    gap: 8px;
-    margin-bottom: 8px;
-  }
-
-  .portal-config-card {
-    margin-bottom: 14px;
-
-    :deep(.el-card__header) {
-      padding: 10px 14px;
-    }
-
-    :deep(.el-card__body) {
-      padding: 14px 14px 10px;
-    }
-  }
-
-  .portal-config-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    font-weight: 600;
-  }
-
-  .portal-config-form {
-    :deep(.el-form-item) {
-      margin-bottom: 12px;
-    }
-  }
-
-  .portal-config-actions {
-    display: flex;
-    justify-content: flex-end;
-  }
-
   .mt12 {
     margin-top: 12px;
   }
+}
+
+.portal-config-card {
+  margin-bottom: 14px;
+
+  :deep(.el-card__header) {
+    padding: 10px 14px;
+  }
+
+  :deep(.el-card__body) {
+    padding: 14px 14px 10px;
+  }
+}
+
+.portal-config-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.portal-config-form {
+  :deep(.el-form-item) {
+    margin-bottom: 12px;
+  }
+
+  :deep(.el-input-number) {
+    max-width: 100%;
+  }
+}
+
+.portal-config-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.portal-login-policy {
+  margin-bottom: 14px;
+  padding: 0 0 12px;
+  border-bottom: 1px solid var(--el-border-color-light);
+}
+
+.portal-login-policy-form,
+.portal-policy-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.portal-login-policy-form {
+  gap: 12px 24px;
+}
+
+.portal-login-policy-form :deep(.el-form-item) {
+  margin-bottom: 4px;
+  min-width: 0;
+}
+
+.portal-policy-controls {
+  gap: 8px;
+}
+
+.portal-policy-controls :deep(.el-input-number) {
+  width: 108px;
+}
+
+.portal-login-policy :deep(.el-alert) {
+  margin-top: 8px;
 }
 </style>

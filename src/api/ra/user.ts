@@ -3,7 +3,9 @@ import { AxiosPromise } from 'axios';
 import { parseStrEmpty } from '@/utils/ruoyi';
 import { UserForm, UserInfoVO, UserQuery, UserVO } from '@/api/system/user/types';
 
-export const listUser = (query: UserQuery): AxiosPromise<UserVO[]> => {
+export type RaApplicantUserInfo = UserInfoVO & { deptId?: number | string; domainAccount?: string };
+
+export const listUser = (query: UserQuery & { domainAccount?: string }): AxiosPromise<UserVO[]> => {
   return request({
     url: '/ra/v1/users/page',
     method: 'post',
@@ -14,26 +16,29 @@ export const listUser = (query: UserQuery): AxiosPromise<UserVO[]> => {
   });
 };
 
-export const getUser = (userId?: string | number): AxiosPromise<UserInfoVO> => {
+export const getUser = (userId?: string | number, hideErrorNotify = false): AxiosPromise<RaApplicantUserInfo> => {
   return request({
     url: '/ra/v1/users/' + parseStrEmpty(userId),
-    method: 'get'
+    method: 'get',
+    headers: { hideErrorNotify }
   });
 };
 
-export const addUser = (data: UserForm) => {
+export type LocalEmployeeAttributes = { employeeNo?: string; gender?: string; jobName?: string };
+
+export const addUser = (data: UserForm, domainAccount?: string, attributes: LocalEmployeeAttributes = {}) => {
   return request({
     url: '/ra/v1/users',
     method: 'post',
-    data: { co: data }
+    data: { co: data, domainAccount, ...attributes }
   });
 };
 
-export const updateUser = (data: UserForm) => {
+export const updateUser = (data: UserForm, domainAccount?: string, attributes: LocalEmployeeAttributes = {}) => {
   return request({
     url: '/ra/v1/users',
     method: 'put',
-    data: { co: data }
+    data: { co: data, domainAccount, ...attributes }
   });
 };
 
@@ -44,6 +49,9 @@ export const delUser = (userId: Array<string | number> | string | number) => {
     data: Array.isArray(userId) ? userId : [userId]
   });
 };
+
+export const deleteLocalUser = (userId: string | number) =>
+  request({ url: `/ra/v1/users/local/${encodeURIComponent(userId)}`, method: 'delete' });
 
 export const resetUserPwd = (userId: string | number, password: string) => {
   return request({

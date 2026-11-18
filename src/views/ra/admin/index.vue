@@ -1,28 +1,33 @@
 <template>
   <div class="app-container ra-admin-page">
-    <el-row :gutter="16">
-      <el-col :xs="24" :sm="24" :md="6" :lg="5" :xl="4">
+    <div ref="adminLayout" class="admin-layout" :style="{ '--dept-width': `${deptWidth}px` }">
+      <div class="dept-column">
         <el-card shadow="never" class="dept-tree-card">
           <template #header>
             <div class="dept-tree-title">部门</div>
           </template>
           <el-input v-model="deptName" placeholder="请输入部门名称" prefix-icon="Search" clearable />
-          <el-tree
+          <el-tree-v2
             ref="deptTreeRef"
             class="dept-tree"
-            node-key="id"
             :data="deptTreeOptions"
             :props="deptTreeProps"
+            :height="Math.max(240, treeHeight)"
             :expand-on-click-node="false"
-            :filter-node-method="filterDeptNode"
+            :filter-method="filterDeptNode"
+            :default-expanded-keys="[ALL_DEPT_ID]"
+            :current-node-key="selectedDeptId"
             highlight-current
-            default-expand-all
             @node-click="handleDeptNodeClick"
           />
         </el-card>
-      </el-col>
+        <div class="dept-resize-handle" role="separator" aria-label="调整部门列表宽度" aria-orientation="vertical"
+          :aria-valuenow="deptWidth" :aria-valuemin="240" :aria-valuemax="640" tabindex="0"
+          @pointerdown="startDeptResize" @pointermove="moveDeptResize" @lostpointercapture="deptResizeStart = undefined"
+          @keydown.left.prevent="resizeDeptBy(-24)" @keydown.right.prevent="resizeDeptBy(24)" />
+      </div>
 
-      <el-col :xs="24" :sm="24" :md="18" :lg="19" :xl="20">
+      <div class="admin-content">
         <el-form :model="queryParams" ref="queryForm" :inline="true" v-show="showSearch" label-width="68px">
           <el-form-item label="用户名称" prop="username">
             <el-input v-model="queryParams.username" placeholder="请输入用户名称" clearable style="width: 240px" @keyup.enter="handleQuery" />
@@ -132,8 +137,8 @@
         </el-table>
 
         <pagination v-show="total > 0" :total="total" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" @pagination="getList" />
-      </el-col>
-    </el-row>
+      </div>
+    </div>
 
     <!-- 添加或修改用户配置对话框 -->
     <el-dialog :title="title" v-model="open" width="600px" append-to-body>
@@ -365,7 +370,7 @@ import {
 } from '@/api/ra/adminUser';
 import { getToken } from '@/utils/auth';
 import { UserForm, UserQuery, UserVO } from '@/api/system/user/types';
-import { ElMessageBox, FormInstance, FormRules } from 'element-plus';
+import { ElMessage, ElMessageBox, FormInstance, FormRules } from 'element-plus';
 import X509Cert from '@/components/X509Cert/index.vue';
 import { listDeptSelectTree } from '@/api/ra/dept';
 import { RaDeptTreeOption, writableRaDepartments } from '@/api/ra/dept/types';
@@ -394,11 +399,35 @@ const raBizRoleOptions = computed(() => assignableRoles.value.map(({ roleId, rol
 const RA_BIZ_ROLE_IDS = RA_BUSINESS_ROLE_OPTIONS.map((role) => role.roleId);
 const RA_DEFAULT_BIZ_ROLE_IDS = ['503'];
 const ALL_DEPT_ID = '__ALL__';
-const deptOptions = ref<RaDeptTreeOption[]>([]);
+const deptOptions = shallowRef<RaDeptTreeOption[]>([]);
 const writableDeptOptions = computed(() => writableRaDepartments(deptOptions.value));
 const deptName = ref('');
 const deptTreeRef = ref<any>();
-const deptTreeProps = { label: 'name', children: 'children' };
+const deptTreeProps = { value: 'id', label: 'name', children: 'children' };
+const selectedDeptId = ref<string | number>(ALL_DEPT_ID);
+const adminLayout = ref<HTMLElement>();
+const deptWidth = ref(300);
+const treeHeight = ref(400);
+let deptResizeStart: { x: number; width: number } | undefined;
+let deptLayoutObserver: ResizeObserver | undefined;
+function setDeptWidth(width: number) {
+  const available = adminLayout.value?.clientWidth || 1000;
+  deptWidth.value = Math.max(240, Math.min(640, available - 400, Math.round(width)));
+}
+function resizeDeptBy(delta: number) { setDeptWidth(deptWidth.value + delta); }
+function startDeptResize(event: PointerEvent) {
+  if (event.button !== 0) return;
+  const handle = event.currentTarget as HTMLElement;
+  handle.focus();
+  handle.setPointerCapture(event.pointerId);
+  deptResizeStart = { x: event.clientX, width: deptWidth.value };
+  event.preventDefault();
+}
+function moveDeptResize(event: PointerEvent) {
+  if (deptResizeStart && (event.currentTarget as HTMLElement).hasPointerCapture(event.pointerId)) {
+    setDeptWidth(deptResizeStart.width + event.clientX - deptResizeStart.x);
+  }
+}
 const deptTreeOptions = computed<RaDeptTreeOption[]>(() => [
   {
     id: ALL_DEPT_ID,
@@ -599,6 +628,7 @@ watch(
   deptName,
   (value) => {
     deptTreeRef.value?.filter(value);
+    if (!value) deptTreeRef.value?.setExpandedKeys([ALL_DEPT_ID]);
   },
   { flush: 'post' }
 );
@@ -614,27 +644,40 @@ function filterDeptNode(value: string, data: RaDeptTreeOption) {
 }
 
 function handleDeptNodeClick(data: RaDeptTreeOption) {
+  selectedDeptId.value = data.id;
   queryParams.value.deptId = data.id === ALL_DEPT_ID ? undefined : data.id;
   handleQuery();
 }
 
 /** 查询用户列表 */
-function getList() {
+let adminListRequest: AbortController | undefined;
+async function getList() {
+  adminListRequest?.abort();
+  const request = adminListRequest = new AbortController();
   loading.value = true;
   isDataLoaded.value = false;
   queryParams.value.roleIds = queryParams.value.roleId ? undefined : RA_BIZ_ROLE_IDS;
-  listUser(proxy?.addDateRange(queryParams.value, dateRange.value)).then((res) => {
-    loading.value = false;
+  try {
+    const res = await listUser(proxy?.addDateRange(queryParams.value, dateRange.value), request.signal);
+    if (request.signal.aborted) return;
     const page = res.data || res;
     userList.value = [];
     nextTick(() => {
+      if (request.signal.aborted) return;
       userList.value = page.rows || page.records || [];
       setTimeout(() => {
-        isDataLoaded.value = true;
+        if (!request.signal.aborted) isDataLoaded.value = true;
       }, 200);
     });
     total.value = page.total || 0;
-  });
+  } catch {
+    if (!request.signal.aborted) {
+      userList.value = [];
+      total.value = 0;
+    }
+  } finally {
+    if (!request.signal.aborted) loading.value = false;
+  }
 }
 
 /** 搜索按钮操作 */
@@ -650,6 +693,7 @@ function resetQuery() {
   queryParams.value.roleId = undefined;
   queryParams.value.roleIds = RA_BIZ_ROLE_IDS;
   queryParams.value.deptId = undefined;
+  selectedDeptId.value = ALL_DEPT_ID;
   deptTreeRef.value?.setCurrentKey(ALL_DEPT_ID);
   handleQuery();
 }
@@ -1068,20 +1112,64 @@ function closeCertDialog() {
   certFormRef.value?.resetFields();
 }
 
-async function initPage() {
-  assignableRoles.value = await getAssignableRaRoles();
-  await loadDeptOptions();
-  nextTick(() => {
-    deptTreeRef.value?.setCurrentKey(ALL_DEPT_ID);
-  });
+function initPage() {
   getList();
+  getAssignableRaRoles().then(roles => { assignableRoles.value = roles; }).catch(() => ElMessage.error('业务角色加载失败'));
+  loadDeptOptions().then(() => nextTick(() => deptTreeRef.value?.setCurrentKey(ALL_DEPT_ID))).catch(() => ElMessage.error('部门加载失败'));
 }
 
 initPage();
+onMounted(() => {
+  if (!adminLayout.value) return;
+  deptLayoutObserver = new ResizeObserver(() => {
+    setDeptWidth(deptWidth.value);
+    treeHeight.value = Math.max(240, window.innerHeight - (adminLayout.value?.getBoundingClientRect().top || 0) - 150);
+  });
+  deptLayoutObserver.observe(adminLayout.value);
+  window.addEventListener('resize', updateDeptTreeHeight);
+  updateDeptTreeHeight();
+});
+function updateDeptTreeHeight() {
+  treeHeight.value = Math.max(240, window.innerHeight - (adminLayout.value?.getBoundingClientRect().top || 0) - 150);
+}
+onUnmounted(() => {
+  adminListRequest?.abort();
+  deptLayoutObserver?.disconnect();
+  window.removeEventListener('resize', updateDeptTreeHeight);
+});
 </script>
 
 <style scoped lang="scss">
 .ra-admin-page {
+  .admin-layout {
+    display: grid;
+    grid-template-columns: minmax(240px, var(--dept-width)) minmax(0, 1fr);
+    gap: 16px;
+  }
+
+  .dept-column { position: relative; min-width: 0; }
+  .admin-content { min-width: 0; }
+  .dept-resize-handle {
+    position: absolute;
+    z-index: 1;
+    inset: 0 -14px 0 auto;
+    width: 14px;
+    cursor: col-resize;
+    touch-action: none;
+    outline: none;
+  }
+  .dept-resize-handle::before {
+    content: '';
+    display: block;
+    width: 3px;
+    height: 34px;
+    margin: 40px auto 0;
+    border-radius: 2px;
+    background: var(--el-border-color);
+  }
+  .dept-resize-handle:hover::before,
+  .dept-resize-handle:focus-visible::before { background: var(--el-color-primary); }
+
   .dept-tree-card {
     margin-bottom: 12px;
   }
@@ -1095,10 +1183,13 @@ initPage();
 
   .dept-tree {
     margin-top: 10px;
-    min-height: 360px;
-    max-height: calc(100vh - 220px);
-    overflow: auto;
+    width: 100%;
   }
+}
+
+@media (max-width: 900px) {
+  .ra-admin-page .admin-layout { grid-template-columns: minmax(0, 1fr); }
+  .ra-admin-page .dept-resize-handle { display: none; }
 }
 
 .dialog-footer {

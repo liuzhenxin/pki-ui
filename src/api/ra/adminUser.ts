@@ -23,10 +23,12 @@ export async function getAssignableRaRoles() {
   return RA_BUSINESS_ROLE_OPTIONS.filter((role) => ids.has(role.roleId));
 }
 
-export const listAdminUser = (query: UserQuery): Promise<Result<UserPage> & UserPage> => {
+export const listAdminUser = (query: UserQuery, signal?: AbortSignal): Promise<Result<UserPage> & UserPage> => {
   return request<UserPage, Result<UserPage> & UserPage>({
     url: '/ra/v1/admin-users/page',
     method: 'post',
+    headers: { repeatSubmit: false },
+    signal,
     data: { params: {}, ...query }
   });
 };

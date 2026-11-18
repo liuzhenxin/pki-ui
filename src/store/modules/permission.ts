@@ -15,6 +15,7 @@ import { useUserStore } from '@/store/modules/user';
 import { isSvsProduct, svsRoutes } from '@/utils/svsNavigation';
 import { isHsmProduct, buildHsmRoutes } from '@/utils/hsmNavigation';
 import { buildOcspNavigation } from '@/utils/ocspNavigation';
+import { groupFawvwEmployeeNavigation, isRaApplicantDirectory, isRaDepartmentDirectory } from '@/utils/fawvwEmployeeNavigation';
 
 // 匹配views里面所有的.vue文件
 const modules = ['7', '9'].includes(import.meta.env.VITE_APP_TENANT_IDS) ? {} : import.meta.glob('./../../views/**/*.vue');
@@ -66,9 +67,11 @@ export const usePermissionStore = defineStore('permission', () => {
     const sdata = JSON.parse(JSON.stringify(sourceRoutes));
     const rdata = JSON.parse(JSON.stringify(sourceRoutes));
     const defaultData = JSON.parse(JSON.stringify(sourceRoutes));
-    const sidebarRoutes = filterAsyncRouter(buildOcspNavigation(sdata, auth.hasPermi('ocsp:monitoring')));
+    const sidebarRoutes = filterAsyncRouter(
+      buildOcspNavigation(groupFawvwEmployeeNavigation(orderFawvwCertBusinessMenu(sdata)), auth.hasPermi('ocsp:monitoring'))
+    );
     const rewriteRoutes = filterAsyncRouter(rdata, undefined, true);
-    const defaultRoutes = filterAsyncRouter(defaultData);
+    const defaultRoutes = filterAsyncRouter(groupFawvwEmployeeNavigation(defaultData));
     const asyncRoutes = filterDynamicRoutes(dynamicRoutes);
     asyncRoutes.forEach((route) => {
       router.addRoute(route);
@@ -90,9 +93,9 @@ export const usePermissionStore = defineStore('permission', () => {
     const sdata = JSON.parse(JSON.stringify(sourceRoutes));
     const rdata = JSON.parse(JSON.stringify(sourceRoutes));
     const defaultData = JSON.parse(JSON.stringify(sourceRoutes));
-    const sidebarRoutes = filterAsyncRouter(buildOcspNavigation(sdata, false));
+    const sidebarRoutes = filterAsyncRouter(buildOcspNavigation(groupFawvwEmployeeNavigation(orderFawvwCertBusinessMenu(sdata)), false));
     const rewriteRoutes = filterAsyncRouter(rdata, undefined, true);
-    const defaultRoutes = filterAsyncRouter(defaultData);
+    const defaultRoutes = filterAsyncRouter(groupFawvwEmployeeNavigation(defaultData));
     const asyncRoutes = filterDynamicRoutes(dynamicRoutes);
     asyncRoutes.forEach((route) => {
       router.addRoute(route);
@@ -130,9 +133,17 @@ export const usePermissionStore = defineStore('permission', () => {
         route.component = InnerLink;
       } else {
         const view = String(route.component ?? '');
+        if (view.startsWith('ra/')) {
+          route.meta = { ...route.meta, raWorkspace: true };
+        }
+        if (view.replace(/\/index$/, '') === 'ra/public-cert') {
+          route.meta = { ...route.meta, title: '录入证书管理' };
+        }
         if ((view.replace(/\/index$/, '') === 'ops/alert' || route.path === '/ops/alert') && !sidebarIcons.includes(route.meta?.icon ?? '')) {
           route.meta = { ...route.meta, icon: 'bell' };
         }
+        if (isRaApplicantDirectory(route.component)) route.meta = { ...route.meta, fawvwApplicantDirectory: true };
+        if (isRaDepartmentDirectory(route.component)) route.meta = { ...route.meta, fawvwDepartmentDirectory: true };
         route.component = loadView(route.component, route.name as string);
       }
       if (route.children != null && route.children && route.children.length) {
@@ -225,12 +236,20 @@ const removeRetiredKmcRoutes = (routes: RouteRecordRaw[]): RouteRecordRaw[] => {
     });
 };
 
-const FAWVW_ADMIN_HIDDEN_PATHS = new Set([
-  'ra-cert-management',
-  '/ra-cert-management',
-  'ra-employees',
-  '/ra-employees'
-]);
+const FAWVW_ADMIN_HIDDEN_PATHS = new Set(['ra-cert-management', '/ra-cert-management', 'ra-employees', '/ra-employees']);
+
+const orderFawvwCertBusinessMenu = (routes: RouteRecordRaw[]): RouteRecordRaw[] => {
+  const children = routes.find((route) => route.path === '/ra-certificate' || route.path === 'ra-certificate')?.children;
+  if (!children) return routes;
+
+  const apply = children.find((route) => /^(?:\/ra-certificate\/|\/)?ra-cert-apply$/.test(route.path));
+  const issueIndex = children.findIndex((route) => /^ra\/issue(?:\/index)?$/.test(String(route.component ?? '')));
+  if (!apply || issueIndex < 0) return routes;
+
+  const [issue] = children.splice(issueIndex, 1);
+  children.splice(children.indexOf(apply) + 1, 0, issue);
+  return routes;
+};
 
 const isFawvwAdminHiddenRoute = (route: RouteRecordRaw): boolean => {
   const rawRoute = route as any;

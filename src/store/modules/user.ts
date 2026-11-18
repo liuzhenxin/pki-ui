@@ -7,6 +7,7 @@ import defAva from '@/assets/images/profile.jpg';
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import { UserInfo } from '@/api/system/user/types';
+import { assertLoginResult } from '@/utils/loginResponse';
 
 export const useUserStore = defineStore('user', () => {
   const token = ref(getToken());
@@ -25,20 +26,25 @@ export const useUserStore = defineStore('user', () => {
    * @returns
    */
   const login = async (userInfo: LoginData): Promise<LoginResult> => {
-    const [err, res] = await to(loginApi(userInfo));
-    if (res) {
-      setToken(res.access_token);
-      if (res.refresh_token) setRefreshToken(res.refresh_token);
-      token.value = res.access_token;
-      tenantId.value = userInfo.tenantId || '';
-      return Promise.resolve(res);
-    }
-    return Promise.reject(err);
+    token.value = '';
+    roles.value = [];
+    permissions.value = [];
+    tenantInitStatus.value = undefined;
+    removeToken();
+    removeRefreshToken();
+    markCertLogin(false);
+    const res = assertLoginResult(await loginApi(userInfo));
+    setToken(res.access_token);
+    if (res.refresh_token) setRefreshToken(res.refresh_token);
+    token.value = res.access_token;
+    tenantId.value = userInfo.tenantId || '';
+    return res;
   };
 
   const certificateLogin = async (certificateCode: string, currentTenantId: string): Promise<LoginResult> => {
     const [err, res] = await to(exchangeCertificateCode(certificateCode));
     if (res) {
+      assertLoginResult(res);
       setToken(res.access_token);
       if (res.refresh_token) setRefreshToken(res.refresh_token);
       else removeRefreshToken();
