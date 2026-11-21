@@ -318,3 +318,26 @@ export interface AlertEventLog {
   channelResult?: string;
   createTime?: string;
 }
+export type FawVwChannelKind = 'FAW_VW_DINGTALK' | 'FAW_VW_EMAIL';
+
+export interface FawVwChannelConfig {
+  revision: string | null;
+  enabled: boolean;
+  endpointUrl: string;
+  from: string | null;
+  to: string;
+  app: string | null;
+  dingTalkTarget: 'ACCOUNT' | 'JOB_ID' | null;
+  smtpServer: 'CC' | 'CD' | 'FS' | 'TJ' | 'QD' | null;
+  targetsFormat: 'ARRAY' | 'JSON_ARRAY_STRING' | 'SINGLE_STRING' | null;
+}
+
+export interface FawVwChannelSettings extends FawVwChannelConfig {
+  credentialsConfigured: boolean;
+}
+
+export interface FawVwChannelSave {
+  settings: FawVwChannelConfig;
+  accessKey?: string;
+  secretKey?: string;
+}

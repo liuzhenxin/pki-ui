@@ -10,6 +10,9 @@ import type {
   AlertRuleSave,
   AppServiceConfig,
   CryptoMonitorInstance,
+  FawVwChannelKind,
+  FawVwChannelSave,
+  FawVwChannelSettings,
   OpsContainer,
   OpsContainerLogs,
   OpsContainerActionRequest,
@@ -30,6 +33,20 @@ const gatewayBaseURL = import.meta.env.VITE_APP_BASE_API.replace(/\/$/, '');
 const baseURL = import.meta.env.VITE_APP_OPS_API || `${gatewayBaseURL}/ops`;
 
 export { baseURL as opsApiBaseURL };
+
+export function getFawVwChannel(kind: FawVwChannelKind) {
+  return request<unknown, { settings: FawVwChannelSettings | null }>({ baseURL, url: '/v1/alert/faw-vw-channels/' + kind, method: 'get' });
+}
+
+export function saveFawVwChannel(kind: FawVwChannelKind, data: FawVwChannelSave) {
+  return request<unknown, { settings: FawVwChannelSettings }>({
+    baseURL,
+    url: '/v1/alert/faw-vw-channels/' + kind,
+    method: 'put',
+    headers: { sensitive: true, repeatSubmit: false },
+    data
+  });
+}
 
 export function getOpsOverview(): Promise<OpsOverview> {
   return request({

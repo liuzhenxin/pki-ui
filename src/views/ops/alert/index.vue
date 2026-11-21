@@ -58,6 +58,13 @@
           <MailChannelPane v-if="activeTab === 'mail'" />
         </el-tab-pane>
 
+        <el-tab-pane label="FAW-VW 渠道" name="faw-vw">
+          <el-space v-if="activeTab === 'faw-vw'" direction="vertical" alignment="stretch" fill style="width: 100%; max-width: 900px">
+            <FawVwChannelPane kind="FAW_VW_DINGTALK" />
+            <FawVwChannelPane kind="FAW_VW_EMAIL" />
+          </el-space>
+        </el-tab-pane>
+
         <el-tab-pane label="告警规则" name="rules">
           <div class="toolbar">
             <el-button type="primary" icon="Plus" @click="openRuleDialog()">新建规则</el-button>
@@ -171,6 +178,7 @@
 </template>
 
 <script setup name="OpsAlertCenter" lang="ts">
+import FawVwChannelPane from './FawVwChannelPane.vue';
 import MailChannelPane from './MailChannelPane.vue';
 import type { AlertIncident } from '@/api/ops';
 import { dateTimeText } from '@/views/ops/utils';
@@ -289,7 +297,7 @@ watch(activeTab, (tab) => {
   if (tab === 'channels') loadChannels();
   else if (tab === 'rules') loadRules();
   else if (tab === 'logs') loadLogs();
-  else {
+  else if (tab === 'current' || tab === 'history') {
     incidentOffset.value = 0;
     loadIncidents();
   }
