@@ -73,6 +73,7 @@
         </el-tab-pane>
 
         <el-tab-pane label="告警规则" name="rules">
+          <IncidentTemplateRulePane v-if="activeTab === 'rules'" />
           <div class="toolbar">
             <el-button type="primary" icon="Plus" @click="openRuleDialog()">新建规则</el-button>
             <el-select v-model="ruleServiceFilter" clearable placeholder="按服务过滤" style="width: 200px">
@@ -188,6 +189,7 @@
 import MailChannelPane from './MailChannelPane.vue';
 import ApplicationMailChannelPane from './ApplicationMailChannelPane.vue';
 import NotificationTemplatePane from './NotificationTemplatePane.vue';
+import IncidentTemplateRulePane from './IncidentTemplateRulePane.vue';
 import RaCertificateExpiryPane from './RaCertificateExpiryPane.vue';
 import type { AlertIncident } from '@/api/ops';
 import { dateTimeText } from '@/views/ops/utils';
