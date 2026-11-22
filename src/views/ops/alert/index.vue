@@ -68,6 +68,10 @@
           </el-card>
         </el-tab-pane>
 
+        <el-tab-pane label="通知模板" name="notification-templates">
+          <NotificationTemplatePane v-if="activeTab === 'notification-templates'" />
+        </el-tab-pane>
+
         <el-tab-pane label="告警规则" name="rules">
           <div class="toolbar">
             <el-button type="primary" icon="Plus" @click="openRuleDialog()">新建规则</el-button>
@@ -183,6 +187,7 @@
 <script setup name="OpsAlertCenter" lang="ts">
 import MailChannelPane from './MailChannelPane.vue';
 import ApplicationMailChannelPane from './ApplicationMailChannelPane.vue';
+import NotificationTemplatePane from './NotificationTemplatePane.vue';
 import RaCertificateExpiryPane from './RaCertificateExpiryPane.vue';
 import type { AlertIncident } from '@/api/ops';
 import { dateTimeText } from '@/views/ops/utils';
@@ -301,7 +306,7 @@ watch(activeTab, (tab) => {
   if (tab === 'channels') loadChannels();
   else if (tab === 'rules') loadRules();
   else if (tab === 'logs') loadLogs();
-  else {
+  else if (tab === 'current' || tab === 'history') {
     incidentOffset.value = 0;
     loadIncidents();
   }
