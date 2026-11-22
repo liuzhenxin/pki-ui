@@ -18,6 +18,7 @@ import type {
   OpsOverview,
   OpsServer,
   PlatformServiceMenuConfig,
+  RaCertificateExpiry,
   RadiusConfig,
   RadiusStatus,
   RadiusTestRequest,
@@ -30,6 +31,15 @@ const gatewayBaseURL = import.meta.env.VITE_APP_BASE_API.replace(/\/$/, '');
 const baseURL = import.meta.env.VITE_APP_OPS_API || `${gatewayBaseURL}/ops`;
 
 export { baseURL as opsApiBaseURL };
+
+export function getRaCertificateExpiry(closed: boolean, offset: number, limit: number) {
+  return request<unknown, { total: number; items: RaCertificateExpiry[] }>({
+    baseURL,
+    url: '/v1/alert/certificate-expiry',
+    method: 'get',
+    params: { closed, offset, limit }
+  });
+}
 
 export function getOpsOverview(): Promise<OpsOverview> {
   return request({

@@ -25,6 +25,9 @@
             </template>
           </template>
         </el-tab-pane>
+        <el-tab-pane label="证书到期" name="certificate-expiry">
+          <RaCertificateExpiryPane v-if="activeTab === 'certificate-expiry'" />
+        </el-tab-pane>
         <el-tab-pane label="通知渠道" name="channels">
           <div class="toolbar">
             <el-button type="primary" icon="Plus" @click="openChannelDialog()">新建渠道</el-button>
@@ -172,6 +175,7 @@
 
 <script setup name="OpsAlertCenter" lang="ts">
 import MailChannelPane from './MailChannelPane.vue';
+import RaCertificateExpiryPane from './RaCertificateExpiryPane.vue';
 import type { AlertIncident } from '@/api/ops';
 import { dateTimeText } from '@/views/ops/utils';
 import { useRoute } from 'vue-router';
