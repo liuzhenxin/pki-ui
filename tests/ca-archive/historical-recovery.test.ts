@@ -108,7 +108,7 @@ describe('CA archive certificate recovery', () => {
     }
   });
 
-  it('submits the archive ID, retries unchanged after a timeout and confirms only the bound device receipt', async () => {
+  it('submits over HTTP, retries unchanged after a timeout and confirms only the bound device receipt', async () => {
     mocks.user.permissions = [historicalRecoveryPermission];
     mocks.request
       .mockRejectedValueOnce(new Error('fixture timeout'))
@@ -116,6 +116,7 @@ describe('CA archive certificate recovery', () => {
       .mockResolvedValueOnce({ code: 'OK', data: { ...task, status: 'PENDING_CONFIRMATION', confirmBy: date } })
       .mockResolvedValueOnce({ code: 'OK', data: { ...task, status: 'SUCCEEDED', receiptSha256: 'f'.repeat(64) } });
     const wrapper = await mountPage();
+    vi.stubGlobal('crypto', { getRandomValues: crypto.getRandomValues.bind(crypto) });
     try {
       expect(wrapper.findAll('button').filter((item) => item.text() === '密钥恢复')).toHaveLength(1);
       await button(wrapper, '密钥恢复').trigger('click');
@@ -137,7 +138,7 @@ describe('CA archive certificate recovery', () => {
           headers: { sensitive: true, repeatSubmit: false, hideErrorNotify: true },
           data: {
             ...bindingFile,
-            clientRequestNo: expect.stringMatching(/^[0-9a-f-]{36}$/),
+            clientRequestNo: expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/),
             certificateRef: { source: 'ARCHIVE', id: archiveId },
             ticketNo: 'fixture-ticket',
             reason: '模拟恢复',
@@ -176,6 +177,7 @@ describe('CA archive certificate recovery', () => {
       expect(dialog.text()).toContain('恢复成功');
       expect(mocks.request.mock.calls.every(([config]) => config.url.startsWith('/ca/'))).toBe(true);
     } finally {
+      vi.unstubAllGlobals();
       wrapper.unmount();
     }
   });
