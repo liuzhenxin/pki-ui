@@ -505,6 +505,7 @@
       </div>
       <template #footer>
         <div class="dialog-footer">
+          <RaIssueNotificationButton v-if="issueResult.certId" :cert-id="issueResult.certId" />
           <el-button type="primary" @click="issueResultOpen = false">关闭</el-button>
         </div>
       </template>
@@ -533,6 +534,7 @@
 import CertRowAction from '../components/CertRowAction.vue';
 import { useRaListRefreshOnReturn } from '@/hooks/useRaListRefreshOnReturn';
 import { ElMessage, FormInstance, FormRules } from 'element-plus';
+import RaIssueNotificationButton from './RaIssueNotificationButton.vue';
 import {
   confirmRaRenewalDistribution,
   executeRaCert,

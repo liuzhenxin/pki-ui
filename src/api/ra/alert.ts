@@ -28,6 +28,16 @@ export interface RaAlertRuleQuery {
   ruleStatus?: number | string;
 }
 
+export interface RaAlertExpiryOption {
+  id: string;
+  name: string;
+}
+
+export interface RaAlertExpiryOptions {
+  roots: RaAlertExpiryOption[];
+  profiles: RaAlertExpiryOption[];
+}
+
 export interface RaAlertHistory {
   id?: number | string;
   ruleId?: number | string;
@@ -88,6 +98,13 @@ export function pageRaAlertRule(query: RaAlertRuleQuery): Promise<Result<any>> {
 export function getRaAlertRule(id: number | string): Promise<Result<RaAlertRule>> {
   return request({
     url: `/ra/v1/alert-rules/${id}`,
+    method: 'get'
+  }) as any;
+}
+
+export function getRaAlertExpiryOptions(): Promise<Result<RaAlertExpiryOptions>> {
+  return request({
+    url: '/ra/v1/alert-rules/expiry-options',
     method: 'get'
   }) as any;
 }

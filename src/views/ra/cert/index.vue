@@ -136,6 +136,7 @@
       <el-input v-model="detail.cert" type="textarea" :rows="11" readonly class="pem-textarea" />
 
       <template #footer>
+        <RaIssueNotificationButton v-if="detail.id && detail.status === 'VALID'" :cert-id="detail.id" />
         <el-button type="primary" @click="detailOpen = false">关闭</el-button>
       </template>
     </el-dialog>
@@ -243,6 +244,7 @@ import auth from '@/plugins/auth';
 import { certificateDownloadBlob } from '@/utils/raCertificateDownload';
 import { extendedUsageText } from '@/utils/raCertificatePurpose';
 import { intranetCertSyncLocation } from '@/utils/raIntranetCertNavigation';
+import RaIssueNotificationButton from '../issue/RaIssueNotificationButton.vue';
 
 const rows = ref<RaCertSummary[]>([]);
 const router = useRouter();

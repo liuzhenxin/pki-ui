@@ -89,15 +89,15 @@
       </div>
     </el-card>
 
-    <el-dialog v-model="dialog.visible" :title="dialog.title" width="760px" append-to-body>
+    <el-dialog v-model="dialog.visible" :title="dialog.title" width="min(760px, calc(100vw - 32px))" append-to-body>
       <el-form ref="ruleFormRef" :model="form" :rules="rules" label-width="110px">
         <el-row :gutter="16">
-          <el-col :span="12">
+          <el-col :span="12" :xs="24">
             <el-form-item label="规则名称" prop="ruleName">
               <el-input v-model="form.ruleName" maxlength="100" placeholder="请输入规则名称" />
             </el-form-item>
           </el-col>
-          <el-col :span="12">
+          <el-col :span="12" :xs="24">
             <el-form-item label="告警类型" prop="alertType">
               <el-select v-model="form.alertType" style="width: 100%" @change="resetCondition">
                 <el-option v-for="item in alertTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
@@ -106,14 +106,14 @@
           </el-col>
         </el-row>
         <el-row :gutter="16">
-          <el-col :span="8">
+          <el-col :span="8" :xs="24">
             <el-form-item label="告警级别" prop="alertLevel">
               <el-select v-model="form.alertLevel" style="width: 100%">
                 <el-option v-for="item in alertLevelOptions" :key="item.value" :label="item.label" :value="item.value" />
               </el-select>
             </el-form-item>
           </el-col>
-          <el-col :span="8">
+          <el-col v-if="form.alertType !== 'cert_expire'" :span="8" :xs="24">
             <el-form-item label="冷静期" prop="coolDownMinutes">
               <div class="number-with-unit">
                 <el-input-number v-model="form.coolDownMinutes" :min="0" :max="10080" controls-position="right" />
@@ -121,7 +121,7 @@
               </div>
             </el-form-item>
           </el-col>
-          <el-col :span="8">
+          <el-col :span="8" :xs="24">
             <el-form-item label="状态">
               <el-switch v-model="form.ruleStatus" :active-value="1" :inactive-value="0" active-text="启用" inactive-text="禁用" />
             </el-form-item>
@@ -129,22 +129,50 @@
         </el-row>
 
         <template v-if="form.alertType === 'cert_expire'">
-          <el-row :gutter="16">
-            <el-col :span="12">
-              <el-form-item label="预警天数">
-                <el-input-number v-model="form.triggerCondition.days" :min="1" :max="3650" controls-position="right" />
-              </el-form-item>
-            </el-col>
-            <el-col :span="12">
-              <el-form-item label="证书范围">
-                <el-select v-model="form.triggerCondition.certificateScope" style="width: 100%">
-                  <el-option label="业务证书" value="business" />
-                  <el-option label="根证书及中间证书" value="ca" />
-                  <el-option label="全部证书" value="all" />
-                </el-select>
-              </el-form-item>
-            </el-col>
-          </el-row>
+          <el-form-item label="证书范围">
+            <el-select v-model="form.triggerCondition.certificateScope" style="width: 100%">
+              <el-option label="业务证书" value="business" />
+              <el-option label="根证书及中间证书" value="ca" />
+              <el-option label="全部证书" value="all" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="预警范围（天）">
+            <el-input-number v-model="form.triggerCondition.days" :min="1" :max="3650" controls-position="right" />
+            <span v-if="form.triggerCondition.certificateScope !== 'ca'" class="unit-text">范围内的 30、7、1 天节点各提醒一次</span>
+          </el-form-item>
+          <el-form-item label="CA 根">
+            <el-select
+              :model-value="selectedExpiryId('root')"
+              :loading="loadingExpiryOptions"
+              :disabled="expiryOptionsFailed || loadingExpiryOptions"
+              clearable
+              filterable
+              placeholder="全部 CA 根"
+              style="width: 100%"
+              @update:model-value="updateExpiryScope('root', $event)"
+            >
+              <el-option v-for="item in expiryChoices('root', expiryOptions.roots)" :key="item.id" :label="item.name" :value="item.id" />
+            </el-select>
+          </el-form-item>
+          <el-form-item v-if="form.triggerCondition.certificateScope !== 'ca'" label="证书模板">
+            <el-select
+              :model-value="selectedExpiryId('profile')"
+              :loading="loadingExpiryOptions"
+              :disabled="expiryOptionsFailed || loadingExpiryOptions"
+              clearable
+              filterable
+              placeholder="全部证书模板"
+              style="width: 100%"
+              @update:model-value="updateExpiryScope('profile', $event)"
+            >
+              <el-option v-for="item in expiryChoices('profile', expiryOptions.profiles)" :key="item.id" :label="item.name" :value="item.id" />
+            </el-select>
+            <span class="expiry-scope-help">同时选择时，证书须同时匹配 CA 根和模板。</span>
+          </el-form-item>
+          <el-form-item v-if="expiryOptionsFailed">
+            <span role="status">证书筛选选项加载失败。</span>
+            <el-button link type="primary" @click="loadExpiryOptions">重试</el-button>
+          </el-form-item>
         </template>
         <template v-if="form.alertType === 'pending_approval'">
           <el-form-item label="待审批阈值">
@@ -157,14 +185,14 @@
 
         <el-alert title="站内通知会直接发送；邮件、短信和Webhook需配置对应发送服务。" type="info" :closable="false" show-icon class="form-alert" />
         <el-row :gutter="16">
-          <el-col :span="12">
+          <el-col :span="12" :xs="24">
             <el-form-item label="通知方式" prop="notificationType">
               <el-select v-model="form.notificationType" style="width: 100%">
                 <el-option v-for="item in notificationTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
               </el-select>
             </el-form-item>
           </el-col>
-          <el-col :span="12">
+          <el-col :span="12" :xs="24">
             <el-form-item label="规则描述">
               <el-input v-model="form.description" maxlength="500" placeholder="请输入描述" />
             </el-form-item>
@@ -181,10 +209,11 @@
 </template>
 
 <script setup name="RaAlertRule" lang="ts">
-import { ComponentInternalInstance, getCurrentInstance, reactive, ref } from 'vue';
+import { ComponentInternalInstance, getCurrentInstance, reactive, ref, watch } from 'vue';
 import { ElMessage, FormInstance, FormRules } from 'element-plus';
 import { to } from 'await-to-js';
 import {
+  getRaAlertExpiryOptions,
   getRaAlertRule,
   modifyRaAlertRule,
   pageRaAlertRule,
@@ -194,7 +223,7 @@ import {
   updateRaAlertRuleStatus,
   validateRaAlertRule
 } from '@/api/ra/alert';
-import type { RaAlertRule } from '@/api/ra/alert';
+import type { RaAlertExpiryOption, RaAlertExpiryOptions, RaAlertRule } from '@/api/ra/alert';
 
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
 
@@ -219,6 +248,9 @@ const loading = ref(false);
 const submitting = ref(false);
 const validating = ref(false);
 const scanning = ref(false);
+const loadingExpiryOptions = ref(false);
+const expiryOptionsFailed = ref(false);
+const expiryOptions = ref<RaAlertExpiryOptions>({ roots: [], profiles: [] });
 const total = ref(0);
 const ruleList = ref<RaAlertRule[]>([]);
 const ids = ref<Array<number | string>>([]);
@@ -243,6 +275,7 @@ const defaultForm = (): RaAlertRule => ({
   description: ''
 });
 const form = reactive<RaAlertRule>(defaultForm());
+type ExpiryFilter = 'root' | 'profile';
 
 const rules: FormRules = {
   ruleName: [{ required: true, message: '规则名称不能为空', trigger: 'blur' }],
@@ -297,8 +330,9 @@ async function handleEdit(row: RaAlertRule) {
   const response = await getRaAlertRule(row.id!);
   Object.assign(form, unwrap(response));
   form.triggerCondition = form.triggerCondition || defaultCondition(form.alertType);
-  if (form.alertType === 'cert_expire' && !form.triggerCondition.certificateScope) {
-    form.triggerCondition.certificateScope = 'business';
+  if (form.alertType === 'cert_expire') {
+    form.triggerCondition.days ??= form.triggerCondition.thresholdDays ?? 30;
+    form.triggerCondition.certificateScope ||= 'business';
   }
   dialog.title = '修改告警规则';
   dialog.visible = true;
@@ -306,6 +340,55 @@ async function handleEdit(row: RaAlertRule) {
 
 function resetCondition() {
   form.triggerCondition = defaultCondition(form.alertType);
+}
+
+watch(
+  () => dialog.visible && form.alertType === 'cert_expire',
+  (visible) => {
+    if (visible) void loadExpiryOptions();
+  }
+);
+
+async function loadExpiryOptions() {
+  if (loadingExpiryOptions.value) return;
+  loadingExpiryOptions.value = true;
+  expiryOptionsFailed.value = false;
+  try {
+    const { data } = await getRaAlertExpiryOptions();
+    if (data) {
+      expiryOptions.value = data;
+    } else {
+      expiryOptionsFailed.value = true;
+    }
+  } catch {
+    expiryOptionsFailed.value = true;
+  } finally {
+    loadingExpiryOptions.value = false;
+  }
+}
+
+function selectedExpiryId(filter: ExpiryFilter): string | undefined {
+  const { triggerCondition } = form;
+  const value = triggerCondition[`${filter}Id`];
+  return triggerCondition[`${filter}Scope`] === 'selected' && value != null ? String(value) : undefined;
+}
+
+function expiryChoices(filter: ExpiryFilter, options: RaAlertExpiryOption[]): RaAlertExpiryOption[] {
+  const selected = selectedExpiryId(filter);
+  if (selected && !options.some(({ id }) => id === selected)) {
+    return [...options, { id: selected, name: 'ID ' + selected }];
+  }
+  return options;
+}
+
+function updateExpiryScope(filter: ExpiryFilter, id?: string) {
+  const { triggerCondition } = form;
+  triggerCondition[`${filter}Scope`] = id ? 'selected' : 'all';
+  if (id) {
+    triggerCondition[`${filter}Id`] = id;
+  } else {
+    delete triggerCondition[`${filter}Id`];
+  }
 }
 
 async function handleStatus(row: RaAlertRule) {
@@ -399,6 +482,11 @@ getList();
 </script>
 
 <style scoped lang="scss">
+.expiry-scope-help {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+}
+
 .card-header,
 .table-footer {
   display: flex;

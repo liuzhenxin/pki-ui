@@ -25,6 +25,9 @@
             </template>
           </template>
         </el-tab-pane>
+        <el-tab-pane label="证书到期" name="certificate-expiry">
+          <RaCertificateExpiryPane v-if="activeTab === 'certificate-expiry'" />
+        </el-tab-pane>
         <el-tab-pane label="通知渠道" name="channels">
           <div class="toolbar">
             <el-button type="primary" icon="Plus" @click="openChannelDialog()">新建渠道</el-button>
@@ -58,7 +61,19 @@
           <MailChannelPane v-if="activeTab === 'mail'" />
         </el-tab-pane>
 
+        <el-tab-pane label="应用通知" name="application-notifications">
+          <el-card v-if="activeTab === 'application-notifications'" shadow="never">
+            <template #header>RA 业务邮件</template>
+            <ApplicationMailChannelPane />
+          </el-card>
+        </el-tab-pane>
+
+        <el-tab-pane label="通知模板" name="notification-templates">
+          <NotificationTemplatePane v-if="activeTab === 'notification-templates'" />
+        </el-tab-pane>
+
         <el-tab-pane label="告警规则" name="rules">
+          <IncidentTemplateRulePane v-if="activeTab === 'rules'" />
           <div class="toolbar">
             <el-button type="primary" icon="Plus" @click="openRuleDialog()">新建规则</el-button>
             <el-select v-model="ruleServiceFilter" clearable placeholder="按服务过滤" style="width: 200px">
@@ -172,6 +187,10 @@
 
 <script setup name="OpsAlertCenter" lang="ts">
 import MailChannelPane from './MailChannelPane.vue';
+import ApplicationMailChannelPane from './ApplicationMailChannelPane.vue';
+import NotificationTemplatePane from './NotificationTemplatePane.vue';
+import IncidentTemplateRulePane from './IncidentTemplateRulePane.vue';
+import RaCertificateExpiryPane from './RaCertificateExpiryPane.vue';
 import type { AlertIncident } from '@/api/ops';
 import { dateTimeText } from '@/views/ops/utils';
 import { useRoute } from 'vue-router';
@@ -289,7 +308,7 @@ watch(activeTab, (tab) => {
   if (tab === 'channels') loadChannels();
   else if (tab === 'rules') loadRules();
   else if (tab === 'logs') loadLogs();
-  else {
+  else if (tab === 'current' || tab === 'history') {
     incidentOffset.value = 0;
     loadIncidents();
   }

@@ -318,3 +318,12 @@ export interface AlertEventLog {
   channelResult?: string;
   createTime?: string;
 }
+
+export interface RaCertificateExpiry {
+  sourceId: string;
+  certId: string;
+  expiresAt: string;
+  stageDays: number;
+  status: 'OPEN' | 'RENEWED' | 'REVOKED' | 'EXPIRED' | 'REPLACED' | 'REMOVED';
+  updatedAt: string;
+}
