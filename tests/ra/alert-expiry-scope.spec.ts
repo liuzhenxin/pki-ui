@@ -79,7 +79,9 @@ test('RA saves both filters as exact IDs, reloads them and clears a single filte
   await profile.getByRole('combobox').click();
   await page.getByRole('option', { name: '测试证书模板' }).click();
   await dialog.getByRole('button', { name: '保存', exact: true }).click();
-  await expect.poll(() => saved).toEqual([{ thresholdDays: 30, days: 30, rootScope: 'selected', rootId, profileScope: 'selected', profileId }]);
+  await expect
+    .poll(() => saved)
+    .toEqual([{ certificateScope: 'business', thresholdDays: 30, days: 30, rootScope: 'selected', rootId, profileScope: 'selected', profileId }]);
   await expect(dialog).toBeHidden();
 
   await edit.click();
@@ -89,7 +91,9 @@ test('RA saves both filters as exact IDs, reloads them and clears a single filte
   await root.locator('.el-select__clear').click();
   await expect(root).toContainText('全部 CA 根');
   await dialog.getByRole('button', { name: '保存', exact: true }).click();
-  await expect.poll(() => saved[1]).toEqual({ thresholdDays: 30, days: 30, rootScope: 'all', profileScope: 'selected', profileId });
+  await expect
+    .poll(() => saved[1])
+    .toEqual({ certificateScope: 'business', thresholdDays: 30, days: 30, rootScope: 'all', profileScope: 'selected', profileId });
   expect(paths.filter((path) => path.startsWith('/ops/'))).toEqual([]);
 });
 
