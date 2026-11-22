@@ -71,6 +71,7 @@
 <script setup lang="ts">
 import { computed, ref, shallowRef } from 'vue';
 import { isAxiosError } from 'axios';
+import { v4 as uuidv4 } from 'uuid';
 import {
   confirmHistoricalRecovery,
   getHistoricalRecovery,
@@ -260,7 +261,7 @@ function submit() {
       const { deviceId, recipientId, ticketNo } = proof.deviceBinding.payload;
       attempt.value = {
         ...proof,
-        clientRequestNo: crypto.randomUUID(),
+        clientRequestNo: uuidv4(),
         certificateRef: { source: 'ARCHIVE', id: props.certificate.id },
         ticketNo,
         reason: reason.value,
