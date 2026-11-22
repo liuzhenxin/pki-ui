@@ -109,6 +109,7 @@
       <el-input v-model="detail.cert" type="textarea" :rows="11" readonly class="pem-textarea" />
 
       <template #footer>
+        <RaIssueNotificationButton v-if="detail.id && detail.status === 'VALID'" :cert-id="detail.id" />
         <el-button type="primary" @click="detailOpen = false">关闭</el-button>
       </template>
     </el-dialog>
@@ -210,6 +211,7 @@ import {
 } from '@/api/ra/cert';
 import SKFClient from '@/api/skf/skf_api';
 import { certificateDownloadBlob } from '@/utils/raCertificateDownload';
+import RaIssueNotificationButton from '../issue/RaIssueNotificationButton.vue';
 
 const rows = ref<RaCertSummary[]>([]);
 const loading = ref(false);
