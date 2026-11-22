@@ -68,6 +68,10 @@
           </el-card>
         </el-tab-pane>
 
+        <el-tab-pane label="通知模板" name="notification-templates">
+          <NotificationTemplatePane v-if="activeTab === 'notification-templates'" />
+        </el-tab-pane>
+
         <el-tab-pane label="FAW-VW 渠道" name="faw-vw">
           <el-space v-if="activeTab === 'faw-vw'" direction="vertical" alignment="stretch" fill style="width: 100%; max-width: 900px">
             <FawVwChannelPane kind="FAW_VW_DINGTALK" />
@@ -192,6 +196,7 @@ import FawVwChannelPane from './FawVwChannelPane.vue';
 import RaCertificateExpiryPane from './RaCertificateExpiryPane.vue';
 import MailChannelPane from './MailChannelPane.vue';
 import ApplicationMailChannelPane from './ApplicationMailChannelPane.vue';
+import NotificationTemplatePane from './NotificationTemplatePane.vue';
 import type { AlertIncident } from '@/api/ops';
 import { dateTimeText } from '@/views/ops/utils';
 import { useRoute } from 'vue-router';
