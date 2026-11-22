@@ -25,9 +25,6 @@
             </template>
           </template>
         </el-tab-pane>
-        <el-tab-pane label="证书到期" name="certificate-expiry">
-          <RaCertificateExpiryPane v-if="activeTab === 'certificate-expiry'" />
-        </el-tab-pane>
         <el-tab-pane label="通知渠道" name="channels">
           <div class="toolbar">
             <el-button type="primary" icon="Plus" @click="openChannelDialog()">新建渠道</el-button>
@@ -77,6 +74,10 @@
             <FawVwChannelPane kind="FAW_VW_DINGTALK" />
             <FawVwChannelPane kind="FAW_VW_EMAIL" />
           </el-space>
+        </el-tab-pane>
+
+        <el-tab-pane label="告警条件" name="conditions">
+          <AlertConditionPane v-if="activeTab === 'conditions'" />
         </el-tab-pane>
 
         <el-tab-pane label="告警规则" name="rules">
@@ -193,8 +194,8 @@
 </template>
 
 <script setup name="OpsAlertCenter" lang="ts">
+import AlertConditionPane from './AlertConditionPane.vue';
 import FawVwChannelPane from './FawVwChannelPane.vue';
-import RaCertificateExpiryPane from './RaCertificateExpiryPane.vue';
 import MailChannelPane from './MailChannelPane.vue';
 import ApplicationMailChannelPane from './ApplicationMailChannelPane.vue';
 import NotificationTemplatePane from './NotificationTemplatePane.vue';
