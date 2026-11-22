@@ -61,6 +61,13 @@
           <MailChannelPane v-if="activeTab === 'mail'" />
         </el-tab-pane>
 
+        <el-tab-pane label="应用通知" name="application-notifications">
+          <el-card v-if="activeTab === 'application-notifications'" shadow="never">
+            <template #header>RA 业务邮件</template>
+            <ApplicationMailChannelPane />
+          </el-card>
+        </el-tab-pane>
+
         <el-tab-pane label="告警规则" name="rules">
           <div class="toolbar">
             <el-button type="primary" icon="Plus" @click="openRuleDialog()">新建规则</el-button>
@@ -175,6 +182,7 @@
 
 <script setup name="OpsAlertCenter" lang="ts">
 import MailChannelPane from './MailChannelPane.vue';
+import ApplicationMailChannelPane from './ApplicationMailChannelPane.vue';
 import RaCertificateExpiryPane from './RaCertificateExpiryPane.vue';
 import type { AlertIncident } from '@/api/ops';
 import { dateTimeText } from '@/views/ops/utils';
