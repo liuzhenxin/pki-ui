@@ -341,3 +341,12 @@ export interface FawVwChannelSave {
   accessKey?: string;
   secretKey?: string;
 }
+
+export interface RaCertificateExpiry {
+  sourceId: string;
+  certId: string;
+  expiresAt: string;
+  stageDays: number;
+  status: 'OPEN' | 'RENEWED' | 'REVOKED' | 'EXPIRED' | 'REPLACED' | 'REMOVED';
+  updatedAt: string;
+}
