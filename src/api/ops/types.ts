@@ -319,11 +319,36 @@ export interface AlertEventLog {
   createTime?: string;
 }
 
-export interface RaCertificateExpiry {
-  sourceId: string;
-  certId: string;
-  expiresAt: string;
-  stageDays: number;
-  status: 'OPEN' | 'RENEWED' | 'REVOKED' | 'EXPIRED' | 'REPLACED' | 'REMOVED';
-  updatedAt: string;
+export type AlertConditionType =
+  | 'SERVER_CPU'
+  | 'SERVER_MEMORY'
+  | 'SERVER_DISK'
+  | 'SERVER_AGENT'
+  | 'COMPONENT'
+  | 'KMC_HSM'
+  | 'CA_HSM'
+  | 'RA_CERT_EXPIRY';
+
+export interface AlertConditionRule {
+  type: AlertConditionType;
+  target: string;
+  triggerPercent?: number;
+  recoveryPercent?: number;
+  triggerSeconds?: number;
+  recoverySeconds?: number;
+  timeoutSeconds?: number;
+  triggerSamples?: number;
+  recoverySamples?: number;
+  expiryDays?: number[];
+}
+
+export interface AlertConditionSettings {
+  revision: number;
+  rules: AlertConditionRule[];
+}
+
+export interface AlertConditionView {
+  settings: AlertConditionSettings;
+  servers: string[];
+  editable: boolean;
 }

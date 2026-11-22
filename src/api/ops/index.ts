@@ -4,6 +4,8 @@ import type {
   AccessControlCurrentIp,
   AlertChannel,
   AlertChannelSave,
+  AlertConditionSettings,
+  AlertConditionView,
   AlertDispatchResult,
   AlertEventLog,
   AlertRule,
@@ -18,7 +20,6 @@ import type {
   OpsOverview,
   OpsServer,
   PlatformServiceMenuConfig,
-  RaCertificateExpiry,
   RadiusConfig,
   RadiusStatus,
   RadiusTestRequest,
@@ -32,13 +33,12 @@ const baseURL = import.meta.env.VITE_APP_OPS_API || `${gatewayBaseURL}/ops`;
 
 export { baseURL as opsApiBaseURL };
 
-export function getRaCertificateExpiry(closed: boolean, offset: number, limit: number) {
-  return request<unknown, { total: number; items: RaCertificateExpiry[] }>({
-    baseURL,
-    url: '/v1/alert/certificate-expiry',
-    method: 'get',
-    params: { closed, offset, limit }
-  });
+export function getAlertConditions() {
+  return request<unknown, AlertConditionView>({ baseURL, url: '/v1/alert/conditions', method: 'get' });
+}
+
+export function saveAlertConditions(data: AlertConditionSettings) {
+  return request<unknown, AlertConditionSettings>({ baseURL, url: '/v1/alert/conditions', method: 'put', data });
 }
 
 export function getOpsOverview(): Promise<OpsOverview> {

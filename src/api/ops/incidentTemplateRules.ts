@@ -10,7 +10,7 @@ export interface IncidentTemplateBinding {
 }
 
 export interface IncidentTemplateRules {
-  sources: { source: string; application: string; trigger: string; recovery: string }[];
+  sources: { source: string; application: string; trigger: string; recovery: string | null }[];
   channels: { name: string; channel: string; templateChannels: string[] }[];
   bindings: IncidentTemplateBinding[];
   editable: boolean;
