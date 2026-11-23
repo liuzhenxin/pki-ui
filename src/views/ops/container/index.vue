@@ -320,7 +320,7 @@ import {
   submitOpsContainerAction
 } from '@/api/ops';
 import type { OpsContainer, OpsContainerAction, OpsContainerLogs, OpsContainerVersion, OpsOperation, OpsServer } from '@/api/ops/types';
-import { collectContainers, dateTimeText } from '@/views/ops/utils';
+import { collectContainers, containerImageTag, dateTimeText, matchesContainerVersion } from '@/views/ops/utils';
 import OpsTaskProgressDrawer from '@/views/ops/components/OpsTaskProgressDrawer.vue';
 import { checkPermi } from '@/utils/permission';
 
@@ -349,21 +349,20 @@ const query = ref({ serverCode: '', running: '', health: '', updateOnly: false, 
 const page = ref({ pageNum: 1, pageSize: 10 });
 let pollTimer: ReturnType<typeof setTimeout> | undefined;
 const keyOf = (row: Row) => `${row.serverCode}/${row.name}`;
-const imageTagOf = (image: string) => {
-  const lastSlash = image.lastIndexOf('/');
-  const lastColon = image.lastIndexOf(':');
-  return lastColon > lastSlash ? image.slice(lastColon + 1) : '';
-};
 const versionFromRow = (row: Row): OpsContainerVersion => ({
   repository: '',
-  currentTag: imageTagOf(row.image),
+  currentTag: containerImageTag(row.image),
   currentDigest: row.imageDigest,
   latestReleaseTag: row.latestReleaseTag,
   latestReleaseDigest: row.latestReleaseDigest,
   status: row.latestReleaseTag ? 'AVAILABLE' : '',
   updateAvailable: row.updateAvailable
 });
-const versionOf = (row?: Row) => (row ? versions.value[keyOf(row)] || versionFromRow(row) : ({} as OpsContainerVersion));
+const versionOf = (row?: Row) => {
+  if (!row) return {} as OpsContainerVersion;
+  const scanned = versions.value[keyOf(row)];
+  return scanned && matchesContainerVersion(row, scanned) ? scanned : versionFromRow(row);
+};
 const manageable = (row: Row) => row.manageable === true;
 const canUpgrade = (row: Row) => manageable(row) && row.health !== 'none' && row.health !== 'unknown' && versionOf(row).updateAvailable;
 const disabledReason = (row: Row) =>
@@ -490,7 +489,7 @@ const summary = computed(() => [
   { label: '容器总数', value: containers.value.length, type: '' },
   { label: '运行中', value: containers.value.filter((v) => v.running).length, type: 'success' },
   { label: '已停止', value: containers.value.filter((v) => !v.running).length, type: 'muted' },
-  { label: '可升级', value: Object.values(versions.value).filter((v) => v.updateAvailable).length, type: 'warning' },
+  { label: '可升级', value: containers.value.filter((row) => versionOf(row).updateAvailable).length, type: 'warning' },
   { label: '执行失败', value: operations.value.filter((v) => v.status === 'FAILED').length, type: 'danger' }
 ]);
 const selectedOperations = computed(() =>
@@ -542,11 +541,9 @@ const checkUpdates = async () => {
     const result = await checkOpsContainerUpdates();
     const next: Record<string, OpsContainerVersion> = {};
     containers.value.forEach((row) => {
-      const candidates = result.filter((v) => row.image.includes(`/${v.repository}:`) || row.image.startsWith(`${v.repository}:`));
-      const match =
-        candidates.find((v) => Boolean(row.imageDigest) && v.currentDigest === row.imageDigest) ||
-        candidates.find((v) => v.currentTag === imageTagOf(row.image)) ||
-        candidates[0];
+      const match = result.find(
+        (v) => (row.image.includes(`/${v.repository}:`) || row.image.startsWith(`${v.repository}:`)) && matchesContainerVersion(row, v)
+      );
       if (match) next[keyOf(row)] = match;
     });
     versions.value = next;
