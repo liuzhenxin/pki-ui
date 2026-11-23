@@ -3,8 +3,48 @@
     <ResponderDetail v-if="selectedId" :id="selectedId" :revision="detailRevision" @back="closeDetail" @edit="openEdit" @certificate="openCert" />
     <template v-else>
       <OcspPageHeader title="响应者管理" description="查看响应者、签名证书和关联数据源。"
-        ><el-button v-hasPermi="['ocsp:responder:save']" type="primary" icon="Plus" @click="openEdit()">新建响应者</el-button></OcspPageHeader
+        ><el-button v-hasPermi="['ocsp:responder:save']" @click="openEdit()">手动配置响应者</el-button
+        ><el-button v-hasPermi="['ocsp:responder:save']" type="primary" icon="Plus" @click="openSigningMaterial()"
+          >申请签名证书</el-button
+        ></OcspPageHeader
       >
+      <el-card shadow="never" class="mb16">
+        <template #header>待关联签名材料</template>
+        <el-table v-loading="materialsLoading" :data="signingMaterials" size="small">
+          <template #empty>
+            <OcspEmptyState
+              v-if="!materialsLoading"
+              :title="materialsError ? '签名材料读取失败' : '暂无待关联材料'"
+              :description="materialsError ? '刷新后可重新读取列表。' : '导入 CA 签发的响应者证书后，可在按 CA 配置中关联。'"
+              :error="materialsError"
+            >
+              <el-button v-if="materialsError" @click="loadSigningMaterials">重新加载</el-button>
+            </OcspEmptyState>
+          </template>
+          <el-table-column prop="name" label="材料名称" min-width="160" />
+          <el-table-column prop="subject" label="CSR 主题" min-width="170" show-overflow-tooltip />
+          <el-table-column prop="algorithm" label="算法" width="140" />
+          <el-table-column label="状态" width="170">
+            <template #default="{ row }">
+              <el-tag :type="row.status === 'ACTIVE' ? 'success' : 'warning'">
+                {{ row.status === 'ACTIVE' ? '已导入，待关联' : '等待签发证书' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="120">
+            <template #default="{ row }">
+              <el-button
+                v-if="row.status === 'PENDING'"
+                v-hasPermi="['ocsp:responder:save']"
+                link
+                type="primary"
+                @click="openSigningMaterial(row.name)"
+                >继续导入</el-button
+              >
+            </template>
+          </el-table-column>
+        </el-table>
+      </el-card>
       <el-card shadow="never" class="mb16">
         <el-form :inline="true" :model="query">
           <el-form-item label="名称">
@@ -14,6 +54,7 @@
             <el-select v-model="query.status" clearable placeholder="全部" style="width: 140px">
               <el-option label="已启用" value="ACTIVE" />
               <el-option label="已停用" value="INACTIVE" />
+              <el-option label="待服务 CA 启用" value="STAGED" />
             </el-select>
           </el-form-item>
           <el-form-item>
@@ -43,7 +84,7 @@
           <el-table-column label="签名类型" min-width="130"
             ><template #default="{ row }">{{ signerTypeLabel(row.signerType) }}</template></el-table-column
           >
-          <el-table-column label="状态" width="110" align="center">
+          <el-table-column label="状态" width="145" align="center">
             <template #default="{ row }">
               <el-tag :type="row.status === 'ACTIVE' ? 'success' : 'info'" size="small">{{ responderStatusLabel(row.status) }}</el-tag>
             </template>
@@ -56,8 +97,10 @@
           <el-table-column label="操作" width="240" fixed="right">
             <template #default="{ row }">
               <el-button link type="primary" @click="openDetail(row)">详情</el-button>
-              <el-button v-hasPermi="['ocsp:responder:save']" link type="primary" @click="openEdit(row)">编辑</el-button>
-              <el-button v-hasPermi="['ocsp:responder:status']" link type="warning" @click="toggleStatus(row)">
+              <el-button v-if="row.status !== 'STAGED'" v-hasPermi="['ocsp:responder:save']" link type="primary" @click="openEdit(row)">
+                编辑
+              </el-button>
+              <el-button v-if="row.status !== 'STAGED'" v-hasPermi="['ocsp:responder:status']" link type="warning" @click="toggleStatus(row)">
                 {{ row.status === 'ACTIVE' ? '停用' : '启用' }}
               </el-button>
             </template>
@@ -66,6 +109,26 @@
         <pagination v-show="total > 0" v-model:page="query.pageNum" v-model:limit="query.pageSize" :total="total" @pagination="getList" />
       </el-card>
     </template>
+
+    <el-drawer v-model="materialVisible" title="申请签名证书" size="min(680px, 100vw)" @closed="loadSigningMaterials">
+      <el-form v-if="materialVisible" label-width="130px" @submit.prevent>
+        <el-form-item label="材料名称" required>
+          <el-input v-model="materialName" maxlength="100" :readonly="materialNameLocked" />
+        </el-form-item>
+        <ResponderCsrPanel
+          :name="materialName"
+          signer-type="SOFTWARE"
+          signer-cert=""
+          signer-conf=""
+          cert-source="CSR"
+          unassigned-only
+          @imported="materialVisible = false"
+        />
+      </el-form>
+      <template #footer>
+        <el-button @click="materialVisible = false">关闭</el-button>
+      </template>
+    </el-drawer>
 
     <el-drawer v-model="editVisible" :title="form.id ? '编辑响应者' : '新建响应者'" size="min(680px, 100vw)">
       <el-form ref="formRef" :model="form" :rules="rules" label-width="140px">
@@ -147,12 +210,45 @@ import { normalizeOcspCaId } from '@/utils/ocspIdentifier';
 import { responderStatusLabel, signerTypeLabel } from '@/utils/ocspPresentation';
 import ResponderCsrPanel from '@/views/ocsp/components/ResponderCsrPanel.vue';
 import { assertSafeSignerCert, assertSafeSignerConf } from '@/api/ocsp/common';
-import { createOcspResponder, getOcspResponder, pageOcspResponders, updateOcspResponder, updateOcspResponderStatus } from '@/api/ocsp/responder';
+import {
+  createOcspResponder,
+  getOcspResponder,
+  listUnassignedOcspSignerMaterials,
+  pageOcspResponders,
+  updateOcspResponder,
+  updateOcspResponderStatus
+} from '@/api/ocsp/responder';
 import { listServiceCaDrafts } from '@/api/ocsp/serviceCa';
-import type { OcspResponder } from '@/api/ocsp/types';
+import type { OcspResponder, OcspSignerMaterialSummary } from '@/api/ocsp/types';
 
 const route = useRoute();
 const router = useRouter();
+const materialVisible = ref(false);
+const materialName = ref('');
+const materialNameLocked = ref(false);
+const materialsLoading = ref(false);
+const materialsError = ref(false);
+const signingMaterials = ref<OcspSignerMaterialSummary[]>([]);
+
+const openSigningMaterial = (name = '') => {
+  materialName.value = name;
+  materialNameLocked.value = Boolean(name);
+  materialVisible.value = true;
+};
+
+const loadSigningMaterials = async () => {
+  if (materialsLoading.value) return;
+  materialsLoading.value = true;
+  materialsError.value = false;
+  try {
+    signingMaterials.value = (await listUnassignedOcspSignerMaterials()) ?? [];
+  } catch {
+    signingMaterials.value = [];
+    materialsError.value = true;
+  } finally {
+    materialsLoading.value = false;
+  }
+};
 const detailRevision = ref(0);
 const selectedId = computed(() => {
   const id = Number(route.query.id);
@@ -369,7 +465,10 @@ watch(
   }
 );
 
-onMounted(getList);
+onMounted(() => {
+  void getList();
+  void loadSigningMaterials();
+});
 </script>
 
 <style scoped>

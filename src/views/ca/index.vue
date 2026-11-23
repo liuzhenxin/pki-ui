@@ -185,8 +185,11 @@
     </div>
 
     <div v-else>
+      <el-alert v-if="statsError" :title="statsError" type="error" :closable="false" show-icon class="mb4">
+        <el-button link type="primary" :loading="statsLoading" @click="fetchCertificateStats">重试</el-button>
+      </el-alert>
       <!-- 数据概览 -->
-      <el-row v-if="canViewCerts" :gutter="20">
+      <el-row v-if="canViewCerts" v-loading="statsLoading" :gutter="20">
         <el-col :span="6">
           <el-card shadow="hover" class="stat-card">
             <div class="stat-content">
@@ -195,11 +198,11 @@
               </div>
               <div class="stat-info">
                 <div class="stat-label">总签发证书</div>
-                <div class="stat-value">{{ stats.totalCerts }}</div>
+                <div class="stat-value">{{ statsAvailable ? stats.totalCerts : '—' }}</div>
               </div>
             </div>
             <div class="stat-footer">
-              <div class="footer-desc">累计签发总量</div>
+              <div class="footer-desc">在用及归档证书总量</div>
             </div>
           </el-card>
         </el-col>
@@ -211,12 +214,12 @@
               </div>
               <div class="stat-info">
                 <div class="stat-label">有效证书</div>
-                <div class="stat-value">{{ stats.validCerts }}</div>
+                <div class="stat-value">{{ statsAvailable ? stats.validCerts : '—' }}</div>
               </div>
             </div>
             <div class="stat-footer">
-              <el-progress :percentage="Math.round((stats.validCerts / stats.totalCerts) * 100) || 0" :stroke-width="4" status="success" />
-              <div class="footer-desc">占比 {{ Math.round((stats.validCerts / stats.totalCerts) * 100) || 0 }}%</div>
+              <el-progress v-if="statsAvailable" :percentage="validPercentage" :stroke-width="4" status="success" />
+              <div class="footer-desc">占比 {{ statsAvailable ? `${validPercentage}%` : '—' }}</div>
             </div>
           </el-card>
         </el-col>
@@ -228,11 +231,11 @@
               </div>
               <div class="stat-info">
                 <div class="stat-label">已注销证书</div>
-                <div class="stat-value">{{ stats.revokedCerts }}</div>
+                <div class="stat-value">{{ statsAvailable ? stats.revokedCerts : '—' }}</div>
               </div>
             </div>
             <div class="stat-footer">
-              <div class="footer-desc">包含手动注销及异常证书</div>
+              <div class="footer-desc">包含归档注销证书，不含冻结证书</div>
             </div>
           </el-card>
         </el-col>
@@ -244,7 +247,7 @@
               </div>
               <div class="stat-info">
                 <div class="stat-label">即将过期</div>
-                <div class="stat-value">{{ stats.expiringSoon }}</div>
+                <div class="stat-value">{{ statsAvailable ? stats.expiringSoon : '—' }}</div>
               </div>
             </div>
             <div class="stat-footer">
@@ -412,10 +415,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, reactive, nextTick, getCurrentInstance, ComponentInternalInstance, watch, computed } from 'vue';
+import { ref, onActivated, onMounted, onUnmounted, reactive, nextTick, getCurrentInstance, ComponentInternalInstance, watch, computed } from 'vue';
 import * as echarts from 'echarts';
 import { useRouter } from 'vue-router';
-import { pageCert } from '@/api/ca/cert';
+import { getCertStatistics, pageCert } from '@/api/ca/cert';
 import { getTenant } from '@/api/system/tenant';
 import { list as listLoginLog } from '@/api/system/loginlog';
 import { list as listOperateLog } from '@/api/system/operlog';
@@ -516,6 +519,42 @@ const stats = reactive({
   revokedCerts: 0,
   expiringSoon: 0
 });
+
+const statsLoading = ref(false);
+const statsAvailable = ref(false);
+const statsError = ref('');
+const validPercentage = computed(() => (stats.totalCerts > 0 ? Math.round((stats.validCerts / stats.totalCerts) * 100) : 0));
+let dashboardLoaded = false;
+
+const fetchCertificateStats = async () => {
+  if (!canViewCerts.value) return;
+  statsLoading.value = true;
+  statsError.value = '';
+  try {
+    const { data } = await getCertStatistics();
+    const keys = ['totalCerts', 'validCerts', 'revokedCerts', 'expiringSoon'] as const;
+    if (
+      !data ||
+      !keys.every((key) => {
+        const value = data[key];
+        return (
+          (typeof value === 'number' || (typeof value === 'string' && /^\d+$/.test(value))) &&
+          Number.isSafeInteger(Number(value)) &&
+          Number(value) >= 0
+        );
+      })
+    ) {
+      throw new Error('Invalid certificate statistics');
+    }
+    Object.assign(stats, Object.fromEntries(keys.map((key) => [key, Number(data[key])])));
+    statsAvailable.value = true;
+  } catch {
+    statsAvailable.value = false;
+    statsError.value = '证书统计加载失败，请重试';
+  } finally {
+    statsLoading.value = false;
+  }
+};
 
 const allCerts = ref<any[]>([]);
 const recentCerts = ref<any[]>([]);
@@ -734,9 +773,9 @@ const fetchDashboardData = async () => {
     return;
   }
   try {
+    await fetchCertificateStats();
     const certs = await fetchAllCerts();
     allCerts.value = certs.map(normalizeCert);
-    updateStats();
     updateAlgoDistribution();
     if (isCaBusinessAdmin.value) {
       updateRecentCerts();
@@ -805,13 +844,6 @@ const normalizeCert = (cert: any) => {
     notAfterDate: notAfter,
     algorithm: resolveCertAlgorithm(cert)
   };
-};
-
-const updateStats = () => {
-  stats.totalCerts = allCerts.value.length;
-  stats.validCerts = allCerts.value.filter((item) => item.status === 'VALID').length;
-  stats.revokedCerts = allCerts.value.filter((item) => item.status === 'REVOKED').length;
-  stats.expiringSoon = allCerts.value.filter((item) => isExpiringSoon(item)).length;
 };
 
 const updateRecentCerts = () => {
@@ -913,12 +945,6 @@ const resolveCertAlgorithm = (cert: any) => {
   return '其他';
 };
 
-const isExpiringSoon = (cert: any) => {
-  if (cert.status !== 'VALID' || !cert.notAfterDate) return false;
-  const diff = cert.notAfterDate.getTime() - Date.now();
-  return diff >= 0 && diff <= 30 * 24 * 60 * 60 * 1000;
-};
-
 const parseDate = (value?: string) => {
   if (!value) return null;
   const normalized = value.includes('T') ? value : value.replace(/-/g, '/');
@@ -954,6 +980,7 @@ onMounted(async () => {
       await fetchAuditHomeData();
     } else {
       await fetchDashboardData();
+      dashboardLoaded = true;
       if (canViewCerts.value) {
         nextTick(() => {
           initTrendChart();
@@ -963,6 +990,15 @@ onMounted(async () => {
     }
   }
   window.addEventListener('resize', handleResize);
+});
+
+onActivated(() => {
+  if (dashboardLoaded && isInitialized.value && canViewCerts.value && !isCaAuditHome.value) {
+    void fetchDashboardData().then(() => {
+      renderTrendChart();
+      renderAlgoChart();
+    });
+  }
 });
 
 onUnmounted(() => {

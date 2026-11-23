@@ -318,12 +318,64 @@ export interface AlertEventLog {
   channelResult?: string;
   createTime?: string;
 }
+export type FawVwChannelKind = 'FAW_VW_DINGTALK' | 'FAW_VW_EMAIL';
 
-export interface RaCertificateExpiry {
-  sourceId: string;
-  certId: string;
-  expiresAt: string;
-  stageDays: number;
-  status: 'OPEN' | 'RENEWED' | 'REVOKED' | 'EXPIRED' | 'REPLACED' | 'REMOVED';
-  updatedAt: string;
+export interface FawVwChannelConfig {
+  revision: string | null;
+  enabled: boolean;
+  endpointUrl: string;
+  from: string | null;
+  to: string;
+  app: string | null;
+  dingTalkTarget: 'ACCOUNT' | 'JOB_ID' | null;
+  smtpServer: 'CC' | 'CD' | 'FS' | 'TJ' | 'QD' | null;
+  targetsFormat: 'ARRAY' | 'JSON_ARRAY_STRING' | 'SINGLE_STRING' | null;
+}
+
+export interface FawVwChannelSettings extends FawVwChannelConfig {
+  credentialsConfigured: boolean;
+}
+
+export interface FawVwChannelSave {
+  settings: FawVwChannelConfig;
+  accessKey?: string;
+  secretKey?: string;
+}
+
+export interface FawVwGatewaySettings {
+  origin: string | null;
+  revision: string | null;
+}
+export type AlertConditionType =
+  | 'SERVER_CPU'
+  | 'SERVER_MEMORY'
+  | 'SERVER_DISK'
+  | 'SERVER_AGENT'
+  | 'COMPONENT'
+  | 'KMC_HSM'
+  | 'CA_HSM'
+  | 'RA_CERT_EXPIRY';
+
+export interface AlertConditionRule {
+  type: AlertConditionType;
+  target: string;
+  triggerPercent?: number;
+  recoveryPercent?: number;
+  triggerSeconds?: number;
+  recoverySeconds?: number;
+  timeoutSeconds?: number;
+  triggerSamples?: number;
+  recoverySamples?: number;
+  expiryDays?: number[];
+}
+
+export interface AlertConditionSettings {
+  revision: number;
+  rules: AlertConditionRule[];
+}
+
+export interface AlertConditionView {
+  settings: AlertConditionSettings;
+  servers: string[];
+  editable: boolean;
 }

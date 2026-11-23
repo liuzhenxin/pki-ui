@@ -211,9 +211,7 @@ export default class SKFClient {
    * @returns {Promise<boolean>} True if successful
    */
   async deleteContainer(provider, deviceName, appName, containerName, pin = null) {
-    const params = pin
-      ? [provider, deviceName, appName, containerName, pin]
-      : [provider, deviceName, appName, containerName];
+    const params = pin ? [provider, deviceName, appName, containerName, pin] : [provider, deviceName, appName, containerName];
     return this.call('DeleteContainer', params);
   }
 
@@ -265,10 +263,14 @@ export default class SKFClient {
    * @param {string} alg Algorithm ("SM2", "RSA")
    * @param {string} encKeyPair Base64 encoded encrypted key pair
    * @param {string} [wrapKey=""] Base64 encoded wrap key (RSA only)
+   * @param {string} [symmetricMode="ECB"] RSA symmetric mode
+   * @param {string} [pin] Operation PIN, verified on the same native application handle
    * @returns {Promise<boolean>} Success status
    */
-  async importKeyPair(provider, deviceName, appName, containerName, alg, encKeyPair, wrapKey = '', symmetricMode = 'ECB') {
-    return this.call('ImportKeyPair', [provider, deviceName, appName, containerName, alg, encKeyPair, wrapKey, symmetricMode]);
+  async importKeyPair(provider, deviceName, appName, containerName, alg, encKeyPair, wrapKey = '', symmetricMode = 'ECB', pin = null) {
+    const params = [provider, deviceName, appName, containerName, alg, encKeyPair, wrapKey, symmetricMode];
+    if (pin) params.push(pin);
+    return this.call('ImportKeyPair', params);
   }
 
   /**

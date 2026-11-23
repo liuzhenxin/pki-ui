@@ -11,6 +11,7 @@
     "build:prod": "node -e \"console.error('Choose a target: yarn build:ops | yarn build:ca | yarn build:kmc | yarn build:ra | yarn build:ocsp | yarn build:ucsp'); process.exit(1)\"",
     "build:ops": "VITE_APP_VERSION=${VITE_APP_VERSION:-3.0.11} VITE_APP_TENANT_IDS=1 VITE_APP_CLIENT_ID=95TxSsTPFA3tF12TBSMmUVK0da vite build --mode production",
     "build:ca": "VITE_APP_VERSION=${VITE_APP_VERSION:-3.0.27} VITE_APP_TENANT_IDS=4 VITE_APP_CLIENT_ID=pki-ca-ui vite build --mode production",
+    "build:ca:release": "sh scripts/build-ca-release.sh",
     "build:kms": "VITE_APP_VERSION=${VITE_APP_VERSION:-3.0.0} VITE_APP_TENANT_IDS=2 VITE_APP_CLIENT_ID=${KMS_PLATFORM_CLIENT_ID:?Configure the registered KMS platform client} vite build --mode production",
     "build:kmc": "VITE_APP_VERSION=${VITE_APP_VERSION:-3.0.6} VITE_APP_TENANT_IDS=3 VITE_APP_CLIENT_ID=pki-kmc-ui vite build --mode production",
     "build:ra": "VITE_APP_VERSION=${VITE_APP_VERSION:-3.0.12} VITE_APP_TENANT_IDS=5 VITE_APP_CLIENT_ID=pki-ra-ui vite build --mode production",

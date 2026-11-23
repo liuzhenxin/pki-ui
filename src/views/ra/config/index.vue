@@ -57,6 +57,7 @@
             </el-form-item>
             <el-form-item>
               <el-button v-hasPermi="['ra:config:get']" icon="CircleCheck" :loading="testing" @click="testActiveConfig">校验证书</el-button>
+              <el-button v-hasPermi="['ra:config:save']" type="primary" @click="openIdentityRotation">更新身份证书</el-button>
             </el-form-item>
           </el-form>
         </el-tab-pane>
@@ -102,19 +103,101 @@
         <el-button v-hasPermi="['ra:config:save']" type="primary" icon="Check" :loading="saving" @click="saveActiveConfig">保存配置</el-button>
       </div>
     </el-card>
+
+    <el-dialog v-model="rotationOpen" title="更新 RA 身份证书" width="min(680px, 94vw)" :close-on-click-modal="!rotationBusy">
+      <el-form label-position="top">
+        <el-form-item v-if="!rotation" label="证书请求">
+          <el-button type="primary" :loading="rotationBusy" @click="generateIdentityRotation">生成 CSR</el-button>
+        </el-form-item>
+        <template v-else>
+          <el-form-item :label="`待签发 CSR · ${rotation.algorithm}`">
+            <el-input :model-value="rotation.csrPem" type="textarea" :rows="7" readonly />
+            <el-button link type="primary" @click="downloadIdentityCsr">下载 CSR</el-button>
+          </el-form-item>
+          <el-form-item label="CA 签发的身份证书 PEM">
+            <el-input v-model="rotationCertificate" type="textarea" :rows="7" maxlength="32768" placeholder="-----BEGIN CERTIFICATE-----" />
+          </el-form-item>
+          <el-alert title="请先在各 CA 的 RA 请求者配置中登记新证书，再回到这里导入。" type="info" :closable="false" show-icon />
+        </template>
+      </el-form>
+      <template #footer>
+        <el-button @click="rotationOpen = false">关闭</el-button>
+        <el-button v-if="rotation" type="primary" :loading="rotationBusy" :disabled="!rotationCertificate.trim()" @click="activateIdentityRotation">
+          校验并启用
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup name="RaConfig" lang="ts">
 import { reactive, ref } from 'vue';
-import { ElMessage } from 'element-plus';
-import { getRaConfig, saveRaConfig, testRaConfig } from '@/api/ra/config';
-import type { RaConfigGroup, RaConfigTestCO } from '@/api/ra/config';
+import { ElMessage, ElMessageBox } from 'element-plus';
+import {
+  activateRaIdentityRotation,
+  generateRaIdentityRotation,
+  getRaConfig,
+  getRaIdentityRotation,
+  saveRaConfig,
+  testRaConfig
+} from '@/api/ra/config';
+import type { RaConfigGroup, RaConfigTestCO, RaIdentityRotation } from '@/api/ra/config';
 
 const activeGroup = ref<RaConfigGroup>('BASIC');
 const saving = ref(false);
 const testing = ref(false);
 const testResult = ref<RaConfigTestCO>();
+const rotationOpen = ref(false);
+const rotationBusy = ref(false);
+const rotation = ref<RaIdentityRotation | null>(null);
+const rotationCertificate = ref('');
+
+const openIdentityRotation = async () => {
+  rotationBusy.value = true;
+  try {
+    rotation.value = (await getRaIdentityRotation()).data ?? null;
+    rotationCertificate.value = '';
+    rotationOpen.value = true;
+  } finally {
+    rotationBusy.value = false;
+  }
+};
+
+const generateIdentityRotation = async () => {
+  rotationBusy.value = true;
+  try {
+    rotation.value = (await generateRaIdentityRotation()).data;
+  } finally {
+    rotationBusy.value = false;
+  }
+};
+
+const downloadIdentityCsr = () => {
+  if (!rotation.value) return;
+  const url = URL.createObjectURL(new Blob([rotation.value.csrPem], { type: 'application/pkcs10' }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'ra-identity.csr.pem';
+  link.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+};
+
+const activateIdentityRotation = async () => {
+  try {
+    await ElMessageBox.confirm('启用后，RA 对各 CA 的新请求将使用这张身份证书。', '确认更新 RA 身份证书', { type: 'warning' });
+  } catch {
+    return;
+  }
+  rotationBusy.value = true;
+  try {
+    await activateRaIdentityRotation(rotationCertificate.value.trim());
+    rotationOpen.value = false;
+    ElMessage.success('RA 身份证书已更新');
+    await loadActiveConfig();
+  } finally {
+    rotationBusy.value = false;
+  }
+};
 
 const basicForm = reactive({
   systemName: 'LiuZX RA',

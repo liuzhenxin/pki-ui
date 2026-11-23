@@ -4,12 +4,18 @@ import type {
   AccessControlCurrentIp,
   AlertChannel,
   AlertChannelSave,
+  AlertConditionSettings,
+  AlertConditionView,
   AlertDispatchResult,
   AlertEventLog,
   AlertRule,
   AlertRuleSave,
   AppServiceConfig,
   CryptoMonitorInstance,
+  FawVwChannelKind,
+  FawVwChannelSave,
+  FawVwChannelSettings,
+  FawVwGatewaySettings,
   OpsContainer,
   OpsContainerLogs,
   OpsContainerActionRequest,
@@ -18,7 +24,6 @@ import type {
   OpsOverview,
   OpsServer,
   PlatformServiceMenuConfig,
-  RaCertificateExpiry,
   RadiusConfig,
   RadiusStatus,
   RadiusTestRequest,
@@ -32,12 +37,53 @@ const baseURL = import.meta.env.VITE_APP_OPS_API || `${gatewayBaseURL}/ops`;
 
 export { baseURL as opsApiBaseURL };
 
-export function getRaCertificateExpiry(closed: boolean, offset: number, limit: number) {
-  return request<unknown, { total: number; items: RaCertificateExpiry[] }>({
+export function getAlertConditions() {
+  return request<unknown, AlertConditionView>({ baseURL, url: '/v1/alert/conditions', method: 'get' });
+}
+
+export function saveAlertConditions(data: AlertConditionSettings) {
+  return request<unknown, AlertConditionSettings>({ baseURL, url: '/v1/alert/conditions', method: 'put', data });
+}
+
+export function getFawVwGateway() {
+  return request<unknown, { settings: FawVwGatewaySettings; editable: boolean }>({
     baseURL,
-    url: '/v1/alert/certificate-expiry',
-    method: 'get',
-    params: { closed, offset, limit }
+    url: '/v1/alert/faw-vw-channels/gateway',
+    method: 'get'
+  });
+}
+
+export function saveFawVwGateway(settings: FawVwGatewaySettings) {
+  return request<unknown, { settings: FawVwGatewaySettings; editable: boolean }>({
+    baseURL,
+    url: '/v1/alert/faw-vw-channels/gateway',
+    method: 'put',
+    headers: { sensitive: true, repeatSubmit: false },
+    data: settings
+  });
+}
+
+export function getFawVwChannel(kind: FawVwChannelKind) {
+  return request<unknown, { settings: FawVwChannelSettings | null }>({ baseURL, url: '/v1/alert/faw-vw-channels/' + kind, method: 'get' });
+}
+
+export function saveFawVwChannel(kind: FawVwChannelKind, data: FawVwChannelSave) {
+  return request<unknown, { settings: FawVwChannelSettings }>({
+    baseURL,
+    url: '/v1/alert/faw-vw-channels/' + kind,
+    method: 'put',
+    headers: { sensitive: true, repeatSubmit: false },
+    data
+  });
+}
+
+export function testFawVwChannel(kind: FawVwChannelKind, action: 'test-connection' | 'test-send', revision: string) {
+  return request<unknown, { message: string }>({
+    baseURL,
+    url: `/v1/alert/faw-vw-channels/${kind}/${action}`,
+    method: 'post',
+    headers: { sensitive: true },
+    data: { revision }
   });
 }
 

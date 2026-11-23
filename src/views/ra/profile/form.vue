@@ -822,7 +822,16 @@ function validateTemplate() {
       issues.push({ level: 'error', tab: 'subject', message: `主题字段缺少 ${getSubjectLabel(field)}` });
     }
   });
+  const seenSubjectFields = new Set<string>();
   subjectFields.forEach((field) => {
+    if (seenSubjectFields.has(field)) {
+      issues.push({
+        level: 'error',
+        tab: 'subject',
+        message: `主题字段重复：${getSubjectLabel(field)}。每种字段只配置一条规则，多值请设置该字段的最小/最大出现次数。`
+      });
+    }
+    seenSubjectFields.add(field);
     if (!allowedSubjects.has(field)) {
       issues.push({ level: 'warning', tab: 'subject', message: `${getSubjectLabel(field)} 不属于 ${constraint.label} 模板建议字段` });
     }
@@ -986,6 +995,10 @@ function moveDown(index: number) {
 function addCommonRdn(common: { value: string; label: string }) {
   if (!form.subjectItems) {
     form.subjectItems = [];
+  }
+  if (form.subjectItems.some((item: any) => item.type === common.value)) {
+    ElMessage.warning(`${common.label}已配置，多值请调整该字段的最小/最大出现次数`);
+    return;
   }
   form.subjectItems.push({
     type: common.value
@@ -1233,17 +1246,14 @@ async function getProfileDetail(id: string | number) {
       // 解析subject（处理可能存在的 rdns 嵌套）
       const subjectRaw = conf.subject?.rdns || (Array.isArray(conf.subject) ? conf.subject : []);
       form.subjectItems = subjectRaw.map((item: any) => {
-        let typeValue = item.type;
-        // 处理type字段：可能是对象 {oid, description} 或字符串
-        if (item.type && typeof item.type === 'object' && item.type.description) {
-          // 从description反推type值
-          const description = item.type.description.toLowerCase();
-          typeValue = subjectValueToDescriptionMap[description] || description;
-        } else if (typeof item.type === 'string') {
-          // 如果是字符串，尝试从映射中查找
-          const lowerType = item.type.toLowerCase();
-          typeValue = subjectValueToDescriptionMap[lowerType] || item.type;
-        }
+        const typeText = typeof item.type === 'string' ? item.type : item.type?.description || '';
+        const oid = typeof item.type === 'string' ? item.type : item.type?.oid;
+        // OID 是字段标识，描述仅用于兼容旧模板的别名。
+        const typeValue =
+          commonOIDs.find((item) => item.oid === oid)?.value ||
+          subjectValueToDescriptionMap[typeText.toLowerCase()] ||
+          commonOIDs.find((item) => item.value.toLowerCase() === typeText.toLowerCase())?.value ||
+          typeText;
         return {
           type: typeValue || '',
           minOccurs: item.minOccurs !== undefined ? item.minOccurs : 1,

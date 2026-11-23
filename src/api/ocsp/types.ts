@@ -44,12 +44,21 @@ export interface OcspResponderCsrCmd {
   organization?: string;
   country?: string;
   alias?: string;
+  unassignedOnly?: boolean;
 }
 
 export interface OcspResponderCertImportCmd {
   name: string;
   certificatePem: string;
   certificateChainPem?: string;
+  unassignedOnly?: boolean;
+}
+
+export interface OcspSignerMaterialSummary {
+  name: string;
+  status: 'PENDING' | 'ACTIVE';
+  algorithm?: string;
+  subject?: string;
 }
 
 export interface OcspResponderPageQry {

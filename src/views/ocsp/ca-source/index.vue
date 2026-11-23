@@ -1,14 +1,21 @@
 <template>
   <div class="app-container ocsp-page">
-    <OcspPageHeader title="按 CA 配置" description="登记签发者证书，为每个 CA 配置专属证书状态来源。草稿验证通过后可启用。"
-      ><el-button icon="Refresh" @click="refresh">刷新</el-button
-      ><el-button v-hasPermi="['ocsp:source:save']" type="primary" icon="Plus" @click="openWizard()">添加服务 CA</el-button></OcspPageHeader
-    >
+    <OcspPageHeader title="按 CA 配置" description="为签发 CA 关联响应者和证书状态来源。" />
 
     <el-tabs v-model="activeTab"
       ><el-tab-pane label="服务 CA" name="serviceCas">
         <el-card shadow="never">
-          <el-input v-model="caSearch" aria-label="搜索服务 CA" placeholder="按 CA 名称或完整 ID 搜索" clearable class="ca-search" />
+          <div class="ca-toolbar">
+            <el-input v-model="caSearch" aria-label="搜索服务 CA" placeholder="按 CA 名称、CA ID 或响应者 ID 搜索" clearable class="ca-search" />
+            <el-select v-model="progressFilter" aria-label="按草稿进度筛选" class="ca-progress-filter">
+              <el-option label="全部草稿进度" value="all" />
+              <el-option v-for="(progress, value) in draftProgress" :key="value" :label="progress.label" :value="value" />
+            </el-select>
+            <div class="ca-toolbar-actions">
+              <el-button icon="Refresh" :loading="managedLoading" @click="refresh">刷新列表</el-button>
+              <el-button v-hasPermi="['ocsp:source:save']" type="primary" icon="Plus" @click="openWizard()">添加服务 CA</el-button>
+            </div>
+          </div>
           <el-table v-loading="managedLoading" :data="filteredRows" border>
             <template #empty>
               <OcspEmptyState
@@ -16,31 +23,36 @@
                 :error="managedError"
                 :title="managedError ? '服务 CA 读取失败' : managedRows.length ? '未找到匹配的服务 CA' : '暂无服务 CA'"
                 :description="
-                  managedError ? '请重新加载配置。' : managedRows.length ? '请调整名称或 ID 后重试。' : '添加服务 CA 后，先验证草稿，再启用。'
+                  managedError ? '请重新加载配置。' : managedRows.length ? '请调整搜索条件或草稿进度。' : '添加服务 CA 后，先验证草稿，再启用。'
                 "
               >
                 <el-button v-if="managedError" @click="getManaged">重新加载</el-button>
               </OcspEmptyState>
             </template>
-            <el-table-column label="签发 CA" min-width="250">
+            <el-table-column label="签发 CA" min-width="230">
               <template #default="{ row }">
                 <div>{{ caNames[row.caId] || '名称不可用' }}</div>
                 <div class="ca-id">{{ row.caId }}</div>
               </template>
             </el-table-column>
-            <el-table-column prop="responderId" label="草稿响应者 ID" min-width="190" />
-            <el-table-column label="草稿来源" width="110"
-              ><template #default="{ row }">{{ row.sourceType || '-' }}</template></el-table-column
-            >
-            <el-table-column prop="version" label="草稿版本" width="110" />
-            <el-table-column label="已启用版本" width="120"
-              ><template #default="{ row }">{{ row.publishedVersion ?? '-' }}</template></el-table-column
-            >
-            <el-table-column label="状态" min-width="150"
-              ><template #default="{ row }"
-                ><el-tag :type="managedTag(row)">{{ managedStatus(row) }}</el-tag></template
-              ></el-table-column
-            >
+            <el-table-column label="当前生效版本" min-width="130">
+              <template #default="{ row }">
+                <el-tag v-if="row.publishedVersion != null" type="success">版本 {{ row.publishedVersion }}</el-tag>
+                <span v-else class="ca-detail">未启用</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="草稿进度" min-width="150">
+              <template #default="{ row }">
+                <el-tag :type="draftProgress[draftState(row)].type">{{ draftProgress[draftState(row)].label }}</el-tag>
+                <div class="ca-detail">版本 {{ row.version }}</div>
+              </template>
+            </el-table-column>
+            <el-table-column label="草稿响应者 ID" min-width="180">
+              <template #default="{ row }">{{ row.responderId ?? '未关联' }}</template>
+            </el-table-column>
+            <el-table-column label="草稿来源" width="110">
+              <template #default="{ row }">{{ row.sourceType === 'DB' ? '数据库' : row.sourceType || '未配置' }}</template>
+            </el-table-column>
             <el-table-column label="操作" width="160" fixed="right"
               ><template #default="{ row }"
                 ><el-button v-hasPermi="['ocsp:source:save']" link type="primary" @click="openWizard(row.caId)">{{
@@ -77,24 +89,38 @@ const managedError = ref(false);
 const managedRows = ref<ServiceCaDraft[]>([]);
 
 const caSearch = ref('');
+const draftProgress = {
+  configure: { label: '待配置', type: 'warning' },
+  validate: { label: '待验证', type: 'warning' },
+  publish: { label: '已验证，待启用', type: 'success' },
+  published: { label: '与生效版本一致', type: 'info' }
+} as const;
+type DraftState = keyof typeof draftProgress;
+const progressFilter = ref<DraftState | 'all'>('all');
 const caNames = ref<Record<string, string>>({});
+
+const draftState = (item: ServiceCaDraft): DraftState => {
+  if (item.publishedVersion != null && String(item.publishedVersion) === String(item.version)) return 'published';
+  if (item.verifiedVersion != null && String(item.verifiedVersion) === String(item.version)) return 'publish';
+  return item.sourceConfigured && item.sampleConfigured ? 'validate' : 'configure';
+};
+
 const filteredRows = computed(() => {
   const query = caSearch.value.trim().toLowerCase();
-  return managedRows.value.filter(({ caId }) => String(caId).includes(query) || caNames.value[caId]?.toLowerCase().includes(query));
+  return managedRows.value.filter(
+    (row) =>
+      (progressFilter.value === 'all' || draftState(row) === progressFilter.value) &&
+      [String(row.caId), caNames.value[row.caId] ?? '', String(row.responderId ?? '')].some((value) => value.toLowerCase().includes(query))
+  );
 });
 
-const managedStatus = (item: ServiceCaDraft) => {
-  if (item.publishedVersion != null && String(item.publishedVersion) === String(item.version)) return '已启用';
-  if (item.verifiedVersion != null && String(item.verifiedVersion) === String(item.version)) return '已验证，待启用';
-  return item.publishedVersion != null ? '已启用，有未发布草稿' : '草稿待配置';
-};
 const managedAction = (item: ServiceCaDraft) => {
-  const status = managedStatus(item);
-  if (status === '已启用') return '查看配置';
-  if (status === '已验证，待启用') return auth.hasPermi('ocsp:source:probe') ? '启用已验证草稿' : '查看配置';
+  const state = draftState(item);
+  if (state === 'published') return '查看配置';
+  if (state === 'publish') return auth.hasPermi('ocsp:source:probe') ? '启用已验证草稿' : '查看草稿';
+  if (state === 'validate') return auth.hasPermi('ocsp:source:probe') ? '验证草稿' : '查看草稿';
   return '继续配置';
 };
-const managedTag = (item: ServiceCaDraft) => (managedStatus(item) === '已启用' ? 'success' : 'warning');
 const openWizard = (caId = '') => {
   wizardCaId.value = caId;
   wizardVisible.value = true;
@@ -125,10 +151,29 @@ onMounted(refresh);
 </script>
 
 <style scoped>
-.ca-search {
-  max-width: 320px;
+.ca-toolbar,
+.ca-toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.ca-toolbar {
   margin-bottom: 12px;
 }
+.ca-toolbar-actions {
+  margin-inline-start: auto;
+}
+.ca-toolbar-actions :deep(.el-button + .el-button) {
+  margin-inline-start: 0;
+}
+.ca-search {
+  width: min(100%, 335px);
+}
+.ca-progress-filter {
+  width: min(100%, 180px);
+}
+.ca-detail,
 .ca-id {
   color: var(--el-text-color-secondary);
   font-variant-numeric: tabular-nums;
@@ -137,13 +182,8 @@ onMounted(refresh);
   padding: 24px;
 }
 @media (max-width: 760px) {
-  .ca-search {
-    max-width: 320px;
-    margin-bottom: 12px;
-  }
-  .ca-id {
-    color: var(--el-text-color-secondary);
-    font-variant-numeric: tabular-nums;
+  .ca-toolbar-actions {
+    margin-inline-start: 0;
   }
   .ocsp-page {
     padding: 12px;

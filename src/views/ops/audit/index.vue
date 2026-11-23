@@ -65,7 +65,8 @@ const operationTypeText = (value?: string) => {
     RESTART: '重启容器',
     UPGRADE: '升级容器',
     PROBE_RETRY: '探针重试',
-    COLLECTION_REFRESH: '采集刷新'
+    COLLECTION_REFRESH: '采集刷新',
+    FAW_VW_GATEWAY_UPDATE: '修改企业网关'
   };
   return value ? map[value] || value : '-';
 };

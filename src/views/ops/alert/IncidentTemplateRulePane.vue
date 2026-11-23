@@ -9,13 +9,18 @@
     <el-form v-if="view?.channels.length" label-position="top" @submit.prevent="save">
       <div class="binding-selectors">
         <el-form-item label="告警类型">
-          <el-select v-model="source" :disabled="busy" @change="applyBinding">
+          <el-select v-model="source" :disabled="busy" @change="selectSource">
             <el-option v-for="item in view.sources" :key="item.source" :label="sourceLabels[item.source] || item.source" :value="item.source" />
           </el-select>
         </el-form-item>
         <el-form-item label="投递渠道">
           <el-select v-model="channel" :disabled="busy" @change="applyBinding">
-            <el-option v-for="item in view.channels" :key="item.name" :label="`${item.name} · ${channelLabel(item.channel)}`" :value="item.name" />
+            <el-option
+              v-for="item in selectableChannels"
+              :key="item.name"
+              :label="`${item.name} · ${channelLabel(item.channel)}`"
+              :value="item.name"
+            />
           </el-select>
         </el-form-item>
         <el-form-item label="触发模板">
@@ -24,7 +29,7 @@
             <el-option v-for="kind in templateChoices" :key="kind" :label="templateLabel('trigger', kind)" :value="kind" />
           </el-select>
         </el-form-item>
-        <el-form-item label="恢复模板">
+        <el-form-item v-if="selection?.recovery" label="恢复模板">
           <el-select v-model="recovery" placeholder="沿用外部规则" :disabled="busy || !view.editable">
             <el-option label="沿用外部规则" value="" />
             <el-option v-for="kind in templateChoices" :key="kind" :label="templateLabel('recovery', kind)" :value="kind" />
@@ -48,7 +53,8 @@ const sourceLabels: Record<string, string> = {
   SERVER_AGENT: 'Agent 断报',
   COMPONENT: '组件健康',
   CA_HSM: 'CA 密码机',
-  KMC_HSM: 'KMC 密码机'
+  KMC_HSM: 'KMC 密码机',
+  RA_CERT_EXPIRY: 'RA 证书有效期'
 };
 
 const catalog = ref<NotificationTemplateCatalog>();
@@ -61,7 +67,10 @@ const busy = ref(false);
 const stale = ref(false);
 
 const selection = computed(() => view.value?.sources.find((item) => item.source === source.value));
-const templateChoices = computed(() => view.value?.channels.find((item) => item.name === channel.value)?.templateChannels || []);
+const selectableChannels = computed(() =>
+  (view.value?.channels ?? []).filter((item) => source.value !== 'RA_CERT_EXPIRY' || item.channel !== 'DINGTALK')
+);
+const templateChoices = computed(() => selectableChannels.value.find((item) => item.name === channel.value)?.templateChannels || []);
 const binding = computed(() => view.value?.bindings.find((item) => item.source === source.value && item.channel === channel.value));
 const changed = computed(() => trigger.value !== (binding.value?.triggerChannel || '') || recovery.value !== (binding.value?.recoveryChannel || ''));
 
@@ -81,6 +90,11 @@ function applyBinding() {
   recovery.value = binding.value?.recoveryChannel || '';
 }
 
+function selectSource() {
+  if (!selectableChannels.value.some((item) => item.name === channel.value)) channel.value = selectableChannels.value[0]?.name || '';
+  applyBinding();
+}
+
 async function load() {
   busy.value = true;
   try {
@@ -88,8 +102,7 @@ async function load() {
     view.value = rules;
     catalog.value = metadata;
     if (!rules.sources.some((item) => item.source === source.value)) source.value = rules.sources[0]?.source || '';
-    if (!rules.channels.some((item) => item.name === channel.value)) channel.value = rules.channels[0]?.name || '';
-    applyBinding();
+    selectSource();
   } catch {
     view.value = undefined;
   } finally {

@@ -1,6 +1,6 @@
 <template>
   <div class="app-container ocsp-page">
-    <OcspPageHeader title="诊断工具" description="查询证书状态与缓存命中情况，帮助定位状态来源问题。" />
+    <OcspPageHeader title="诊断工具" description="按签发 CA 和序列号查询证书状态，也可绕过缓存直接查询来源。" />
     <el-card shadow="never">
       <template #header>
         <div class="card-header">
@@ -42,20 +42,38 @@
         v-if="!result && !loading"
         :error="queryError"
         :title="queryError ? '证书状态查询失败' : '准备查询证书状态'"
-        :description="queryError ? '请检查输入与数据源后重试，查询失败不代表证书 UNKNOWN。' : '选择签发 CA 或输入 CA ID，再填写十六进制序列号。'"
-      />
-      <el-descriptions v-else-if="result" :column="2" border>
-        <el-descriptions-item label="状态">
-          <el-tag :type="statusType(result.status)">{{ result.status }}</el-tag>
-        </el-descriptions-item>
-        <el-descriptions-item label="数据源">{{ result.sourceType || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="是否命中缓存">{{ result.cacheHit ? '是' : '否' }}</el-descriptions-item>
-        <el-descriptions-item label="序列号">{{ result.serialNumber }}</el-descriptions-item>
-        <el-descriptions-item label="notBefore">{{ result.notBefore || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="notAfter">{{ result.notAfter || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="吊销时间">{{ result.revocationTime || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="吊销原因">{{ result.revocationReason ?? '-' }}</el-descriptions-item>
-      </el-descriptions>
+        :description="queryError ? '请核对签发 CA、序列号和来源可用性后重试。' : '选择签发 CA 或输入 CA ID，再填写十六进制序列号。'"
+      >
+        <el-button v-if="queryError" @click="retryQuery">重试上次查询</el-button>
+      </OcspEmptyState>
+
+      <section v-else-if="result && lastQuery" aria-labelledby="ocsp-query-result">
+        <div class="result-header">
+          <h2 id="ocsp-query-result">查询结果</h2>
+          <el-button v-if="!lastQuery.bypassCache" plain type="primary" @click="retryWithoutCache">绕过缓存重查</el-button>
+        </div>
+        <el-alert
+          v-if="result.status === 'UNKNOWN'"
+          class="result-note"
+          type="warning"
+          title="当前查询未能确认该证书的状态"
+          :closable="false"
+          show-icon
+        />
+        <el-descriptions :column="2" border>
+          <el-descriptions-item label="状态">
+            <el-tag :type="statusType(result.status)">{{ result.status }}</el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="查询模式">{{ lastQuery.bypassCache ? '绕过缓存' : '允许使用缓存' }}</el-descriptions-item>
+          <el-descriptions-item label="来源类型">{{ sourceLabel(result.sourceType) }}</el-descriptions-item>
+          <el-descriptions-item label="签发 CA ID">{{ lastQuery.caId }}</el-descriptions-item>
+          <el-descriptions-item label="序列号">{{ result.serialNumber || lastQuery.serialNumber }}</el-descriptions-item>
+          <el-descriptions-item label="有效期起始">{{ result.notBefore || '—' }}</el-descriptions-item>
+          <el-descriptions-item label="有效期截止">{{ result.notAfter || '—' }}</el-descriptions-item>
+          <el-descriptions-item label="吊销时间">{{ result.revocationTime || '—' }}</el-descriptions-item>
+          <el-descriptions-item label="吊销原因">{{ result.revocationReason ?? '—' }}</el-descriptions-item>
+        </el-descriptions>
+      </section>
     </el-card>
   </div>
 </template>
@@ -63,7 +81,7 @@
 <script setup name="OcspStatus" lang="ts">
 import OcspPageHeader from '@/views/ocsp/components/OcspPageHeader.vue';
 import OcspEmptyState from '@/views/ocsp/components/OcspEmptyState.vue';
-import { onMounted, reactive, ref, watch } from 'vue';
+import { onMounted, reactive, ref, shallowRef, watch } from 'vue';
 import { normalizeOcspCaId } from '@/utils/ocspIdentifier';
 import { useRoute } from 'vue-router';
 import { ElMessage } from 'element-plus';
@@ -75,15 +93,18 @@ import { listServiceCaDrafts } from '@/api/ocsp/serviceCa';
 import { queryOcspCertStatus } from '@/api/ocsp/status';
 import type { OcspCertStatus } from '@/api/ocsp/types';
 
+type StatusQuery = { caId: string; serialNumber: string; bypassCache: boolean };
+
 const route = useRoute();
 const loading = ref(false);
 const queryError = ref(false);
 const result = ref<OcspCertStatus | null>(null);
+const lastQuery = shallowRef<StatusQuery>();
 const manualEntry = ref(false);
 const caLoading = ref(false);
 const caLoadError = ref(false);
 const caOptions = ref<{ id: string; label: string }[]>([]);
-const form = reactive({
+const form = reactive<StatusQuery>({
   caId: '',
   serialNumber: '',
   bypassCache: false
@@ -151,17 +172,19 @@ onMounted(loadCaOptions);
 watch(
   () => route.query.caId,
   (value) => {
+    lastQuery.value = undefined;
+    result.value = null;
+    queryError.value = false;
+    loading.value = false;
     if (value == null) {
       form.caId = '';
       manualEntry.value = false;
-      result.value = null;
       return;
     }
     if (typeof value !== 'string') return;
     try {
       form.caId = normalizeOcspCaId(value);
       manualEntry.value = !caOptions.value.some(({ id }) => id === form.caId);
-      result.value = null;
     } catch {
       ElMessage.warning('CA ID 必须为有效的正整数');
     }
@@ -173,6 +196,12 @@ const statusType = (status?: string) => {
   if (status === 'GOOD') return 'success';
   if (status === 'REVOKED') return 'danger';
   return 'warning';
+};
+
+const sourceLabel = (type?: string) => {
+  if (type === 'DB') return '数据库 (DB)';
+  if (type === 'LDAP') return 'LDAP 目录';
+  return type || '—';
 };
 
 const queryStatus = async () => {
@@ -190,20 +219,36 @@ const queryStatus = async () => {
     ElMessage.warning('CA ID 必须为有效的正整数');
     return;
   }
+  await runQuery({ ...form, serialNumber: form.serialNumber.trim() });
+};
+
+const runQuery = async (params: StatusQuery) => {
+  if (loading.value) return;
+  lastQuery.value = params;
   result.value = null;
   queryError.value = false;
   loading.value = true;
   try {
-    result.value = await queryOcspCertStatus({
-      caId: form.caId,
-      serialNumber: form.serialNumber.trim(),
-      bypassCache: form.bypassCache
-    });
+    const data = await queryOcspCertStatus(params);
+    if (lastQuery.value !== params) return;
+    if (data?.status) result.value = data;
+    else queryError.value = true;
   } catch {
-    queryError.value = true;
+    if (lastQuery.value === params) queryError.value = true;
   } finally {
-    loading.value = false;
+    if (lastQuery.value === params) loading.value = false;
   }
+};
+
+const retryQuery = () => {
+  if (lastQuery.value) return runQuery(lastQuery.value);
+};
+
+const retryWithoutCache = () => {
+  if (!lastQuery.value || loading.value) return;
+  const params = { ...lastQuery.value, bypassCache: true };
+  Object.assign(form, params);
+  return runQuery(params);
 };
 </script>
 
@@ -215,11 +260,34 @@ const queryStatus = async () => {
   .ocsp-page {
     padding: 12px;
   }
+  .query-form :deep(.el-form-item) {
+    display: block;
+  }
+  .query-form :deep(.el-form-item__label) {
+    justify-content: flex-start;
+  }
 }
-.card-header {
+.card-header,
+.result-header {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
+}
+.result-header {
+  margin-bottom: 12px;
+}
+.result-header h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+.result-note {
+  margin-bottom: 12px;
+}
+:deep(.el-descriptions__content) {
+  overflow-wrap: anywhere;
 }
 .query-form {
   max-width: 640px;

@@ -45,10 +45,13 @@
       </el-table-column>
       <el-table-column label="归档时间" align="center" prop="archiveTime" width="170" />
       <el-table-column label="有效期结束" align="center" prop="notAfter" width="170" />
-      <el-table-column label="操作" align="center" width="160" class-name="small-padding fixed-width">
+      <el-table-column label="操作" align="center" width="230" class-name="small-padding fixed-width">
         <template #default="scope">
           <el-button link type="primary" icon="View" @click="handleView(scope.row)" v-hasPermi="['ca:archive-cert:detail']">详情</el-button>
           <el-button link type="primary" icon="Download" @click="handleDownload(scope.row)" v-hasPermi="['ca:archive-cert:download']">下载</el-button>
+          <el-button v-if="canRecover(scope.row)" v-hasPermi="[historicalRecoveryPermission]" link type="primary" @click="openRecovery(scope.row)">
+            密钥恢复
+          </el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -63,6 +66,7 @@
         </div>
       </template>
     </el-dialog>
+    <HistoricalRecoveryDialog v-if="recoveryCertificate" :key="recoveryCertificate.id" v-model="showRecovery" :certificate="recoveryCertificate" />
   </div>
 </template>
 
@@ -72,6 +76,8 @@ import { ElMessage } from 'element-plus';
 import { X509 } from 'jsrsasign';
 import X509Cert from '@/components/X509Cert/index.vue';
 import { exportArchiveCert, pageArchiveCert } from '@/api/ca/archiveCert';
+import { historicalRecoveryPermission } from '@/api/ca/historicalRecovery';
+import HistoricalRecoveryDialog from './HistoricalRecoveryDialog.vue';
 
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
 
@@ -83,6 +89,17 @@ const ids = ref<Array<string | number>>([]);
 const multiple = ref(true);
 const showDetail = ref(false);
 const currentCertPem = ref('');
+const showRecovery = ref(false);
+const recoveryCertificate = ref<{ id: string; serialNumber?: string; subject?: string }>();
+
+interface RecoveryRow {
+  id: string | number;
+  keySource?: string;
+  archiveReason?: string;
+  isRevoked?: number;
+  serialNumber?: string;
+  subject?: string;
+}
 
 const data = reactive({
   queryParams: {
@@ -114,6 +131,16 @@ function handleSelectionChange(selection: any[]) {
 function handleView(row: any) {
   currentCertPem.value = row.cert || '';
   showDetail.value = true;
+}
+
+function canRecover(row: RecoveryRow) {
+  const validId = typeof row.id === 'number' ? Number.isSafeInteger(row.id) && row.id > 0 : /^[1-9]\d{0,18}$/.test(row.id);
+  return validId && row.keySource === 'KMC' && row.archiveReason !== 'REVOKED' && Number(row.isRevoked) !== 1;
+}
+
+function openRecovery(row: RecoveryRow) {
+  recoveryCertificate.value = { id: String(row.id), subject: row.subject, serialNumber: row.serialNumber };
+  showRecovery.value = true;
 }
 
 function handleDownload(row: any) {

@@ -1,4 +1,16 @@
-import type { OpsComponent, OpsContainer, OpsOverview, OpsServer, OpsSummary } from '@/api/ops/types';
+import type { OpsComponent, OpsContainer, OpsContainerVersion, OpsOverview, OpsServer, OpsSummary } from '@/api/ops/types';
+
+export const containerImageTag = (image: string) => {
+  if (image.includes('@')) return '';
+  const lastSlash = image.lastIndexOf('/');
+  const lastColon = image.lastIndexOf(':');
+  return lastColon > lastSlash ? image.slice(lastColon + 1) : '';
+};
+
+export const matchesContainerVersion = (
+  container: Pick<OpsContainer, 'image' | 'imageDigest'>,
+  version: Pick<OpsContainerVersion, 'currentTag' | 'currentDigest'>
+) => version.currentTag === containerImageTag(container.image) && (version.currentDigest ?? '') === (container.imageDigest ?? '');
 
 export const statusTagType = (status?: string, running?: boolean, present = true) => {
   if (!present) {

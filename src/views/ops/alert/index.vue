@@ -25,40 +25,21 @@
             </template>
           </template>
         </el-tab-pane>
-        <el-tab-pane label="证书到期" name="certificate-expiry">
-          <RaCertificateExpiryPane v-if="activeTab === 'certificate-expiry'" />
-        </el-tab-pane>
-        <el-tab-pane label="通知渠道" name="channels">
-          <div class="toolbar">
-            <el-button type="primary" icon="Plus" @click="openChannelDialog()">新建渠道</el-button>
-            <span class="hint">钉钉机器人配置；事件由各服务自定义后上报，OPS 统一投递。</span>
+        <el-tab-pane label="钉钉渠道" name="channels">
+          <div v-if="activeTab === 'channels'" class="channel-sections">
+            <FawVwChannelPane kind="FAW_VW_DINGTALK" />
+            <UserDingTalkChannelPane />
           </div>
-          <el-table :data="channels" border v-loading="loading">
-            <el-table-column prop="name" label="名称" min-width="140" />
-            <el-table-column label="类型" width="110">
-              <template #default="{ row }">{{ row.channelType || 'DINGTALK' }}</template>
-            </el-table-column>
-            <el-table-column label="启用" width="90" align="center">
-              <template #default="{ row }">
-                <el-switch v-model="row.enabled" @change="persistChannel(row)" />
-              </template>
-            </el-table-column>
-            <el-table-column label="Token" min-width="180" show-overflow-tooltip>
-              <template #default="{ row }">{{ row.accessToken || '未配置' }}</template>
-            </el-table-column>
-            <el-table-column label="备注" prop="remark" min-width="160" />
-            <el-table-column label="操作" width="220" fixed="right">
-              <template #default="{ row }">
-                <el-button link type="primary" @click="openChannelDialog(row)">编辑</el-button>
-                <el-button link type="warning" :loading="testingId === row.id" @click="handleTest(row)">测试发送</el-button>
-                <el-button link type="danger" @click="handleDeleteChannel(row)">删除</el-button>
-              </template>
-            </el-table-column>
-          </el-table>
         </el-tab-pane>
 
         <el-tab-pane label="邮件渠道" name="mail">
-          <MailChannelPane v-if="activeTab === 'mail'" />
+          <div v-if="activeTab === 'mail'" class="channel-sections">
+            <el-card shadow="never">
+              <template #header><strong>SMTP 邮件</strong></template>
+              <MailChannelPane />
+            </el-card>
+            <FawVwChannelPane kind="FAW_VW_EMAIL" />
+          </div>
         </el-tab-pane>
 
         <el-tab-pane label="应用通知" name="application-notifications">
@@ -67,9 +48,15 @@
             <ApplicationMailChannelPane />
           </el-card>
         </el-tab-pane>
-
         <el-tab-pane label="通知模板" name="notification-templates">
           <NotificationTemplatePane v-if="activeTab === 'notification-templates'" />
+        </el-tab-pane>
+        <el-tab-pane label="企业网关" name="enterprise-gateway">
+          <FawVwGatewayPane v-if="activeTab === 'enterprise-gateway'" />
+        </el-tab-pane>
+
+        <el-tab-pane label="告警条件" name="conditions">
+          <AlertConditionPane v-if="activeTab === 'conditions'" />
         </el-tab-pane>
 
         <el-tab-pane label="告警规则" name="rules">
@@ -142,24 +129,6 @@
       </template>
     </el-drawer>
 
-    <el-dialog v-model="channelVisible" :title="channelForm.id ? '编辑渠道' : '新建渠道'" width="520px">
-      <el-form :model="channelForm" label-width="90px">
-        <el-form-item label="名称" required><el-input v-model="channelForm.name" /></el-form-item>
-        <el-form-item label="启用"><el-switch v-model="channelForm.enabled" /></el-form-item>
-        <el-form-item label="Access Token"
-          ><el-input v-model="channelForm.accessToken" type="password" autocomplete="new-password" placeholder="编辑时留空保留原值"
-        /></el-form-item>
-        <el-form-item label="加签 Secret"
-          ><el-input v-model="channelForm.secret" type="password" autocomplete="new-password" placeholder="编辑时留空保留原值"
-        /></el-form-item>
-        <el-form-item label="备注"><el-input v-model="channelForm.remark" /></el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="channelVisible = false">取消</el-button>
-        <el-button type="primary" @click="saveChannel">保存</el-button>
-      </template>
-    </el-dialog>
-
     <el-dialog v-model="ruleVisible" :title="ruleForm.id ? '编辑规则' : '新建规则'" width="520px">
       <el-form :model="ruleForm" label-width="100px">
         <el-form-item label="渠道" required>
@@ -186,11 +155,14 @@
 </template>
 
 <script setup name="OpsAlertCenter" lang="ts">
+import AlertConditionPane from './AlertConditionPane.vue';
+import FawVwChannelPane from './FawVwChannelPane.vue';
+import FawVwGatewayPane from './FawVwGatewayPane.vue';
 import MailChannelPane from './MailChannelPane.vue';
 import ApplicationMailChannelPane from './ApplicationMailChannelPane.vue';
 import NotificationTemplatePane from './NotificationTemplatePane.vue';
 import IncidentTemplateRulePane from './IncidentTemplateRulePane.vue';
-import RaCertificateExpiryPane from './RaCertificateExpiryPane.vue';
+import UserDingTalkChannelPane from './UserDingTalkChannelPane.vue';
 import type { AlertIncident } from '@/api/ops';
 import { dateTimeText } from '@/views/ops/utils';
 import { useRoute } from 'vue-router';
@@ -199,18 +171,14 @@ import {
   acknowledgeAlertIncident,
   getAlertIncident,
   getAlertIncidents,
-  createAlertChannel,
   createAlertRule,
-  deleteAlertChannel,
   deleteAlertRule,
   getAlertChannels,
   getAlertEventLogs,
   getAlertRules,
-  testAlertChannel,
-  updateAlertChannel,
   updateAlertRule
 } from '@/api/ops';
-import type { AlertChannel, AlertChannelSave, AlertDispatchResult, AlertEventLog, AlertRule, AlertRuleSave } from '@/api/ops/types';
+import type { AlertChannel, AlertEventLog, AlertRule, AlertRuleSave } from '@/api/ops/types';
 
 const incidentTabs = [
   { label: '当前告警', name: 'current' },
@@ -265,10 +233,7 @@ const channels = ref<AlertChannel[]>([]);
 const rules = ref<AlertRule[]>([]);
 const logs = ref<AlertEventLog[]>([]);
 const ruleServiceFilter = ref('');
-const testingId = ref<number>();
-const channelVisible = ref(false);
 const ruleVisible = ref(false);
-const channelForm = reactive<AlertChannelSave & { id?: number }>({ id: undefined, name: '', enabled: true, accessToken: '', secret: '', remark: '' });
 const ruleForm = reactive<AlertRuleSave & { id?: number }>({
   id: undefined,
   channelId: undefined as unknown as number,
@@ -279,14 +244,6 @@ const ruleForm = reactive<AlertRuleSave & { id?: number }>({
   cooldownSeconds: 900
 });
 
-const loadChannels = async () => {
-  loading.value = true;
-  try {
-    channels.value = (await getAlertChannels()) || [];
-  } finally {
-    loading.value = false;
-  }
-};
 const loadRules = async () => {
   loading.value = true;
   try {
@@ -305,8 +262,7 @@ const loadLogs = async () => {
 };
 
 watch(activeTab, (tab) => {
-  if (tab === 'channels') loadChannels();
-  else if (tab === 'rules') loadRules();
+  if (tab === 'rules') loadRules();
   else if (tab === 'logs') loadLogs();
   else if (tab === 'current' || tab === 'history') {
     incidentOffset.value = 0;
@@ -315,56 +271,8 @@ watch(activeTab, (tab) => {
 });
 watch(ruleServiceFilter, () => loadRules());
 
-const openChannelDialog = (row?: AlertChannel) => {
-  Object.assign(
-    channelForm,
-    row
-      ? { id: row.id, name: row.name, enabled: row.enabled, accessToken: '', secret: '', remark: row.remark || '' }
-      : { id: undefined, name: '', enabled: true, accessToken: '', secret: '', remark: '' }
-  );
-  channelVisible.value = true;
-};
-const saveChannel = async () => {
-  if (!channelForm.name) return ElMessage.warning('请填写名称');
-  const payload: AlertChannelSave = {
-    name: channelForm.name,
-    enabled: channelForm.enabled,
-    accessToken: channelForm.accessToken,
-    secret: channelForm.secret,
-    remark: channelForm.remark
-  };
-  if (channelForm.id) await updateAlertChannel(channelForm.id, payload);
-  else await createAlertChannel(payload);
-  channelVisible.value = false;
-  ElMessage.success('已保存');
-  await loadChannels();
-};
-const persistChannel = async (row: AlertChannel) => {
-  if (!row.id) return;
-  await updateAlertChannel(row.id, {
-    name: row.name,
-    enabled: row.enabled,
-    remark: row.remark || ''
-  });
-  ElMessage.success('已更新');
-};
-const handleTest = async (row: AlertChannel) => {
-  if (!row.id) return;
-  testingId.value = row.id;
-  try {
-    const result: AlertDispatchResult = await testAlertChannel(row.id);
-    result.delivered ? ElMessage.success(`测试发送成功：${result.channelResult}`) : ElMessage.error(`测试发送失败：${result.channelResult}`);
-  } finally {
-    testingId.value = undefined;
-  }
-};
-const handleDeleteChannel = async (row: AlertChannel) => {
-  await ElMessageBox.confirm(`确认删除渠道 ${row.name}？`, '提示', { type: 'warning' });
-  if (row.id) await deleteAlertChannel(row.id);
-  await loadChannels();
-};
-
-const openRuleDialog = (row?: AlertRule) => {
+const openRuleDialog = async (row?: AlertRule) => {
+  channels.value = (await getAlertChannels()) || [];
   Object.assign(
     ruleForm,
     row
@@ -417,6 +325,11 @@ onMounted(loadIncidents);
 <style scoped lang="scss">
 .ops-alert-page {
   padding: 12px;
+}
+.channel-sections {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
 }
 .toolbar {
   display: flex;

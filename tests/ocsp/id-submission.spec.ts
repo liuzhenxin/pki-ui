@@ -7,15 +7,20 @@ import { normalizeOcspCaId, normalizeOptionalOcspId } from '../../src/utils/ocsp
 import { signerPolicyLabel } from '../../src/utils/ocspSignerPolicy';
 import * as presentation from '../../src/utils/ocspPresentation';
 
-// Execute each real SFC submission handler with API calls replaced; no initialization occurs.
-const loadSetup = (file: string, api: Record<string, unknown>) => {
+// Execute each real SFC handler with API calls replaced; no initialization occurs.
+const loadSetup = (
+  file: string,
+  api: Record<string, unknown>,
+  props: Record<string, unknown> = { id: 1 },
+  hasPermi: (permission: string) => boolean = () => true
+) => {
   const source = readFileSync(new URL(`../../src/${file}`, import.meta.url), 'utf8');
   const script = compileScript(parse(source).descriptor, { id: 'id-submission' }).content;
   const code = ts.transpileModule(script, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   const exports: any = {};
   const requireMock = (name: string) => {
-    if (name === 'vue') return { ...vue, onMounted: () => {}, onBeforeUnmount: () => {}, watch: () => {} };
-    if (name === '@/plugins/auth') return { default: { hasPermi: () => true } };
+    if (name === 'vue') return { ...vue, onMounted: () => {}, onBeforeUnmount: () => {}, onUnmounted: () => {}, watch: () => {} };
+    if (name === '@/plugins/auth') return { default: { hasPermi } };
     if (name === '@/utils/ocspSignerPolicy') return { signerPolicyLabel };
     if (name === '@/utils/ocspPresentation') return presentation;
     if (name === 'vue-router') return { useRouter: () => ({}), useRoute: () => ({ query: {} }) };
@@ -23,16 +28,81 @@ const loadSetup = (file: string, api: Record<string, unknown>) => {
       return { ElMessage: { warning: vi.fn(), error: vi.fn(), success: vi.fn() }, ElMessageBox: { confirm: vi.fn().mockResolvedValue(true) } };
     if (name === '@/utils/ocspIdentifier') return { normalizeOcspCaId, normalizeOptionalOcspId };
     if (name === '@/api/ocsp/common')
-      return { assertSafeSignerCert: () => {}, assertSafeSignerConf: () => {}, unwrapOcspData: (value: unknown) => value };
+      return { assertSafeSignerCert: (value: string) => value, assertSafeSignerConf: () => {}, unwrapOcspData: (value: unknown) => value };
     if (name === '@/store/modules/user') return { useUserStore: () => ({ setTenantInitStatus: vi.fn() }) };
     if (name.startsWith('@/api/ocsp/')) return api;
     return { default: {} };
   };
   new Function('require', 'exports', code)(requireMock, exports);
-  return exports.default.setup({ id: 1 }, { expose: () => {}, emit: () => {} });
+  return exports.default.setup(props, { expose: () => {}, emit: () => {} });
 };
 
 const largeId = '99183839863111681';
+
+describe('real OCSP dashboard loading', () => {
+  const empty = {
+    range: '24h',
+    requestCount: 0,
+    successCount: 0,
+    unknownCount: 0,
+    activeResponderCount: 1,
+    series: [],
+    statusPie: {},
+    responders: []
+  };
+
+  it.each([0, '0'])('shows a zero request count (%s) without fabricating a success rate', async (requestCount) => {
+    const page = loadSetup('views/ocsp/dashboard/index.vue', {
+      getOcspDashboardSummary: vi.fn().mockResolvedValue({ ...empty, requestCount })
+    });
+    expect(page.statCards.value.map(({ value }) => value)).toEqual(['—', '—', '—', '—']);
+    await page.loadSummary();
+    expect(page.statCards.value.map(({ value }) => value)).toEqual([requestCount, '—', 0, 1]);
+    expect(page.statCards.value[1].unit).toBeUndefined();
+    expect(page.hasTrend.value).toBe(false);
+    expect(page.hasStatusBreakdown.value).toBe(false);
+    expect(page.loadError.value).toBe(false);
+  });
+
+  it('clears stale statistics on failure and shows fresh data after retry', async () => {
+    const ready = { ...empty, requestCount: 4, successCount: 3, unknownCount: 1, statusPie: { GOOD: 2, UNKNOWN: 1 } };
+    const getOcspDashboardSummary = vi.fn().mockResolvedValueOnce(ready).mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce(empty);
+    const page = loadSetup('views/ocsp/dashboard/index.vue', { getOcspDashboardSummary });
+    await page.loadSummary();
+    expect(page.successRatio.value).toBe(75);
+    expect(page.hasStatusBreakdown.value).toBe(true);
+    page.range.value = '1h';
+    await page.loadSummary();
+    expect(page.loadError.value).toBe(true);
+    expect(page.loading.value).toBe(false);
+    expect(page.summary.value).toBeUndefined();
+    expect(page.hasStatusBreakdown.value).toBe(false);
+    await page.loadSummary();
+    expect(page.loadError.value).toBe(false);
+    expect(page.summary.value.requestCount).toBe(0);
+    expect(getOcspDashboardSummary).toHaveBeenLastCalledWith('1h');
+  });
+
+  it('keeps results from the latest window when an older request resolves later', async () => {
+    let finishOlder!: (data: typeof empty) => void;
+    const older = new Promise<typeof empty>((resolve) => {
+      finishOlder = resolve;
+    });
+    const getOcspDashboardSummary = vi
+      .fn()
+      .mockReturnValueOnce(older)
+      .mockResolvedValueOnce({ ...empty, range: '7d', requestCount: 10 });
+    const page = loadSetup('views/ocsp/dashboard/index.vue', { getOcspDashboardSummary });
+    const firstLoad = page.loadSummary();
+    page.range.value = '7d';
+    await page.loadSummary();
+    finishOlder(empty);
+    await firstLoad;
+    expect(page.summary.value).toMatchObject({ range: '7d', requestCount: 10 });
+    expect(page.loading.value).toBe(false);
+  });
+});
+
 describe('real signer diagnostic handler', () => {
   it('clears stale verdict on failure and displays the subsequent explicit result', async () => {
     const diagnoseOcspResponderSigner = vi.fn().mockRejectedValueOnce(new Error('unavailable')).mockResolvedValueOnce({ signerPolicyOk: true });
@@ -49,6 +119,39 @@ describe('real signer diagnostic handler', () => {
   });
 });
 describe('real OCSP ID submission handlers', () => {
+  it('generates and imports signing material without a CA or responder ID', async () => {
+    const generateOcspResponderCsr = vi.fn().mockResolvedValue({ csrPending: true, csrPem: 'certificate request' });
+    const importOcspResponderCertificate = vi.fn().mockResolvedValue({ signerCert: 'public certificate' });
+    const panel = loadSetup(
+      'views/ocsp/components/ResponderCsrPanel.vue',
+      { generateOcspResponderCsr, importOcspResponderCertificate },
+      { name: 'prepared', signerType: 'SOFTWARE', certSource: 'CSR', unassignedOnly: true }
+    );
+    await panel.generateCsr();
+    expect(generateOcspResponderCsr.mock.calls[0][0]).toMatchObject({ name: 'prepared', unassignedOnly: true });
+    expect(generateOcspResponderCsr.mock.calls[0][0]).not.toHaveProperty('caId');
+    panel.issuedPem.value = 'public certificate';
+    await panel.importCertificate();
+    expect(importOcspResponderCertificate).toHaveBeenCalledExactlyOnceWith({
+      name: 'prepared',
+      certificatePem: 'public certificate',
+      certificateChainPem: undefined,
+      unassignedOnly: true
+    });
+  });
+
+  it('opens the standalone material drawer without loading service CAs', async () => {
+    const listServiceCaDrafts = vi.fn();
+    const listUnassignedOcspSignerMaterials = vi.fn().mockResolvedValue([{ name: 'prepared', status: 'PENDING' }]);
+    const page = loadSetup('views/ocsp/responder/index.vue', { listServiceCaDrafts, listUnassignedOcspSignerMaterials });
+    await page.loadSigningMaterials();
+    page.openSigningMaterial('prepared');
+    expect(page.materialVisible.value).toBe(true);
+    expect(page.materialName.value).toBe('prepared');
+    expect(page.materialNameLocked.value).toBe(true);
+    expect(listServiceCaDrafts).not.toHaveBeenCalled();
+  });
+
   it('offers registered service CA IDs when creating a responder without defaulting to CA 1', async () => {
     const listServiceCaDrafts = vi.fn().mockResolvedValue([{ caId: largeId }, { caId: '42' }, { caId: largeId }]);
     const page = loadSetup('views/ocsp/responder/index.vue', { listServiceCaDrafts });
@@ -85,7 +188,7 @@ describe('real OCSP ID submission handlers', () => {
     certificate.mockReturnValueOnce({ state: '有效期内', subject: '/CN=测试签发 CA', issuer: '-', serial: '-', algorithm: '-', validity: '-' });
     try {
       const rows = [
-        { caId: largeId, version: 3, publishedVersion: 2 },
+        { caId: largeId, version: 3, publishedVersion: 2, sourceConfigured: true, sampleConfigured: true, responderId: '9223372036854775807' },
         { caId: '42', version: 1 },
         { caId: '43', version: 5, verifiedVersion: '5', publishedVersion: 4 },
         { caId: '44', version: 6, publishedVersion: '6' }
@@ -96,8 +199,15 @@ describe('real OCSP ID submission handlers', () => {
       expect(page.filteredRows.value.map(({ caId }) => caId)).toEqual([largeId]);
       page.caSearch.value = largeId;
       expect(page.filteredRows.value[0].publishedVersion).toBe(2);
-      expect(page.managedStatus(rows[0])).toBe('已启用，有未发布草稿');
-      expect(rows.map(page.managedAction)).toEqual(['继续配置', '继续配置', '启用已验证草稿', '查看配置']);
+      expect(rows.map(page.draftState)).toEqual(['validate', 'configure', 'publish', 'published']);
+      expect(rows.map(page.managedAction)).toEqual(['验证草稿', '继续配置', '启用已验证草稿', '查看配置']);
+      page.caSearch.value = '9223372036854775807';
+      page.progressFilter.value = 'validate';
+      expect(page.filteredRows.value.map(({ caId }) => caId)).toEqual([largeId]);
+      page.progressFilter.value = 'publish';
+      expect(page.filteredRows.value).toEqual([]);
+      page.caSearch.value = '';
+      expect(page.filteredRows.value.map(({ caId }) => caId)).toEqual(['43']);
       page.openWizard(largeId);
       expect(page.wizardCaId.value).toBe(largeId);
       page.caSearch.value = '找不到';
@@ -105,6 +215,13 @@ describe('real OCSP ID submission handlers', () => {
     } finally {
       certificate.mockRestore();
     }
+  });
+
+  it('offers viewing a draft when the operator cannot validate or publish it', () => {
+    const page = loadSetup('views/ocsp/ca-source/index.vue', {}, { id: 1 }, (permission) => permission === 'ocsp:source:save');
+    const ready = { caId: largeId, version: 2, publishedVersion: 1, sourceConfigured: true, sampleConfigured: true };
+    expect(page.managedAction(ready)).toBe('查看草稿');
+    expect(page.managedAction({ ...ready, verifiedVersion: 2 })).toBe('查看草稿');
   });
 
   it('clears stale service CA drafts when refresh fails', async () => {
@@ -230,6 +347,44 @@ describe('OCSP loading failures and recovery', () => {
     expect(page.alertsError.value).toBe(false);
     expect(page.cards.value[0].value).toBe(0);
   });
+  it('keeps the current alert tab when an older alert request resolves later', async () => {
+    let finishOpen!: (alerts: { code: string }[]) => void;
+    const older = new Promise<{ code: string }[]>((resolve) => {
+      finishOpen = resolve;
+    });
+    const getOcspMonitoringSummary = vi.fn().mockResolvedValue({ openAlertCount: 1 });
+    const listOcspAlerts = vi
+      .fn()
+      .mockReturnValueOnce(older)
+      .mockResolvedValueOnce([{ code: 'RESOLVED_ALERT' }]);
+    const page = loadSetup('views/ocsp/components/MonitoringPanel.vue', { getOcspMonitoringSummary, listOcspAlerts });
+    const openLoad = page.load();
+    page.tab.value = 'history';
+    await page.load();
+    finishOpen([{ code: 'OPEN_ALERT' }]);
+    await openLoad;
+    expect(listOcspAlerts.mock.calls).toEqual([[false], [true]]);
+    expect(page.alerts.value).toEqual([{ code: 'RESOLVED_ALERT' }]);
+  });
+  it('reports a failed source check separately from the status of reading monitoring data', async () => {
+    const getOcspMonitoringSummary = vi.fn().mockResolvedValue({ openAlertCount: 2 });
+    const listOcspAlerts = vi.fn().mockResolvedValue([]);
+    const runOcspMonitoring = vi.fn().mockRejectedValueOnce(new Error('unavailable')).mockResolvedValueOnce({});
+    const page = loadSetup('views/ocsp/components/MonitoringPanel.vue', { getOcspMonitoringSummary, listOcspAlerts, runOcspMonitoring });
+    await page.load();
+    const sourceCheck = page.run(page.actions[0]);
+    expect(page.running.value).toBe('source-health');
+    await page.run(page.actions[1]);
+    expect(runOcspMonitoring).toHaveBeenCalledExactlyOnceWith('source-health');
+    await sourceCheck;
+    expect(page.checkError.value).toContain('检查来源失败');
+    expect(page.summaryError.value).toBe(false);
+    expect(page.cards.value[0].value).toBe(2);
+    await page.run(page.actions[0]);
+    expect(page.checkError.value).toBe('');
+    expect(page.running.value).toBeUndefined();
+    expect(getOcspMonitoringSummary).toHaveBeenCalledTimes(2);
+  });
   it('loads named issuing CA options, deduplicates IDs and submits the selected ID intact', async () => {
     const listServiceCaDrafts = vi.fn().mockResolvedValue([{ caId: largeId }]);
     const listOcspCaStatusSources = vi.fn().mockResolvedValue([{ caId: largeId }, { caId: Number(largeId) }]);
@@ -287,8 +442,29 @@ describe('OCSP loading failures and recovery', () => {
     await page.queryStatus();
     expect(page.queryError.value).toBe(true);
     expect(page.result.value).toBeNull();
-    await page.queryStatus();
+    page.form.serialNumber = 'deff';
+    await page.retryQuery();
+    expect(queryOcspCertStatus).toHaveBeenLastCalledWith({ caId: largeId, serialNumber: 'abcdef', bypassCache: false });
     expect(page.queryError.value).toBe(false);
     expect(page.result.value.status).toBe('UNKNOWN');
+  });
+
+  it('requeries the displayed certificate directly at its source when bypassing cache', async () => {
+    const queryOcspCertStatus = vi.fn().mockResolvedValue({ status: 'GOOD', sourceType: 'DB', cacheHit: true });
+    const page = loadSetup('views/ocsp/status/index.vue', { queryOcspCertStatus });
+    page.form.caId = largeId;
+    page.form.serialNumber = ' ab ';
+    await page.queryStatus();
+    expect(page.lastQuery.value.bypassCache).toBe(false);
+    expect(page.sourceLabel(page.result.value.sourceType)).toBe('数据库 (DB)');
+    page.form.caId = '42';
+    page.form.serialNumber = 'ff';
+    await page.retryWithoutCache();
+    const params = { caId: largeId, serialNumber: 'ab', bypassCache: true };
+    expect(queryOcspCertStatus).toHaveBeenLastCalledWith(params);
+    expect(page.lastQuery.value).toEqual(params);
+    expect(page.form).toEqual(params);
+    const source = readFileSync(new URL('../../src/views/ocsp/status/index.vue', import.meta.url), 'utf8');
+    expect(source).not.toContain('result.cacheHit');
   });
 });

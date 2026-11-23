@@ -3,13 +3,23 @@
     ><template #header
       ><div class="header">
         <b>一致性监控与告警</b>
-        <div>
-          <el-button v-hasPermi="['ocsp:monitoring:run']" :loading="running" @click="run('source-health')">检查来源</el-button
-          ><el-button v-hasPermi="['ocsp:monitoring:run']" :loading="running" @click="run('consistency')">检查一致性</el-button
-          ><el-button v-hasPermi="['ocsp:monitoring:run']" type="primary" :loading="running" @click="run('alerts')">刷新告警</el-button>
+        <div class="header-actions">
+          <el-button :loading="loading" @click="load">刷新数据</el-button>
+          <div v-hasPermi="['ocsp:monitoring:run']" class="header-actions">
+            <el-button
+              v-for="action in actions"
+              :key="action.key"
+              :loading="running === action.key"
+              :disabled="!!running && running !== action.key"
+              @click="run(action)"
+            >
+              {{ action.label }}
+            </el-button>
+          </div>
         </div>
       </div></template
     >
+    <el-alert v-if="checkError" class="summary-error" type="error" :title="checkError" :closable="false" show-icon />
     <el-row :gutter="12" v-loading="loading"
       ><el-col v-for="item in cards" :key="item.label" :xs="12" :sm="8" :lg="4"
         ><div class="monitor-metric">
@@ -51,13 +61,23 @@ import { computed, onMounted, ref } from 'vue';
 import { ElMessage } from 'element-plus';
 import { getOcspMonitoringSummary, listOcspAlerts, runOcspMonitoring } from '@/api/ocsp/operations';
 import type { OcspAlert, OcspMonitoringSummary } from '@/api/ocsp/types';
+
+const actions = [
+  { key: 'source-health', label: '检查来源' },
+  { key: 'consistency', label: '检查一致性' },
+  { key: 'alerts', label: '重新评估告警' }
+] as const;
+type MonitoringAction = (typeof actions)[number];
+
 const loading = ref(false),
-  running = ref(false),
+  running = ref<MonitoringAction['key']>(),
   tab = ref('open');
 const summary = ref<OcspMonitoringSummary>();
 const summaryError = ref(false);
 const alertsError = ref(false);
 const alerts = ref<OcspAlert[]>([]);
+const checkError = ref('');
+let loadVersion = 0;
 const cards = computed(() => [
   { label: '打开告警', value: summary.value?.openAlertCount ?? '-' },
   { label: '来源', value: summary.value?.sourceAlertCount ?? '-' },
@@ -74,42 +94,33 @@ const safeEvidence = (v?: string) => {
     return v;
   }
 };
-const loadAlerts = async () => {
-  alertsError.value = false;
-  alerts.value = [];
-  try {
-    alerts.value = await listOcspAlerts(tab.value === 'history');
-  } catch {
-    alertsError.value = true;
-  }
-};
 const load = async () => {
+  const version = ++loadVersion;
   loading.value = true;
-  try {
-    await Promise.allSettled([
-      (async () => {
-        summaryError.value = false;
-        summary.value = undefined;
-        try {
-          summary.value = await getOcspMonitoringSummary();
-        } catch {
-          summaryError.value = true;
-        }
-      })(),
-      loadAlerts()
-    ]);
-  } finally {
-    loading.value = false;
-  }
+  summaryError.value = false;
+  alertsError.value = false;
+  summary.value = undefined;
+  alerts.value = [];
+  const [summaryResult, alertsResult] = await Promise.allSettled([getOcspMonitoringSummary(), listOcspAlerts(tab.value === 'history')]);
+  if (version !== loadVersion) return;
+  if (summaryResult.status === 'fulfilled') summary.value = summaryResult.value;
+  else summaryError.value = true;
+  if (alertsResult.status === 'fulfilled') alerts.value = alertsResult.value;
+  else alertsError.value = true;
+  loading.value = false;
 };
-const run = async (k: 'consistency' | 'source-health' | 'alerts') => {
-  running.value = true;
+const run = async (action: MonitoringAction) => {
+  if (running.value) return;
+  running.value = action.key;
+  checkError.value = '';
   try {
-    await runOcspMonitoring(k);
-    ElMessage.success('检查完成');
+    await runOcspMonitoring(action.key);
+    ElMessage.success(`${action.label}完成`);
     await load();
+  } catch {
+    checkError.value = `${action.label}失败，请重试。`;
   } finally {
-    running.value = false;
+    running.value = undefined;
   }
 };
 onMounted(load);
@@ -123,6 +134,15 @@ onMounted(load);
   justify-content: space-between;
   align-items: center;
   gap: 12px;
+}
+.header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.header-actions :deep(.el-button + .el-button) {
+  margin-left: 0;
 }
 .evidence {
   overflow-wrap: anywhere;

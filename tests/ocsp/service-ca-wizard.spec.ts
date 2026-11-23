@@ -27,7 +27,8 @@ const setupWizard = (api: Record<string, unknown>) => {
     if (name === 'vue') return { ...vue, watch: () => {} };
     if (name === 'element-plus') return { ElMessage: { error: vi.fn(), success: vi.fn(), info: vi.fn() } };
     if (name === '@/utils/ocspIdentifier') return { normalizeOcspCaId, normalizeOptionalOcspId };
-    if (name === '@/api/ocsp/serviceCa') return api;
+    if (name === '@/plugins/auth') return { default: { hasPermi: () => true, hasPermiAnd: () => true } };
+    if (name === '@/api/ocsp/serviceCa' || name === '@/api/ocsp/responder') return api;
     return { default: {} };
   };
   new Function('require', 'exports', compiled)(requireMock, exports);
@@ -85,6 +86,41 @@ describe('service CA onboarding', () => {
     expect(wizard.step.value).toBe(2);
     await wizard.publish();
     expect(publishServiceCaDraft).not.toHaveBeenCalled();
+  });
+
+  it('lists imported materials and sends the material name instead of an existing responder ID', async () => {
+    const saveServiceCaDraft = vi.fn().mockResolvedValue(draft(2, { responderId }));
+    const listUnassignedOcspSignerMaterials = vi.fn().mockResolvedValue([
+      { name: 'waiting', status: 'PENDING' },
+      { name: 'prepared', status: 'ACTIVE' }
+    ]);
+    const pageOcspResponders = vi.fn().mockResolvedValue({
+      records: [
+        { name: 'other CA', caId: '10', id: '20', status: 'ACTIVE' },
+        { name: 'staged', caId: largeCaId, id: responderId, status: 'STAGED' }
+      ]
+    });
+    const wizard = setupWizard({ saveServiceCaDraft, listUnassignedOcspSignerMaterials, pageOcspResponders });
+    wizard.draft.value = draft(1);
+    Object.assign(wizard.form, {
+      caId: largeCaId,
+      issuerPem,
+      sourceCaId: 'source-ca',
+      sampleSerialHex: 'ab',
+      responderId: 'material:prepared'
+    });
+    Object.assign(wizard.form.db, { url: 'jdbc:mysql://example.invalid/ca', username: 'reader', passwordRef: 'fixture.ref' });
+    await wizard.loadSigningMaterials();
+    await wizard.loadResponders();
+    expect(wizard.materialOptions.value.map(({ name }) => name)).toEqual(['prepared']);
+    expect(wizard.responderOptions.value.map(({ name }) => name)).toEqual(['staged']);
+    await wizard.saveSource();
+    const request = saveServiceCaDraft.mock.calls[0][0];
+    expect(request).toMatchObject({ signerMaterialName: 'prepared', expectedVersion: 1, issuerPem, caId: largeCaId });
+    expect(request.responderId).toBeUndefined();
+    expect(request.source.responderId).toBeUndefined();
+    expect(wizard.form.responderId).toBe(responderId);
+    expect(wizard.step.value).toBe(2);
   });
 
   it('requires the external source CA identifier before saving a data source', async () => {
