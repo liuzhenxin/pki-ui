@@ -38,7 +38,12 @@ describe('OPS FAW-VW channel form', () => {
     });
     await flushPromises();
     expect(mocks.request).toHaveBeenNthCalledWith(1, expect.objectContaining({ method: 'get', url: '/v1/alert/faw-vw-channels/FAW_VW_DINGTALK' }));
-    expect(wrapper.text()).not.toContain('试发');
+    expect(
+      wrapper
+        .findAll('button')
+        .find((button) => button.text() === '发送测试消息')
+        ?.attributes('disabled')
+    ).toBeDefined();
 
     await input(wrapper, '钉钉收件人').setValue(saved.to);
     const typeSelect = wrapper.findAllComponents(ElSelect).at(-1)!;
@@ -112,21 +117,26 @@ describe('OPS FAW-VW channel form', () => {
     wrapper.unmount();
   });
 
-  it('tests the saved enterprise DingTalk connection while notifications are disabled', async () => {
-    mocks.request.mockResolvedValueOnce({ settings: saved }).mockResolvedValueOnce({ message: '企业钉钉网关已响应（HTTP 405），未验证凭据' });
+  it('probes and explicitly confirms a test send to the saved enterprise DingTalk recipients', async () => {
+    mocks.request
+      .mockResolvedValueOnce({ settings: saved })
+      .mockResolvedValueOnce({ message: '企业钉钉网关已响应（HTTP 405），未验证凭据' })
+      .mockResolvedValueOnce({ message: '企业钉钉网关已接受测试消息' });
+    const confirm = vi.spyOn(ElMessageBox, 'confirm').mockRejectedValueOnce('cancel').mockResolvedValueOnce('confirm');
     const wrapper = mount(FawVwChannelPane, {
       props: { kind: 'FAW_VW_DINGTALK', editable: true, gatewayConfigured: true },
       global: { plugins: [ElementPlus] }
     });
-    const button = () => wrapper.findAll('button').find((candidate) => candidate.text() === '测试连接')!;
+    const button = (text: string) => wrapper.findAll('button').find((candidate) => candidate.text() === text)!;
     try {
       await flushPromises();
       await input(wrapper, '钉钉收件人').setValue('unsaved.user');
-      expect(button().attributes('disabled')).toBeDefined();
+      expect(button('测试连接').attributes('disabled')).toBeDefined();
+      expect(button('发送测试消息').attributes('disabled')).toBeDefined();
       expect(mocks.request).toHaveBeenCalledTimes(1);
 
       await input(wrapper, '钉钉收件人').setValue(saved.to);
-      await button().trigger('click');
+      await button('测试连接').trigger('click');
       await flushPromises();
       expect(mocks.request).toHaveBeenCalledTimes(2);
       expect(mocks.request).toHaveBeenLastCalledWith(
@@ -137,10 +147,20 @@ describe('OPS FAW-VW channel form', () => {
         })
       );
       expect(wrapper.text()).toContain('企业钉钉网关已响应（HTTP 405），未验证凭据');
+      await button('发送测试消息').trigger('click');
+      await flushPromises();
+      expect(mocks.request).toHaveBeenCalledTimes(2);
+      await button('发送测试消息').trigger('click');
+      await flushPromises();
+      expect(confirm).toHaveBeenLastCalledWith(expect.stringContaining(saved.to), '试发企业钉钉', expect.any(Object));
+      expect(mocks.request).toHaveBeenLastCalledWith(
+        expect.objectContaining({ method: 'post', url: '/v1/alert/faw-vw-channels/FAW_VW_DINGTALK/test-send', data: { revision: saved.revision } })
+      );
+      expect(wrapper.text()).toContain('企业钉钉网关已接受测试消息');
       expect(wrapper.text()).toContain('未启用');
-      expect(wrapper.text()).not.toContain('试发');
     } finally {
       wrapper.unmount();
+      confirm.mockRestore();
     }
   });
 
