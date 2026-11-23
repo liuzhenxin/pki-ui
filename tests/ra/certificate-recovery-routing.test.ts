@@ -7,6 +7,8 @@ import RaCertPage from '@/views/ra/cert/index.vue';
 
 const mocks = vi.hoisted(() => ({ request: vi.fn() }));
 vi.mock('@/utils/request', () => ({ default: mocks.request }));
+vi.mock('@/plugins/auth', () => ({ default: { hasPermiAnd: () => false } }));
+vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }));
 vi.mock('@/api/skf/skf_api', () => ({
   default: class {
     connect = async () => this;
