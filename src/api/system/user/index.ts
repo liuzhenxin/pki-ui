@@ -73,11 +73,13 @@ const toUserCommand = (data: UserForm) => {
     'cert'
   ] as const;
 
-  return Object.fromEntries(
-    allowedFields
-      .filter((field) => data[field] !== undefined)
-      .map((field) => [field, data[field]])
-  );
+  return Object.fromEntries(allowedFields.filter((field) => data[field] !== undefined).map((field) => [field, data[field]]));
+};
+
+// U01/U17 初始状态和账号属性由服务端设定，创建请求只携带可编辑字段。
+const toUserCreateCommand = (data: object) => {
+  const fields = ['username', 'password', 'mail', 'mobile', 'userCategory', 'avatar', 'deptId', 'roleIds'];
+  return Object.fromEntries(Object.entries(data).filter(([field, value]) => fields.includes(field) && value !== undefined));
 };
 
 /**
@@ -87,7 +89,7 @@ export const addUser = (data: UserForm) => {
   return request({
     url: '/admin/v1/users',
     method: 'post',
-    data: { co: toUserCommand(data) }
+    data: { co: toUserCreateCommand(data) }
   });
 };
 
@@ -384,11 +386,18 @@ export const uploadUserCert = (data: FormData) => {
  * 新增用户并上传证书
  * @param data
  */
-export const saveUserWithCert = (data: FormData) => {
+export const saveUserWithCert = async (data: FormData) => {
+  const raw = data.get('co');
+  if (raw === null) throw new Error('缺少用户创建信息');
+  const co = JSON.parse(typeof raw === 'string' ? raw : await raw.text());
+  if (!co || typeof co !== 'object' || Array.isArray(co)) throw new Error('用户创建信息格式无效');
+  const payload = new FormData();
+  payload.append('co', new Blob([JSON.stringify(toUserCreateCommand(co))], { type: 'application/json' }));
+  data.getAll('file').forEach((file) => payload.append('file', file));
   return request({
     url: '/admin/v1/users/cert/save',
     method: 'post',
-    data: data
+    data: payload
   });
 };
 
