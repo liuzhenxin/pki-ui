@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
-import ElementPlus from 'element-plus';
+import ElementPlus, { ElMessageBox } from 'element-plus';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import FawVwChannelPane from '@/views/ops/alert/FawVwChannelPane.vue';
 import type { FawVwChannelSettings } from '@/api/ops/types';
@@ -104,5 +104,82 @@ describe('OPS FAW-VW channel form', () => {
     expect(wrapper.get('button[type="submit"]').attributes('disabled')).toBeUndefined();
     expect(input(wrapper, 'Access Key').element.value).toBe('');
     wrapper.unmount();
+  });
+
+  it('tests the saved enterprise DingTalk connection while notifications are disabled', async () => {
+    mocks.request.mockResolvedValueOnce({ settings: saved }).mockResolvedValueOnce({ message: '企业钉钉网关已响应（HTTP 405），未验证凭据' });
+    const wrapper = mount(FawVwChannelPane, { props: { kind: 'FAW_VW_DINGTALK' }, global: { plugins: [ElementPlus] } });
+    const button = () => wrapper.findAll('button').find((candidate) => candidate.text() === '测试连接')!;
+    try {
+      await flushPromises();
+      await input(wrapper, '接口 URL').setValue('https://mock.invalid/unsaved');
+      expect(button().attributes('disabled')).toBeDefined();
+      expect(mocks.request).toHaveBeenCalledTimes(1);
+      await input(wrapper, '接口 URL').setValue(saved.endpointUrl);
+
+      await button().trigger('click');
+      await flushPromises();
+      expect(mocks.request).toHaveBeenCalledTimes(2);
+      expect(mocks.request).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          method: 'post',
+          url: '/v1/alert/faw-vw-channels/FAW_VW_DINGTALK/test-connection',
+          data: { revision: saved.revision }
+        })
+      );
+      expect(wrapper.text()).toContain('企业钉钉网关已响应（HTTP 405），未验证凭据');
+      expect(wrapper.text()).toContain('未启用');
+      expect(wrapper.text()).not.toContain('试发');
+    } finally {
+      wrapper.unmount();
+    }
+  });
+
+  it('probes and sends only with saved enterprise mail settings and explicit send confirmation', async () => {
+    const email: FawVwChannelSettings = {
+      ...saved,
+      from: 'alerts@example.test',
+      to: 'oncall@example.test',
+      app: null,
+      dingTalkTarget: null,
+      targetsFormat: 'ARRAY'
+    };
+    mocks.request
+      .mockResolvedValueOnce({ settings: email })
+      .mockResolvedValueOnce({ message: '网关已响应' })
+      .mockResolvedValueOnce({ message: '网关已接受测试邮件' });
+    const confirm = vi.spyOn(ElMessageBox, 'confirm').mockRejectedValueOnce('cancel').mockResolvedValueOnce('confirm');
+    const wrapper = mount(FawVwChannelPane, { props: { kind: 'FAW_VW_EMAIL' }, global: { plugins: [ElementPlus] } });
+    const button = (text: string) => wrapper.findAll('button').find((candidate) => candidate.text() === text)!;
+    try {
+      await flushPromises();
+      await input(wrapper, '收件邮箱').setValue('unsaved@example.test');
+      expect(button('测试连接').attributes('disabled')).toBeDefined();
+      expect(button('试发邮件').attributes('disabled')).toBeDefined();
+      await input(wrapper, '收件邮箱').setValue(email.to);
+
+      await button('测试连接').trigger('click');
+      await flushPromises();
+      expect(mocks.request).toHaveBeenLastCalledWith(
+        expect.objectContaining({ method: 'post', url: '/v1/alert/faw-vw-channels/FAW_VW_EMAIL/test-connection', data: { revision: email.revision } })
+      );
+      expect(wrapper.text()).toContain('网关已响应');
+
+      await button('试发邮件').trigger('click');
+      await flushPromises();
+      expect(mocks.request).toHaveBeenCalledTimes(2);
+      await button('试发邮件').trigger('click');
+      await flushPromises();
+
+      expect(confirm).toHaveBeenLastCalledWith(expect.stringContaining(email.to), '试发企业邮件', expect.any(Object));
+      expect(mocks.request).toHaveBeenLastCalledWith(
+        expect.objectContaining({ method: 'post', url: '/v1/alert/faw-vw-channels/FAW_VW_EMAIL/test-send', data: { revision: email.revision } })
+      );
+      expect(wrapper.text()).toContain('网关已接受测试邮件');
+      expect(wrapper.text()).toContain('未启用');
+    } finally {
+      wrapper.unmount();
+      confirm.mockRestore();
+    }
   });
 });

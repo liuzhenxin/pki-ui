@@ -15,6 +15,7 @@ import type {
   FawVwChannelKind,
   FawVwChannelSave,
   FawVwChannelSettings,
+  FawVwGatewaySettings,
   OpsContainer,
   OpsContainerLogs,
   OpsContainerActionRequest,
@@ -44,6 +45,24 @@ export function saveAlertConditions(data: AlertConditionSettings) {
   return request<unknown, AlertConditionSettings>({ baseURL, url: '/v1/alert/conditions', method: 'put', data });
 }
 
+export function getFawVwGateway() {
+  return request<unknown, { settings: FawVwGatewaySettings; editable: boolean }>({
+    baseURL,
+    url: '/v1/alert/faw-vw-channels/gateway',
+    method: 'get'
+  });
+}
+
+export function saveFawVwGateway(settings: FawVwGatewaySettings) {
+  return request<unknown, { settings: FawVwGatewaySettings; editable: boolean }>({
+    baseURL,
+    url: '/v1/alert/faw-vw-channels/gateway',
+    method: 'put',
+    headers: { sensitive: true, repeatSubmit: false },
+    data: settings
+  });
+}
+
 export function getFawVwChannel(kind: FawVwChannelKind) {
   return request<unknown, { settings: FawVwChannelSettings | null }>({ baseURL, url: '/v1/alert/faw-vw-channels/' + kind, method: 'get' });
 }
@@ -55,6 +74,16 @@ export function saveFawVwChannel(kind: FawVwChannelKind, data: FawVwChannelSave)
     method: 'put',
     headers: { sensitive: true, repeatSubmit: false },
     data
+  });
+}
+
+export function testFawVwChannel(kind: FawVwChannelKind, action: 'test-connection' | 'test-send', revision: string) {
+  return request<unknown, { message: string }>({
+    baseURL,
+    url: `/v1/alert/faw-vw-channels/${kind}/${action}`,
+    method: 'post',
+    headers: { sensitive: true },
+    data: { revision }
   });
 }
 

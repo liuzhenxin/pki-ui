@@ -342,6 +342,10 @@ export interface FawVwChannelSave {
   secretKey?: string;
 }
 
+export interface FawVwGatewaySettings {
+  origin: string | null;
+  revision: string | null;
+}
 export type AlertConditionType =
   | 'SERVER_CPU'
   | 'SERVER_MEMORY'

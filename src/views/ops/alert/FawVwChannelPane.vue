@@ -2,7 +2,7 @@
   <el-card shadow="never">
     <template #header>
       <div class="channel-header">
-        <strong>{{ isMail ? 'FAW-VW 邮件' : 'FAW-VW 钉钉' }}</strong>
+        <strong>{{ isMail ? '企业邮件' : '企业钉钉' }}</strong>
         <el-tag v-if="loaded" :type="savedEnabled ? 'success' : 'info'">{{ savedEnabled ? '已启用' : '未启用' }}</el-tag>
       </div>
     </template>
@@ -66,7 +66,12 @@
         </el-form-item>
         <el-form-item label="启用通知"><el-switch v-model="form.enabled" /></el-form-item>
       </div>
-      <el-button type="primary" native-type="submit" :loading="saving" :disabled="stale">保存配置</el-button>
+      <el-space wrap>
+        <el-button type="primary" native-type="submit" :loading="saving" :disabled="stale">保存配置</el-button>
+        <el-button :disabled="!canTest" :loading="testing === 'test-connection'" @click="testChannel('test-connection')">测试连接</el-button>
+        <el-button v-if="isMail" :disabled="!canTest" :loading="testing === 'test-send'" @click="testChannel('test-send')">试发邮件</el-button>
+      </el-space>
+      <el-alert v-if="testResult" class="test-result" :title="testResult" type="info" :closable="false" show-icon />
     </el-form>
     <el-button v-if="loadFailed || stale" class="reload" :disabled="busy" @click="load">刷新配置</el-button>
   </el-card>
@@ -74,8 +79,8 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue';
-import { ElMessage } from 'element-plus';
-import { getFawVwChannel, saveFawVwChannel } from '@/api/ops';
+import { ElMessage, ElMessageBox } from 'element-plus';
+import { getFawVwChannel, saveFawVwChannel, testFawVwChannel } from '@/api/ops';
 import type { FawVwChannelConfig, FawVwChannelKind, FawVwChannelSettings } from '@/api/ops/types';
 
 const props = defineProps<{ kind: FawVwChannelKind }>();
@@ -103,9 +108,23 @@ const credentialsConfigured = ref(false);
 const loaded = ref(false);
 const loading = ref(false);
 const saving = ref(false);
+const testing = ref<'test-connection' | 'test-send'>();
+const testResult = ref('');
+const savedConfig = ref('');
 const loadFailed = ref(false);
 const stale = ref(false);
-const busy = computed(() => loading.value || saving.value);
+const busy = computed(() => loading.value || saving.value || !!testing.value);
+const canTest = computed(
+  () =>
+    loaded.value &&
+    !busy.value &&
+    !stale.value &&
+    credentialsConfigured.value &&
+    !!form.revision &&
+    !accessKey.value &&
+    !secretKey.value &&
+    JSON.stringify(form) === savedConfig.value
+);
 
 function apply(settings: FawVwChannelSettings | null) {
   const { credentialsConfigured: configured, ...data } = settings ?? { ...emptyConfig(), credentialsConfigured: false };
@@ -115,6 +134,8 @@ function apply(settings: FawVwChannelSettings | null) {
   accessKey.value = '';
   secretKey.value = '';
   stale.value = false;
+  savedConfig.value = JSON.stringify(form);
+  testResult.value = '';
 }
 
 async function load() {
@@ -159,6 +180,23 @@ async function save() {
   }
 }
 
+async function testChannel(action: 'test-connection' | 'test-send') {
+  if (!canTest.value || !form.revision) return;
+  const revision = form.revision;
+  testing.value = action;
+  testResult.value = '';
+  try {
+    if (action === 'test-send') {
+      await ElMessageBox.confirm(`试发邮件将发送到 ${form.to}。`, '试发企业邮件', { type: 'warning', confirmButtonText: '发送' });
+    }
+    testResult.value = (await testFawVwChannel(props.kind, action, revision)).message;
+  } catch (error) {
+    if ((error as { response?: { status?: number } })?.response?.status === 409) stale.value = true;
+  } finally {
+    testing.value = undefined;
+  }
+}
+
 onMounted(load);
 </script>
 
@@ -175,7 +213,8 @@ onMounted(load);
   column-gap: 20px;
 }
 
-.reload {
+.reload,
+.test-result {
   margin-top: 12px;
 }
 </style>
