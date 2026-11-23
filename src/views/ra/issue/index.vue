@@ -153,6 +153,11 @@
                     : 'RSA 加密单证：密钥由 KMC 生成，无需提交 CSR。证书可写入 USB Key 或导出到文件。'
                 }}</template>
               </el-alert>
+              <el-form-item v-if="isRsaKmcEncryption && !isCertUpdate" label="密钥长度">
+                <el-radio-group v-model="issueForm.kmcKeySize">
+                  <el-radio-button v-for="size in kmcKeySizes" :key="size" :value="size">RSA {{ size }}</el-radio-button>
+                </el-radio-group>
+              </el-form-item>
               <el-form-item v-if="issueForm.issueType === 'csr'" label="CSR" prop="csr" class="csr-form-item">
                 <el-input v-model="issueForm.csr" type="textarea" :rows="8" placeholder="请输入证书请求CSR" />
               </el-form-item>
@@ -535,6 +540,7 @@ import { downloadRaPkcs12 } from '@/api/ra/cert';
 import CertSubject, { typeMapping, sortSubjectItems } from '@/components/CertSubject/index.vue';
 import { parseJson } from '@/utils/json';
 import { resolveTemplateUsages } from '@/utils/raCertUsage';
+import { rsaKmcKeyRequest, rsaKmcKeySizes } from '@/utils/raKmcKeyRequest';
 import SKFClient from '@/api/skf/skf_api';
 
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
@@ -735,6 +741,7 @@ const queryParams = reactive({
 });
 
 const issueForm = reactive({
+  kmcKeySize: 2048,
   issueType: 'csr' as 'csr' | 'usb_key' | 'file',
   csr: '',
   subject: '',
@@ -748,6 +755,8 @@ const issueForm = reactive({
   fileFormat: 'PKCS12' as const,
   filePassword: ''
 });
+
+const kmcKeySizes = computed(() => rsaKmcKeySizes(current.value.profileConf));
 
 const rules: FormRules = {
   issueType: [{ required: true, message: '请选择签发方式', trigger: 'change' }],
@@ -921,6 +930,7 @@ async function handleIssue(row: RaCertIssue) {
     }
   }
   resetIssueForm();
+  issueForm.kmcKeySize = kmcKeySizes.value[0] || 2048;
   issueForm.csr = current.value.csr || '';
   issueForm.subject = current.value.subject || '';
   issueForm.subjectItems = buildSubjectItems(current.value.profileConf, current.value.subject);
@@ -1180,13 +1190,18 @@ function submitIssue() {
     submitLoading.value = true;
     issueStep.value = isCertUpdate.value ? '正在调用 CA 执行证书更新（换密钥）...' : '正在调用 CA 执行证书签发...';
     try {
+      const kmcRequest = isRsaKmcEncryption.value && !isCertUpdate.value ? rsaKmcKeyRequest(current.value.profileConf, issueForm.kmcKeySize) : {};
       const subject = resolveIssueSubject();
       let csr = issueForm.csr;
+      // GM3000 discards native PIN authentication when its application handle closes.
+      const operationPin = issueForm.provider === 'GM3000' ? issueForm.pin : null;
       if (issueForm.issueType === 'usb_key') {
         issueStep.value = '正在连接 SKF 服务并验证 USB Key PIN...';
         const skf = await getSkfClient();
-        const appPath = `${issueForm.provider}/${issueForm.device}/${issueForm.appName}`;
-        await withTimeout(skf.checkPIN(appPath, issueForm.pin), 15000, '验证 PIN 超时');
+        if (!operationPin) {
+          const appPath = `${issueForm.provider}/${issueForm.device}/${issueForm.appName}`;
+          await withTimeout(skf.checkPIN(appPath, issueForm.pin), 15000, '验证 PIN 超时');
+        }
         if (!isRsaKmcEncryption.value) {
           issueStep.value = '正在 USB Key 中生成密钥并创建 CSR...';
           const p10Res = await withTimeout(
@@ -1197,7 +1212,8 @@ function submitIssue() {
               subject,
               resolveKeyAlgorithm(),
               resolveKeySize(),
-              issueForm.containerName
+              issueForm.containerName,
+              operationPin
             ),
             30000,
             '生成 CSR 超时'
@@ -1213,7 +1229,8 @@ function submitIssue() {
               subject,
               'RSA',
               resolveKeySize() || 2048,
-              issueForm.containerName
+              issueForm.containerName,
+              operationPin
             ),
             30000,
             '生成封装 CSR 超时'
@@ -1222,6 +1239,7 @@ function submitIssue() {
         }
       }
       const res = await issueRaCert(current.value.businessType, current.value.businessId, {
+        ...kmcRequest,
         issueType: issueForm.issueType,
         csr: csr || undefined,
         subject: subject || undefined,
@@ -1249,21 +1267,38 @@ function submitIssue() {
               'RSA',
               res.data.encryptionPrivateKey,
               res.data.wrapKey || '',
-              res.data.symmetricMode || 'ECB'
+              res.data.symmetricMode || 'ECB',
+              operationPin
             ),
             30000,
             '写入 KMC RSA 加密密钥对超时'
           );
           issueStep.value = '正在写入加密证书到 USB Key...';
           await withTimeout(
-            skf.importCertificate(issueForm.provider, issueForm.device, issueForm.appName, issueForm.containerName, false, res.data.cert),
+            skf.importCertificate(
+              issueForm.provider,
+              issueForm.device,
+              issueForm.appName,
+              issueForm.containerName,
+              false,
+              res.data.cert,
+              operationPin
+            ),
             30000,
             '写入 USB Key 证书超时'
           );
         } else {
           issueStep.value = '正在写入证书到 USB Key...';
           await withTimeout(
-            skf.importCertificate(issueForm.provider, issueForm.device, issueForm.appName, issueForm.containerName, true, res.data.cert),
+            skf.importCertificate(
+              issueForm.provider,
+              issueForm.device,
+              issueForm.appName,
+              issueForm.containerName,
+              true,
+              res.data.cert,
+              operationPin
+            ),
             30000,
             '写入 USB Key 证书超时'
           );
@@ -1280,14 +1315,24 @@ function submitIssue() {
                 issueForm.containerName,
                 'SM2',
                 res.data.encryptionPrivateKey,
-                ''
+                '',
+                'ECB',
+                operationPin
               ),
               30000,
               '写入 KMC 加密密钥对超时'
             );
             issueStep.value = '正在写入加密证书到 USB Key...';
             await withTimeout(
-              skf.importCertificate(issueForm.provider, issueForm.device, issueForm.appName, issueForm.containerName, false, res.data.encCert),
+              skf.importCertificate(
+                issueForm.provider,
+                issueForm.device,
+                issueForm.appName,
+                issueForm.containerName,
+                false,
+                res.data.encCert,
+                operationPin
+              ),
               30000,
               '写入加密证书超时'
             );
@@ -1332,6 +1377,7 @@ function closeIssueDialog() {
 }
 
 function resetIssueForm() {
+  issueForm.kmcKeySize = 2048;
   issueForm.issueType = 'csr';
   issueForm.csr = '';
   issueForm.subject = '';

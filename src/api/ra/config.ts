@@ -20,6 +20,26 @@ export interface RaConfigTestCO {
   checks: RaConfigTestCheck[];
 }
 
+export interface RaIdentityRotation {
+  csrPem: string;
+  subject: string;
+  algorithm: 'RSA' | 'SM2';
+}
+
+const identityRotationUrl = '/ra/v1/config/identity/rotation';
+
+export function getRaIdentityRotation(): Promise<Result<RaIdentityRotation | null>> {
+  return request({ url: identityRotationUrl, method: 'get' }) as any;
+}
+
+export function generateRaIdentityRotation(): Promise<Result<RaIdentityRotation>> {
+  return request({ url: `${identityRotationUrl}/csr`, method: 'post' }) as any;
+}
+
+export function activateRaIdentityRotation(certPem: string): Promise<Result<void>> {
+  return request({ url: `${identityRotationUrl}/certificate`, method: 'post', data: { certPem } }) as any;
+}
+
 export function getRaConfig(group: RaConfigGroup): Promise<Result<RaConfigCO>> {
   return request({
     url: `/ra/v1/config/${group}`,

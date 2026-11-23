@@ -40,6 +40,8 @@ export interface DualCertIssueInfo {
 }
 
 export interface RaCertIssueForm {
+  keyAlgorithm?: 'RSA';
+  keySize?: number;
   issueType?: 'csr' | 'usb_key' | 'file';
   csr?: string;
   subject?: string;

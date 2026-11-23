@@ -76,19 +76,21 @@ import {
   confirmHistoricalRecovery,
   getHistoricalRecovery,
   submitArchiveRecovery,
-  type ArchiveRecoveryRequest,
+  type HistoricalRecoveryRequest,
   type HistoricalRecoveryTask,
   type RecoveryConfirmation,
   type RecoveryDeviceFile
 } from '@/api/ca/historicalRecovery';
+import { submitRaHistoricalRecovery, getRaHistoricalRecovery, confirmRaHistoricalRecovery } from '@/api/ra/historicalRecovery';
 
 const visible = defineModel<boolean>({ required: true });
-const props = defineProps<{ certificate: { id: string; serialNumber?: string; subject?: string } }>();
+const props = defineProps<{ certificate: { id: string; serialNumber?: string; subject?: string }; application?: 'ca' | 'ra' }>();
 
 const statusLabels: Record<HistoricalRecoveryTask['status'], string> = {
   QUEUED: '排队中',
   EXECUTING: '处理中',
   PENDING_CONFIRMATION: '等待设备导入',
+  DELIVERED: '加密信封已交付',
   SUCCEEDED: '恢复成功',
   FAILED: '恢复失败',
   EXPIRED: '任务已过期',
@@ -115,7 +117,7 @@ const authorizationRef = ref('');
 const reason = ref('');
 const deviceFile = shallowRef<RecoveryDeviceFile>();
 const receipt = shallowRef<RecoveryConfirmation>();
-const attempt = shallowRef<ArchiveRecoveryRequest>();
+const attempt = shallowRef<HistoricalRecoveryRequest & { mode: 'DEVICE_DELIVERY' }>();
 const targetDeviceId = ref('');
 const task = shallowRef<HistoricalRecoveryTask>();
 const busy = ref(false);
@@ -262,7 +264,6 @@ function submit() {
       attempt.value = {
         ...proof,
         clientRequestNo: uuidv4(),
-        certificateRef: { source: 'ARCHIVE', id: props.certificate.id },
         ticketNo,
         reason: reason.value,
         authorizationRef: authorizationRef.value,
@@ -273,7 +274,11 @@ function submit() {
     }
     if (!attempt.value) return;
     try {
-      const response = await submitArchiveRecovery(attempt.value);
+      const id = props.certificate.id;
+      const response =
+        props.application === 'ra'
+          ? await submitRaHistoricalRecovery(id, attempt.value)
+          : await submitArchiveRecovery({ ...attempt.value, certificateRef: { source: 'ARCHIVE', id } });
       updateTask(response.data);
       targetDeviceId.value = attempt.value.deviceId;
       attempt.value = undefined;
@@ -293,13 +298,20 @@ function submit() {
 function refresh() {
   const id = task.value?.recoveryId;
   if (!id) return;
-  return run(async () => updateTask((await getHistoricalRecovery(id)).data, id), '无法刷新恢复状态，请稍后重试');
+  return run(async () => {
+    const response = props.application === 'ra' ? await getRaHistoricalRecovery(props.certificate.id, id) : await getHistoricalRecovery(id);
+    updateTask(response.data, id);
+  }, '无法刷新恢复状态，请稍后重试');
 }
 
 function confirm() {
   const data = receipt.value;
   if (!pendingConfirmation.value || !data) return;
-  return run(async () => updateTask((await confirmHistoricalRecovery(data)).data, data.recoveryId), '未能确认导入结果，请刷新状态或重试确认');
+  return run(async () => {
+    const response =
+      props.application === 'ra' ? await confirmRaHistoricalRecovery(props.certificate.id, data) : await confirmHistoricalRecovery(data);
+    updateTask(response.data, data.recoveryId);
+  }, '未能确认导入结果，请刷新状态或重试确认');
 }
 
 function reset() {

@@ -23,15 +23,19 @@ export interface RecoveryDeviceFile {
   deviceBinding: SignedDevicePayload<RecoveryDeviceBinding>;
 }
 
-export interface ArchiveRecoveryRequest extends RecoveryDeviceFile {
+export interface HistoricalRecoveryRequest extends RecoveryDeviceFile {
   clientRequestNo: string;
-  certificateRef: { source: 'ARCHIVE'; id: string };
   ticketNo: string;
   reason: string;
   authorizationRef: string;
-  mode: 'DEVICE_DELIVERY';
+  mode: 'DEVICE_DELIVERY' | 'RA_SKF';
   recipientId: string;
   deviceId: string;
+}
+
+export interface ArchiveRecoveryRequest extends HistoricalRecoveryRequest {
+  mode: 'DEVICE_DELIVERY';
+  certificateRef: { source: 'ARCHIVE'; id: string };
 }
 
 export interface RecoveryConfirmation {
@@ -42,7 +46,7 @@ export interface RecoveryConfirmation {
 export interface HistoricalRecoveryTask {
   recoveryId: string;
   applicationNo: string;
-  status: 'QUEUED' | 'EXECUTING' | 'PENDING_CONFIRMATION' | 'SUCCEEDED' | 'FAILED' | 'EXPIRED' | 'CANCELLED';
+  status: 'QUEUED' | 'EXECUTING' | 'PENDING_CONFIRMATION' | 'DELIVERED' | 'SUCCEEDED' | 'FAILED' | 'EXPIRED' | 'CANCELLED';
   updatedAt: string;
   expiresAt: string;
   confirmBy?: string;

@@ -51,7 +51,7 @@
             <el-button link type="primary" icon="View" @click="handleDetail(row)" />
           </el-tooltip>
           <el-tooltip v-if="row.keySource === 'KMC'" content="密钥恢复" placement="top">
-            <el-button link type="primary" icon="Key" @click="openRecover(row)" />
+            <el-button link type="primary" icon="Key" aria-label="密钥恢复" :disabled="recoverOpening" @click="openRecover(row)" />
           </el-tooltip>
           <el-dropdown trigger="click" @command="(format: string) => handleDownload(format, row)">
             <el-button link type="primary" icon="Download" />
@@ -135,22 +135,29 @@
 
     <el-dialog
       v-model="recoverOpen"
-      :title="recoverAlgorithm === 'SM2' ? 'SM2密钥恢复' : 'RSA密钥恢复'"
+      :title="archiveSkf ? '归档密钥恢复' : recoverAlgorithm === 'SM2' ? 'SM2密钥恢复' : 'RSA密钥恢复'"
       width="560px"
       append-to-body
+      :close-on-click-modal="!recoverLoading"
+      :close-on-press-escape="!recoverLoading"
+      :show-close="!recoverLoading"
       @closed="resetRecoverForm"
     >
       <el-alert
         type="info"
         :closable="false"
         show-icon
-        :title="`恢复会通过 CMP 从 CA 取回原 ${recoverAlgorithm} 加密私钥。USB Key 写入导入信封；签发到文件则下载 PKCS#12。序列号与有效期不变。`"
+        :title="
+          archiveSkf
+            ? '将归档密钥和原证书写入 USB Key 的新容器。'
+            : `恢复会通过 CMP 从 CA 取回原 ${recoverAlgorithm} 加密私钥。USB Key 写入导入信封；签发到文件则下载 PKCS#12。序列号与有效期不变。`
+        "
       />
       <el-form ref="recoverFormRef" :model="recoverForm" :rules="recoverRules" label-width="110px" class="pkcs12-form">
         <el-form-item label="证书序列号">
           <el-input :model-value="recoveringCert?.serialNumber || '-'" disabled />
         </el-form-item>
-        <el-form-item label="输出方式" prop="issueType">
+        <el-form-item v-if="!archiveSkf" label="输出方式" prop="issueType">
           <el-radio-group v-model="recoverForm.issueType" @change="onRecoverIssueTypeChange">
             <el-radio-button value="usb_key">USB Key</el-radio-button>
             <el-radio-button value="file">签发到文件</el-radio-button>
@@ -158,23 +165,59 @@
         </el-form-item>
         <template v-if="recoverForm.issueType === 'usb_key'">
           <el-form-item label="厂商" prop="provider">
-            <el-select v-model="recoverForm.provider" placeholder="请选择厂商" @change="onRecoverProviderChange">
+            <el-select
+              v-model="recoverForm.provider"
+              placeholder="请选择厂商"
+              :disabled="!!archiveAttempt || recoverLoading"
+              @change="onRecoverProviderChange"
+            >
               <el-option v-for="item in recoverProviders" :key="item" :label="item" :value="item" />
             </el-select>
           </el-form-item>
           <el-form-item label="设备" prop="device">
-            <el-select v-model="recoverForm.device" placeholder="请选择设备" @change="onRecoverDeviceChange">
+            <el-select
+              v-model="recoverForm.device"
+              placeholder="请选择设备"
+              :disabled="!!archiveAttempt || recoverLoading"
+              @change="onRecoverDeviceChange"
+            >
               <el-option v-for="item in recoverDevices" :key="item" :label="item" :value="item" />
             </el-select>
           </el-form-item>
           <el-form-item label="应用" prop="appName">
-            <el-select v-model="recoverForm.appName" placeholder="请选择应用">
+            <el-select v-model="recoverForm.appName" placeholder="请选择应用" :disabled="!!archiveAttempt || recoverLoading">
               <el-option v-for="item in recoverApps" :key="item" :label="item" :value="item" />
             </el-select>
           </el-form-item>
           <el-form-item label="新容器" prop="containerName">
-            <el-input v-model="recoverForm.containerName" placeholder="恢复将写入新容器" />
+            <el-input
+              v-model="recoverForm.containerName"
+              placeholder="恢复将写入新容器"
+              :disabled="!!archiveAttempt || recoverLoading || archiveSkf"
+            />
           </el-form-item>
+          <template v-if="archiveSkf">
+            <el-form-item label="设备签名证书" prop="signingKey">
+              <el-select v-model="recoverForm.signingKey" :disabled="!!archiveAttempt || recoverLoading" placeholder="选择已登记的 RSA 签名证书">
+                <el-option v-for="item in archiveSigners" :key="item.key" :label="item.value" :value="item.key" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="登记设备 ID" prop="deviceId">
+              <el-input v-model.trim="recoverForm.deviceId" :disabled="!!archiveAttempt || recoverLoading" maxlength="128" />
+            </el-form-item>
+            <el-form-item label="接收方 ID" prop="recipientId">
+              <el-input v-model.trim="recoverForm.recipientId" :disabled="!!archiveAttempt || recoverLoading" maxlength="128" />
+            </el-form-item>
+            <el-form-item label="工单号" prop="ticketNo">
+              <el-input v-model.trim="recoverForm.ticketNo" :disabled="!!archiveAttempt || recoverLoading" maxlength="128" />
+            </el-form-item>
+            <el-form-item label="授权依据" prop="authorizationRef">
+              <el-input v-model.trim="recoverForm.authorizationRef" :disabled="!!archiveAttempt || recoverLoading" maxlength="128" />
+            </el-form-item>
+            <el-form-item label="恢复原因" prop="reason">
+              <el-input v-model.trim="recoverForm.reason" :disabled="!!archiveAttempt || recoverLoading" maxlength="512" />
+            </el-form-item>
+          </template>
           <el-form-item label="PIN码" prop="pin">
             <el-input v-model="recoverForm.pin" type="password" show-password />
           </el-form-item>
@@ -188,11 +231,22 @@
           </el-form-item>
         </template>
       </el-form>
+      <p v-if="archiveTask" role="status">任务编号 {{ archiveTask.recoveryId }} · {{ archiveStatus }}</p>
+      <el-alert v-if="archiveWriteResult" :title="archiveWriteResult.message" :type="archiveWriteResult.type" :closable="false" show-icon />
       <template #footer>
-        <el-button @click="recoverOpen = false">取消</el-button>
-        <el-button type="primary" :loading="recoverLoading" @click="submitRecover">确认恢复</el-button>
+        <el-button :disabled="recoverLoading" @click="recoverOpen = false">关闭</el-button>
+        <el-button type="primary" :loading="recoverLoading" :disabled="archiveFinished" @click="submitRecover">
+          {{ archiveTask ? '查询并写入 USB Key' : '确认恢复' }}
+        </el-button>
       </template>
     </el-dialog>
+    <HistoricalRecoveryDialog
+      v-if="archiveRecoveryCertificate"
+      :key="archiveRecoveryCertificate.id"
+      v-model="archiveRecoveryOpen"
+      application="ra"
+      :certificate="archiveRecoveryCertificate"
+    />
   </div>
 </template>
 
@@ -209,9 +263,15 @@ import {
   RaCertSummary,
   RaKmcKeyStatus
 } from '@/api/ra/cert';
+import { claimRaSkfDelivery, getRaHistoricalRecovery, isRaArchiveRecoveryAvailable, submitRaHistoricalRecovery } from '@/api/ra/historicalRecovery';
+import type { HistoricalRecoveryRequest, HistoricalRecoveryTask } from '@/api/ca/historicalRecovery';
+import type { RaSkfDelivery } from '@/api/ra/historicalRecovery';
+import { certificateFingerprint, isRsaSigningCertificate, signArchivePayload, utcNow, wrappingFingerprint } from '@/utils/raArchiveSkf';
+import type { SkfSigningCertificate } from '@/utils/raArchiveSkf';
 import SKFClient from '@/api/skf/skf_api';
 import { certificateDownloadBlob } from '@/utils/raCertificateDownload';
 import RaIssueNotificationButton from '../issue/RaIssueNotificationButton.vue';
+import HistoricalRecoveryDialog from '@/views/ca/archive-cert/HistoricalRecoveryDialog.vue';
 
 const rows = ref<RaCertSummary[]>([]);
 const loading = ref(false);
@@ -227,6 +287,22 @@ const pkcs12FormRef = ref<FormInstance>();
 const pkcs12Form = reactive({ password: '', confirmPassword: '' });
 const kmcKeyStatus = ref<RaKmcKeyStatus | null>(null);
 const recoverOpen = ref(false);
+const recoverOpening = ref(false);
+const archiveRecoveryOpen = ref(false);
+const archiveRecoveryCertificate = ref<{ id: string; serialNumber?: string; subject?: string }>();
+const archiveSkf = ref(false);
+const archiveAttempt = shallowRef<HistoricalRecoveryRequest>();
+const archiveTask = shallowRef<HistoricalRecoveryTask>();
+const archiveCertificates = shallowRef<SkfSigningCertificate[]>([]);
+const archiveFinished = ref(false);
+const archiveImportAttempted = ref(false);
+const archiveWriteResult = shallowRef<{ type: 'success' | 'error'; message: string }>();
+const archiveStatus = computed(() => {
+  if (archiveTask.value?.status === 'DELIVERED') return '加密信封已交付';
+  if (archiveTask.value?.status === 'PENDING_CONFIRMATION') return '可领取';
+  if (archiveTask.value?.status === 'QUEUED' || archiveTask.value?.status === 'EXECUTING') return '准备加密信封中';
+  return '归档任务不可领取';
+});
 const recoverAlgorithm = ref<'RSA' | 'SM2'>('RSA');
 const recoverLoading = ref(false);
 const recoveringCert = ref<RaCertSummary>();
@@ -242,7 +318,17 @@ const recoverForm = reactive({
   containerName: '',
   pin: '123456',
   filePassword: '',
-  confirmPassword: ''
+  confirmPassword: '',
+  signingKey: '',
+  deviceId: '',
+  recipientId: '',
+  ticketNo: '',
+  authorizationRef: '',
+  reason: ''
+});
+const archiveSigners = computed(() => {
+  const prefix = `${recoverForm.provider}/${recoverForm.device}/${recoverForm.appName}/`;
+  return archiveCertificates.value.filter((cert) => cert.key.startsWith(prefix));
 });
 const recoverRules = computed<FormRules>(() => {
   const usb = recoverForm.issueType === 'usb_key';
@@ -252,6 +338,16 @@ const recoverRules = computed<FormRules>(() => {
     appName: usb ? [{ required: true, message: '请选择应用', trigger: 'change' }] : [],
     containerName: usb ? [{ required: true, message: '请输入容器名称', trigger: 'blur' }] : [],
     pin: usb ? [{ required: true, message: '请输入PIN码', trigger: 'blur' }] : [],
+    ...(archiveSkf.value
+      ? {
+          signingKey: [{ required: true, message: '请选择登记的设备签名证书' }],
+          deviceId: [{ required: true, message: '请输入登记设备 ID' }],
+          recipientId: [{ required: true, message: '请输入接收方 ID' }],
+          ticketNo: [{ required: true, message: '请输入工单号' }],
+          authorizationRef: [{ required: true, message: '请输入授权依据' }],
+          reason: [{ required: true, message: '请输入恢复原因' }]
+        }
+      : {}),
     filePassword: usb
       ? []
       : [
@@ -482,6 +578,42 @@ function pemToBase64(pem: string) {
 }
 
 async function openRecover(row: RaCertSummary) {
+  if (recoverOpening.value) return;
+  recoverOpening.value = true;
+  try {
+    await prepareRecovery(row);
+  } finally {
+    recoverOpening.value = false;
+  }
+}
+
+async function prepareRecovery(row: RaCertSummary) {
+  if (row.status === 'EXPIRED') {
+    const id = String(row.id);
+    try {
+      const available = unwrapData<boolean>(await isRaArchiveRecoveryAvailable(id));
+      if (available === true) {
+        if (import.meta.env.VITE_RA_ARCHIVE_SKF === 'true') {
+          archiveSkf.value = true;
+          recoverAlgorithm.value = 'RSA';
+          recoveringCert.value = row;
+          recoverForm.issueType = 'usb_key';
+          recoverForm.containerName = `HR${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`;
+          recoverForm.pin = '';
+          recoverOpen.value = true;
+          await refreshRecoverProviders();
+        } else {
+          archiveRecoveryCertificate.value = { id, serialNumber: row.serialNumber, subject: row.subject };
+          archiveRecoveryOpen.value = true;
+        }
+      } else {
+        ElMessage.warning('CA 证书和 KMC 密钥尚未确认均已归档，无法发起历史恢复');
+      }
+    } catch {
+      ElMessage.warning('无法确认归档恢复资格，请核对权限和 CA、KMC 状态后重试');
+    }
+    return;
+  }
   recoverAlgorithm.value = 'RSA';
   if (String(row.keySource || '').toUpperCase() === 'KMC') {
     try {
@@ -513,6 +645,19 @@ function resetRecoverForm() {
   recoverForm.pin = '123456';
   recoverForm.filePassword = '';
   recoverForm.confirmPassword = '';
+  recoverForm.signingKey = '';
+  recoverForm.deviceId = '';
+  recoverForm.recipientId = '';
+  recoverForm.ticketNo = '';
+  recoverForm.authorizationRef = '';
+  recoverForm.reason = '';
+  archiveSkf.value = false;
+  archiveAttempt.value = undefined;
+  archiveTask.value = undefined;
+  archiveCertificates.value = [];
+  archiveFinished.value = false;
+  archiveImportAttempted.value = false;
+  archiveWriteResult.value = undefined;
   recoverFormRef.value?.clearValidate();
 }
 
@@ -531,6 +676,10 @@ async function refreshRecoverProviders() {
     skfClientPromise = null;
     const skf = await getSkfClient();
     recoverProviders.value = await skf.enumProvider();
+    if (archiveSkf.value) {
+      const certs: SkfSigningCertificate[] = await skf.findCertificates('Sign');
+      archiveCertificates.value = certs.filter(isRsaSigningCertificate);
+    }
     if (recoverProviders.value.length > 0) {
       recoverForm.provider = recoverProviders.value[0];
       await onRecoverProviderChange();
@@ -565,10 +714,90 @@ async function onRecoverDeviceChange() {
   }
 }
 
+async function submitArchiveToSkf(certId: string, subject: string) {
+  const { provider, device, appName, containerName, pin, deviceId, recipientId, ticketNo, reason, authorizationRef, signingKey } = recoverForm;
+  const signer = archiveSigners.value.find((cert) => cert.key === signingKey);
+  if (!signer) throw new Error('请选择目标 USB Key 中已登记的 RSA 签名证书');
+  const skf = await getSkfClient();
+  await skf.checkPIN(`${provider}/${device}/${appName}`, pin);
+  const sign = (digest: string) => skf.signData(signer.key, digest);
+  if (!archiveAttempt.value) {
+    const containers: string[] = await skf.enumContainer(provider, device, appName);
+    if (containers.includes(containerName)) throw new Error('恢复容器已经存在，请关闭后重新发起');
+    const csr = await skf.createPKCS10(provider, device, appName, subject, 'RSA', 2048, containerName);
+    const wrappingCsrBase64 = pemToBase64(csr?.pem || csr?.csr || csr);
+    const payload = {
+      bindingId: crypto.randomUUID(),
+      issuedAt: utcNow(),
+      clientCertSha256: await certificateFingerprint(signer.cert),
+      wrappingSpkiSha256: await wrappingFingerprint(wrappingCsrBase64),
+      deviceId,
+      recipientId,
+      ticketNo
+    };
+    const deviceBinding = await signArchivePayload('KMC-HISTORICAL-RA-SKF-BINDING-V1', payload, sign);
+    archiveAttempt.value = {
+      clientRequestNo: crypto.randomUUID(),
+      mode: 'RA_SKF',
+      wrappingCsrBase64,
+      deviceBinding,
+      deviceId,
+      recipientId,
+      ticketNo,
+      reason,
+      authorizationRef
+    };
+  }
+  const task = archiveTask.value
+    ? unwrapData<HistoricalRecoveryTask>(await getRaHistoricalRecovery(certId, archiveTask.value.recoveryId))
+    : unwrapData<HistoricalRecoveryTask>(await submitRaHistoricalRecovery(certId, archiveAttempt.value));
+  if (!task?.recoveryId) throw new Error('未获取归档恢复任务');
+  archiveTask.value = task;
+
+  if (task.status === 'QUEUED' || task.status === 'EXECUTING') return;
+  if (task.status !== 'PENDING_CONFIRMATION' && task.status !== 'DELIVERED') {
+    archiveFinished.value = true;
+    throw new Error('归档任务无法领取');
+  }
+  const claim = {
+    recoveryId: task.recoveryId,
+    claimId: crypto.randomUUID(),
+    issuedAt: utcNow(),
+    wrappingSpkiSha256: archiveAttempt.value.deviceBinding.payload.wrappingSpkiSha256
+  };
+  const proof = await signArchivePayload('KMC-HISTORICAL-RA-SKF-CLAIM-V1', claim, sign);
+  const envelope = unwrapData<RaSkfDelivery>(await claimRaSkfDelivery(certId, { recoveryId: task.recoveryId, proof }));
+  archiveTask.value = { ...task, status: 'DELIVERED' };
+  if (!envelope?.encryptedPrivateKey || !envelope.wrapKey || !envelope.originalCertificateDerBase64) {
+    throw new Error('归档服务未返回完整的 SKF 信封');
+  }
+  archiveImportAttempted.value = true;
+  const imported = await skf.importKeyPair(
+    provider,
+    device,
+    appName,
+    containerName,
+    'RSA',
+    envelope.encryptedPrivateKey,
+    envelope.wrapKey,
+    envelope.symmetricMode
+  );
+  if (imported !== true) throw new Error('SKF 未确认密钥写入');
+  const certWritten = await skf.importCertificate(provider, device, appName, containerName, false, envelope.originalCertificateDerBase64);
+  if (certWritten !== true) throw new Error('SKF 未确认原证书写入');
+  archiveFinished.value = true;
+  archiveWriteResult.value = { type: 'success', message: 'SKF 确认归档密钥和原证书已写入 USB Key' };
+}
+
 async function submitRecover() {
-  if (!recoveringCert.value || !(await recoverFormRef.value?.validate().catch(() => false))) return;
+  if (recoverLoading.value || !recoveringCert.value) return;
   recoverLoading.value = true;
   try {
+    if (!(await recoverFormRef.value?.validate().catch(() => false))) return;
+    if (archiveSkf.value) {
+      await submitArchiveToSkf(String(recoveringCert.value.id), recoveringCert.value.subject || 'CN=Archive Recovery');
+      return;
+    }
     if (recoverForm.issueType === 'file') {
       const res = unwrapData<any>(
         await recoverRaKey(recoveringCert.value.id, {
@@ -624,7 +853,14 @@ async function submitRecover() {
     }
     recoverOpen.value = false;
   } catch (error: any) {
-    ElMessage.error(`${recoverAlgorithm.value === 'SM2' ? 'SM2' : 'RSA'}密钥恢复失败: ` + (error?.message || error?.msg || '未知错误'));
+    if (archiveSkf.value && archiveImportAttempted.value) {
+      archiveFinished.value = true;
+      archiveWriteResult.value = { type: 'error', message: 'SKF 写入未完成，请核对目标容器的密钥和证书状态' };
+    } else if (archiveSkf.value) {
+      ElMessage.error('归档恢复未完成，请核对任务状态、授权和目标 USB Key');
+    } else {
+      ElMessage.error(`${recoverAlgorithm.value === 'SM2' ? 'SM2' : 'RSA'}密钥恢复失败: ` + (error?.message || error?.msg || '未知错误'));
+    }
   } finally {
     recoverLoading.value = false;
   }
