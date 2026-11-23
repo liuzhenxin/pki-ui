@@ -37,7 +37,7 @@
             <el-form-item label="身份证书">
               <el-input v-model="identityForm.certPem" type="textarea" :rows="8" placeholder="-----BEGIN CERTIFICATE-----" />
             </el-form-item>
-            <el-form-item label="证书主题">
+            <el-form-item label="证书主题 DN">
               <el-input v-model="identityForm.subject" placeholder="C=CN,O=LiuZX PKI,CN=RA Identity" />
             </el-form-item>
             <el-form-item label="密钥算法">
@@ -57,7 +57,7 @@
             </el-form-item>
             <el-form-item>
               <el-button v-hasPermi="['ra:config:get']" icon="CircleCheck" :loading="testing" @click="testActiveConfig">校验证书</el-button>
-              <el-button v-hasPermi="['ra:config:save']" type="primary" @click="openIdentityRotation">更新身份证书</el-button>
+              <el-button v-hasPermi="['ra:config:save']" type="primary" :loading="rotationBusy" @click="openIdentityRotation">更新身份证书</el-button>
             </el-form-item>
           </el-form>
         </el-tab-pane>
@@ -104,25 +104,59 @@
       </div>
     </el-card>
 
-    <el-dialog v-model="rotationOpen" title="更新 RA 身份证书" width="min(680px, 94vw)" :close-on-click-modal="!rotationBusy">
+    <el-dialog
+      v-model="rotationOpen"
+      title="更新 RA 身份证书"
+      width="min(680px, 94vw)"
+      :close-on-click-modal="!rotationBusy"
+      :close-on-press-escape="!rotationBusy"
+      :show-close="!rotationBusy"
+    >
       <el-form label-position="top">
-        <el-form-item v-if="!rotation" label="证书请求">
-          <el-button type="primary" :loading="rotationBusy" @click="generateIdentityRotation">生成 CSR</el-button>
+        <el-form-item label="请求主题 DN">
+          <el-input v-model="rotationSubject" maxlength="2048" :disabled="rotationBusy" />
         </el-form-item>
-        <template v-else>
-          <el-form-item :label="`待签发 CSR · ${rotation.algorithm}`">
-            <el-input :model-value="rotation.csrPem" type="textarea" :rows="7" readonly />
-            <el-button link type="primary" @click="downloadIdentityCsr">下载 CSR</el-button>
+        <el-form-item>
+          <el-button
+            type="primary"
+            :loading="rotationBusy"
+            :disabled="!rotationSubject.trim() || !!currentRotation"
+            @click="generateIdentityRotation"
+          >
+            {{ rotation ? '重新生成 CSR' : '生成 CSR' }}
+          </el-button>
+        </el-form-item>
+        <el-form-item v-if="rotation" label="待签发主题 DN">
+          <span class="break-all">{{ rotation.subject }}</span>
+        </el-form-item>
+        <el-alert v-if="rotation && !currentRotation" title="请按修改后的主题重新生成 CSR。" type="warning" :closable="false" show-icon />
+        <template v-if="currentRotation">
+          <el-form-item :label="`待签发 CSR · ${currentRotation.algorithm}`">
+            <el-input :model-value="currentRotation.csrPem" type="textarea" :rows="7" readonly />
+            <el-button link type="primary" :disabled="rotationBusy" @click="downloadIdentityCsr">下载 CSR</el-button>
           </el-form-item>
           <el-form-item label="CA 签发的身份证书 PEM">
-            <el-input v-model="rotationCertificate" type="textarea" :rows="7" maxlength="32768" placeholder="-----BEGIN CERTIFICATE-----" />
+            <el-input
+              v-model="rotationCertificate"
+              type="textarea"
+              :rows="7"
+              maxlength="32768"
+              :disabled="rotationBusy"
+              placeholder="-----BEGIN CERTIFICATE-----"
+            />
           </el-form-item>
           <el-alert title="请先在各 CA 的 RA 请求者配置中登记新证书，再回到这里导入。" type="info" :closable="false" show-icon />
         </template>
       </el-form>
       <template #footer>
-        <el-button @click="rotationOpen = false">关闭</el-button>
-        <el-button v-if="rotation" type="primary" :loading="rotationBusy" :disabled="!rotationCertificate.trim()" @click="activateIdentityRotation">
+        <el-button :disabled="rotationBusy" @click="rotationOpen = false">关闭</el-button>
+        <el-button
+          v-if="currentRotation"
+          type="primary"
+          :loading="rotationBusy"
+          :disabled="!rotationCertificate.trim()"
+          @click="activateIdentityRotation"
+        >
           校验并启用
         </el-button>
       </template>
@@ -131,7 +165,7 @@
 </template>
 
 <script setup name="RaConfig" lang="ts">
-import { reactive, ref } from 'vue';
+import { computed, reactive, ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import {
   activateRaIdentityRotation,
@@ -150,12 +184,18 @@ const testResult = ref<RaConfigTestCO>();
 const rotationOpen = ref(false);
 const rotationBusy = ref(false);
 const rotation = ref<RaIdentityRotation | null>(null);
+const rotationSubject = ref('');
 const rotationCertificate = ref('');
+const currentRotation = computed(() => (rotation.value?.subject === rotationSubject.value ? rotation.value : null));
 
 const openIdentityRotation = async () => {
+  if (rotationBusy.value) return;
+  const subject = identityForm.subject;
+  const edited = subject !== loadedIdentitySubject;
   rotationBusy.value = true;
   try {
     rotation.value = (await getRaIdentityRotation()).data ?? null;
+    rotationSubject.value = edited ? subject : (rotation.value?.subject ?? subject);
     rotationCertificate.value = '';
     rotationOpen.value = true;
   } finally {
@@ -164,17 +204,30 @@ const openIdentityRotation = async () => {
 };
 
 const generateIdentityRotation = async () => {
+  const subject = rotationSubject.value;
+  const pending = rotation.value;
+  if (rotationBusy.value || !subject.trim() || currentRotation.value) return;
   rotationBusy.value = true;
   try {
-    rotation.value = (await generateRaIdentityRotation()).data;
+    if (pending) {
+      try {
+        await ElMessageBox.confirm('重新生成后，原 CSR 签发的证书将无法导入。请将新 CSR 提交给 CA。', '确认重新生成 CSR', { type: 'warning' });
+      } catch {
+        return;
+      }
+    }
+    const { data } = await generateRaIdentityRotation({ subject, ...(pending ? { replaceCsrPem: pending.csrPem } : {}) });
+    rotation.value = data;
+    rotationSubject.value = data.subject;
+    if (data.csrPem !== pending?.csrPem) rotationCertificate.value = '';
   } finally {
     rotationBusy.value = false;
   }
 };
 
 const downloadIdentityCsr = () => {
-  if (!rotation.value) return;
-  const url = URL.createObjectURL(new Blob([rotation.value.csrPem], { type: 'application/pkcs10' }));
+  if (rotationBusy.value || !currentRotation.value) return;
+  const url = URL.createObjectURL(new Blob([currentRotation.value.csrPem], { type: 'application/pkcs10' }));
   const link = document.createElement('a');
   link.href = url;
   link.download = 'ra-identity.csr.pem';
@@ -183,14 +236,16 @@ const downloadIdentityCsr = () => {
 };
 
 const activateIdentityRotation = async () => {
-  try {
-    await ElMessageBox.confirm('启用后，RA 对各 CA 的新请求将使用这张身份证书。', '确认更新 RA 身份证书', { type: 'warning' });
-  } catch {
-    return;
-  }
+  const certificate = rotationCertificate.value.trim();
+  if (rotationBusy.value || !currentRotation.value || !certificate) return;
   rotationBusy.value = true;
   try {
-    await activateRaIdentityRotation(rotationCertificate.value.trim());
+    try {
+      await ElMessageBox.confirm('启用后，RA 对各 CA 的新请求将使用这张身份证书。', '确认更新 RA 身份证书', { type: 'warning' });
+    } catch {
+      return;
+    }
+    await activateRaIdentityRotation(certificate);
     rotationOpen.value = false;
     ElMessage.success('RA 身份证书已更新');
     await loadActiveConfig();
@@ -212,6 +267,7 @@ const identityForm = reactive({
   privateKey: '',
   privateKeyConfigured: false
 });
+let loadedIdentitySubject = identityForm.subject;
 
 const noticeAuditForm = reactive({
   noticeEnabled: true,
@@ -262,6 +318,7 @@ const applyConfig = (group: RaConfigGroup, config: Record<string, any>) => {
     assignKnown(basicForm, config);
   } else if (group === 'RA_IDENTITY') {
     assignKnown(identityForm, { ...config, privateKey: '' });
+    loadedIdentitySubject = identityForm.subject;
   } else if (group === 'NOTICE_AUDIT') {
     assignKnown(noticeAuditForm, config);
   }

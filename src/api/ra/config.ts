@@ -32,8 +32,8 @@ export function getRaIdentityRotation(): Promise<Result<RaIdentityRotation | nul
   return request({ url: identityRotationUrl, method: 'get' }) as any;
 }
 
-export function generateRaIdentityRotation(): Promise<Result<RaIdentityRotation>> {
-  return request({ url: `${identityRotationUrl}/csr`, method: 'post' }) as any;
+export function generateRaIdentityRotation(data: { subject: string; replaceCsrPem?: string }): Promise<Result<RaIdentityRotation>> {
+  return request({ url: `${identityRotationUrl}/csr`, method: 'post', data }) as any;
 }
 
 export function activateRaIdentityRotation(certPem: string): Promise<Result<void>> {
