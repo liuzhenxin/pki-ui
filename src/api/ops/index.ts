@@ -13,8 +13,9 @@ import type {
   AppServiceConfig,
   CryptoMonitorInstance,
   FawVwChannelKind,
-  FawVwChannelSave,
+  FawVwChannelConfig,
   FawVwChannelSettings,
+  FawVwGatewaySave,
   FawVwGatewaySettings,
   OpsContainer,
   OpsContainerLogs,
@@ -53,13 +54,13 @@ export function getFawVwGateway() {
   });
 }
 
-export function saveFawVwGateway(settings: FawVwGatewaySettings) {
+export function saveFawVwGateway(data: FawVwGatewaySave) {
   return request<unknown, { settings: FawVwGatewaySettings; editable: boolean }>({
     baseURL,
     url: '/v1/alert/faw-vw-channels/gateway',
     method: 'put',
     headers: { sensitive: true, repeatSubmit: false },
-    data: settings
+    data
   });
 }
 
@@ -67,7 +68,7 @@ export function getFawVwChannel(kind: FawVwChannelKind) {
   return request<unknown, { settings: FawVwChannelSettings | null }>({ baseURL, url: '/v1/alert/faw-vw-channels/' + kind, method: 'get' });
 }
 
-export function saveFawVwChannel(kind: FawVwChannelKind, data: FawVwChannelSave) {
+export function saveFawVwChannel(kind: FawVwChannelKind, data: FawVwChannelConfig) {
   return request<unknown, { settings: FawVwChannelSettings }>({
     baseURL,
     url: '/v1/alert/faw-vw-channels/' + kind,

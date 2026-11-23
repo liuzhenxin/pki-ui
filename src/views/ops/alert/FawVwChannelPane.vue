@@ -7,10 +7,7 @@
       </div>
     </template>
     <el-alert v-if="loadFailed" title="无法读取渠道配置，请刷新后重试" type="error" :closable="false" show-icon />
-    <el-form v-else v-loading="busy" :model="form" label-position="top" :disabled="!loaded || busy" @submit.prevent="save">
-      <el-form-item label="接口 URL" required>
-        <el-input v-model.trim="form.endpointUrl" :maxlength="2048" placeholder="输入已获授权的完整网关接口地址" />
-      </el-form-item>
+    <el-form v-else v-loading="busy" :model="form" label-position="top" :disabled="!loaded || busy || !editable" @submit.prevent="save">
       <div class="channel-fields">
         <template v-if="isMail">
           <el-form-item label="发件邮箱" required><el-input v-model.trim="form.from" :maxlength="254" /></el-form-item>
@@ -26,13 +23,6 @@
               <el-option label="青岛（QD）" value="QD" />
             </el-select>
           </el-form-item>
-          <el-form-item label="targets 编码" required>
-            <el-select v-model="form.targetsFormat" placeholder="选择 UAT 确认的编码">
-              <el-option label="JSON 数组" value="ARRAY" />
-              <el-option label="JSON 数组字符串" value="JSON_ARRAY_STRING" />
-              <el-option label="单个地址字符串" value="SINGLE_STRING" />
-            </el-select>
-          </el-form-item>
         </template>
         <template v-else>
           <el-form-item label="钉钉应用"><el-input v-model.trim="form.app" :maxlength="128" /></el-form-item>
@@ -46,30 +36,29 @@
             <el-input v-model.trim="form.to" :maxlength="254" placeholder="多个账号或工号用英文逗号分隔" />
           </el-form-item>
         </template>
-        <el-form-item label="Access Key" :required="!credentialsConfigured">
-          <el-input
-            v-model="accessKey"
-            type="password"
-            autocomplete="new-password"
-            :maxlength="1024"
-            :placeholder="credentialsConfigured ? '已配置，留空保留' : '请输入 Access Key'"
-          />
+        <el-form-item label="正文类型">
+          <el-select v-model="form.messageType">
+            <template v-if="isMail">
+              <el-option label="TEXT（纯文本）" value="TEXT" />
+              <el-option label="MIXED（H5）" value="MIXED" />
+            </template>
+            <template v-else>
+              <el-option label="Markdown" value="markdown" />
+              <el-option label="text（纯文本）" value="text" />
+            </template>
+          </el-select>
         </el-form-item>
-        <el-form-item label="Secret Key" :required="!credentialsConfigured">
-          <el-input
-            v-model="secretKey"
-            type="password"
-            autocomplete="new-password"
-            :maxlength="1024"
-            :placeholder="credentialsConfigured ? '已配置，留空保留' : '请输入 Secret Key'"
-          />
+        <el-form-item label="启用通知">
+          <el-switch v-model="form.enabled" :disabled="!gatewayConfigured && !form.enabled" />
+          <span v-if="!gatewayConfigured" class="gateway-hint">启用前请保存共享凭据</span>
         </el-form-item>
-        <el-form-item label="启用通知"><el-switch v-model="form.enabled" /></el-form-item>
       </div>
-      <el-space wrap>
+      <el-space v-if="editable" wrap>
         <el-button type="primary" native-type="submit" :loading="saving" :disabled="stale">保存配置</el-button>
         <el-button :disabled="!canTest" :loading="testing === 'test-connection'" @click="testChannel('test-connection')">测试连接</el-button>
-        <el-button v-if="isMail" :disabled="!canTest" :loading="testing === 'test-send'" @click="testChannel('test-send')">试发邮件</el-button>
+        <el-button v-if="isMail" :disabled="!canTest || !gatewayConfigured" :loading="testing === 'test-send'" @click="testChannel('test-send')"
+          >试发邮件</el-button
+        >
       </el-space>
       <el-alert v-if="testResult" class="test-result" :title="testResult" type="info" :closable="false" show-icon />
     </el-form>
@@ -83,28 +72,24 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { getFawVwChannel, saveFawVwChannel, testFawVwChannel } from '@/api/ops';
 import type { FawVwChannelConfig, FawVwChannelKind, FawVwChannelSettings } from '@/api/ops/types';
 
-const props = defineProps<{ kind: FawVwChannelKind }>();
+const props = defineProps<{ kind: FawVwChannelKind; editable: boolean; gatewayConfigured: boolean }>();
 const isMail = computed(() => props.kind === 'FAW_VW_EMAIL');
 
 function emptyConfig(): FawVwChannelConfig {
   return {
     revision: null,
     enabled: false,
-    endpointUrl: '',
     from: null,
     to: '',
     app: isMail.value ? null : 'fawvw',
     dingTalkTarget: isMail.value ? null : 'ACCOUNT',
     smtpServer: null,
-    targetsFormat: null
+    messageType: isMail.value ? 'TEXT' : 'markdown'
   };
 }
 
 const form = reactive(emptyConfig());
-const accessKey = ref('');
-const secretKey = ref('');
 const savedEnabled = ref(false);
-const credentialsConfigured = ref(false);
 const loaded = ref(false);
 const loading = ref(false);
 const saving = ref(false);
@@ -115,24 +100,22 @@ const loadFailed = ref(false);
 const stale = ref(false);
 const busy = computed(() => loading.value || saving.value || !!testing.value);
 const canTest = computed(
-  () =>
-    loaded.value &&
-    !busy.value &&
-    !stale.value &&
-    credentialsConfigured.value &&
-    !!form.revision &&
-    !accessKey.value &&
-    !secretKey.value &&
-    JSON.stringify(form) === savedConfig.value
+  () => props.editable && loaded.value && !busy.value && !stale.value && !!form.revision && JSON.stringify(form) === savedConfig.value
 );
 
 function apply(settings: FawVwChannelSettings | null) {
-  const { credentialsConfigured: configured, ...data } = settings ?? { ...emptyConfig(), credentialsConfigured: false };
-  Object.assign(form, data);
+  const data = settings ?? emptyConfig();
+  Object.assign(form, {
+    revision: data.revision,
+    enabled: data.enabled,
+    from: data.from,
+    to: data.to,
+    app: data.app,
+    dingTalkTarget: data.dingTalkTarget,
+    smtpServer: data.smtpServer,
+    messageType: data.messageType ?? emptyConfig().messageType
+  });
   savedEnabled.value = data.enabled;
-  credentialsConfigured.value = configured;
-  accessKey.value = '';
-  secretKey.value = '';
   stale.value = false;
   savedConfig.value = JSON.stringify(form);
   testResult.value = '';
@@ -154,26 +137,24 @@ async function load() {
 }
 
 async function save() {
-  if (!loaded.value || busy.value || stale.value) return;
-  if (!form.endpointUrl || !form.to || (isMail.value && (!form.from || !form.targetsFormat))) {
-    ElMessage.warning('请填写接口 URL、收件人和必填的邮件参数');
+  if (!props.editable || !loaded.value || busy.value || stale.value) return;
+  if (!form.to || (isMail.value && !form.from)) {
+    ElMessage.warning('请填写收件人和必填的邮件参数');
     return;
   }
-  if (!credentialsConfigured.value && (!accessKey.value || !secretKey.value)) {
-    ElMessage.warning('请填写 Access Key 和 Secret Key');
+  if (form.enabled && !props.gatewayConfigured) {
+    ElMessage.warning('请先保存企业网关共享凭据');
     return;
   }
   saving.value = true;
   try {
     const result = await saveFawVwChannel(props.kind, {
-      settings: { ...form, smtpServer: form.smtpServer || null },
-      accessKey: accessKey.value || undefined,
-      secretKey: secretKey.value || undefined
+      ...form,
+      smtpServer: form.smtpServer || null
     });
     apply(result.settings);
     ElMessage.success('渠道配置已保存');
   } catch (error) {
-    // The shared request interceptor reports the backend message without logging the credentials.
     if ((error as { response?: { status?: number } })?.response?.status === 409) stale.value = true;
   } finally {
     saving.value = false;
@@ -181,7 +162,7 @@ async function save() {
 }
 
 async function testChannel(action: 'test-connection' | 'test-send') {
-  if (!canTest.value || !form.revision) return;
+  if (!canTest.value || !form.revision || (action === 'test-send' && !props.gatewayConfigured)) return;
   const revision = form.revision;
   testing.value = action;
   testResult.value = '';
@@ -211,6 +192,11 @@ onMounted(load);
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
   column-gap: 20px;
+}
+
+.gateway-hint {
+  margin-left: 8px;
+  color: var(--el-text-color-secondary);
 }
 
 .reload,

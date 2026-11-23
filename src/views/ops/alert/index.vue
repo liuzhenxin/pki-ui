@@ -27,7 +27,6 @@
         </el-tab-pane>
         <el-tab-pane label="钉钉渠道" name="channels">
           <div v-if="activeTab === 'channels'" class="channel-sections">
-            <FawVwChannelPane kind="FAW_VW_DINGTALK" />
             <UserDingTalkChannelPane />
           </div>
         </el-tab-pane>
@@ -39,7 +38,6 @@
               <MailChannelPane @saved="smtpRevision++" />
               <ApplicationMailChannelPane :key="smtpRevision" />
             </el-card>
-            <FawVwChannelPane kind="FAW_VW_EMAIL" />
           </div>
         </el-tab-pane>
 
@@ -151,7 +149,6 @@
 
 <script setup name="OpsAlertCenter" lang="ts">
 import AlertConditionPane from './AlertConditionPane.vue';
-import FawVwChannelPane from './FawVwChannelPane.vue';
 import FawVwGatewayPane from './FawVwGatewayPane.vue';
 import MailChannelPane from './MailChannelPane.vue';
 import ApplicationMailChannelPane from './ApplicationMailChannelPane.vue';
