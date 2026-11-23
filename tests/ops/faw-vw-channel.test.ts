@@ -18,30 +18,28 @@ function input(wrapper: VueWrapper, label: string) {
 const saved: FawVwChannelSettings = {
   revision: 'updated-revision',
   enabled: false,
-  endpointUrl: 'https://mock.invalid/notify',
   from: null,
   to: 'test.user',
   app: 'fawvw',
   dingTalkTarget: 'ACCOUNT',
   smtpServer: null,
-  targetsFormat: null,
   credentialsConfigured: true
 };
 
 describe('OPS FAW-VW channel form', () => {
   beforeEach(() => mocks.request.mockReset());
 
-  it('saves new credentials in a sensitive request and clears password fields after save', async () => {
+  it('saves enterprise recipients without per-channel credentials or an endpoint override', async () => {
     mocks.request.mockResolvedValueOnce({ settings: null }).mockResolvedValueOnce({ settings: saved });
-    const wrapper = mount(FawVwChannelPane, { props: { kind: 'FAW_VW_DINGTALK' }, global: { plugins: [ElementPlus] } });
+    const wrapper = mount(FawVwChannelPane, {
+      props: { kind: 'FAW_VW_DINGTALK', editable: true, gatewayConfigured: true },
+      global: { plugins: [ElementPlus] }
+    });
     await flushPromises();
     expect(mocks.request).toHaveBeenNthCalledWith(1, expect.objectContaining({ method: 'get', url: '/v1/alert/faw-vw-channels/FAW_VW_DINGTALK' }));
     expect(wrapper.text()).not.toContain('试发');
 
-    await input(wrapper, '接口 URL').setValue(saved.endpointUrl);
     await input(wrapper, '钉钉收件人').setValue(saved.to);
-    await input(wrapper, 'Access Key').setValue('dummy-access');
-    await input(wrapper, 'Secret Key').setValue('dummy-secret');
     await wrapper.get('form').trigger('submit');
     await flushPromises();
 
@@ -52,34 +50,38 @@ describe('OPS FAW-VW channel form', () => {
         url: '/v1/alert/faw-vw-channels/FAW_VW_DINGTALK',
         headers: { sensitive: true, repeatSubmit: false },
         data: {
-          settings: expect.objectContaining({ endpointUrl: saved.endpointUrl, to: saved.to, enabled: false, revision: null }),
-          accessKey: 'dummy-access',
-          secretKey: 'dummy-secret'
+          revision: null,
+          enabled: false,
+          from: null,
+          to: saved.to,
+          app: 'fawvw',
+          dingTalkTarget: 'ACCOUNT',
+          smtpServer: null
         }
       })
     );
-    expect(input(wrapper, 'Access Key').element.value).toBe('');
-    expect(input(wrapper, 'Secret Key').element.value).toBe('');
-    expect(input(wrapper, 'Secret Key').attributes('placeholder')).toBe('已配置，留空保留');
+    expect(wrapper.find('input[type="password"]').exists()).toBe(false);
     wrapper.unmount();
   });
 
-  it('keeps configured credentials blank and requires a refresh on a stale edit', async () => {
+  it('requires a refresh on a stale edit and keeps targets encoding out of the form', async () => {
     const email: FawVwChannelSettings = {
       ...saved,
       from: 'alerts@example.test',
       to: 'oncall@example.test',
       app: null,
-      dingTalkTarget: null,
-      targetsFormat: 'JSON_ARRAY_STRING'
+      dingTalkTarget: null
     };
     mocks.request
       .mockResolvedValueOnce({ settings: email })
       .mockRejectedValueOnce({ response: { status: 409 } })
       .mockResolvedValueOnce({ settings: { ...email, revision: 'other-revision' } });
-    const wrapper = mount(FawVwChannelPane, { props: { kind: 'FAW_VW_EMAIL' }, global: { plugins: [ElementPlus] } });
+    const wrapper = mount(FawVwChannelPane, {
+      props: { kind: 'FAW_VW_EMAIL', editable: true, gatewayConfigured: true },
+      global: { plugins: [ElementPlus] }
+    });
     await flushPromises();
-    expect(wrapper.text()).toContain('targets 编码');
+    expect(wrapper.text()).not.toContain('targets 编码');
     expect(input(wrapper, '发件邮箱').element.value).toBe(email.from);
     await wrapper.get('form').trigger('submit');
     await flushPromises();
@@ -88,11 +90,7 @@ describe('OPS FAW-VW channel form', () => {
       2,
       expect.objectContaining({
         method: 'put',
-        data: {
-          settings: expect.objectContaining({ revision: email.revision, targetsFormat: 'JSON_ARRAY_STRING' }),
-          accessKey: undefined,
-          secretKey: undefined
-        }
+        data: expect.objectContaining({ revision: email.revision, from: email.from, to: email.to })
       })
     );
     expect(wrapper.get('button[type="submit"]').attributes('disabled')).toBeDefined();
@@ -102,21 +100,23 @@ describe('OPS FAW-VW channel form', () => {
       .trigger('click');
     await flushPromises();
     expect(wrapper.get('button[type="submit"]').attributes('disabled')).toBeUndefined();
-    expect(input(wrapper, 'Access Key').element.value).toBe('');
     wrapper.unmount();
   });
 
   it('tests the saved enterprise DingTalk connection while notifications are disabled', async () => {
     mocks.request.mockResolvedValueOnce({ settings: saved }).mockResolvedValueOnce({ message: '企业钉钉网关已响应（HTTP 405），未验证凭据' });
-    const wrapper = mount(FawVwChannelPane, { props: { kind: 'FAW_VW_DINGTALK' }, global: { plugins: [ElementPlus] } });
+    const wrapper = mount(FawVwChannelPane, {
+      props: { kind: 'FAW_VW_DINGTALK', editable: true, gatewayConfigured: true },
+      global: { plugins: [ElementPlus] }
+    });
     const button = () => wrapper.findAll('button').find((candidate) => candidate.text() === '测试连接')!;
     try {
       await flushPromises();
-      await input(wrapper, '接口 URL').setValue('https://mock.invalid/unsaved');
+      await input(wrapper, '钉钉收件人').setValue('unsaved.user');
       expect(button().attributes('disabled')).toBeDefined();
       expect(mocks.request).toHaveBeenCalledTimes(1);
-      await input(wrapper, '接口 URL').setValue(saved.endpointUrl);
 
+      await input(wrapper, '钉钉收件人').setValue(saved.to);
       await button().trigger('click');
       await flushPromises();
       expect(mocks.request).toHaveBeenCalledTimes(2);
@@ -141,15 +141,17 @@ describe('OPS FAW-VW channel form', () => {
       from: 'alerts@example.test',
       to: 'oncall@example.test',
       app: null,
-      dingTalkTarget: null,
-      targetsFormat: 'ARRAY'
+      dingTalkTarget: null
     };
     mocks.request
       .mockResolvedValueOnce({ settings: email })
       .mockResolvedValueOnce({ message: '网关已响应' })
       .mockResolvedValueOnce({ message: '网关已接受测试邮件' });
     const confirm = vi.spyOn(ElMessageBox, 'confirm').mockRejectedValueOnce('cancel').mockResolvedValueOnce('confirm');
-    const wrapper = mount(FawVwChannelPane, { props: { kind: 'FAW_VW_EMAIL' }, global: { plugins: [ElementPlus] } });
+    const wrapper = mount(FawVwChannelPane, {
+      props: { kind: 'FAW_VW_EMAIL', editable: true, gatewayConfigured: true },
+      global: { plugins: [ElementPlus] }
+    });
     const button = (text: string) => wrapper.findAll('button').find((candidate) => candidate.text() === text)!;
     try {
       await flushPromises();
