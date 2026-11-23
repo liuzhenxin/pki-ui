@@ -21,6 +21,7 @@ export interface RaCertIssue {
   profileId?: string | number;
   profileName?: string;
   profileConf?: string;
+  encryptionProfileValidity?: string;
   oldCertId?: string | number;
   serialNumber?: string;
   subject?: string;
@@ -45,6 +46,8 @@ export interface RaCertIssueForm {
   issueType?: 'csr' | 'usb_key' | 'file';
   csr?: string;
   subject?: string;
+  notBefore?: string;
+  notAfter?: string;
   extensions?: string;
   fileFormat?: 'PKCS12';
   filePassword?: string;

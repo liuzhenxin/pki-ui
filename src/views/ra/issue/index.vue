@@ -158,6 +158,30 @@
                   <el-radio-button v-for="size in kmcKeySizes" :key="size" :value="size">RSA {{ size }}</el-radio-button>
                 </el-radio-group>
               </el-form-item>
+              <div v-if="showIssueValidity" class="issue-info-grid">
+                <el-form-item label="生效时间">
+                  <el-date-picker
+                    v-model="issueForm.notBefore"
+                    type="datetime"
+                    placeholder="留空为签发时生效"
+                    :disabled-date="disablePastIssueDate"
+                  />
+                </el-form-item>
+                <el-form-item label="有效期" :error="issueValidityPreview.error">
+                  <div class="issue-validity-input">
+                    <el-input-number v-model="issueForm.validityAmount" :min="1" :controls="false" placeholder="按模板默认" />
+                    <el-select v-model="issueForm.validityUnit" aria-label="有效期单位">
+                      <el-option v-for="unit in issueValidityUnits" :key="unit.value" :value="unit.value" :label="unit.label" />
+                    </el-select>
+                  </div>
+                </el-form-item>
+                <el-form-item label="模板有效期上限">
+                  <span>{{ issueValidityLimits.map(formatProfileValidity).join(' / ') }}</span>
+                </el-form-item>
+                <el-form-item v-if="issueValidityPreview.expiry" label="到期时间">
+                  <span>{{ issueValidityPreview.expiry.toLocaleString('zh-CN', { hour12: false }) }}</span>
+                </el-form-item>
+              </div>
               <el-form-item v-if="issueForm.issueType === 'csr'" label="CSR" prop="csr" class="csr-form-item">
                 <el-input v-model="issueForm.csr" type="textarea" :rows="8" placeholder="请输入证书请求CSR" />
               </el-form-item>
@@ -537,9 +561,12 @@ import {
   DualCertIssueInfo
 } from '@/api/ra/certIssue';
 import { downloadRaPkcs12 } from '@/api/ra/cert';
-import CertSubject, { typeMapping, sortSubjectItems } from '@/components/CertSubject/index.vue';
+import CertSubject, { type SubjectItem } from '@/components/CertSubject/index.vue';
+import { formatProfileValidity } from '@/utils/ca/profile-validity';
 import { parseJson } from '@/utils/json';
 import { resolveTemplateUsages } from '@/utils/raCertUsage';
+import { buildIssueSubjectItems, formatIssueSubject } from '@/utils/raIssueSubject';
+import { issueValidityUnits, resolveIssueValidity, type IssueValidityUnit } from '@/utils/raIssueValidity';
 import { rsaKmcKeyRequest, rsaKmcKeySizes } from '@/utils/raKmcKeyRequest';
 import SKFClient from '@/api/skf/skf_api';
 
@@ -745,7 +772,10 @@ const issueForm = reactive({
   issueType: 'csr' as 'csr' | 'usb_key' | 'file',
   csr: '',
   subject: '',
-  subjectItems: [] as any[],
+  notBefore: null as Date | null,
+  validityAmount: undefined as number | undefined,
+  validityUnit: 'day' as IssueValidityUnit,
+  subjectItems: [] as SubjectItem[],
   extensionItems: [] as any[],
   provider: '',
   device: '',
@@ -757,6 +787,28 @@ const issueForm = reactive({
 });
 
 const kmcKeySizes = computed(() => rsaKmcKeySizes(current.value.profileConf));
+const showIssueValidity = computed(() => current.value.businessType === 'cert_apply' && issueForm.issueType !== 'csr');
+const issueValidityLimits = computed(() => {
+  const primary = parseJson(current.value.profileConf || '{}')?.validity;
+  return dualCertInfo.value?.certMode === 'dual' ? [primary, current.value.encryptionProfileValidity] : [primary];
+});
+const issueValidityPreview = computed(() => {
+  try {
+    return { expiry: getIssueValidity().expiry, error: '' };
+  } catch (error) {
+    return { expiry: undefined, error: (error as Error).message };
+  }
+});
+
+function getIssueValidity(): ReturnType<typeof resolveIssueValidity> {
+  return showIssueValidity.value
+    ? resolveIssueValidity(issueForm.notBefore, issueForm.validityAmount, issueForm.validityUnit, issueValidityLimits.value)
+    : {};
+}
+
+function disablePastIssueDate(value: Date) {
+  return value.getTime() < new Date().setHours(0, 0, 0, 0);
+}
 
 const rules: FormRules = {
   issueType: [{ required: true, message: '请选择签发方式', trigger: 'change' }],
@@ -933,7 +985,7 @@ async function handleIssue(row: RaCertIssue) {
   issueForm.kmcKeySize = kmcKeySizes.value[0] || 2048;
   issueForm.csr = current.value.csr || '';
   issueForm.subject = current.value.subject || '';
-  issueForm.subjectItems = buildSubjectItems(current.value.profileConf, current.value.subject);
+  issueForm.subjectItems = buildIssueSubjectItems(parseJson(current.value.profileConf || '{}')?.subject, current.value.subject);
   issueForm.extensionItems = buildIssueExtensionItems(parseJson(current.value.profileConf || '{}')?.extensions || []);
   if (isPostQuantumUpdate.value) {
     issueForm.issueType = 'csr';
@@ -1187,6 +1239,13 @@ function submitIssue() {
         return;
       }
     }
+    let validity: ReturnType<typeof getIssueValidity>;
+    try {
+      validity = getIssueValidity();
+    } catch (error) {
+      ElMessage.warning((error as Error).message);
+      return;
+    }
     submitLoading.value = true;
     issueStep.value = isCertUpdate.value ? '正在调用 CA 执行证书更新（换密钥）...' : '正在调用 CA 执行证书签发...';
     try {
@@ -1243,6 +1302,8 @@ function submitIssue() {
         issueType: issueForm.issueType,
         csr: csr || undefined,
         subject: subject || undefined,
+        notBefore: validity.notBefore,
+        notAfter: validity.notAfter,
         extensions: buildIssueExtensionsPayload(),
         fileFormat: issueForm.issueType === 'file' ? issueForm.fileFormat : undefined,
         filePassword: issueForm.issueType === 'file' ? issueForm.filePassword : undefined,
@@ -1381,6 +1442,9 @@ function resetIssueForm() {
   issueForm.issueType = 'csr';
   issueForm.csr = '';
   issueForm.subject = '';
+  issueForm.notBefore = null;
+  issueForm.validityAmount = undefined;
+  issueForm.validityUnit = 'day';
   issueForm.subjectItems = [];
   issueForm.extensionItems = [];
   issueForm.provider = '';
@@ -1414,46 +1478,6 @@ async function handleIssueTypeChange(value: string | number | boolean) {
   }
 }
 
-function buildSubjectItems(profileConf?: string, subject?: string) {
-  const conf = parseJson(profileConf || '{}');
-  const rdns = conf?.subject?.rdns || (Array.isArray(conf?.subject) ? conf.subject : []);
-  if (!Array.isArray(rdns) || rdns.length === 0) {
-    return [];
-  }
-  const subjectMap = parseSubject(subject);
-  const items: any[] = [];
-  rdns.forEach((rdn: any) => {
-    const rdnType = (typeof rdn.type === 'object' ? rdn.type.description : rdn.type) || '';
-    let compType = String(rdnType).toLowerCase();
-    for (const [type, meta] of Object.entries(typeMapping)) {
-      if (meta.key.toLowerCase() === compType || type.toLowerCase() === compType || meta.label.toLowerCase().includes(compType)) {
-        compType = type;
-        break;
-      }
-    }
-    const count = Math.max(1, rdn.minOccurs === undefined ? 1 : Number(rdn.minOccurs));
-    for (let i = 0; i < count; i++) {
-      const key = typeMapping[compType]?.key || compType;
-      items.push({ type: compType, value: subjectMap[key] || '', minOccurs: rdn.minOccurs, maxOccurs: rdn.maxOccurs, regex: rdn.regex });
-    }
-  });
-  return sortSubjectItems(items);
-}
-
-function parseSubject(subject?: string) {
-  const map: Record<string, string> = {};
-  String(subject || '')
-    .split(',')
-    .map((item) => item.trim())
-    .forEach((item) => {
-      const index = item.indexOf('=');
-      if (index > 0) {
-        map[item.slice(0, index).trim()] = item.slice(index + 1).trim();
-      }
-    });
-  return map;
-}
-
 function resolveIssueSubject() {
   if (issueForm.issueType === 'csr' && !isRsaKmcEncryption.value) {
     return issueForm.subject || undefined;
@@ -1461,10 +1485,7 @@ function resolveIssueSubject() {
   if (issueForm.subjectItems.length === 0) {
     return issueForm.subject;
   }
-  return issueForm.subjectItems
-    .filter((item: any) => item.value)
-    .map((item: any) => `${typeMapping[item.type]?.key || item.type}=${item.value}`)
-    .join(',');
+  return formatIssueSubject(issueForm.subjectItems);
 }
 
 function getExtensionTypeMeta(ext: any) {
@@ -2466,6 +2487,17 @@ onMounted(() => {
   grid-column: 1 / -1;
 }
 
+.issue-validity-input {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 76px;
+  gap: 8px;
+  width: 100%;
+}
+
+.issue-validity-input :deep(.el-input-number) {
+  width: 100%;
+}
+
 :global(.cert-issue-dialog .issue-info-grid) {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -2694,6 +2726,14 @@ onMounted(() => {
 }
 
 @media (max-width: 760px) {
+  :global(.cert-issue-dialog .params-section .issue-info-grid) {
+    grid-template-columns: 1fr;
+  }
+
+  :global(.cert-issue-dialog .issue-info-grid.compact) {
+    height: auto;
+  }
+
   :global(.cert-issue-dialog .el-dialog__body) {
     max-height: calc(100vh - 132px);
     overflow: auto;
