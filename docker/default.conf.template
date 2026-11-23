@@ -30,6 +30,12 @@ server {
         proxy_read_timeout 60s;
     }
 
+    # Always revalidate the entry document so an existing browser discovers releases.
+    location = /index.html {
+        add_header Cache-Control "no-store, no-cache, must-revalidate" always;
+        try_files $uri =404;
+    }
+
     location / {
         try_files $uri $uri/ /index.html;
     }
