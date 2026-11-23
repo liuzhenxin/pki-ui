@@ -36,18 +36,13 @@
           <div v-if="activeTab === 'mail'" class="channel-sections">
             <el-card shadow="never">
               <template #header><strong>SMTP 邮件</strong></template>
-              <MailChannelPane />
+              <MailChannelPane @saved="smtpRevision++" />
+              <ApplicationMailChannelPane :key="smtpRevision" />
             </el-card>
             <FawVwChannelPane kind="FAW_VW_EMAIL" />
           </div>
         </el-tab-pane>
 
-        <el-tab-pane label="应用通知" name="application-notifications">
-          <el-card v-if="activeTab === 'application-notifications'" shadow="never">
-            <template #header>RA 业务邮件</template>
-            <ApplicationMailChannelPane />
-          </el-card>
-        </el-tab-pane>
         <el-tab-pane label="通知模板" name="notification-templates">
           <NotificationTemplatePane v-if="activeTab === 'notification-templates'" />
         </el-tab-pane>
@@ -185,6 +180,7 @@ const incidentTabs = [
   { label: '告警历史', name: 'history' }
 ];
 const activeTab = ref('current');
+const smtpRevision = ref(0);
 const route = useRoute();
 const incidents = ref<AlertIncident[]>([]);
 const incident = ref<AlertIncident>();
