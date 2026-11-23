@@ -59,21 +59,6 @@
           <AlertConditionPane v-if="activeTab === 'conditions'" />
         </el-tab-pane>
 
-        <el-tab-pane label="应用通知" name="application-notifications">
-          <el-card v-if="activeTab === 'application-notifications'" shadow="never">
-            <template #header>RA 业务邮件</template>
-            <ApplicationMailChannelPane />
-          </el-card>
-        </el-tab-pane>
-
-        <el-tab-pane label="通知模板" name="notification-templates">
-          <NotificationTemplatePane v-if="activeTab === 'notification-templates'" />
-        </el-tab-pane>
-
-        <el-tab-pane label="告警条件" name="conditions">
-          <AlertConditionPane v-if="activeTab === 'conditions'" />
-        </el-tab-pane>
-
         <el-tab-pane label="告警规则" name="rules">
           <IncidentTemplateRulePane v-if="activeTab === 'rules'" />
           <div class="toolbar">
