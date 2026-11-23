@@ -9,17 +9,9 @@ const mocks = vi.hoisted(() => ({ request: vi.fn() }));
 vi.mock('@/utils/request', () => ({ default: mocks.request }));
 
 it('manages the RA SMTP grant without making a send request', async () => {
-  const settings = {
-    revision: 'fixture-1',
-    host: 'smtp.example.invalid',
-    port: 465,
-    tls: 'TLS',
-    username: 'ra',
-    from: 'ra@example.invalid',
-    enabled: false
-  };
+  const settings = { authorized: false, smtpConfigured: true, smtpEnabled: true };
   mocks.request.mockResolvedValueOnce({ settings, identityConfigured: true }).mockResolvedValueOnce({
-    settings: { ...settings, revision: 'fixture-2', enabled: true },
+    settings: { ...settings, authorized: true },
     identityConfigured: true
   });
   const wrapper = mount(ApplicationMailChannelPane, { global: { plugins: [ElementPlus] } });
@@ -34,11 +26,12 @@ it('manages the RA SMTP grant without making a send request', async () => {
       expect.objectContaining({
         method: 'put',
         url: '/v1/application-notifications/ra/mail',
-        data: { settings: { ...settings, enabled: true }, password: '' }
+        data: { authorized: true }
       })
     );
     expect(mocks.request).toHaveBeenCalledTimes(2);
-    expect(wrapper.text()).toContain('RA 邮件渠道与授权已保存');
+    expect(wrapper.text()).toContain('RA SMTP 授权已保存');
+    expect(wrapper.findAll('input')).toHaveLength(1);
   } finally {
     wrapper.unmount();
   }
