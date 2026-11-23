@@ -21,6 +21,7 @@ export interface ServiceCaSave {
   caId?: string;
   expectedVersion: number;
   responderId?: string;
+  signerMaterialName?: string;
   issuerPem: string;
   source?: OcspStatusSource;
   sampleSerialHex?: string;

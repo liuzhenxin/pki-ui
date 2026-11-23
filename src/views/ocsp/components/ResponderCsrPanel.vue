@@ -1,6 +1,6 @@
 <template>
   <div class="ocsp-csr-panel">
-    <el-form-item label="证书来源">
+    <el-form-item v-if="!unassignedOnly" label="证书来源">
       <el-radio-group :model-value="certSource" :disabled="hsmMode" @update:model-value="onCertSourceChange">
         <el-radio-button value="CSR">CSR 申请</el-radio-button>
         <el-radio-button value="PEM">粘贴证书</el-radio-button>
@@ -33,7 +33,7 @@
           type="warning"
           :closable="false"
           show-icon
-          title="私钥仅保存在 OCSP 服务端。请将 CSR 交给 CA 签发 OCSP 签名证书（须含数字签名用途），再导入证书。重新生成会使旧 CSR 失效。"
+          title="请将 CSR 交给目标证书的直接签发 CA。签发的响应者证书须包含数字签名和 OCSP Signing 用途。重新生成会使旧 CSR 失效。"
         />
         <el-form-item label="CSR 主题">
           <el-input :model-value="csr.subject" readonly />
@@ -52,7 +52,7 @@
           <el-input v-model="chainPem" type="textarea" :rows="4" placeholder="可选：中间 CA 与根 CA PEM" />
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" :loading="loading" @click="importCertificate">导入并绑定证书</el-button>
+          <el-button type="primary" :loading="loading" @click="importCertificate">{{ unassignedOnly ? '导入签名证书' : '导入并绑定证书' }}</el-button>
         </el-form-item>
       </div>
     </template>
@@ -84,6 +84,7 @@ const props = defineProps<{
   signerCert: string;
   signerConf: string;
   certSource: 'CSR' | 'PEM';
+  unassignedOnly?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -167,7 +168,8 @@ const generateCsr = async () => {
       commonName: csrForm.commonName.trim(),
       organization: csrForm.organization.trim(),
       country: csrForm.country.trim(),
-      alias: csrForm.alias.trim() || 'ocsp-responder-key'
+      alias: csrForm.alias.trim() || 'ocsp-responder-key',
+      ...(props.unassignedOnly ? { unassignedOnly: true } : {})
     });
     applyCsr(data);
     emit('update:signerConf', DB_SIGNER_CONF);
@@ -199,7 +201,8 @@ const importCertificate = async () => {
     const imported = await importOcspResponderCertificate({
       name: responderName,
       certificatePem,
-      certificateChainPem: chainPem.value.trim() || undefined
+      certificateChainPem: chainPem.value.trim() || undefined,
+      ...(props.unassignedOnly ? { unassignedOnly: true } : {})
     });
     emit('update:signerCert', imported.signerCert || certificatePem);
     emit('update:signerConf', imported.signerConf || DB_SIGNER_CONF);
@@ -208,7 +211,7 @@ const importCertificate = async () => {
     applyCsr({ ...csr, csrPending: false });
     issuedPem.value = '';
     chainPem.value = '';
-    ElMessage.success('证书已导入，签名配置已指向 ocsp-db');
+    ElMessage.success(props.unassignedOnly ? '签名证书已导入，可在按 CA 配置中关联' : '证书已导入，签名配置已指向 ocsp-db');
   } finally {
     loading.value = false;
   }

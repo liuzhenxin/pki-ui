@@ -69,10 +69,18 @@
         <el-form-item label="来源 CA 标识" required>
           <el-input v-model="form.sourceCaId" maxlength="255" placeholder="填写证书状态库或 LDAP 中的 CA 标识" />
         </el-form-item>
-        <el-form-item label="响应者" required>
-          <el-select v-model="form.responderId" filterable allow-create default-first-option placeholder="选择响应者或输入完整响应者 ID">
-            <el-option v-for="item in responderOptions" :key="item.id" :value="item.id" :label="`${item.name}（${item.id}）`" />
+        <el-form-item label="响应者或签名材料" required>
+          <el-select v-model="form.responderId" filterable allow-create default-first-option placeholder="选择材料、响应者或输入完整响应者 ID">
+            <el-option-group v-if="materialOptions.length" label="已导入，待关联的签名材料">
+              <el-option v-for="item in materialOptions" :key="item.name" :value="materialPrefix + item.name" :label="`${item.name} · 签名材料`" />
+            </el-option-group>
+            <el-option-group v-if="responderOptions.length" label="此 CA 的响应者">
+              <el-option v-for="item in responderOptions" :key="item.id" :value="item.id" :label="`${item.name}（${item.id}）`" />
+            </el-option-group>
           </el-select>
+          <div class="help">
+            {{ materialsError ? '签名材料列表读取失败，可关闭后重新打开向导。' : '签名材料在响应者管理中申请和导入。' }}
+          </div>
         </el-form-item>
         <el-form-item label="来源名称"><el-input v-model="form.name" placeholder="例如：CA 证书状态库" /></el-form-item>
         <el-form-item label="来源类型"><el-segmented v-model="form.type" :options="['DB', 'LDAP']" /></el-form-item>
@@ -149,7 +157,8 @@ import { ElMessage } from 'element-plus';
 import { getServiceCaDraft, publishServiceCaDraft, saveServiceCaDraft, validateServiceCaDraft } from '@/api/ocsp/serviceCa';
 import type { ServiceCaDraft } from '@/api/ocsp/serviceCa';
 import { normalizeOcspCaId, normalizeOptionalOcspId } from '@/utils/ocspIdentifier';
-import { pageOcspResponders } from '@/api/ocsp/responder';
+import { listUnassignedOcspSignerMaterials, pageOcspResponders } from '@/api/ocsp/responder';
+import type { OcspSignerMaterialSummary } from '@/api/ocsp/types';
 import auth from '@/plugins/auth';
 
 const props = defineProps<{ modelValue: boolean; initialCaId?: string }>();
@@ -159,7 +168,10 @@ const busy = ref(false);
 const step = ref(0);
 const draft = ref<ServiceCaDraft | null>(null);
 const canVerify = computed(() => auth.hasPermiAnd(['ocsp:source:save', 'ocsp:source:probe']));
-const responderOptions = ref<Array<{ id: string; name: string }>>([]);
+const materialPrefix = 'material:';
+const materialOptions = ref<OcspSignerMaterialSummary[]>([]);
+const materialsError = ref(false);
+const allResponderOptions = ref<Array<{ caId: string; id: string; name: string }>>([]);
 let responderRequest = 0;
 const loadedIssuer = ref('');
 const initialForm = () => ({
@@ -204,6 +216,7 @@ const initialForm = () => ({
   }
 });
 const form = reactive(initialForm());
+const responderOptions = computed(() => allResponderOptions.value.filter((item) => item.caId === form.caId));
 const dbFields: Array<{ key: keyof typeof form.db; label: string }> = [
   { key: 'certTable', label: '证书表' },
   { key: 'archiveCertTable', label: '归档表' },
@@ -243,7 +256,9 @@ const reset = () => {
   loadedIssuer.value = '';
   step.value = 0;
   busy.value = false;
-  responderOptions.value = [];
+  allResponderOptions.value = [];
+  materialOptions.value = [];
+  materialsError.value = false;
   responderRequest++;
 };
 const loadResponders = async () => {
@@ -252,16 +267,27 @@ const loadResponders = async () => {
   try {
     const page = await pageOcspResponders({ pageNum: 1, pageSize: 100 });
     if (current !== responderRequest || !props.modelValue) return;
-    responderOptions.value = (page?.records || []).flatMap((item) => {
-      if (item.status !== 'ACTIVE' || item.id == null) return [];
+    allResponderOptions.value = (page?.records || []).flatMap((item) => {
+      if ((item.status !== 'ACTIVE' && item.status !== 'STAGED') || item.id == null) return [];
       try {
-        return [{ id: normalizeOcspCaId(item.id), name: item.name }];
+        return [{ caId: normalizeOcspCaId(item.caId), id: normalizeOcspCaId(item.id), name: item.name }];
       } catch {
         return [];
       }
     });
   } catch {
-    if (current === responderRequest) responderOptions.value = [];
+    if (current === responderRequest) allResponderOptions.value = [];
+  }
+};
+const loadSigningMaterials = async () => {
+  if (!auth.hasPermi('ocsp:source:save')) return;
+  const current = responderRequest;
+  try {
+    const materials = await listUnassignedOcspSignerMaterials();
+    if (current !== responderRequest || !props.modelValue) return;
+    materialOptions.value = (materials ?? []).filter((item) => item.status === 'ACTIVE');
+  } catch {
+    if (current === responderRequest) materialsError.value = true;
   }
 };
 watch(
@@ -273,6 +299,7 @@ watch(
     }
     reset();
     void loadResponders();
+    void loadSigningMaterials();
     if (props.initialCaId) {
       form.caId = props.initialCaId;
       await loadDraft();
@@ -365,8 +392,10 @@ const saveSource = async () => {
     const caId = normalizeOcspCaId(form.caId);
     const sourceCaId = form.sourceCaId.trim();
     if (!sourceCaId || sourceCaId.length > 255) throw new Error('请输入有效的来源 CA 标识');
-    const responderId = normalizeOptionalOcspId(form.responderId);
-    if (!responderId) throw new Error('请输入响应者 ID');
+    const selection = form.responderId.trim();
+    const signerMaterialName = selection.startsWith(materialPrefix) ? selection.slice(materialPrefix.length) : undefined;
+    const responderId = signerMaterialName ? undefined : normalizeOptionalOcspId(selection);
+    if (!responderId && !signerMaterialName) throw new Error('请选择已导入签名材料或填写响应者 ID');
     const serial = form.sampleSerialHex.trim().toUpperCase();
     if (!/^[0-9A-F]{1,40}$/.test(serial) || /^0+$/.test(serial)) throw new Error('请输入有效的十六进制证书序列号');
     if (form.type === 'DB' && (!form.db.url.trim() || !form.db.username.trim() || !form.db.passwordRef.trim()))
@@ -395,12 +424,14 @@ const saveSource = async () => {
       caId,
       expectedVersion: versionOf(draft.value.version),
       responderId,
+      ...(signerMaterialName ? { signerMaterialName } : {}),
       issuerPem: form.issuerPem.trim(),
       source,
       sampleSerialHex: serial,
       expectedStatus: form.expectedStatus
     });
     versionOf(draft.value.version);
+    if (draft.value.responderId) form.responderId = draft.value.responderId;
     step.value = 2;
     emit('saved');
   } catch (error: any) {

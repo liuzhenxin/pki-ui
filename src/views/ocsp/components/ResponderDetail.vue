@@ -17,7 +17,13 @@
           <p>关联 CA ID：{{ responder.caId }}<span class="separator" />响应者 ID：{{ responder.id }}</p>
         </div>
         <div class="heading-actions">
-          <el-button v-hasPermi="['ocsp:responder:save']" type="primary" :icon="Edit" @click="emit('edit', responder)">编辑配置</el-button
+          <el-button
+            v-if="responder.status !== 'STAGED'"
+            v-hasPermi="['ocsp:responder:save']"
+            type="primary"
+            :icon="Edit"
+            @click="emit('edit', responder)"
+            >编辑配置</el-button
           ><el-button :icon="Search" @click="tab = 'diagnostics'">诊断</el-button>
         </div>
       </header>
@@ -174,7 +180,9 @@
                 </div>
               </dl>
               <p class="hint">在编辑配置中管理 CSR 与签发证书。私钥、PIN 和口令不在详情中展示。</p>
-              <el-button v-hasPermi="['ocsp:responder:save']" type="primary" @click="emit('edit', responder)">管理签名配置与证书</el-button>
+              <el-button v-if="responder.status !== 'STAGED'" v-hasPermi="['ocsp:responder:save']" type="primary" @click="emit('edit', responder)"
+                >管理签名配置与证书</el-button
+              >
             </section></el-tab-pane
           >
           <el-tab-pane label="响应策略" name="policy"
@@ -213,7 +221,9 @@
                   <dd>{{ responder.protocolExtensionPolicy?.preferredSignatureEnabled ? '启用' : '关闭' }}</dd>
                 </div>
               </dl>
-              <el-button v-hasPermi="['ocsp:responder:save']" type="primary" @click="emit('edit', responder)">编辑响应策略</el-button>
+              <el-button v-if="responder.status !== 'STAGED'" v-hasPermi="['ocsp:responder:save']" type="primary" @click="emit('edit', responder)"
+                >编辑响应策略</el-button
+              >
             </section></el-tab-pane
           >
           <el-tab-pane label="运行与诊断" name="diagnostics"

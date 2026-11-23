@@ -16,7 +16,11 @@
       </div>
     </div>
 
-    <el-row :gutter="20">
+    <el-alert v-if="loadError" class="summary-error" type="error" :closable="false" show-icon title="服务概览加载失败">
+      无法读取所选时间范围的数据，请刷新重试。
+    </el-alert>
+
+    <el-row v-loading="loading" :gutter="20">
       <el-col v-for="card in statCards" :key="card.label" :xs="24" :sm="12" :lg="6">
         <el-card shadow="hover" class="stat-card">
           <div class="stat-content">
@@ -31,7 +35,7 @@
               </div>
             </div>
           </div>
-          <div class="stat-footer">
+          <div v-if="card.desc" class="stat-footer">
             <div class="footer-desc">{{ card.desc }}</div>
           </div>
         </el-card>
@@ -40,19 +44,25 @@
 
     <el-row :gutter="20" class="mt20">
       <el-col :xs="24" :lg="16">
-        <el-card shadow="hover" class="panel-card">
+        <el-card v-loading="loading" shadow="hover" class="panel-card">
           <template #header>
             <div class="card-header"><span>请求量趋势</span></div>
           </template>
-          <div ref="lineChartRef" class="chart-panel"></div>
+          <div class="chart-panel">
+            <div v-show="hasTrend" ref="lineChartRef" class="chart"></div>
+            <OcspEmptyState v-if="summary && !hasTrend" title="暂无请求趋势数据" />
+          </div>
         </el-card>
       </el-col>
       <el-col :xs="24" :lg="8">
-        <el-card shadow="hover" class="panel-card">
+        <el-card v-loading="loading" shadow="hover" class="panel-card">
           <template #header>
             <div class="card-header"><span>证书状态分布</span></div>
           </template>
-          <div ref="pieChartRef" class="chart-panel"></div>
+          <div class="chart-panel">
+            <div v-show="hasStatusBreakdown" ref="pieChartRef" class="chart"></div>
+            <OcspEmptyState v-if="summary && !hasStatusBreakdown" title="暂无证书状态数据" />
+          </div>
         </el-card>
       </el-col>
     </el-row>
@@ -63,9 +73,10 @@
           <template #header>
             <div class="card-header"><span>响应者</span></div>
           </template>
-          <el-table v-loading="loading" :data="summary.responders || []" size="small" @row-click="openResponder">
+          <el-table v-loading="loading" :data="summary?.responders ?? []" size="small" @row-click="openResponder">
             <template #empty>
-              <el-empty description="暂无响应者" :image-size="120" />
+              <OcspEmptyState v-if="summary" title="暂无响应者" />
+              <span v-else-if="!loading">响应者信息暂不可用</span>
             </template>
             <el-table-column prop="name" label="名称" min-width="180" />
             <el-table-column prop="caId" label="CA ID" width="100" />
@@ -93,78 +104,70 @@ import { Connection, Refresh, TrendCharts, Warning, CircleCheck } from '@element
 import { getOcspDashboardSummary } from '@/api/ocsp/dashboard';
 import type { OcspDashboardSummary, OcspResponder } from '@/api/ocsp/types';
 import { checkPermi } from '@/utils/permission';
+import OcspEmptyState from '@/views/ocsp/components/OcspEmptyState.vue';
 
 const router = useRouter();
-const loading = ref(false);
+const loading = ref(true);
+const loadError = ref(false);
 const range = ref('24h');
-const summary = ref<OcspDashboardSummary>({
-  range: '24h',
-  requestCount: 0,
-  successCount: 0,
-  unknownCount: 0,
-  activeResponderCount: 0,
-  series: [],
-  statusPie: {},
-  responders: []
-});
+const summary = ref<OcspDashboardSummary>();
 const lineChartRef = ref<HTMLElement | null>(null);
 const pieChartRef = ref<HTMLElement | null>(null);
 let lineChart: echarts.ECharts | null = null;
 let pieChart: echarts.ECharts | null = null;
+let loadVersion = 0;
 
 const unknownRatio = computed(() => {
-  if (!summary.value.requestCount) {
-    return 0;
-  }
-  return Math.round((summary.value.unknownCount / summary.value.requestCount) * 1000) / 10;
+  const data = summary.value;
+  return data && Number(data.requestCount) > 0 ? Math.round((data.unknownCount / data.requestCount) * 1000) / 10 : undefined;
 });
 
 const successRatio = computed(() => {
-  if (!summary.value.requestCount) {
-    return 100;
-  }
-  return Math.round((summary.value.successCount / summary.value.requestCount) * 1000) / 10;
+  const data = summary.value;
+  return data && Number(data.requestCount) > 0 ? Math.round((data.successCount / data.requestCount) * 1000) / 10 : undefined;
 });
+
+const hasTrend = computed(() => Number(summary.value?.requestCount) > 0 && Boolean(summary.value?.series?.length));
+const hasStatusBreakdown = computed(() => ['GOOD', 'REVOKED', 'UNKNOWN'].some((status) => Number(summary.value?.statusPie?.[status]) > 0));
 
 const statCards = computed(() => [
   {
     label: '请求总数',
-    value: summary.value.requestCount,
-    unit: '次',
-    desc: `统计窗口 ${range.value}`,
+    value: summary.value?.requestCount ?? '—',
+    unit: summary.value ? '次' : undefined,
+    desc: summary.value && Number(summary.value.requestCount) === 0 ? '所选时段暂无请求' : undefined,
     icon: TrendCharts,
     iconClass: 'bg-blue'
   },
   {
-    label: '成功响应',
-    value: successRatio.value,
-    unit: '%',
-    desc: `${summary.value.successCount} 次 SUCCESS`,
+    label: '协议响应成功率',
+    value: successRatio.value ?? '—',
+    unit: successRatio.value === undefined ? undefined : '%',
+    desc: summary.value ? `${summary.value.successCount} 次成功响应` : undefined,
     icon: CircleCheck,
     iconClass: 'bg-green'
   },
   {
     label: 'UNKNOWN',
-    value: summary.value.unknownCount,
-    unit: '次',
-    desc: unknownRatio.value > 5 ? `占比 ${unknownRatio.value}%，请检查验证数据源` : `占比 ${unknownRatio.value}%`,
+    value: summary.value?.unknownCount ?? '—',
+    unit: summary.value ? '次' : undefined,
+    desc: unknownRatio.value === undefined ? undefined : `占比 ${unknownRatio.value}%`,
     icon: Warning,
-    iconClass: unknownRatio.value > 5 ? 'bg-orange' : 'bg-purple'
+    iconClass: (unknownRatio.value ?? 0) > 5 ? 'bg-orange' : 'bg-purple'
   },
   {
     label: '活跃响应者',
-    value: summary.value.activeResponderCount,
-    unit: '个',
-    desc: 'status = ACTIVE',
+    value: summary.value?.activeResponderCount ?? '—',
+    unit: summary.value ? '个' : undefined,
     icon: Connection,
     iconClass: 'bg-green'
   }
 ]);
 
 const renderCharts = () => {
-  if (lineChartRef.value) {
+  if (lineChartRef.value && hasTrend.value) {
     lineChart = lineChart || echarts.init(lineChartRef.value);
-    const series = summary.value.series || [];
+    const series = summary.value?.series ?? [];
     lineChart.setOption({
       tooltip: { trigger: 'axis' },
       legend: { data: ['SUCCESS', 'MALFORMED', '其他'], bottom: 0 },
@@ -177,10 +180,11 @@ const renderCharts = () => {
         { name: '其他', type: 'line', smooth: true, data: series.map((item) => item.other) }
       ]
     });
+    lineChart.resize();
   }
-  if (pieChartRef.value) {
+  if (pieChartRef.value && hasStatusBreakdown.value) {
     pieChart = pieChart || echarts.init(pieChartRef.value);
-    const pie = summary.value.statusPie || {};
+    const pie = summary.value?.statusPie ?? {};
     pieChart.setOption({
       tooltip: { trigger: 'item' },
       legend: { bottom: 0, left: 'center' },
@@ -199,18 +203,30 @@ const renderCharts = () => {
         }
       ]
     });
+    pieChart.resize();
   }
 };
 
 const loadSummary = async () => {
+  const version = ++loadVersion;
   loading.value = true;
+  loadError.value = false;
+  summary.value = undefined;
   try {
-    summary.value = (await getOcspDashboardSummary(range.value)) ?? summary.value;
-    await nextTick();
-    renderCharts();
+    const data = await getOcspDashboardSummary(range.value);
+    if (version !== loadVersion) return;
+    if (data?.requestCount == null || data.successCount == null || data.unknownCount == null || data.activeResponderCount == null) {
+      loadError.value = true;
+      return;
+    }
+    summary.value = data;
+  } catch {
+    if (version === loadVersion) loadError.value = true;
   } finally {
-    loading.value = false;
+    if (version === loadVersion) loading.value = false;
   }
+  await nextTick();
+  if (version === loadVersion) renderCharts();
 };
 
 const openResponder = (row: OcspResponder) => {
@@ -224,12 +240,13 @@ const handleResize = () => {
   pieChart?.resize();
 };
 
-onMounted(async () => {
-  await loadSummary();
+onMounted(() => {
   window.addEventListener('resize', handleResize);
+  void loadSummary();
 });
 
 onUnmounted(() => {
+  loadVersion++;
   window.removeEventListener('resize', handleResize);
   lineChart?.dispose();
   pieChart?.dispose();
@@ -243,6 +260,10 @@ onUnmounted(() => {
 
 .mt20 {
   margin-top: 20px;
+}
+
+.summary-error {
+  margin-bottom: 16px;
 }
 
 .dashboard-header {
@@ -351,7 +372,14 @@ onUnmounted(() => {
 }
 
 .chart-panel {
+  display: grid;
+  align-items: center;
   height: 350px;
+}
+
+.chart {
+  width: 100%;
+  height: 100%;
 }
 
 @media (max-width: 768px) {

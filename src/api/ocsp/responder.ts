@@ -6,8 +6,12 @@ import type {
   OcspResponderCertImportCmd,
   OcspResponderCsr,
   OcspResponderCsrCmd,
-  OcspResponderPageQry
+  OcspResponderPageQry,
+  OcspSignerMaterialSummary
 } from '@/api/ocsp/types';
+
+export const listUnassignedOcspSignerMaterials = () =>
+  request({ url: '/ocsp/v1/responders/signing-materials', method: 'get' }).then((res) => unwrapOcspData<OcspSignerMaterialSummary[]>(res));
 
 export const pageOcspResponders = (data: OcspResponderPageQry) => {
   return request({

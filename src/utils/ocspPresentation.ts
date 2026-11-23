@@ -1,6 +1,7 @@
 import { X509 } from 'jsrsasign';
 
-export const responderStatusLabel = (status?: string) => (status === 'ACTIVE' ? '已启用' : status === 'INACTIVE' ? '已停用' : status || '未提供');
+const responderStatusLabels: Record<string, string> = { ACTIVE: '已启用', INACTIVE: '已停用', STAGED: '待服务 CA 启用' };
+export const responderStatusLabel = (status?: string) => (status ? (responderStatusLabels[status] ?? status) : '未提供');
 const signerLabels: Record<string, string> = { SOFTWARE: '软件签名', HSM: '硬件签名', SDF: 'SDF 硬件签名' };
 export const signerTypeLabel = (type?: string) => signerLabels[type || ''] || type || '未提供';
 
