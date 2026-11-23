@@ -39,16 +39,22 @@
             <span class="break-all">{{ preview.parent.sha256 }}</span>
           </el-descriptions-item>
         </el-descriptions>
-        <el-alert v-if="preview.existingRootId != null" title="此证书已登记" type="info" :closable="false" />
+        <el-alert
+          v-if="preview.existingRootId != null"
+          :title="bindingTargetId == null ? '此证书已登记' : '此证书已登记，可选择签发者完成绑定'"
+          type="info"
+          :closable="false"
+        />
       </template>
-      <el-form-item v-if="bindingRootId != null || (preview && preview.existingRootId == null)" label="签名者" :required="bindingRootId != null">
+      <el-form-item v-if="showSignerPicker" label="签发者" :required="bindingTargetId != null">
         <el-select
           v-model="signerId"
           clearable
           :value-on-clear="null"
+          :disabled="bindingTargetId == null && !preview"
           filterable
           style="width: 100%"
-          :placeholder="bindingRootId == null ? '可留空，稍后绑定' : '选择签名者'"
+          :placeholder="signerPlaceholder"
         >
           <el-option
             v-for="signer in signers"
@@ -58,7 +64,10 @@
             :disabled="publicKeyStatus(signer) === 'MISMATCH'"
           />
         </el-select>
-        <div v-if="!signers.length" class="mt-1 text-sm">请先在签名者管理中配置 PKCS12 或 SDF 签发者。</div>
+        <div v-if="!preview && bindingTargetId == null" class="mt-1 text-sm">
+          {{ subordinate ? '选择父 CA 并预览证书链后，再选择签发者。' : '预览证书后选择签发者，系统会比对签发者与证书的公钥。' }}
+        </div>
+        <div v-else-if="!busy && !signers.length" class="mt-1 text-sm">请先在签名者管理中配置 PKCS12 或 SDF 签发者。</div>
         <div v-else-if="selectedSigner && publicKeyStatus(selectedSigner) === 'UNVERIFIED'" class="mt-1 text-sm">
           暂未读取到签名公钥，保存时将用原 CA 证书验证签名。
         </div>
@@ -66,12 +75,27 @@
     </el-form>
     <template #footer>
       <el-button :disabled="busy" @click="visible = false">取消</el-button>
-      <el-button v-if="bindingRootId != null" type="primary" :loading="busy" :disabled="signerId == null" @click="saveBinding">
+      <el-button
+        v-if="preview?.existingRootId != null"
+        :type="bindingTargetId == null ? 'primary' : 'default'"
+        :disabled="busy"
+        @click="complete(preview.existingRootId)"
+      >
+        查看已有记录
+      </el-button>
+      <el-button v-if="bindingTargetId != null" type="primary" :loading="busy" :disabled="!hasSelectableSigner" @click="saveBinding">
         验证并绑定
       </el-button>
-      <el-button v-else-if="preview?.existingRootId != null" type="primary" @click="complete(preview.existingRootId)">查看已有记录</el-button>
-      <el-button v-else-if="preview" type="primary" :loading="busy" :disabled="!name.trim()" @click="saveImport">确认导入</el-button>
-      <el-button v-else type="primary" :loading="busy" :disabled="!file || (subordinate && parentRootId == null)" @click="loadPreview">
+      <el-button
+        v-else-if="preview && preview.existingRootId == null"
+        type="primary"
+        :loading="busy"
+        :disabled="!name.trim() || (signerId != null && !hasSelectableSigner)"
+        @click="saveImport"
+      >
+        确认导入
+      </el-button>
+      <el-button v-else-if="!preview" type="primary" :loading="busy" :disabled="!file || (subordinate && parentRootId == null)" @click="loadPreview">
         预览证书
       </el-button>
     </template>
@@ -85,7 +109,7 @@ import { bindExistingCaSigner, getExistingCaSigners, importExistingCa, previewEx
 import type { ExistingCaPreview, ExistingCaSigner, RootHierarchyEntry } from '@/api/ca/root';
 import { parseTime } from '@/utils/ruoyi';
 
-defineProps<{ parents: RootHierarchyEntry[] }>();
+const props = defineProps<{ parents: RootHierarchyEntry[] }>();
 const emit = defineEmits<{ completed: [id: string | number] }>();
 
 const visible = ref(false);
@@ -101,6 +125,19 @@ const encoded = ref('');
 const preview = ref<ExistingCaPreview>();
 const signers = ref<ExistingCaSigner[]>([]);
 const selectedSigner = computed(() => signers.value.find((signer) => signer.id === signerId.value));
+const hasSelectableSigner = computed(() => selectedSigner.value != null && publicKeyStatus(selectedSigner.value) !== 'MISMATCH');
+const bindingTargetId = computed(() => {
+  if (bindingRootId.value != null) return bindingRootId.value;
+  const id = preview.value?.existingRootId;
+  if (id == null) return undefined;
+  const root = props.parents.find((entry) => String(entry.id) === String(id));
+  return root?.imported && root.caStatus === 'inactive' && root.signerId == null ? id : undefined;
+});
+const showSignerPicker = computed(() => bindingTargetId.value != null || preview.value?.existingRootId == null);
+const signerPlaceholder = computed(() => {
+  if (bindingTargetId.value != null) return '请选择签发者';
+  return preview.value ? '请选择签发者（可留空）' : '预览证书后选择';
+});
 const title = computed(() =>
   bindingRootId.value != null ? `绑定签名者 · ${bindingRootName.value}` : subordinate.value ? '导入已有子 CA' : '导入已有根 CA'
 );
@@ -187,7 +224,7 @@ async function loadPreview() {
     encoded.value = btoa(Array.from(bytes, (byte) => String.fromCharCode(byte)).join(''));
     const { data } = await previewExistingCa(command());
     preview.value = data;
-    applySignerOptions(data.signers);
+    applySignerOptions(data.signers ?? []);
   } catch {
     if (!encoded.value) ElMessage.error('无法读取证书文件，请重新选择');
   } finally {
@@ -196,6 +233,7 @@ async function loadPreview() {
 }
 
 async function saveImport() {
+  if (busy.value || (signerId.value != null && !hasSelectableSigner.value)) return;
   busy.value = true;
   try {
     const { data } = await importExistingCa(command());
@@ -209,12 +247,13 @@ async function saveImport() {
 }
 
 async function saveBinding() {
-  if (bindingRootId.value == null || signerId.value == null) return;
+  const rootId = bindingTargetId.value;
+  if (busy.value || rootId == null || signerId.value == null || !hasSelectableSigner.value) return;
   busy.value = true;
   try {
-    await bindExistingCaSigner(bindingRootId.value, signerId.value);
-    ElMessage.success('签名者验证通过，已绑定');
-    complete(bindingRootId.value);
+    await bindExistingCaSigner(rootId, signerId.value);
+    ElMessage.success('签发者验证通过，已绑定');
+    complete(rootId);
   } catch {
     // The request interceptor reports the server error.
   } finally {

@@ -6,6 +6,13 @@ import { Plus, Delete, Top, Bottom, Postcard, CollectionTag, Timer, Calendar, Ed
 import { getProfile, listProfile, saveProfile, modifyProfile } from '@/api/ca/profile';
 import { ProfileForm } from '@/api/ca/profile/types';
 import { parseJson, parseKeyAlgorithms } from '@/utils/json';
+import {
+  MAX_PROFILE_VALIDITY,
+  formatProfileValidity,
+  parseProfileValidity,
+  profileValidityUnits,
+  type ProfileValidityUnit
+} from '@/utils/ca/profile-validity';
 
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
 const router = useRouter();
@@ -26,7 +33,6 @@ interface TemplateIssue {
 
 interface TemplateConstraint {
   label: string;
-  maxValidityDays: number;
   subjectFields: string[];
   requiredSubjectFields: string[];
   keyUsages: string[];
@@ -283,45 +289,23 @@ function syncDualEntityDefaults() {
   selectedSubjectAltNameModes.value = [];
 }
 
-// 计算属性：解析validity字符串为数值和单位
-const validityValue = computed(() => {
-  const validity = form.validity || '1y';
-  const match = validity.match(/^(\d+)([ymd])$/);
-  return match ? parseInt(match[1]) : 1;
-});
+// 模板 validity 同时用于编辑、约束展示和后端签发上限校验。
+const validityValue = computed(() => parseProfileValidity(form.validity)?.value);
+const selectedValidityUnit = ref<ProfileValidityUnit>('y');
 
 const validityUnit = computed({
-  get() {
-    const validity = form.validity || '1y';
-    const match = validity.match(/^(\d+)([ymd])$/);
-    if (!match) {
-      return 'year';
-    }
-    if (match[2] === 'y') {
-      return 'year';
-    }
-    return match[2] === 'm' ? 'month' : 'day';
-  },
-  set(value: string) {
-    const numValue = value === 'year' ? 1 : value === 'month' ? 12 : 365;
-    const unit = value === 'year' ? 'y' : value === 'month' ? 'm' : 'd';
-    form.validity = `${numValue}${unit}`;
+  get: () => parseProfileValidity(form.validity)?.unit || selectedValidityUnit.value,
+  set(value: ProfileValidityUnit) {
+    const amount = validityValue.value;
+    selectedValidityUnit.value = value;
+    form.validity = amount === undefined ? '' : `${amount}${value}`;
   }
 });
 
-// 计算属性：根据单位返回最大值
-const validityMax = computed(() => {
-  if (validityUnit.value === 'year') {
-    return 50;
-  }
-  return validityUnit.value === 'month' ? 600 : 3650;
-});
-
-// 更新validity字符串
 function updateValidity(numValue?: number) {
-  const value = numValue ?? validityValue.value;
-  const unit = validityUnit.value === 'year' ? 'y' : validityUnit.value === 'month' ? 'm' : 'd';
-  form.validity = `${value}${unit}`;
+  const unit = validityUnit.value;
+  selectedValidityUnit.value = unit;
+  form.validity = numValue === undefined ? '' : `${numValue}${unit}`;
 }
 
 // 跟踪每个扩展选中的密钥用法
@@ -541,7 +525,6 @@ const subjectAltNameModeOptions = [
 
 const defaultConstraint: TemplateConstraint = {
   label: '通用终端证书',
-  maxValidityDays: 1825,
   subjectFields: commonOIDs.map((item) => item.value),
   requiredSubjectFields: ['commonName'],
   keyUsages: keyUsageOptions.map((item) => item.value),
@@ -554,7 +537,6 @@ const defaultConstraint: TemplateConstraint = {
 const templateConstraints: Record<string, TemplateConstraint> = {
   RootCA: {
     label: '根 CA',
-    maxValidityDays: 3650 * 3,
     subjectFields: ['country', 'organization', 'organizationalUnit', 'domainComponent', 'commonName'],
     requiredSubjectFields: ['commonName'],
     keyUsages: ['keyCertSign', 'cRLSign'],
@@ -565,7 +547,6 @@ const templateConstraints: Record<string, TemplateConstraint> = {
   },
   SubCA: {
     label: '子 CA',
-    maxValidityDays: 3650,
     subjectFields: ['country', 'organization', 'organizationalUnit', 'domainComponent', 'commonName'],
     requiredSubjectFields: ['commonName'],
     keyUsages: ['keyCertSign', 'cRLSign'],
@@ -576,7 +557,6 @@ const templateConstraints: Record<string, TemplateConstraint> = {
   },
   TLS_SERVER: {
     label: 'TLS 服务器',
-    maxValidityDays: 1825,
     subjectFields: ['country', 'organization', 'organizationalUnit', 'serialNumber', 'commonName'],
     requiredSubjectFields: ['commonName'],
     keyUsages: ['digitalSignature', 'keyEncipherment', 'dataEncipherment', 'keyAgreement'],
@@ -587,7 +567,6 @@ const templateConstraints: Record<string, TemplateConstraint> = {
   },
   TLS_CLIENT: {
     label: 'TLS 客户端',
-    maxValidityDays: 1825,
     subjectFields: ['country', 'organization', 'organizationalUnit', 'serialNumber', 'commonName', 'userId', 'emailAddress'],
     requiredSubjectFields: ['commonName'],
     keyUsages: ['digitalSignature', 'keyEncipherment', 'nonRepudiation'],
@@ -598,7 +577,6 @@ const templateConstraints: Record<string, TemplateConstraint> = {
   },
   TLS_ENC: {
     label: 'TLS 加密',
-    maxValidityDays: 730,
     subjectFields: ['country', 'organization', 'organizationalUnit', 'serialNumber', 'commonName'],
     requiredSubjectFields: ['commonName'],
     keyUsages: ['keyEncipherment', 'dataEncipherment', 'keyAgreement'],
@@ -609,7 +587,6 @@ const templateConstraints: Record<string, TemplateConstraint> = {
   },
   EMAIL: {
     label: 'Email',
-    maxValidityDays: 730,
     subjectFields: ['country', 'organization', 'organizationalUnit', 'commonName', 'emailAddress'],
     requiredSubjectFields: ['commonName', 'emailAddress'],
     keyUsages: ['digitalSignature', 'nonRepudiation', 'keyEncipherment'],
@@ -620,7 +597,6 @@ const templateConstraints: Record<string, TemplateConstraint> = {
   },
   OCSP: {
     label: 'OCSP',
-    maxValidityDays: 1825,
     subjectFields: ['country', 'organization', 'organizationalUnit', 'commonName'],
     requiredSubjectFields: ['commonName'],
     keyUsages: ['digitalSignature'],
@@ -637,31 +613,8 @@ const profileRules: FormRules = {
   validity: [
     {
       validator: (rule: any, value: any, callback: any) => {
-        const match = value ? value.match(/^(\d+)([ymd])$/) : null;
-        if (!match) {
-          callback(new Error('有效期格式不正确'));
-          return;
-        }
-        const numValue = parseInt(match[1]);
-        const unit = match[2];
-
-        if (numValue < 1) {
-          callback(new Error('有效期不能小于1'));
-          return;
-        }
-
-        if (unit === 'y' && numValue > 50) {
-          callback(new Error('以年为单位的有效期不能超过50年'));
-          return;
-        }
-
-        if (unit === 'm' && numValue > 600) {
-          callback(new Error('以月为单位的有效期不能超过600个月'));
-          return;
-        }
-
-        if (unit === 'd' && numValue > 3650) {
-          callback(new Error('以天为单位的有效期不能超过3650天'));
+        if (!parseProfileValidity(value)) {
+          callback(new Error('最大有效期须为正整数，并选择有效的时间单位'));
           return;
         }
 
@@ -748,22 +701,6 @@ function extendedKeyUsageOptionsForExtension(index: number) {
 
 function subjectAltNameModeOptionsForExtension(index: number) {
   return optionsWithSelectedOutside(availableSubjectAltNameModeOptions.value, subjectAltNameModeOptions, selectedSubjectAltNameModes.value[index]);
-}
-
-function parseValidityDays(validity?: string) {
-  const match = (validity || '').match(/^(\d+)([ymd])$/);
-  if (!match) {
-    return 0;
-  }
-  const value = Number(match[1]);
-  const unit = match[2];
-  if (unit === 'y') {
-    return value * 365;
-  }
-  if (unit === 'm') {
-    return value * 30;
-  }
-  return value;
 }
 
 function normalizeUsageValue(usage: any) {
@@ -1010,7 +947,16 @@ function validateTemplate() {
       issues.push({ level: 'error', tab: 'subject', message: `主题字段缺少 ${getSubjectLabel(field)}` });
     }
   });
+  const seenSubjectFields = new Set<string>();
   subjectFields.forEach((field) => {
+    if (seenSubjectFields.has(field)) {
+      issues.push({
+        level: 'error',
+        tab: 'subject',
+        message: `主题字段重复：${getSubjectLabel(field)}。每种字段只配置一条规则，多值请设置该字段的最小/最大出现次数。`
+      });
+    }
+    seenSubjectFields.add(field);
     if (!allowedSubjects.has(field)) {
       issues.push({ level: 'warning', tab: 'subject', message: `${getSubjectLabel(field)} 不属于 ${constraint.label} 模板建议字段` });
     }
@@ -1048,8 +994,8 @@ function validateTemplate() {
       issues.push({ level: 'warning', tab: 'extensions', message: `${mode} 不属于 ${constraint.label} 模板建议 SAN 类型` });
     }
   });
-  if (parseValidityDays(form.validity) > constraint.maxValidityDays) {
-    issues.push({ level: 'error', tab: 'basic', message: `${constraint.label} 模板有效期不能超过 ${constraint.maxValidityDays} 天` });
+  if (!parseProfileValidity(form.validity)) {
+    issues.push({ level: 'error', tab: 'basic', message: '请设置有效的最大有效期' });
   }
   (form.extensions || []).forEach((ext: any, index: number) => {
     if ((ext.type === 'BasicConstraints' || ext.type === 'AuthorityInfoAccess') && ext.config) {
@@ -1182,6 +1128,10 @@ function moveDown(index: number) {
 function addCommonRdn(common: { value: string; label: string }) {
   if (!form.subjectItems) {
     form.subjectItems = [];
+  }
+  if (form.subjectItems.some((item: any) => item.type === common.value)) {
+    ElMessage.warning(`${common.label}已配置，多值请调整该字段的最小/最大出现次数`);
+    return;
   }
   form.subjectItems.push({
     type: common.value
@@ -1439,17 +1389,14 @@ async function getProfileDetail(id: string | number) {
       // 解析subject（处理可能存在的 rdns 嵌套）
       const subjectRaw = conf.subject?.rdns || (Array.isArray(conf.subject) ? conf.subject : []);
       form.subjectItems = subjectRaw.map((item: any) => {
-        let typeValue = item.type;
-        // 处理type字段：可能是对象 {oid, description} 或字符串
-        if (item.type && typeof item.type === 'object' && item.type.description) {
-          // 从description反推type值
-          const description = item.type.description.toLowerCase();
-          typeValue = subjectValueToDescriptionMap[description] || description;
-        } else if (typeof item.type === 'string') {
-          // 如果是字符串，尝试从映射中查找
-          const lowerType = item.type.toLowerCase();
-          typeValue = subjectValueToDescriptionMap[lowerType] || item.type;
-        }
+        const typeText = typeof item.type === 'string' ? item.type : item.type?.description || '';
+        const oid = typeof item.type === 'string' ? item.type : item.type?.oid;
+        // OID 是字段标识，描述仅用于兼容旧模板的别名。
+        const typeValue =
+          commonOIDs.find((item) => item.oid === oid)?.value ||
+          subjectValueToDescriptionMap[typeText.toLowerCase()] ||
+          commonOIDs.find((item) => item.value.toLowerCase() === typeText.toLowerCase())?.value ||
+          typeText;
         return {
           type: typeValue || '',
           minOccurs: item.minOccurs !== undefined ? item.minOccurs : 1,
@@ -1630,7 +1577,9 @@ onMounted(() => {
                 </el-col>
               </el-row>
               <el-alert v-if="!isDualEntityTemplate" type="info" :closable="false" show-icon class="constraint-alert">
-                <template #title> 当前按 {{ activeConstraint.label }} 模板约束校验，最多有效期 {{ activeConstraint.maxValidityDays }} 天 </template>
+                <template #title>
+                  当前按 {{ activeConstraint.label }} 模板约束校验，最大有效期为 {{ formatProfileValidity(form.validity) }}
+                </template>
               </el-alert>
               <el-alert
                 v-if="isDualEntityTemplate"
@@ -1748,11 +1697,11 @@ onMounted(() => {
               </el-row>
               <el-row :gutter="20">
                 <el-col :span="12">
-                  <el-form-item label="证书有效期" prop="validity">
+                  <el-form-item label="最大有效期" prop="validity">
                     <template #label>
                       <div class="custom-form-label">
                         <el-icon><Timer /></el-icon>
-                        <span>证书有效期</span>
+                        <span>最大有效期</span>
                       </div>
                     </template>
                     <div class="validity-input-group">
@@ -1760,16 +1709,16 @@ onMounted(() => {
                         :model-value="validityValue"
                         @update:model-value="updateValidity"
                         :min="1"
-                        :max="validityMax"
+                        :max="MAX_PROFILE_VALIDITY"
+                        :precision="0"
                         controls-position="right"
                         class="validity-num"
                       />
                       <el-select v-model="validityUnit" class="validity-unit">
-                        <el-option label="天" value="day" />
-                        <el-option label="月" value="month" />
-                        <el-option label="年" value="year" />
+                        <el-option v-for="unit in profileValidityUnits" :key="unit.value" :label="unit.label" :value="unit.value" />
                       </el-select>
                     </div>
+                    <div class="form-tip">限制后续签发证书的有效期；实际到期时间仍受签发 CA 和证书链限制，已签发证书不受影响。</div>
                   </el-form-item>
                 </el-col>
                 <el-col :span="12">
@@ -2078,11 +2027,11 @@ onMounted(() => {
             <div class="constraints-container">
               <el-descriptions :column="2" border>
                 <el-descriptions-item label="约束类型">{{ activeConstraint.label }}</el-descriptions-item>
-                <el-descriptions-item label="最大有效期">{{ activeConstraint.maxValidityDays }} 天</el-descriptions-item>
+                <el-descriptions-item label="最大有效期">{{ formatProfileValidity(form.validity) }}</el-descriptions-item>
                 <el-descriptions-item label="密钥对生成">
                   {{ keypairGenerationLocation === 'KMC' ? 'KMC 产生密钥对' : '客户端产生密钥对' }}
                 </el-descriptions-item>
-                <el-descriptions-item label="当前有效期">{{ form.validity }}</el-descriptions-item>
+                <el-descriptions-item label="有效期配置">{{ form.validity }}</el-descriptions-item>
               </el-descriptions>
 
               <div class="constraint-block">

@@ -158,6 +158,10 @@
               </el-input>
               <div class="form-tip">Docker 部署默认通过网关访问：http://pki-gateway:5555/api-gateway/kmc</div>
             </el-form-item>
+            <el-form-item label="机构名称">
+              <el-input v-model.trim="kmcForm.kmcCaName" placeholder="填写 KMC 登记的 CA 机构名称，例如：CA" clearable />
+              <div class="form-tip">与 KMC「CA机构」中的名称一致，用于 RSA 等 REST 密钥操作；留空时沿用 CA 身份名称。</div>
+            </el-form-item>
             <el-form-item v-if="kmcTestResult" label="测试结果">
               <el-alert
                 :title="kmcTestResult.passed ? 'KMP通信测试通过' : 'KMP通信测试未通过'"
@@ -322,7 +326,8 @@ const DEFAULT_KMC_BASE_URL = 'http://pki-gateway:5555/api-gateway/kmc';
 const kmcForm = reactive<any>({
   id: undefined,
   enabled: false,
-  kmcBaseUrl: DEFAULT_KMC_BASE_URL
+  kmcBaseUrl: DEFAULT_KMC_BASE_URL,
+  kmcCaName: ''
 });
 
 const archiveForm = reactive<any>({
@@ -372,6 +377,7 @@ function assignForm(target: any, source: any, id?: string | number) {
 
 function normalizeKmcForm(source: any = {}) {
   kmcForm.kmcBaseUrl = source.kmcBaseUrl || source.baseUrl || kmcForm.kmcBaseUrl || DEFAULT_KMC_BASE_URL;
+  kmcForm.kmcCaName = String(source.kmcCaName ?? '').trim();
   if (!kmcForm.kmcBaseUrl) {
     kmcForm.kmcBaseUrl = DEFAULT_KMC_BASE_URL;
   }

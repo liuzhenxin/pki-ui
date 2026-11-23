@@ -2,6 +2,17 @@ import request from '@/utils/request';
 import { withUtcCertificateValidity } from '@/utils/certificateTime';
 import { Result } from '@/api/types';
 
+export interface CertStatistics {
+  totalCerts: number | string;
+  validCerts: number | string;
+  revokedCerts: number | string;
+  expiringSoon: number | string;
+}
+
+export function getCertStatistics(): Promise<Result<CertStatistics>> {
+  return request({ url: '/ca/v1/certs/statistics', method: 'get' }) as Promise<Result<CertStatistics>>;
+}
+
 // 分页查询证书列表
 export function pageCert(query: any): Promise<Result<any>> {
   return request({
