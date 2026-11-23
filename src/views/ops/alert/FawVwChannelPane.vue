@@ -36,6 +36,18 @@
             <el-input v-model.trim="form.to" :maxlength="254" placeholder="多个账号或工号用英文逗号分隔" />
           </el-form-item>
         </template>
+        <el-form-item label="正文类型">
+          <el-select v-model="form.messageType">
+            <template v-if="isMail">
+              <el-option label="TEXT（纯文本）" value="TEXT" />
+              <el-option label="MIXED（H5）" value="MIXED" />
+            </template>
+            <template v-else>
+              <el-option label="Markdown" value="markdown" />
+              <el-option label="text（纯文本）" value="text" />
+            </template>
+          </el-select>
+        </el-form-item>
         <el-form-item label="启用通知">
           <el-switch v-model="form.enabled" :disabled="!gatewayConfigured && !form.enabled" />
           <span v-if="!gatewayConfigured" class="gateway-hint">启用前请保存共享凭据</span>
@@ -71,7 +83,8 @@ function emptyConfig(): FawVwChannelConfig {
     to: '',
     app: isMail.value ? null : 'fawvw',
     dingTalkTarget: isMail.value ? null : 'ACCOUNT',
-    smtpServer: null
+    smtpServer: null,
+    messageType: isMail.value ? 'TEXT' : 'markdown'
   };
 }
 
@@ -99,7 +112,8 @@ function apply(settings: FawVwChannelSettings | null) {
     to: data.to,
     app: data.app,
     dingTalkTarget: data.dingTalkTarget,
-    smtpServer: data.smtpServer
+    smtpServer: data.smtpServer,
+    messageType: data.messageType ?? emptyConfig().messageType
   });
   savedEnabled.value = data.enabled;
   stale.value = false;

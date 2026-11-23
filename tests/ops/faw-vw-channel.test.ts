@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
-import ElementPlus, { ElMessageBox } from 'element-plus';
+import ElementPlus, { ElMessageBox, ElSelect } from 'element-plus';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import FawVwChannelPane from '@/views/ops/alert/FawVwChannelPane.vue';
 import type { FawVwChannelSettings } from '@/api/ops/types';
@@ -23,6 +23,7 @@ const saved: FawVwChannelSettings = {
   app: 'fawvw',
   dingTalkTarget: 'ACCOUNT',
   smtpServer: null,
+  messageType: 'markdown',
   credentialsConfigured: true
 };
 
@@ -40,6 +41,9 @@ describe('OPS FAW-VW channel form', () => {
     expect(wrapper.text()).not.toContain('试发');
 
     await input(wrapper, '钉钉收件人').setValue(saved.to);
+    const typeSelect = wrapper.findAllComponents(ElSelect).at(-1)!;
+    expect(typeSelect.props('modelValue')).toBe('markdown');
+    typeSelect.vm.$emit('update:modelValue', 'text');
     await wrapper.get('form').trigger('submit');
     await flushPromises();
 
@@ -56,7 +60,8 @@ describe('OPS FAW-VW channel form', () => {
           to: saved.to,
           app: 'fawvw',
           dingTalkTarget: 'ACCOUNT',
-          smtpServer: null
+          smtpServer: null,
+          messageType: 'text'
         }
       })
     );
@@ -70,7 +75,8 @@ describe('OPS FAW-VW channel form', () => {
       from: 'alerts@example.test',
       to: 'oncall@example.test',
       app: null,
-      dingTalkTarget: null
+      dingTalkTarget: null,
+      messageType: 'TEXT'
     };
     mocks.request
       .mockResolvedValueOnce({ settings: email })
@@ -83,6 +89,9 @@ describe('OPS FAW-VW channel form', () => {
     await flushPromises();
     expect(wrapper.text()).not.toContain('targets 编码');
     expect(input(wrapper, '发件邮箱').element.value).toBe(email.from);
+    const typeSelect = wrapper.findAllComponents(ElSelect).at(-1)!;
+    expect(typeSelect.props('modelValue')).toBe('TEXT');
+    typeSelect.vm.$emit('update:modelValue', 'MIXED');
     await wrapper.get('form').trigger('submit');
     await flushPromises();
 
@@ -90,7 +99,7 @@ describe('OPS FAW-VW channel form', () => {
       2,
       expect.objectContaining({
         method: 'put',
-        data: expect.objectContaining({ revision: email.revision, from: email.from, to: email.to })
+        data: expect.objectContaining({ revision: email.revision, from: email.from, to: email.to, messageType: 'MIXED' })
       })
     );
     expect(wrapper.get('button[type="submit"]').attributes('disabled')).toBeDefined();
@@ -141,7 +150,8 @@ describe('OPS FAW-VW channel form', () => {
       from: 'alerts@example.test',
       to: 'oncall@example.test',
       app: null,
-      dingTalkTarget: null
+      dingTalkTarget: null,
+      messageType: 'TEXT'
     };
     mocks.request
       .mockResolvedValueOnce({ settings: email })

@@ -328,6 +328,7 @@ export interface FawVwChannelConfig {
   app: string | null;
   dingTalkTarget: 'ACCOUNT' | 'JOB_ID' | null;
   smtpServer: 'CC' | 'CD' | 'FS' | 'TJ' | 'QD' | null;
+  messageType: 'TEXT' | 'MIXED' | 'markdown' | 'text';
 }
 
 export interface FawVwChannelSettings extends FawVwChannelConfig {
