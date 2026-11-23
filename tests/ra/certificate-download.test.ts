@@ -11,6 +11,12 @@ describe('certificate download validation', () => {
     const blob = new Blob(['-----BEGIN CERTIFICATE-----\npublic\n-----END CERTIFICATE-----']);
     expect(await certificateDownloadBlob(blob, 'application/x-pem-file')).toBe(blob);
   });
+  it('shows only recognized employee certificate download errors when requested', async () => {
+    const message = '该任务没有已签发的证书可下载';
+    const blob = new Blob([JSON.stringify({ code: 'RA_EMPLOYEE_CERT_OPERATION_REJECTED', msg: message })]);
+    await expect(certificateDownloadBlob(blob, 'application/zip', 'RA_EMPLOYEE_CERT_')).rejects.toThrow(message);
+    await expect(certificateDownloadBlob(blob, 'application/zip')).rejects.toThrow('服务器返回了错误响应');
+  });
   it('preserves binary CER/P7B/PKCS12 responses', async () => {
     const buffer = new Uint8Array([0x30, 0x82, 0x01, 0x02, 0xff]).buffer;
     const blob = await certificateDownloadBlob({ data: buffer }, 'application/pkix-cert');
@@ -43,8 +49,8 @@ describe('issued result certificate formats', () => {
     expect(forge.pki.certificateFromPem(await blob.text()).serialNumber).toBe('01');
   });
 
-  it('exports CER as DER', async () => {
-    const blob = await issuedCertificateBlob(leaf, 'cer');
+  it.each(['cer', 'der'] as const)('exports %s as DER', async (format) => {
+    const blob = await issuedCertificateBlob(leaf, format);
     const cert = forge.pki.certificateFromAsn1(forge.asn1.fromDer(forge.util.binary.raw.encode(new Uint8Array(await blob.arrayBuffer()))));
     expect(cert.serialNumber).toBe('01');
   });

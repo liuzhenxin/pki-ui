@@ -3,7 +3,7 @@ import { AxiosPromise } from 'axios';
 import { parseStrEmpty } from '@/utils/ruoyi';
 import { UserForm, UserInfoVO, UserQuery, UserVO } from '@/api/system/user/types';
 
-export type RaApplicantUserInfo = UserInfoVO & { deptId?: number | string; domainAccount?: string };
+export type RaApplicantUserInfo = UserInfoVO & { deptId?: number | string; domainAccount?: string; displayName?: string };
 
 export const listUser = (query: UserQuery & { domainAccount?: string }): AxiosPromise<UserVO[]> => {
   return request({
@@ -24,7 +24,7 @@ export const getUser = (userId?: string | number, hideErrorNotify = false): Axio
   });
 };
 
-export type LocalEmployeeAttributes = { employeeNo?: string; gender?: string; jobName?: string };
+export type LocalEmployeeAttributes = { employeeNo?: string; gender?: string; jobName?: string; restoreLocalOrigin?: boolean };
 
 export const addUser = (data: UserForm, domainAccount?: string, attributes: LocalEmployeeAttributes = {}) => {
   return request({

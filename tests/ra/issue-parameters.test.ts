@@ -1,10 +1,17 @@
+import forge from 'node-forge';
 import { describe, expect, it } from 'vitest';
-import { buildIssueSubjectItems, formatIssueSubject } from '@/utils/raIssueSubject';
-import { resolveIssueValidity } from '@/utils/raIssueValidity';
+import { buildIssueSubjectItems, formatIssueSubject, readIssueCsrSubject } from '@/utils/raIssueSubject';
+import { defaultIssueDuration, resolveIssueValidity } from '@/utils/raIssueValidity';
 
 const now = new Date('2028-01-01T00:00:00Z');
 
 describe('RA issuance validity', () => {
+  it('defaults to the shorter certificate profile limit and preserves minute/hour units', () => {
+    expect(defaultIssueDuration(now, ['5y', '1h'])).toEqual({ value: 1, unit: 'hour' });
+    expect(defaultIssueDuration(now, ['30m'])).toEqual({ value: 30, unit: 'minute' });
+    expect(defaultIssueDuration(now, ['5y'], '2028-01-01T01:30:15Z')).toEqual({ value: 90, unit: 'minute' });
+  });
+
   it('keeps CA defaults, and permits a future start even if no duration is entered', () => {
     expect(resolveIssueValidity(null, undefined, 'day', ['5y'], now)).toEqual({});
     expect(resolveIssueValidity(new Date('2028-01-02T00:00:00Z'), undefined, 'day', ['5y'], now)).toEqual({
@@ -34,6 +41,19 @@ describe('RA issuance validity', () => {
 });
 
 describe('RA issuance subject', () => {
+  it('reads the subject from both PEM and pasted Base64 CSR data', () => {
+    const keys = forge.pki.rsa.generateKeyPair(1024);
+    const request = forge.pki.createCertificationRequest();
+    request.publicKey = keys.publicKey;
+    request.setSubject([{ shortName: 'CN', value: 'User, Test' }, { shortName: 'OU', value: 'Development' }]);
+    request.sign(keys.privateKey, forge.md.sha256.create());
+    const pem = forge.pki.certificationRequestToPem(request);
+    const subject = 'CN=User\\, Test,OU=Development';
+    expect(readIssueCsrSubject(pem)).toBe(subject);
+    expect(readIssueCsrSubject(pem.replace(/-----[^-]+-----|\s/g, ''))).toBe(subject);
+    expect(() => readIssueCsrSubject('invalid CSR')).toThrow();
+  });
+
   it('renders template fields when the approved application has no stored subject', () => {
     expect(buildIssueSubjectItems([{ type: { oid: '2.5.4.5' }, minOccurs: 0 }], null)).toMatchObject([
       { type: 'serialNumber', value: '', minOccurs: 0 }

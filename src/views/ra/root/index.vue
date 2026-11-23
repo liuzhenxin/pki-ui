@@ -84,7 +84,7 @@
       </el-table-column>
       <el-table-column label="证书名称" align="center" prop="name" />
       <el-table-column label="颁发者" align="center" prop="issuer" />
-      <el-table-column label="主题" align="center" prop="subject" />
+      <el-table-column label="主题" align="center" prop="subject" :formatter="formatCertificateSubjectColumn" />
       <el-table-column label="有效期开始" align="center" prop="notBefore" width="180">
         <template #default="scope">
           <span>{{ parseTime(scope.row.notBefore) }}</span>
@@ -328,6 +328,7 @@
 </template>
 
 <script setup name="RootCert" lang="ts">
+import { formatCertificateSubjectColumn } from '@/utils/raCertificateSubject';
 import CertRowAction from '../components/CertRowAction.vue';
 import { useRaListRefreshOnReturn } from '@/hooks/useRaListRefreshOnReturn';
 import { ref, reactive, toRefs, getCurrentInstance, ComponentInternalInstance, watch } from 'vue';

@@ -10,8 +10,9 @@
     </template>
   </el-dialog>
 
-  <el-dialog v-model="accountOpen" :title="account.id == null ? '新增申请用户' : '申请用户详情'" width="min(680px, 96vw)" append-to-body
+  <el-dialog v-model="accountOpen" :title="restoringLocalOrigin ? '恢复本地账号' : account.id == null ? '新增申请用户' : '申请用户详情'" width="min(680px, 96vw)" append-to-body
     @closed="account.password = ''">
+    <el-alert v-if="restoringLocalOrigin" title="请选择原部门，并核对域账号和邮箱后保存。" type="warning" :closable="false" class="mb12" />
     <el-form :model="account" label-width="84px" :disabled="saving || !canEditAccount" @submit.prevent="saveAccount">
       <el-row :gutter="16">
         <el-col :xs="24" :sm="12">
@@ -41,7 +42,7 @@
         </el-col>
         <el-col :xs="24" :sm="12">
           <el-form-item label="用户类别" required>
-            <el-select v-model="account.userCategory" style="width: 100%">
+            <el-select v-model="account.userCategory" :disabled="restoringLocalOrigin" style="width: 100%">
               <el-option label="个人用户" value="individual" />
               <el-option label="企业用户" value="organization" />
               <el-option label="设备用户" value="device" />
@@ -61,8 +62,8 @@
       </el-row>
     </el-form>
     <template #footer>
-      <el-button v-if="canEditAccount && account.id != null" :disabled="saving" @click="resetPassword">重置密码</el-button>
-      <el-button v-if="canEditAccount && account.id != null" type="danger" plain :disabled="saving" @click="removeAccount">删除</el-button>
+      <el-button v-if="canEditAccount && account.id != null && !restoringLocalOrigin" :disabled="saving" @click="resetPassword">重置密码</el-button>
+      <el-button v-if="canEditAccount && account.id != null && !restoringLocalOrigin" type="danger" plain :disabled="saving" @click="removeAccount">删除</el-button>
       <el-button @click="accountOpen = false">{{ account.id == null ? '取消' : '关闭' }}</el-button>
       <el-button v-if="canEditAccount" type="primary" :loading="saving" @click="saveAccount">保存</el-button>
     </template>
@@ -79,10 +80,11 @@ import type { UserForm } from '@/api/system/user/types';
 import type { FawvwEmployee } from '@/api/ra/employee';
 import auth from '@/plugins/auth';
 
-defineProps<{ departments: RaDeptTreeOption[] }>();
+const props = defineProps<{ departments: RaDeptTreeOption[]; allowLocalRecovery?: boolean }>();
 const emit = defineEmits<{ departmentsChanged: []; accountsChanged: [deletedId?: string | number] }>();
 const departmentOpen = ref(false);
 const accountOpen = ref(false);
+const restoringLocalOrigin = ref(false);
 const saving = ref(false);
 const department = reactive<RaDeptForm>({});
 const account = reactive<UserForm>({ username: '', password: '', status: 0, roleIds: [], postIds: [] });
@@ -90,7 +92,7 @@ const domainAccount = ref('');
 const domainAccountLocked = ref(false);
 const employeeAttributes = reactive({ employeeNo: '', gender: '', jobName: '' });
 const deptProps = { value: 'id', label: 'name', children: 'children' };
-const canEditAccount = computed(() => auth.hasPermi('ra:user'));
+const canEditAccount = computed(() => restoringLocalOrigin.value ? props.allowLocalRecovery === true : auth.hasPermi('ra:user'));
 
 async function openDepartment(deptId: string, edit = false) {
   if (edit) {
@@ -121,11 +123,12 @@ async function saveDepartment() {
   }
 }
 
-async function openAccount(deptId?: string, userId?: string | number, employee?: FawvwEmployee) {
+async function openAccount(deptId?: string, userId?: string | number, employee?: FawvwEmployee, restoreLocalOrigin = false) {
   const user = userId == null ? undefined : (await getUser(userId)).data;
-  if (userId != null && !user?.id) return;
+  if ((userId != null || restoreLocalOrigin) && !user?.id) return;
+  restoringLocalOrigin.value = restoreLocalOrigin;
   Object.assign(account, {
-    id: user?.id, deptId: user?.deptId == null ? deptId : String(user.deptId), username: user?.username || '',
+    id: user?.id, deptId: restoreLocalOrigin ? undefined : user?.deptId == null ? deptId : String(user.deptId), username: user?.username || '',
     password: '', mail: user?.mail || '', mobile: user?.mobile || '', status: Number(user?.status ?? 0),
     userCategory: user?.userCategory || 'individual'
   });
@@ -139,7 +142,7 @@ async function saveAccount() {
   if (saving.value || !canEditAccount.value) return;
   const username = account.username.trim();
   if (!account.deptId || username.length < 2 || (account.id == null && account.password.length < 6)) {
-    ElMessage.warning('请选择部门，填写用户名和初始密码');
+    ElMessage.warning(restoringLocalOrigin.value ? '请选择原部门' : '请选择部门，填写用户名和初始密码');
     return;
   }
   if (domainAccountLocked.value && account.userCategory === 'individual' && !domainAccount.value.trim()) {
@@ -154,11 +157,14 @@ async function saveAccount() {
     await (account.id == null ? addUser : updateUser)(
       { ...account, username },
       account.userCategory === 'individual' ? domainAccount.value.trim() || undefined : undefined,
-      account.userCategory === 'individual' ? { ...employeeAttributes } : {}
+      {
+        ...(account.userCategory === 'individual' ? employeeAttributes : {}),
+        ...(restoringLocalOrigin.value ? { restoreLocalOrigin: true } : {})
+      }
     );
     accountOpen.value = false;
     emit('accountsChanged');
-    ElMessage.success('申请用户已保存');
+    ElMessage.success(restoringLocalOrigin.value ? '本地账号已恢复' : '申请用户已保存');
   } finally {
     account.password = '';
     saving.value = false;

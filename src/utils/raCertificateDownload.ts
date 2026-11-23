@@ -1,5 +1,5 @@
 /** Validate binary certificate exports before creating a downloadable file. */
-export async function certificateDownloadBlob(response: unknown, mimeType: string): Promise<Blob> {
+export async function certificateDownloadBlob(response: unknown, mimeType: string, businessErrorPrefix?: string): Promise<Blob> {
   const candidate = response as { data?: unknown } | null;
   const value = candidate?.data instanceof Blob || candidate?.data instanceof ArrayBuffer ? candidate.data : response;
   if (!(value instanceof Blob) && !(value instanceof ArrayBuffer)) {
@@ -9,12 +9,16 @@ export async function certificateDownloadBlob(response: unknown, mimeType: strin
   if (!blob.size) throw new Error('证书下载返回了空文件');
   const prefix = (await blob.slice(0, 512).text()).replace(/^\uFEFF/, '').trimStart();
   if (blob.type.toLowerCase().includes('json') || prefix.startsWith('{') || prefix.startsWith('[')) {
+    const result = businessErrorPrefix && blob.size < 64 * 1024 ? await blob.text().then(JSON.parse).catch(() => null) : null;
+    if (businessErrorPrefix && typeof result?.code === 'string' && result.code.startsWith(businessErrorPrefix) && typeof result.msg === 'string') {
+      throw new Error(result.msg);
+    }
     throw new Error('证书下载失败：服务器返回了错误响应');
   }
   return blob;
 }
 
-export type IssuedCertificateFormat = 'pem' | 'cer' | 'crt' | 'p7b';
+export type IssuedCertificateFormat = 'pem' | 'cer' | 'der' | 'crt' | 'p7b';
 
 const certificateBlocks = (pem: string) => [...pem.matchAll(/-----BEGIN CERTIFICATE-----\s*([A-Za-z0-9+/=\s]+?)\s*-----END CERTIFICATE-----/g)]
   .map(([, base64]) => base64.replace(/\s/g, ''));
@@ -28,7 +32,7 @@ export async function issuedCertificateBlob(pem: string, format: IssuedCertifica
   const [leaf] = certificateBlocks(pem);
   if (!leaf) throw new Error('签发结果未返回有效的证书内容');
   const der = base64Bytes(leaf);
-  if (format === 'cer') return new Blob([der], { type: 'application/pkix-cert' });
+  if (format === 'cer' || format === 'der') return new Blob([der], { type: 'application/pkix-cert' });
   if (format !== 'p7b') return new Blob([certificatePem(leaf)], { type: 'application/x-pem-file' });
 
   const certs = [...new Set([leaf, ...certificateBlocks(chain || '')])].map(certificatePem);

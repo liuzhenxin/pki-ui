@@ -213,7 +213,7 @@
             <el-tag :type="detailChain?.linked ? 'success' : 'danger'">{{ detailChain?.linked ? '签名匹配' : '链路异常' }}</el-tag>
             <span v-if="detailChain?.warning" class="ml8">{{ detailChain.warning }}</span>
           </el-descriptions-item>
-          <el-descriptions-item label="主题 DN">{{ detail.certificate.subjectDn }}</el-descriptions-item>
+          <el-descriptions-item label="主题 DN">{{ formatCertificateSubject(detail.certificate.subjectDn) }}</el-descriptions-item>
           <el-descriptions-item label="颁发者 DN">{{ detail.certificate.issuerDn }}</el-descriptions-item>
           <el-descriptions-item label="序列号">{{ detail.certificate.serialNumber }}</el-descriptions-item>
           <el-descriptions-item label="生效时间">{{ dateTime(detail.certificate.notBefore) }}</el-descriptions-item>
@@ -279,6 +279,7 @@
 </template>
 
 <script setup name="FawvwCaCert" lang="ts">
+import { formatCertificateSubject } from '@/utils/raCertificateSubject';
 import CertRowAction from '../components/CertRowAction.vue';
 import { useRaListRefreshOnReturn } from '@/hooks/useRaListRefreshOnReturn';
 import { ElMessage, ElMessageBox, type TableInstance } from 'element-plus';

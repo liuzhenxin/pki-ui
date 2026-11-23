@@ -1,3 +1,4 @@
+import * as jsrsasign from 'jsrsasign';
 import { sortSubjectItems, typeMapping, type SubjectItem } from '@/components/CertSubject/index.vue';
 
 interface ProfileRdn {
@@ -71,5 +72,26 @@ export function formatIssueSubject(items: SubjectItem[]) {
       const value = item.value!.trim().replace(/([,+"<>;=\\]|^#)/g, '\\$1');
       return `${typeMapping[item.type]?.key || item.type}=${value}`;
     })
+    .join(',');
+}
+
+const { ASN1HEX, b64tohex, X509 } = jsrsasign as unknown as {
+  ASN1HEX: { getTLVbyList(hex: string, start: number, indexes: number[], tag: string): string | null };
+  b64tohex(base64: string): string;
+  X509: new () => { getX500Name(hex: string): { array: { type: string; value: string }[][] } };
+};
+
+export function readIssueCsrSubject(csr: string) {
+  const base64 = csr.trim()
+    .replace(/-----BEGIN (?:NEW )?CERTIFICATE REQUEST-----|-----END (?:NEW )?CERTIFICATE REQUEST-----/g, '')
+    .replace(/\s/g, '');
+  if (!base64 || !/^[A-Za-z0-9+/]+={0,2}$/.test(base64)) throw new Error('CSR 格式不正确');
+  const hex = b64tohex(base64);
+  if (!ASN1HEX.getTLVbyList(hex, 0, [0, 0], '02') || !ASN1HEX.getTLVbyList(hex, 0, [0, 2], '30')
+      || !ASN1HEX.getTLVbyList(hex, 0, [2], '03')) throw new Error('CSR 格式不正确');
+  const subject = ASN1HEX.getTLVbyList(hex, 0, [0, 1], '30');
+  if (!subject) throw new Error('CSR 格式不正确');
+  return new X509().getX500Name(subject).array
+    .map((rdn) => rdn.map(({ type, value }) => `${type}=${value.replace(/([,+"<>;=\\]|^#)/g, '\\$1')}`).join('+'))
     .join(',');
 }

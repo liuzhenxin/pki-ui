@@ -237,7 +237,7 @@
     <el-drawer v-model="detailOpen" title="内网证书详情" size="620px" append-to-body>
       <el-descriptions :column="1" border>
         <el-descriptions-item label="序列号">{{ detail.serialNumber || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="证书主题">{{ detail.subject || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="证书主题">{{ formatCertificateSubject(detail.subject) }}</el-descriptions-item>
         <el-descriptions-item label="颁发者">{{ detail.issuer || '-' }}</el-descriptions-item>
         <el-descriptions-item label="系统名称">{{ detail.systemName || '-' }}</el-descriptions-item>
         <el-descriptions-item label="使用场景">{{ detail.usageScenario || '-' }}</el-descriptions-item>
@@ -334,6 +334,7 @@
 </template>
 
 <script setup name="RaIntranetCert" lang="ts">
+import { formatCertificateSubject } from '@/utils/raCertificateSubject';
 import CertRowAction from '../components/CertRowAction.vue';
 import { useRaListRefreshOnReturn } from '@/hooks/useRaListRefreshOnReturn';
 import FileSaver from 'file-saver';

@@ -78,6 +78,14 @@
     <pagination v-show="total > 0" :total="total" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" :auto-scroll="false" @pagination="getList" />
 
     <el-dialog v-model="open" title="新增证书申请" width="620px" append-to-body>
+      <template #header="{ titleId, titleClass }">
+        <div class="apply-dialog-heading">
+          <span :id="titleId" :class="titleClass">新增证书申请</span>
+          <el-tooltip content="设置默认根证书和模板" placement="top">
+            <el-button link icon="Setting" aria-label="设置默认根证书和模板" @click="openDefaultSettings" />
+          </el-tooltip>
+        </div>
+      </template>
       <el-form ref="applyFormRef" :model="form" :rules="rules" label-width="96px">
         <el-form-item label="用户类别" prop="userCategory">
           <el-select v-model="form.userCategory" clearable placeholder="请选择用户类别" style="width: 100%" @change="handleUserCategoryChange">
@@ -141,6 +149,25 @@
           <el-button type="primary" :loading="submitLoading" @click="submitForm">确 定</el-button>
           <el-button @click="open = false">取 消</el-button>
         </div>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="defaultSettingsOpen" title="证书申请默认选项" width="min(500px, 95vw)" append-to-body>
+      <el-form :model="defaultDraft" label-width="112px">
+        <el-form-item label="默认根证书">
+          <el-select v-model="defaultDraft.rootId" filterable clearable placeholder="不设默认根证书" @change="defaultDraft.templateKey = undefined">
+            <el-option v-for="root in rootOptions" :key="String(root.id)" :label="rootLabel(root)" :value="String(root.id)" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="默认证书模板">
+          <el-select v-model="defaultDraft.templateKey" filterable clearable :disabled="!defaultDraft.rootId" placeholder="不设默认模板">
+            <el-option v-for="option in defaultTemplateOptions" :key="option.key" :label="option.label" :value="option.key" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="defaultSettingsOpen = false">取消</el-button>
+        <el-button type="primary" @click="saveDefaultSettings">保存</el-button>
       </template>
     </el-dialog>
 
@@ -289,6 +316,8 @@ import { pageRaApply, getRaApply, saveRaApply, transferRaApplyDepartment, listUn
 import type { RaApplicantUserInfo } from '@/api/ra/user';
 import { getEmployeeDirectoryDetails, getFawvwEmployee, getFawvwEmployeeApplicant, pageEmployeeDirectory, type EmployeeDirectoryRow, type FawvwEmployee } from '@/api/ra/employee';
 import auth from '@/plugins/auth';
+import cache from '@/plugins/cache';
+import { useUserStore } from '@/store/modules/user';
 import { isFawvwEmployeeSourceActive } from '@/utils/fawvwEmployeeStatus';
 import { useRoute } from 'vue-router';
 import { listDeptSelectTree } from '@/api/ra/dept';
@@ -299,6 +328,7 @@ import { FormInstance, FormRules } from 'element-plus';
 
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
 const route = useRoute();
+const userStore = useUserStore();
 
 const applyList = ref<RaApplyVO[]>([]);
 const rootOptions = ref<RaUserCertScopeRoot[]>([]);
@@ -317,6 +347,9 @@ const pickerTree = computed<PickerDepartment[]>(() => [{
   children: mapPickerDepartments(deptOptions.value)
 }]);
 const open = ref(false);
+type ApplyDefaults = { rootId?: string; templateKey?: string };
+const defaultSettingsOpen = ref(false);
+const defaultDraft = reactive<ApplyDefaults>({ rootId: undefined, templateKey: undefined });
 const userPickerOpen = ref(false);
 const detailOpen = ref(false);
 const loading = ref(false);
@@ -442,6 +475,83 @@ const dualProfileOptions = computed<RaUserCertScopeDualPair[]>(() => {
   return rootOptions.value.find((root) => String(root.id) === rootId)?.dualProfiles || [];
 });
 
+const defaultTemplateOptions = computed(() => defaultTemplates(rootOptions.value.find((root) => String(root.id) === defaultDraft.rootId)));
+
+function defaultTemplates(root?: RaUserCertScopeRoot) {
+  const singles = (root?.profiles || []).map((profile) => ({
+    key: `single:${profile.id}`,
+    label: profileApplyLabel(profile, root?.algorithm),
+    profileId: String(profile.id),
+    dualIndex: undefined
+  }));
+  const pairs = (root?.dualProfiles || []).map((pair, index) => ({
+    key: `dual:${pair.signProfileId}:${pair.encryptProfileId}`,
+    label: `双证书 · ${dualPairLabel(pair)}`,
+    profileId: undefined,
+    dualIndex: index
+  }));
+  return [...singles, ...pairs];
+}
+
+function defaultsCacheKey() {
+  return userStore.userId ? `ra.apply.defaults:${userStore.tenantId}:${userStore.userId}` : undefined;
+}
+
+function readApplyDefaults(): ApplyDefaults {
+  const key = defaultsCacheKey();
+  if (!key) return {};
+  try {
+    const saved = cache.local.getJSON(key);
+    const root = rootOptions.value.find((item) => saved?.rootId === String(item.id));
+    if (!root) return {};
+    const option = defaultTemplates(root).find((item) => item.key === saved?.templateKey);
+    return { rootId: String(root.id), templateKey: option?.key };
+  } catch {
+    return {};
+  }
+}
+
+function openDefaultSettings() {
+  const saved = readApplyDefaults();
+  defaultDraft.rootId = saved.rootId;
+  defaultDraft.templateKey = saved.templateKey;
+  defaultSettingsOpen.value = true;
+}
+
+function saveDefaultSettings() {
+  try {
+    const key = defaultsCacheKey();
+    if (!key) {
+      proxy?.$modal.msgError('当前登录信息不可用，无法保存默认选项');
+      return;
+    }
+    if (defaultDraft.rootId) {
+      cache.local.setJSON(key, { rootId: defaultDraft.rootId, templateKey: defaultDraft.templateKey });
+    } else {
+      cache.local.remove(key);
+    }
+    defaultSettingsOpen.value = false;
+  } catch {
+    proxy?.$modal.msgError('无法保存默认选项，请检查浏览器存储设置');
+  }
+}
+
+function applySavedDefaults() {
+  const saved = readApplyDefaults();
+  if (!saved.rootId) return;
+  form.rootId = saved.rootId;
+  handleRootChange(saved.rootId);
+  const option = defaultTemplates(selectedRoot.value).find((item) => item.key === saved.templateKey);
+  if (option?.dualIndex !== undefined) {
+    form.certMode = 'dual';
+    form.dualProfileIndex = option.dualIndex;
+    handleDualProfileChange(option.dualIndex);
+  } else if (option?.profileId) {
+    form.profileId = option.profileId;
+    handleProfileChange(option.profileId);
+  }
+}
+
 function validateProfile(_: any, value: any, callback: any) {
   if (form.certMode !== 'dual' && !value) {
     callback(new Error('证书模板不能为空'));
@@ -548,6 +658,7 @@ async function handleAdd() {
   resetForm();
   await Promise.all([loadDeptOptions(), loadRootOptions()]);
   if (entryPath !== route.fullPath) return;
+  applySavedDefaults();
   open.value = true;
 }
 
@@ -641,7 +752,7 @@ function selectPickerRow(row: PickerRow) {
 
 function selectPickerUser(user: RaApplicantUserInfo, employeeName?: string) {
   form.userId = String(user.id);
-  form.userName = employeeName || user.username || user.userName || '';
+  form.userName = employeeName || user.displayName || user.username || user.userName || '';
   form.deptName = userDeptName(user);
   form.userCategory = user.userCategory || form.userCategory;
   userPickerQuery.userCategory = form.userCategory;
@@ -688,9 +799,9 @@ function handleProfileChange(profileId?: string | number) {
   form.profileName = profile?.name;
 }
 
-function profileApplyLabel(profile: RaUserCertScopeProfile) {
+function profileApplyLabel(profile: RaUserCertScopeProfile, algorithm = selectedRoot.value?.algorithm || form.rootAlgorithm || '') {
   return isEncryptionProfile(profile) &&
-    String(selectedRoot.value?.algorithm || form.rootAlgorithm || '')
+    String(algorithm)
       .toUpperCase()
       .includes('RSA')
     ? `${profile.name}（KMC加密）`
@@ -891,6 +1002,7 @@ onMounted(() => {
 watch(() => route.fullPath, async (entryPath, _, onCleanup) => {
   if (!/^\/ra-certificate\/ra-cert-apply\/?$/.test(route.path)) {
     open.value = false;
+    defaultSettingsOpen.value = false;
     userPickerOpen.value = false;
     return;
   }
@@ -930,6 +1042,7 @@ watch(() => route.fullPath, async (entryPath, _, onCleanup) => {
     await Promise.all([loadDeptOptions(), loadRootOptions()]);
     if (!isCurrent()) return;
     selectPickerUser(selectedApplicant, selectedName);
+    applySavedDefaults();
     open.value = true;
   } catch {
     if (isCurrent()) proxy?.$modal.msgError('无法加载员工申请资格');
@@ -947,6 +1060,14 @@ useRaListRefreshOnReturn(getList);
 </script>
 
 <style scoped lang="scss">
+.apply-dialog-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-inline-end: 24px;
+}
+
 .ra-apply-page {
   .el-table {
     width: 100%;
@@ -965,7 +1086,6 @@ useRaListRefreshOnReturn(getList);
   padding: 14px 16px 0;
   border: 1px solid var(--el-border-color-lighter);
   border-radius: 6px;
-  background: var(--el-fill-color-extra-light);
   gap: 0 16px;
   margin-bottom: 12px;
 

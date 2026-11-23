@@ -1,4 +1,5 @@
 export interface RaDeptQuery extends PageQuery {
+  hideEmptyEmployeeOther?: boolean;
   name?: string;
 }
 

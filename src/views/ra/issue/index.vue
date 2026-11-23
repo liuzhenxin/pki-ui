@@ -10,6 +10,9 @@
         <el-form-item label="关键字" prop="keyword">
           <el-input v-model="queryParams.keyword" clearable placeholder="用户、部门、序列号或主题" class="keyword-input" @keyup.enter="handleQuery" />
         </el-form-item>
+        <el-form-item label="用户信息" prop="userInfo">
+          <el-input v-model="queryParams.userInfo" clearable placeholder="用户名、域账号或部门" class="keyword-input" @keyup.enter="handleQuery" />
+        </el-form-item>
         <el-form-item class="query-actions">
           <el-button type="primary" icon="Search" @click="handleQuery">搜索</el-button>
           <el-button icon="RefreshLeft" @click="resetQuery">重置</el-button>
@@ -38,10 +41,12 @@
           </div>
         </template>
       </el-table-column>
-      <el-table-column label="申请用户" prop="userName" min-width="140" show-overflow-tooltip />
+      <el-table-column label="申请用户" prop="userName" min-width="140" show-overflow-tooltip>
+        <template #default="{ row }">{{ row.userName || '-' }}</template>
+      </el-table-column>
       <el-table-column label="所属部门" prop="deptName" min-width="140" show-overflow-tooltip />
       <el-table-column label="原证书序列号" prop="serialNumber" min-width="170" show-overflow-tooltip />
-      <el-table-column label="证书主题" prop="subject" min-width="220" show-overflow-tooltip />
+      <el-table-column label="证书主题" prop="subject" min-width="220" :formatter="formatCertificateSubjectColumn" show-overflow-tooltip />
       <el-table-column label="证书模板" prop="profileName" min-width="150" show-overflow-tooltip />
       <el-table-column label="申请原因" prop="reason" min-width="160" show-overflow-tooltip />
       <el-table-column label="审核完成时间" prop="submitTime" width="170" align="center">
@@ -105,6 +110,7 @@
               </div>
               <el-descriptions :column="1" border size="small" class="issue-descriptions">
                 <el-descriptions-item label="申请用户">{{ current.userName || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="域账号">{{ current.domainAccount || '-' }}</el-descriptions-item>
                 <el-descriptions-item label="所属部门">{{ current.deptName || '-' }}</el-descriptions-item>
                 <el-descriptions-item label="业务类型">{{ current.businessTypeName || '-' }}</el-descriptions-item>
                 <el-descriptions-item label="业务编号">{{ current.businessId || '-' }}</el-descriptions-item>
@@ -155,25 +161,29 @@
                   <el-radio-button v-for="size in kmcKeySizes" :key="size" :value="size">RSA {{ size }}</el-radio-button>
                 </el-radio-group>
               </el-form-item>
-              <div v-if="showIssueValidity" class="issue-info-grid">
+              <div v-if="showIssueValidity" class="issue-info-grid issue-validity-grid">
                 <el-form-item label="生效时间">
                   <el-date-picker
                     v-model="issueForm.notBefore"
                     type="datetime"
                     placeholder="留空为签发时生效"
                     :disabled-date="disablePastIssueDate"
+                    @change="applyDefaultIssueDuration()"
                   />
                 </el-form-item>
                 <el-form-item label="有效期" :error="issueValidityPreview.error">
                   <div class="issue-validity-input">
-                    <el-input-number v-model="issueForm.validityAmount" :min="1" :controls="false" placeholder="按模板默认" />
-                    <el-select v-model="issueForm.validityUnit" aria-label="有效期单位">
+                    <el-input-number v-model="issueForm.validityAmount" :min="1" :controls="false" placeholder="按模板默认" @change="customIssueDuration = true" />
+                    <el-select v-model="issueForm.validityUnit" aria-label="有效期单位" @change="customIssueDuration = true">
                       <el-option v-for="unit in issueValidityUnits" :key="unit.value" :value="unit.value" :label="unit.label" />
                     </el-select>
                   </div>
                 </el-form-item>
-                <el-form-item label="模板有效期上限">
+                <el-form-item label="模板有效期上限" class="issue-validity-limit">
                   <span>{{ issueValidityLimits.map(formatProfileValidity).join(' / ') }}</span>
+                </el-form-item>
+                <el-form-item v-if="current.issuerNotAfter" label="签发 CA 到期">
+                  <span>{{ parseTime(new Date(current.issuerNotAfter)) }}</span>
                 </el-form-item>
                 <el-form-item v-if="issueValidityPreview.expiry" label="到期时间">
                   <span>{{ issueValidityPreview.expiry.toLocaleString('zh-CN', { hour12: false }) }}</span>
@@ -238,7 +248,7 @@
                   </el-form-item>
                 </template>
                 <el-descriptions v-else :column="1" border size="small" class="issue-descriptions">
-                  <el-descriptions-item label="证书主题">{{ current.subject || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="证书主题">{{ formatCertificateSubject(csrSubject) }}</el-descriptions-item>
                 </el-descriptions>
               </div>
 
@@ -453,7 +463,9 @@
       <el-descriptions :column="2" border class="result-section">
         <el-descriptions-item label="证书ID">{{ issueResult.certId || '-' }}</el-descriptions-item>
         <el-descriptions-item label="序列号">{{ issueResult.serialNumber || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="证书主题" :span="2">{{ issueResult.subject || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="证书主题" :span="2">{{ formatCertificateSubject(issueResult.subject) }}</el-descriptions-item>
+        <el-descriptions-item label="生效时间">{{ issuedDates.notBefore || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="到期时间">{{ issuedDates.notAfter || '-' }}</el-descriptions-item>
       </el-descriptions>
       <div v-if="issueResult.storageType === 'USB_KEY' || issueResult.encStorageType === 'USB_KEY'" class="renewal-result-storage">
         <el-alert :title="`${issueResultLabel}证书已写入 USBKey`" type="success" show-icon :closable="false" />
@@ -495,15 +507,16 @@
       <div class="result-actions">
         <el-button icon="CopyDocument" @click="copyCert(issueResult.cert)">复制证书</el-button>
         <el-dropdown v-if="issueResult.cert" trigger="click"
-          @command="(format) => downloadResultCertificate(issueResult.cert, issueResult.serialNumber || 'ra-cert', format)">
+          @command="(format) => downloadResultCertificate(issueResult.certId, issueResult.cert, issueResult.serialNumber || 'ra-cert', format)">
           <el-button type="primary" icon="Download">下载证书 <el-icon class="el-icon--right"><ArrowDown /></el-icon></el-button>
           <template #dropdown>
             <el-dropdown-menu>
               <el-dropdown-item v-for="item in resultDownloadFormats" :key="item.format" :command="item.format">{{ item.label }}</el-dropdown-item>
+              <el-dropdown-item v-if="issueResult.certId" command="pfx" divided>PFX 证书包</el-dropdown-item>
             </el-dropdown-menu>
           </template>
         </el-dropdown>
-        <el-button v-if="canSyncIntranet" type="warning" plain icon="DocumentAdd" @click="openIntranetCertLedger(issueResult)">同步到内网证书管理</el-button>
+        <el-button v-if="canSyncIntranet" type="warning" plain icon="DocumentAdd" @click="openIntranetCertLedger(issueResult)">同步到证书管理</el-button>
         <el-button v-if="issueResult.certificateChain" icon="Download" @click="downloadCertPem(issueResult.certificateChain, 'certificate-chain')">
           下载证书链
         </el-button>
@@ -521,7 +534,7 @@
         <div class="encryption-actions">
           <el-button icon="CopyDocument" @click="copyCert(issueResult.encCert)">复制加密证书</el-button>
           <el-dropdown trigger="click"
-            @command="(format) => downloadResultCertificate(issueResult.encCert, issueResult.encSerialNumber || 'enc-cert', format)">
+            @command="(format) => downloadResultCertificate(issueResult.encCertId, issueResult.encCert, issueResult.encSerialNumber || 'enc-cert', format)">
             <el-button type="primary" icon="Download">下载加密证书 <el-icon class="el-icon--right"><ArrowDown /></el-icon></el-button>
             <template #dropdown>
               <el-dropdown-menu>
@@ -540,14 +553,40 @@
       </template>
     </el-dialog>
 
+    <el-dialog v-model="pfxOpen" title="下载 PFX 证书包" width="600px" append-to-body
+      :close-on-click-modal="false" :close-on-press-escape="!pfxPending" :show-close="!pfxPending" @closed="clearPfx">
+      <el-form label-width="112px" @submit.prevent>
+        <el-form-item label="私钥">
+          <el-input v-model="pfxForm.privateKey" type="textarea" :rows="6" placeholder="粘贴 PEM 格式私钥"
+            autocomplete="off" :disabled="pfxPending" @input="pfxVerified = false" />
+          <input ref="pfxKeyFileInput" type="file" accept=".key,.pem" hidden @change="loadPfxKeyFile" />
+          <el-button link type="primary" :disabled="pfxPending" @click="pfxKeyFileInput?.click()">选择私钥文件</el-button>
+        </el-form-item>
+        <el-form-item label="私钥密码">
+          <el-input v-model="pfxForm.keyPassword" type="password" show-password placeholder="加密私钥请填写"
+            autocomplete="off" :disabled="pfxPending" @input="pfxVerified = false" />
+        </el-form-item>
+        <el-form-item v-if="pfxVerified" label="PFX 密码">
+          <el-input v-model="pfxForm.password" type="password" show-password placeholder="可以留空"
+            autocomplete="new-password" :disabled="pfxPending" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button :disabled="pfxPending" @click="pfxOpen = false">取消</el-button>
+        <el-button type="primary" :loading="pfxPending" :disabled="!pfxForm.privateKey.trim()"
+          @click="submitPfx">{{ pfxVerified ? '下载 PFX' : '验证私钥' }}</el-button>
+      </template>
+    </el-dialog>
+
     <el-dialog v-model="detailOpen" title="待签发详情" width="720px" append-to-body>
       <el-descriptions :column="1" border>
         <el-descriptions-item label="业务类型">{{ detail.businessTypeName || '-' }}</el-descriptions-item>
         <el-descriptions-item label="业务编号">{{ detail.businessId || '-' }}</el-descriptions-item>
         <el-descriptions-item label="申请用户">{{ detail.userName || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="域账号">{{ detail.domainAccount || '-' }}</el-descriptions-item>
         <el-descriptions-item label="所属部门">{{ detail.deptName || '-' }}</el-descriptions-item>
         <el-descriptions-item label="原证书序列号">{{ detail.serialNumber || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="证书主题">{{ detail.subject || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="证书主题">{{ formatCertificateSubject(detail.subject) }}</el-descriptions-item>
         <el-descriptions-item label="根证书">{{ detail.rootName || detail.rootId || '-' }}</el-descriptions-item>
         <el-descriptions-item label="证书模板">{{ detail.profileName || '-' }}</el-descriptions-item>
         <el-descriptions-item label="申请原因">{{ detail.reason || '-' }}</el-descriptions-item>
@@ -560,6 +599,7 @@
 </template>
 
 <script setup name="RaCertIssue" lang="ts">
+import { formatCertificateSubject, formatCertificateSubjectColumn } from '@/utils/raCertificateSubject';
 import CertRowAction from '../components/CertRowAction.vue';
 import { useRaListRefreshOnReturn } from '@/hooks/useRaListRefreshOnReturn';
 import { ElMessage, FormInstance, FormRules } from 'element-plus';
@@ -567,6 +607,8 @@ import RaIssueNotificationButton from './RaIssueNotificationButton.vue';
 import {
   confirmRaRenewalDistribution,
   executeRaCert,
+  downloadRaIssuedChain,
+  packageRaIssuedPfx,
   getRaCertIssue,
   issueRaCert,
   pageRaCertIssue,
@@ -579,13 +621,15 @@ import CertSubject, { type SubjectItem } from '@/components/CertSubject/index.vu
 import { formatProfileValidity } from '@/utils/ca/profile-validity';
 import { parseJson } from '@/utils/json';
 import { resolveTemplateUsages } from '@/utils/raCertUsage';
-import { buildIssueSubjectItems, formatIssueSubject } from '@/utils/raIssueSubject';
-import { issueValidityUnits, resolveIssueValidity, type IssueValidityUnit } from '@/utils/raIssueValidity';
+import { buildIssueSubjectItems, formatIssueSubject, readIssueCsrSubject } from '@/utils/raIssueSubject';
+import { defaultIssueDuration, issueValidityUnits, resolveIssueValidity, type IssueValidityUnit } from '@/utils/raIssueValidity';
 import { rsaKmcKeyRequest, rsaKmcKeySizes } from '@/utils/raKmcKeyRequest';
 import SKFClient from '@/api/skf/skf_api';
 import auth from '@/plugins/auth';
 import { intranetCertSyncLocation } from '@/utils/raIntranetCertNavigation';
-import { issuedCertificateBlob, type IssuedCertificateFormat } from '@/utils/raCertificateDownload';
+import { certificateDownloadBlob, issuedCertificateBlob, type IssuedCertificateFormat } from '@/utils/raCertificateDownload';
+
+import { X509 } from 'jsrsasign';
 
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
 const router = useRouter();
@@ -783,7 +827,8 @@ const queryParams = reactive({
   pageNum: 1,
   pageSize: 10,
   businessType: '',
-  keyword: ''
+  keyword: '',
+  userInfo: ''
 });
 
 const issueForm = reactive({
@@ -806,7 +851,17 @@ const issueForm = reactive({
 });
 
 const kmcKeySizes = computed(() => rsaKmcKeySizes(current.value.profileConf));
-const showIssueValidity = computed(() => current.value.businessType === 'cert_apply' && issueForm.issueType !== 'csr');
+const issueOpenedAt = ref(new Date());
+const customIssueDuration = ref(false);
+const showIssueValidity = computed(() => current.value.businessType === 'cert_apply');
+const csrSubject = computed(() => {
+  if (!issueForm.csr.trim()) return '';
+  try {
+    return readIssueCsrSubject(issueForm.csr);
+  } catch {
+    return '';
+  }
+});
 const issueValidityLimits = computed(() => {
   const primary = parseJson(current.value.profileConf || '{}')?.validity;
   return dualCertInfo.value?.certMode === 'dual' ? [primary, current.value.encryptionProfileValidity] : [primary];
@@ -820,9 +875,31 @@ const issueValidityPreview = computed(() => {
 });
 
 function getIssueValidity(): ReturnType<typeof resolveIssueValidity> {
-  return showIssueValidity.value
-    ? resolveIssueValidity(issueForm.notBefore, issueForm.validityAmount, issueForm.validityUnit, issueValidityLimits.value)
-    : {};
+  if (!showIssueValidity.value) return {};
+  const start = issueForm.notBefore;
+  const result = resolveIssueValidity(start, issueForm.validityAmount, issueForm.validityUnit, issueValidityLimits.value, issueOpenedAt.value);
+  if (start && current.value.issuerNotAfter) {
+    const caExpiry = Date.parse(current.value.issuerNotAfter);
+    if (start.getTime() >= caExpiry || (result.expiry && result.expiry.getTime() > caExpiry)) {
+      throw new Error('证书有效期不能超过签发 CA 的到期时间');
+    }
+  }
+  return result;
+}
+
+function applyDefaultIssueDuration(start = issueForm.notBefore) {
+  if (customIssueDuration.value || !start) return;
+  const maximum = defaultIssueDuration(start, issueValidityLimits.value, current.value.issuerNotAfter);
+  issueForm.validityAmount = maximum?.value;
+  if (maximum) issueForm.validityUnit = maximum.unit;
+}
+
+function issueValidityRequest(validity: ReturnType<typeof getIssueValidity>) {
+  if (showIssueValidity.value && issueForm.notBefore && issueForm.notBefore.getTime() <= Date.now()) {
+    applyDefaultIssueDuration(new Date());
+    return { startAtIssuance: true, validityAmount: issueForm.validityAmount, validityUnit: issueForm.validityUnit };
+  }
+  return { notBefore: validity.notBefore, notAfter: validity.notAfter };
 }
 
 function disablePastIssueDate(value: Date) {
@@ -842,7 +919,12 @@ const rules: FormRules = {
           callback(new Error('CSR不能为空'));
           return;
         }
-        callback();
+        try {
+          readIssueCsrSubject(value);
+          callback();
+        } catch {
+          callback(new Error('CSR 格式不正确'));
+        }
       },
       trigger: 'blur'
     }
@@ -899,7 +981,8 @@ async function getList() {
       pageNum: queryParams.pageNum,
       pageSize: queryParams.pageSize,
       businessType: queryParams.businessType || undefined,
-      keyword: queryParams.keyword || undefined
+      keyword: queryParams.keyword || undefined,
+      userInfo: queryParams.userInfo || undefined
     });
     if (version !== listVersion) return;
     const page = parsePage(res);
@@ -919,6 +1002,7 @@ function resetQuery() {
   queryFormRef.value?.resetFields();
   queryParams.businessType = '';
   queryParams.keyword = '';
+  queryParams.userInfo = '';
   handleQuery();
 }
 
@@ -1005,6 +1089,12 @@ async function handleIssue(row: RaCertIssue) {
     }
   }
   resetIssueForm();
+  issueOpenedAt.value = new Date();
+  if (showIssueValidity.value) {
+    issueForm.notBefore = issueOpenedAt.value;
+    customIssueDuration.value = false;
+    applyDefaultIssueDuration();
+  }
   issueForm.kmcKeySize = kmcKeySizes.value[0] || 2048;
   issueForm.csr = current.value.csr || '';
   issueForm.subject = current.value.subject || '';
@@ -1325,8 +1415,7 @@ function submitIssue() {
         issueType: issueForm.issueType,
         csr: csr || undefined,
         subject: subject || undefined,
-        notBefore: validity.notBefore,
-        notAfter: validity.notAfter,
+        ...issueValidityRequest(validity),
         extensions: buildIssueExtensionsPayload(),
         fileFormat: issueForm.issueType === 'file' ? issueForm.fileFormat : undefined,
         filePassword: issueForm.issueType === 'file' ? issueForm.filePassword : undefined,
@@ -1503,7 +1592,7 @@ async function handleIssueTypeChange(value: string | number | boolean) {
 
 function resolveIssueSubject() {
   if (issueForm.issueType === 'csr' && !isRsaKmcEncryption.value) {
-    return issueForm.subject || undefined;
+    return undefined;
   }
   if (issueForm.subjectItems.length === 0) {
     return issueForm.subject;
@@ -1897,19 +1986,108 @@ async function copyCert(cert?: string) {
 const resultDownloadFormats: { format: IssuedCertificateFormat; label: string }[] = [
   { format: 'pem', label: 'PEM 证书' },
   { format: 'cer', label: 'CER 证书（DER）' },
+  { format: 'der', label: 'DER 证书' },
   { format: 'crt', label: 'CRT 证书（PEM）' },
   { format: 'p7b', label: 'P7B 证书包' }
 ];
 
-async function downloadResultCertificate(certPem: string | undefined, fileName: string, format: IssuedCertificateFormat) {
+const pfxOpen = ref(false);
+const pfxPending = ref(false);
+const pfxKeyFileInput = ref<HTMLInputElement>();
+const pfxVerified = ref(false);
+const pfxForm = reactive({ privateKey: '', keyPassword: '', password: '' });
+
+async function loadPfxKeyFile(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = '';
+  if (!file) return;
+  try {
+    const pem = await file.text();
+    if (!pfxOpen.value) return;
+    pfxForm.privateKey = pem;
+    pfxVerified.value = false;
+  } catch {
+    ElMessage.error('无法读取私钥文件');
+  }
+}
+
+function clearPfx() {
+  pfxForm.privateKey = '';
+  pfxForm.keyPassword = '';
+  pfxForm.password = '';
+  pfxVerified.value = false;
+}
+
+async function submitPfx() {
+  const certId = issueResult.value.certId;
+  if (!certId || pfxPending.value) return;
+  const verifyOnly = !pfxVerified.value;
+  pfxPending.value = true;
+  try {
+    const response = await packageRaIssuedPfx(certId, pfxForm, verifyOnly);
+    if (verifyOnly) {
+      pfxVerified.value = true;
+      ElMessage.success('私钥与证书匹配');
+    } else {
+      const blob = await certificateDownloadBlob(response, 'application/x-pkcs12', 'RA_CERT_DOWNLOAD_');
+      saveResultDownload(blob, `${issueResult.value.serialNumber || 'ra-cert'}.pfx`);
+      clearPfx();
+      pfxOpen.value = false;
+    }
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : verifyOnly ? '私钥验证失败' : 'PFX 下载失败');
+  } finally {
+    pfxPending.value = false;
+  }
+}
+
+async function downloadResultCertificate(
+  certId: string | number | undefined, certPem: string | undefined, fileName: string, format: IssuedCertificateFormat | 'pfx'
+) {
+  if (format === 'pfx') {
+    clearPfx();
+    pfxOpen.value = true;
+    return;
+  }
   if (!certPem) return;
   try {
-    const blob = await issuedCertificateBlob(certPem, format, issueResult.value.certificateChain);
+    let blob: Blob;
+    if (format === 'p7b') {
+      if (!certId) throw new Error('缺少证书 ID，无法取得完整证书链');
+      const response = await downloadRaIssuedChain(certId);
+      blob = await certificateDownloadBlob(response, 'application/x-pkcs7-certificates', 'RA_CERT_DOWNLOAD_');
+    } else {
+      blob = await issuedCertificateBlob(certPem, format);
+    }
     saveResultDownload(blob, `${fileName}.${format}`);
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '证书下载失败');
   }
 }
+
+function displayIssuedDate(value: string) {
+  const time = /^(?:(\d{4})|(\d{2}))(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})Z$/.exec(value);
+  if (!time) return value;
+  const [, fullYear, shortYear, month, day, hour, minute, second] = time;
+  const year = fullYear || (Number(shortYear) < 50 ? `20${shortYear}` : `19${shortYear}`);
+  return parseTime(new Date(`${year}-${month}-${day}T${hour}:${minute}:${second}Z`));
+}
+
+const issuedDates = computed(() => {
+  if (!issueResult.value.cert) return {};
+  try {
+    const cert = new X509() as unknown as {
+      readCertPEM(pem: string): void;
+      getNotBefore(): string;
+      getNotAfter(): string;
+    };
+    cert.readCertPEM(issueResult.value.cert);
+    return { notBefore: displayIssuedDate(cert.getNotBefore()), notAfter: displayIssuedDate(cert.getNotAfter()) };
+  } catch {
+    return {};
+  }
+});
 
 function openIntranetCertLedger(result: Partial<RaCertIssueResult>) {
   if (!result.certId && !result.serialNumber) {
@@ -2533,6 +2711,10 @@ useRaListRefreshOnReturn(getList);
 :global(.cert-issue-dialog .subject-section),
 :global(.cert-issue-dialog .extension-section) {
   grid-column: 1 / -1;
+}
+
+:global(.cert-issue-dialog .issue-validity-grid .issue-validity-limit .el-form-item__label) {
+  white-space: nowrap;
 }
 
 .issue-validity-input {

@@ -48,7 +48,7 @@
         </el-form>
 
         <el-row :gutter="10" class="mb8">
-          <el-col :span="1.5">
+          <el-col v-if="!fromDepartmentList" :span="1.5">
             <el-button type="primary" plain icon="Plus" @click="handleAdd">新增</el-button>
           </el-col>
           <el-col :span="1.5">
@@ -63,7 +63,9 @@
         <el-table v-loading="loading" :data="userList" @selection-change="handleSelectionChange">
           <el-table-column type="selection" width="50" align="center" :selectable="canManageUser" />
           <el-table-column label="用户编号" align="center" key="id" prop="id" v-if="columns[0].visible" width="110" />
-          <el-table-column label="用户名称" align="center" key="username" prop="username" v-if="columns[1].visible" show-overflow-tooltip />
+          <el-table-column label="用户名称" align="center" key="username" prop="displayName" v-if="columns[1].visible" show-overflow-tooltip>
+            <template #default="{ row }">{{ row.displayName || row.username || '-' }}</template>
+          </el-table-column>
           <el-table-column label="邮箱" align="center" key="mail" prop="mail" v-if="columns[2].visible" show-overflow-tooltip />
           <el-table-column label="手机号码" align="center" key="mobile" prop="mobile" v-if="columns[3].visible" width="130" />
           <el-table-column label="用户类别" align="center" key="userCategory" v-if="columns[4].visible" width="110">
@@ -114,7 +116,8 @@
         <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item label="用户名称" prop="username">
-              <el-input v-model="form.username" placeholder="请输入用户名称" maxlength="30" :disabled="form.id !== undefined" />
+              <el-input v-if="form.id !== undefined" :model-value="editDisplayName || form.username" disabled />
+              <el-input v-else v-model="form.username" placeholder="请输入用户名称" maxlength="30" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
@@ -178,7 +181,7 @@
 
     <el-dialog v-model="detailOpen" title="申请用户详情" width="min(520px, 96vw)" append-to-body>
       <el-descriptions :column="1" border>
-        <el-descriptions-item label="用户名称">{{ detail.username || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="用户名称">{{ detail.displayName || detail.username || '-' }}</el-descriptions-item>
         <el-descriptions-item label="用户类别">{{ userCategoryLabel(detail.userCategory) }}</el-descriptions-item>
         <el-descriptions-item label="手机号码">{{ detail.mobile || '-' }}</el-descriptions-item>
         <el-descriptions-item label="邮箱">{{ detail.mail || '-' }}</el-descriptions-item>
@@ -207,6 +210,8 @@ const { proxy } = getCurrentInstance() as ComponentInternalInstance;
 const { sys_common_status } = toRefs<any>(proxy!.useDict('sys_common_status'));
 const route = useRoute();
 const router = useRouter();
+const editDisplayName = ref('');
+const fromDepartmentList = computed(() => route.meta.fawvwApplicantDirectory === true && route.query.from === 'departments');
 const canViewEmployee = computed(() => auth.hasPermi('ra:employee') && router.getRoutes().some((item) => item.path === employeeDirectoryPath));
 
 const ALL_DEPT_ID = '__ALL__';
@@ -417,6 +422,7 @@ function cancel() {
 }
 
 async function handleAdd() {
+  if (fromDepartmentList.value) return;
   reset();
   await loadDeptOptions();
   if (raDepartmentIsWritable(deptOptions.value, queryParams.value.deptId)) {
@@ -431,7 +437,8 @@ async function handleUpdate(row?: any) {
   await loadDeptOptions();
   const userId = row?.id || ids.value[0];
   const response = await getUser(userId);
-  const userData = response.data as any;
+  const { displayName, ...userData } = response.data as UserForm & { displayName?: string };
+  editDisplayName.value = displayName || '';
   form.value = {
     ...userData,
     deptId: normalizeDeptId(userData.deptId),
@@ -445,7 +452,7 @@ async function handleUpdate(row?: any) {
 
 function submitForm() {
   userFormRef.value?.validate(async (valid: boolean) => {
-    if (!valid) {
+    if (!valid || (form.value.id === undefined && fromDepartmentList.value)) {
       return;
     }
     normalizeUserForm();
@@ -479,7 +486,7 @@ function handleStatusChange(row: any, newStatus: number) {
   }
   const text = newStatus === 0 ? '启用' : '停用';
   proxy?.$modal
-    .confirm('确认要"' + text + '" "' + row.username + '"用户吗?')
+    .confirm('确认要"' + text + '" "' + (row.displayName || row.username) + '"用户吗?')
     .then(() => changeStatus(row.id, newStatus))
     .then(() => {
       proxy?.$modal.msgSuccess(text + '成功');
@@ -491,7 +498,7 @@ function handleStatusChange(row: any, newStatus: number) {
 
 function handleResetPwd(row: any) {
   proxy
-    ?.$prompt('请输入"' + row.username + '"的新密码', '提示', {
+    ?.$prompt('请输入"' + (row.displayName || row.username) + '"的新密码', '提示', {
       confirmButtonText: '确定',
       cancelButtonText: '取消',
       closeOnClickModal: false,

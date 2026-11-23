@@ -48,7 +48,21 @@
                   </el-select>
                 </el-form-item>
               </el-col>
-              <el-col :xs="24" :lg="16">
+              <el-col :xs="24" :sm="12" :lg="8">
+                <el-form-item label="密钥长度" required>
+                  <el-select v-model="form.rsaKeySize" placeholder="请选择密钥长度" style="width: 100%" :disabled="!selectedProfile || creating">
+                    <el-option v-for="size in rsaKeySizes" :key="size" :label="`${size} 位`" :value="size"
+                      :disabled="!supportedRsaKeySizes.includes(size)" />
+                  </el-select>
+                </el-form-item>
+              </el-col>
+              <el-col :xs="24" :sm="12" :lg="8">
+                <el-form-item label="PFX 密码">
+                  <el-button icon="Setting" :disabled="creating || loadingPasswordDefault" @click="openPasswordRule">密码规则</el-button>
+                  <span class="pfx-rule-summary">{{ passwordRuleSummary }}</span>
+                </el-form-item>
+              </el-col>
+              <el-col :xs="24" :lg="8">
                 <el-form-item label="制作说明">
                   <el-input v-model="form.remark" clearable placeholder="选填" />
                 </el-form-item>
@@ -112,7 +126,7 @@
             <el-button
               type="success"
               icon="Finished"
-              :disabled="!canCreateTask"
+              :disabled="!canCreateTask || loadingPasswordDefault"
               :loading="creating"
               @click="createTask"
             >
@@ -133,9 +147,12 @@
                 }}</el-tag>
               </template>
             </el-table-column>
-            <el-table-column label="公钥" width="90" align="center" fixed="right">
+            <el-table-column label="公钥" width="108" align="center" fixed="right">
               <template #default="{ row }">
-                <CertRowAction label="管理公钥" icon="Key" @click="openKeys(row)" />
+                <CertRowAction label="查看公钥与选择证书" icon="Key" :disabled="creating" @click="openKeys(row)" />
+                <el-tag v-if="productionChoices[String(row.id)]" size="small" type="info">
+                  {{ productionChoices[String(row.id)]?.mode === 'NEW' ? '新办' : '已指定' }}
+                </el-tag>
               </template>
             </el-table-column>
           </el-table>
@@ -168,7 +185,10 @@
             </el-table-column>
             <el-table-column label="任务状态" width="120" align="center">
               <template #default="{ row }">
-                <el-tag :type="taskStatusType(row.taskStatus)" effect="plain">{{ row.taskStatusName || row.taskStatus }}</el-tag>
+                <el-tag v-if="taskIssueStatus(row.taskStatus)" :type="issueStatusType(taskIssueStatus(row.taskStatus))" effect="plain">
+                  {{ issueStatusLabel(taskIssueStatus(row.taskStatus)) }}
+                </el-tag>
+                <span v-else>-</span>
               </template>
             </el-table-column>
             <el-table-column label="创建时间" width="166" align="center">
@@ -200,7 +220,26 @@
       </el-tab-pane>
     </el-tabs>
 
-    <DistributionDialog ref="distributionDialog" @submitted="onDistributionSubmitted" />
+    <el-dialog v-model="passwordRuleOpen" title="PFX 密码规则" width="min(460px, 96vw)" append-to-body>
+      <el-form label-width="88px">
+        <el-form-item label="密码长度">
+          <el-input-number v-model="passwordRuleDraft.length" :min="6" :max="12" :precision="0" />
+        </el-form-item>
+        <el-form-item label="字符类型">
+          <el-checkbox v-model="passwordRuleDraft.uppercase">大写字母</el-checkbox>
+          <el-checkbox v-model="passwordRuleDraft.lowercase">小写字母</el-checkbox>
+          <el-checkbox v-model="passwordRuleDraft.digits">数字</el-checkbox>
+          <el-checkbox v-model="passwordRuleDraft.symbols">特殊字符</el-checkbox>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button :loading="savingPasswordDefault" :disabled="!validPasswordRule" @click="setDefaultPasswordRule">设为默认</el-button>
+        <el-button @click="passwordRuleOpen = false">取消</el-button>
+        <el-button type="primary" :disabled="!validPasswordRule || savingPasswordDefault" @click="savePasswordRule">仅本次使用</el-button>
+      </template>
+    </el-dialog>
+
+    <DistributionDialog ref="distributionDialog" @submitted="onFallbackDistributionSubmitted" />
     <el-drawer v-model="taskOpen" title="制作任务详情" size="min(1060px, 96vw)" append-to-body>
       <el-descriptions :column="2" border class="mb12">
         <el-descriptions-item label="任务号">{{ taskDetail.task?.taskNo || '-' }}</el-descriptions-item>
@@ -208,7 +247,14 @@
         <el-descriptions-item label="颁发 CA">{{ taskCaName(taskDetail.task?.rootId) }}</el-descriptions-item>
         <el-descriptions-item label="签发模板">{{ taskDetail.task?.profileNameSnapshot || '-' }}</el-descriptions-item>
         <el-descriptions-item label="有效期">{{ taskDetail.task?.validityYears ? `${taskDetail.task.validityYears} 年` : '按 CA 模板' }}</el-descriptions-item>
-        <el-descriptions-item label="任务状态">{{ taskDetail.task?.taskStatusName || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="PFX 密码规则">{{ describePasswordRule(taskDetail.task?.pfxPasswordRule) }}</el-descriptions-item>
+        <el-descriptions-item label="密钥长度">{{ taskDetail.task?.rsaKeySize ? `${taskDetail.task.rsaKeySize} 位` : '原任务规格' }}</el-descriptions-item>
+        <el-descriptions-item label="任务状态">
+          <el-tag v-if="detailIssueStatus" :type="issueStatusType(detailIssueStatus)" effect="plain">
+            {{ issueStatusLabel(detailIssueStatus) }}
+          </el-tag>
+          <span v-else>-</span>
+        </el-descriptions-item>
         <el-descriptions-item label="人数">{{ taskDetail.task?.successCount || 0 }}/{{ taskDetail.task?.totalCount || 0 }}</el-descriptions-item>
       </el-descriptions>
       <div class="selection-summary">
@@ -218,12 +264,23 @@
       </div>
       <el-table :key="taskDetail.task?.taskNo" ref="issueTable" :data="taskDetail.certs || []" :row-key="(row) => String(row.id)" border stripe
         @selection-change="issueSelection = $event">
-        <el-table-column type="selection" width="48" fixed :selectable="canIssueCert" reserve-selection />
+        <el-table-column type="selection" width="48" fixed :selectable="canSelectTaskCert" reserve-selection />
         <el-table-column label="姓名" prop="employeeName" width="110" />
         <el-table-column label="域账号" prop="domainAccount" width="120" />
-        <el-table-column label="序列号" prop="serialNumber" min-width="170" show-overflow-tooltip />
-        <el-table-column label="签发状态" width="100">
-          <template #default="{ row }">{{ issueStatusLabel(row.issueStatus) }}</template>
+        <el-table-column label="办理类型" width="104">
+          <template #default="{ row }">{{ productionTypeLabel(row) }}</template>
+        </el-table-column>
+        <el-table-column label="序列号" prop="serialNumber" min-width="220" show-overflow-tooltip>
+          <template #default="{ row }">
+            <div>{{ row.serialNumber || '-' }}</div>
+            <div v-for="original in row.originalSerialNumbers" :key="original" class="original-serial">旧证书序列号：{{ original }}</div>
+          </template>
+        </el-table-column>
+        <el-table-column label="签发状态" prop="issueStatus" width="118" align="center" sortable
+          :sort-method="compareIssueStatus" :sort-orders="['ascending', 'descending', null]">
+          <template #default="{ row }">
+            <el-tag :type="issueStatusType(row.issueStatus)" effect="plain">{{ issueStatusLabel(row.issueStatus) }}</el-tag>
+          </template>
         </el-table-column>
         <el-table-column label="签发记录" width="100">
           <template #default="{ row }">
@@ -231,12 +288,6 @@
           </template>
         </el-table-column>
         <el-table-column label="签发说明" prop="issueMessage" min-width="220" show-overflow-tooltip />
-        <el-table-column label="分发状态" width="100" align="center">
-          <template #default="{ row }">
-            <el-tag :type="row.distributionStatus === 'SENT' ? 'success' : 'warning'" effect="plain">{{ row.distributionStatusName }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="分发说明" prop="distributionMessage" min-width="220" show-overflow-tooltip />
         <el-table-column label="邮件" width="96" align="center">
           <template #default="{ row }"><ChannelStatus :status="row.emailStatus" /></template>
         </el-table-column>
@@ -244,12 +295,13 @@
           <template #default="{ row }"><ChannelStatus :status="row.dingtalkStatus" :blocked="row.emailStatus === 'FAILED'" /></template>
         </el-table-column>
       </el-table>
-      <template v-if="taskDetail.task && taskDetail.task.successCount > 0" #footer>
+      <template v-if="taskDetail.task && taskDetail.certs?.some(cert => cert.issueStatus === 'ISSUED' && !cert.superseded)" #footer>
         <el-button
           v-hasPermi="['ra:employee-cert:distribute']"
           icon="Promotion"
+          :disabled="!(canOpenTaskLedger() ? (taskDetail.certs || []) : issueSelection).some(cert => canDistributeEmployeeCert(cert))"
           @click="distributeTask(taskDetail.task)"
-        >批量分发</el-button>
+        >分发所选</el-button>
         <el-button
           v-hasPermi="['ra:employee-cert:distribute']"
           type="primary"
@@ -270,7 +322,9 @@
           <template #default="{ row }">{{ formatDate(row.finishedAt) }}</template>
         </el-table-column>
         <el-table-column label="结果" width="100">
-          <template #default="{ row }">{{ issueStatusLabel(row.status) }}</template>
+          <template #default="{ row }">
+            <el-tag :type="issueStatusType(row.status)" effect="plain">{{ issueStatusLabel(row.status) }}</el-tag>
+          </template>
         </el-table-column>
         <el-table-column label="说明" prop="message" min-width="160" show-overflow-tooltip />
       </el-table>
@@ -305,82 +359,161 @@
       </el-table>
     </el-dialog>
 
-    <el-dialog v-model="keyOpen" title="员工公钥" width="860px" append-to-body>
+    <el-dialog v-model="keyOpen" title="员工公钥与历史证书" width="min(1180px, 96vw)" append-to-body>
       <el-descriptions :column="3" border class="mb12">
         <el-descriptions-item label="姓名">{{ currentEmployee?.cnName || '-' }}</el-descriptions-item>
         <el-descriptions-item label="域账号">{{ currentEmployee?.domainAccount || '-' }}</el-descriptions-item>
         <el-descriptions-item label="科室">{{ currentEmployee?.departmentName || '-' }}</el-descriptions-item>
       </el-descriptions>
-      <el-table v-loading="keyLoading" :data="keys" border stripe max-height="260" empty-text="暂无公钥">
-        <el-table-column label="公钥名称" prop="keyName" min-width="140" />
-        <el-table-column label="算法" prop="keyAlgorithm" width="90" />
-        <el-table-column label="来源" prop="keySource" width="110" />
-        <el-table-column label="创建时间" prop="createTime" width="166">
-          <template #default="{ row }">{{ formatDate(row.createTime) }}</template>
+      <el-alert class="mb12" type="info" :closable="false"
+        title="自动按所选 CA、模板和密钥长度选证，新平台新生成的密钥优先，同类按原签发时间从近到远。原证不足 30 天且允许续签时保留原密钥续签；没有匹配证书时新办。指定原证不可恢复时不会换证。" />
+      <el-radio-group v-model="keyChoice" class="mb12">
+        <el-radio-button value="AUTO">自动选择</el-radio-button>
+        <el-radio-button value="NEW">新办</el-radio-button>
+      </el-radio-group>
+      <el-table v-loading="keyLoading" :data="keys" border stripe max-height="400"
+        :empty-text="keyLoadFailed ? '证书查询失败' : '没有匹配的历史证书，自动选择时将新办'">
+        <el-table-column type="expand">
+          <template #default="{ row }"><el-input :model-value="row.publicKey" type="textarea" :rows="5" readonly /></template>
+        </el-table-column>
+        <el-table-column label="序列号" prop="serialNumber" min-width="135" show-overflow-tooltip />
+        <el-table-column label="主题" prop="subject" min-width="145" :formatter="formatCertificateSubjectColumn" show-overflow-tooltip />
+        <el-table-column label="公钥算法" width="100">
+          <template #default="{ row }">RSA {{ row.keySize }}</template>
+        </el-table-column>
+        <el-table-column label="来源" width="92">
+          <template #default="{ row }">{{ row.source === 'NEW' ? '新平台' : '历史证书' }}</template>
+        </el-table-column>
+        <el-table-column label="原签发时间" width="155">
+          <template #default="{ row }">{{ formatCandidateDate(row.issuedAt) }}</template>
+        </el-table-column>
+        <el-table-column label="有效期" width="155">
+          <template #default="{ row }">
+            <div>{{ formatCandidateDate(row.notBefore) }}</div>
+            <div>{{ formatCandidateDate(row.notAfter) }}</div>
+          </template>
+        </el-table-column>
+        <el-table-column label="使用原证" width="103" fixed="right" align="center">
+          <template #default="{ row }">
+            <el-button link type="primary" :disabled="keyChoice === row.id" @click="keyChoice = row.id">
+              {{ keyChoice === row.id ? '已选择' : row.renewalRequired ? '续签' : '恢复' }}
+            </el-button>
+          </template>
         </el-table-column>
       </el-table>
-      <el-divider content-position="left">新增公钥</el-divider>
-      <el-form :model="keyForm" label-width="86px">
-        <el-form-item label="名称">
-          <el-input v-model="keyForm.keyName" clearable placeholder="例如：邮件加密公钥" />
-        </el-form-item>
-        <el-form-item label="算法">
-          <el-select v-model="keyForm.keyAlgorithm" style="width: 160px">
-            <el-option label="RSA" value="RSA" />
-            <el-option label="SM2" value="SM2" />
-            <el-option label="ECC" value="ECC" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="公钥">
-          <el-input v-model="keyForm.publicKey" type="textarea" :rows="5" placeholder="只录入公钥，不展示或录入私钥" />
-        </el-form-item>
-      </el-form>
       <template #footer>
-        <el-button @click="keyOpen = false">关闭</el-button>
-        <el-button type="primary" :loading="keySaving" @click="saveKey">保存公钥</el-button>
+        <el-button @click="keyOpen = false">取消</el-button>
+        <el-button type="primary" :disabled="keyLoading" @click="saveKeyChoice">确定</el-button>
       </template>
     </el-dialog>
   </div>
 </template>
 
 <script setup name="RaEmployeeCertIssue" lang="ts">
+import { formatCertificateSubjectColumn } from '@/utils/raCertificateSubject';
 import CertRowAction from '../components/CertRowAction.vue';
 import { useRaListRefreshOnReturn } from '@/hooks/useRaListRefreshOnReturn';
 import FileSaver from 'file-saver';
+import auth from '@/plugins/auth';
 import ChannelStatus from './ChannelStatus.vue';
 import DistributionDialog from './DistributionDialog.vue';
 import { onUnmounted } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
+import { employeeCertLedgerPath } from '@/utils/fawvwEmployeeNavigation';
 import { getFawvwEmployee } from '@/api/ra/employee';
 import { isFawvwEmployeeSourceActive } from '@/utils/fawvwEmployeeStatus';
 import { templatePurpose } from '@/utils/raCertificatePurpose';
 import { certificateDownloadBlob } from '@/utils/raCertificateDownload';
 import {
   type AccountResolveResult,
+  canDistributeEmployeeCert,
   createEmployeeCertTask,
   downloadEmployeeCertAccountTemplate,
   downloadEmployeeCertTaskPackage,
   EmployeeCertEmployee,
   type EmployeeCert,
   EmployeeEmailCertProfile,
-  EmployeeCertKey,
+  type EmployeeProductionCandidate,
+  type EmployeeProductionChoice,
   EmployeeCertTask,
   EmployeeCertTaskDetail,
-  getEmployeeCertTask,
-  issueEmployeeCertTask,
+  type EmployeePfxPasswordRule,
+  getEmployeePfxPasswordDefault,
+  saveEmployeePfxPasswordDefault,
   type EmployeeDistributionSelection,
   type EmployeeMailType,
+  getEmployeeCertTask,
+  issueEmployeeCertTask,
   importEmployeeCertAccounts,
   listEmployeeEmailCertProfiles,
-  listEmployeeCertKeys,
+  listEmployeeProductionCandidates,
   pageEmployeeCertTasks,
   resolveEmployeeCertAccounts,
-  saveEmployeeEmailCertProfilePolicy,
-  saveEmployeeCertKey
+  saveEmployeeEmailCertProfilePolicy
 } from '@/api/ra/employeeCert';
 
 const activeTab = ref('create');
-const distributionDialog = ref<InstanceType<typeof DistributionDialog>>();
+const defaultPasswordRule: EmployeePfxPasswordRule = { length: 12, uppercase: true, lowercase: true, digits: true, symbols: false };
+const passwordRule = ref<EmployeePfxPasswordRule | null>(null);
+const savedPasswordRule = ref<EmployeePfxPasswordRule | null>(null);
+const loadingPasswordDefault = ref(true);
+const passwordDefaultLoadFailed = ref(false);
+const savingPasswordDefault = ref(false);
+const passwordRuleDraft = reactive({ ...defaultPasswordRule });
+const passwordRuleOpen = ref(false);
+const validPasswordRule = computed(() => Number.isInteger(passwordRuleDraft.length)
+  && passwordRuleDraft.length >= 6 && passwordRuleDraft.length <= 12
+  && (passwordRuleDraft.uppercase || passwordRuleDraft.lowercase || passwordRuleDraft.digits || passwordRuleDraft.symbols));
+
+function openPasswordRule() {
+  Object.assign(passwordRuleDraft, passwordRule.value ?? savedPasswordRule.value ?? defaultPasswordRule);
+  passwordRuleOpen.value = true;
+}
+
+function savePasswordRule() {
+  if (!validPasswordRule.value) return;
+  passwordRule.value = { ...passwordRuleDraft };
+  passwordRuleOpen.value = false;
+}
+
+async function loadDefaultPasswordRule() {
+  try {
+    const { data } = await getEmployeePfxPasswordDefault();
+    savedPasswordRule.value = data ?? null;
+    passwordDefaultLoadFailed.value = false;
+  } catch {
+    passwordDefaultLoadFailed.value = true;
+  } finally {
+    loadingPasswordDefault.value = false;
+  }
+}
+
+async function setDefaultPasswordRule() {
+  if (!validPasswordRule.value || savingPasswordDefault.value) return;
+  savingPasswordDefault.value = true;
+  try {
+    const rule = { ...passwordRuleDraft };
+    const { data } = await saveEmployeePfxPasswordDefault(rule);
+    savedPasswordRule.value = data;
+    passwordDefaultLoadFailed.value = false;
+    passwordRule.value = null;
+    passwordRuleOpen.value = false;
+    ElMessage.success('PFX 默认密码规则已保存');
+  } finally {
+    savingPasswordDefault.value = false;
+  }
+}
+
+function describePasswordRule(rule?: EmployeePfxPasswordRule | null) {
+  if (!rule) return '默认 16 位';
+  const types = [rule.uppercase && '大写字母', rule.lowercase && '小写字母', rule.digits && '数字', rule.symbols && '特殊字符'];
+  return `${rule.length} 位 · ${types.filter(Boolean).join('、')}`;
+}
+const passwordRuleSummary = computed(() => {
+  if (loadingPasswordDefault.value) return '正在读取默认规则…';
+  const rule = passwordRule.value ?? savedPasswordRule.value;
+  return !rule && passwordDefaultLoadFailed.value ? '默认规则读取失败' : describePasswordRule(rule);
+});
 const downloadingTask = ref('');
 let distributionTimer: ReturnType<typeof setTimeout> | undefined;
 let distributionVersion = 0;
@@ -390,9 +523,12 @@ const form = reactive({
   rootId: '',
   profileId: '',
   validityYears: undefined as number | undefined,
+  rsaKeySize: 2048 as number | undefined,
   remark: ''
 });
 const route = useRoute();
+const router = useRouter();
+const distributionDialog = ref<InstanceType<typeof DistributionDialog>>();
 const fileInputRef = ref<HTMLInputElement>();
 const resolving = ref(false);
 const creating = ref(false);
@@ -411,8 +547,16 @@ const eligibleCas = computed(() =>
 const profilesForCa = computed(() => eligibleProfiles.value.filter((item) => String(item.rootId) === form.rootId));
 const selectedProfile = computed(() => profilesForCa.value.find((item) => String(item.profileId) === form.profileId));
 const maxValidityYears = computed(() => selectedProfile.value?.maxValidityYears ?? 0);
+const rsaKeySizes = [2048, 4096];
+const supportedRsaKeySizes = computed(() => selectedProfile.value?.supportedRsaKeySizes ?? []);
+watch(supportedRsaKeySizes, sizes => {
+  if (!form.rsaKeySize || !sizes.includes(form.rsaKeySize)) {
+    form.rsaKeySize = !selectedProfile.value || sizes.includes(2048) ? 2048 : undefined;
+  }
+}, { flush: 'sync' });
 const canCreateTask = computed(
   () => Boolean(selectedProfile.value) && form.validityYears != null && form.validityYears >= 1 && form.validityYears <= maxValidityYears.value
+    && form.rsaKeySize != null && supportedRsaKeySizes.value.includes(form.rsaKeySize)
     && !resolving.value && !creating.value && selectedEmployees.value.length > 0
     && !missingAccounts.value.length && !blockedAccounts.value.length
 );
@@ -426,6 +570,7 @@ const taskTotal = ref(0);
 const taskQuery = reactive({ pageNum: 1, pageSize: 10, taskNo: '', certTypeCode: 'EMAIL' });
 const taskOpen = ref(false);
 const taskDetail = ref<Partial<EmployeeCertTaskDetail>>({ certs: [] });
+const detailIssueStatus = computed(() => taskIssueStatus(taskDetail.value.task?.taskStatus));
 const issuingTask = ref(false);
 const issueSelection = ref<EmployeeCert[]>([]);
 const issueTable = ref<{ clearSelection: () => void }>();
@@ -438,6 +583,17 @@ const issueStatusLabel = (status?: string) => ({
   PENDING: '待签发', READY_FOR_ISSUE: '待签发', PRECHECKED: '待签发', ISSUING: '签发中', ISSUED: '签发成功', FAILED: '签发失败'
 } as Record<string, string>)[status || ''] || status || '-';
 
+function issueStatusType(status?: string) {
+  if (status === 'ISSUED') return 'success';
+  if (status === 'FAILED') return 'danger';
+  return status === 'ISSUING' ? 'warning' : 'info';
+}
+
+function compareIssueStatus(left: EmployeeCert, right: EmployeeCert) {
+  const rank = (status?: string) => status === 'FAILED' ? -1 : status === 'ISSUED' ? 1 : 0;
+  return rank(left.issueStatus) - rank(right.issueStatus);
+}
+
 function showIssueHistory(cert: EmployeeCert) {
   historyCert.value = cert;
   issueHistoryOpen.value = true;
@@ -445,10 +601,18 @@ function showIssueHistory(cert: EmployeeCert) {
 
 const keyOpen = ref(false);
 const keyLoading = ref(false);
-const keySaving = ref(false);
+const keyLoadFailed = ref(false);
 const currentEmployee = ref<EmployeeCertEmployee>();
-const keys = ref<EmployeeCertKey[]>([]);
-const keyForm = reactive({ keyName: '', keyAlgorithm: 'RSA', publicKey: '' });
+const keys = ref<EmployeeProductionCandidate[]>([]);
+const keyChoice = ref('AUTO');
+const productionChoices = ref<Record<string, EmployeeProductionChoice>>({});
+let keyRequestId = 0;
+
+watch([() => form.rootId, () => form.profileId, () => form.rsaKeySize], () => {
+  productionChoices.value = {};
+  keyOpen.value = false;
+  keyRequestId++;
+}, { flush: 'sync' });
 
 function unwrapData<T>(res: any): T {
   const body = res?.data ?? res;
@@ -457,6 +621,9 @@ function unwrapData<T>(res: any): T {
 
 function clearRoster() {
   selectedEmployees.value = [];
+  productionChoices.value = {};
+  keyOpen.value = false;
+  keyRequestId++;
   missingAccounts.value = [];
   blockedAccounts.value = [];
   rosterName.value = '';
@@ -510,7 +677,8 @@ async function downloadTemplate() {
 async function createTask() {
   const profile = selectedProfile.value;
   const validityYears = form.validityYears;
-  if (!profile || validityYears == null || !canCreateTask.value) return;
+  const rsaKeySize = form.rsaKeySize;
+  if (!profile || validityYears == null || rsaKeySize == null || !canCreateTask.value) return;
   creating.value = true;
   try {
     const detail = unwrapData<EmployeeCertTaskDetail>(
@@ -521,10 +689,18 @@ async function createTask() {
         rootId: profile.rootId,
         profileId: profile.profileId,
         validityYears,
+        rsaKeySize,
+        productionChoices: selectedEmployees.value.flatMap(item => {
+          const choice = productionChoices.value[String(item.id)];
+          return choice ? [choice] : [];
+        }),
+        pfxPasswordRule: passwordRule.value ?? savedPasswordRule.value,
         remark: form.remark
       })
     );
     ElMessage.success('员工加密证书制作任务已创建');
+    passwordRule.value = null;
+    productionChoices.value = {};
     taskDetail.value = detail;
     activeTab.value = 'tasks';
     await loadTasks();
@@ -587,14 +763,23 @@ function resetTaskQuery() {
   loadTasks();
 }
 
-function taskStatusType(status?: string) {
-  if (status === 'DISTRIBUTED' || status === 'ISSUED') {
-    return 'success';
+function taskIssueStatus(status?: string) {
+  if (status === 'DISTRIBUTED' || status === 'ISSUED') return 'ISSUED';
+  if (status === 'PARTIAL_FAILED' || status === 'FAILED') return 'FAILED';
+  return undefined;
+}
+
+function productionTypeLabel(row: EmployeeCert) {
+  switch (row.productionMode) {
+    case 'AUTO':
+      return row.originalSerialNumbers?.length ? '密钥恢复' : '自动选择';
+    case 'SELECTED':
+    case 'RECOVER':
+    case 'RENEW':
+      return '密钥恢复';
+    default:
+      return '新办';
   }
-  if (status === 'PARTIAL_FAILED' || status === 'FAILED') {
-    return 'danger';
-  }
-  return 'warning';
 }
 
 async function openTask(row: Pick<EmployeeCertTask, 'taskNo'>) {
@@ -653,12 +838,41 @@ async function downloadTaskPackage(row: EmployeeCertTask) {
   }
 }
 
-function distributeTask(row: EmployeeCertTask) {
-  distributionDialog.value?.open({ taskNo: row.taskNo }, `${row.taskNo} 中已签发、未完成分发的员工`);
+function canSelectTaskCert(cert: EmployeeCert) {
+  return canIssueCert(cert) || canDistributeEmployeeCert(cert);
 }
 
-async function onDistributionSubmitted(selection: EmployeeDistributionSelection, messageType: EmployeeMailType) {
-  if (messageType === 'MIXED' && selection.taskNo) await openTask({ taskNo: selection.taskNo });
+let taskLedgerEntry = 0;
+
+function canOpenTaskLedger() {
+  return auth.hasPermi('ra:employee-cert') && router.resolve(employeeCertLedgerPath).matched.some(record => record.path === employeeCertLedgerPath);
+}
+
+async function distributeTask(row: EmployeeCertTask) {
+  if (!auth.hasPermi('ra:employee-cert:distribute') || !row.taskNo) return;
+  if (canOpenTaskLedger()) {
+    if (!taskDetail.value.certs?.some(cert => canDistributeEmployeeCert(cert))) return;
+    const failure = await router.push({
+      path: employeeCertLedgerPath,
+      query: { taskNo: row.taskNo, taskEntry: `${Date.now()}-${++taskLedgerEntry}` }
+    });
+    if (!failure) taskOpen.value = false;
+    return;
+  }
+  const selected = issueSelection.value.filter(cert => canDistributeEmployeeCert(cert));
+  if (!selected.length || selected.length !== issueSelection.value.length) {
+    ElMessage.warning('请仅勾选本次要分发的有效证书');
+    return;
+  }
+  distributionDialog.value?.open({ ids: selected.map(cert => String(cert.id)) }, `所选 ${selected.length} 张证书对应的员工`, row.taskNo);
+}
+
+async function onFallbackDistributionSubmitted(selection: EmployeeDistributionSelection, messageType: EmployeeMailType) {
+  if (messageType === 'TEXT') {
+    ElMessage.info('请由有证书台账权限的人员在分发记录中查看纯文本通知结果');
+  } else if (selection.taskNo && taskDetail.value.task?.taskNo === selection.taskNo && taskOpen.value) {
+    await openTask({ taskNo: selection.taskNo });
+  }
 }
 
 async function issueSelectedCerts() {
@@ -688,48 +902,52 @@ async function issueSelectedCerts() {
 }
 
 async function openKeys(row: EmployeeCertEmployee) {
-  currentEmployee.value = row;
-  keyOpen.value = true;
-  await loadKeys();
-}
-
-async function loadKeys() {
-  if (!currentEmployee.value) {
+  const profile = selectedProfile.value;
+  const rsaKeySize = form.rsaKeySize;
+  if (!profile || rsaKeySize == null || !supportedRsaKeySizes.value.includes(rsaKeySize)) {
+    ElMessage.warning('请先选择颁发 CA、模板和密钥长度');
     return;
   }
+  const requestId = ++keyRequestId;
+  currentEmployee.value = row;
+  keys.value = [];
+  keyLoadFailed.value = false;
+  const saved = productionChoices.value[String(row.id)];
+  keyChoice.value = saved?.mode === 'SELECTED' ? saved.certId ?? 'AUTO' : saved?.mode ?? 'AUTO';
+  keyOpen.value = true;
   keyLoading.value = true;
   try {
-    keys.value = unwrapData<EmployeeCertKey[]>(await listEmployeeCertKeys(currentEmployee.value.id)) || [];
+    const data = unwrapData<EmployeeProductionCandidate[]>(await listEmployeeProductionCandidates(row.id, {
+      rootId: profile.rootId, profileId: profile.profileId, rsaKeySize
+    }));
+    if (requestId === keyRequestId && keyOpen.value) {
+      keys.value = data || [];
+    }
+  } catch {
+    if (requestId === keyRequestId && keyOpen.value) keyLoadFailed.value = true;
   } finally {
-    keyLoading.value = false;
+    if (requestId === keyRequestId) keyLoading.value = false;
   }
 }
 
-async function saveKey() {
-  if (!currentEmployee.value) {
+function saveKeyChoice() {
+  const employeeId = currentEmployee.value?.id;
+  if (employeeId == null || keyLoading.value) return;
+  const id = String(employeeId);
+  if (keyChoice.value === 'AUTO') delete productionChoices.value[id];
+  else if (keyChoice.value === 'NEW') productionChoices.value[id] = { employeeId, mode: 'NEW' };
+  else if (keys.value.some(cert => cert.id === keyChoice.value)) {
+    productionChoices.value[id] = { employeeId, mode: 'SELECTED', certId: keyChoice.value };
+  } else {
+    ElMessage.warning('原证书已不在候选列表，请重新选择');
     return;
   }
-  if (!keyForm.publicKey.trim()) {
-    ElMessage.error('请录入公钥');
-    return;
-  }
-  keySaving.value = true;
-  try {
-    await saveEmployeeCertKey({
-      employeeId: currentEmployee.value.id,
-      keyName: keyForm.keyName || '手工录入公钥',
-      keyAlgorithm: keyForm.keyAlgorithm,
-      publicKey: keyForm.publicKey,
-      keySource: 'MANUAL',
-      enabled: true
-    });
-    keyForm.keyName = '';
-    keyForm.publicKey = '';
-    ElMessage.success('公钥已保存');
-    loadKeys();
-  } finally {
-    keySaving.value = false;
-  }
+  keyOpen.value = false;
+}
+
+function formatCandidateDate(value: string) {
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? '-' : parsed.toLocaleString('zh-CN', { hour12: false });
 }
 
 function formatDate(value?: string) {
@@ -737,7 +955,7 @@ function formatDate(value?: string) {
 }
 
 onMounted(async () => {
-  await Promise.all([loadTasks(), loadEmailProfiles()]);
+  await Promise.all([loadTasks(), loadEmailProfiles(), loadDefaultPasswordRule()]);
 });
 watch(() => route.fullPath, async (entry, _, onCleanup) => {
   if (!/^\/ra-cert-management\/ra-employee-cert-issue\/?$/.test(route.path)) return;
@@ -775,6 +993,12 @@ useRaListRefreshOnReturn(() => Promise.all([loadTasks(), loadEmailProfiles()]));
 </script>
 
 <style scoped>
+.pfx-rule-summary {
+  margin-inline-start: 8px;
+  color: var(--el-text-color-secondary);
+  white-space: nowrap;
+}
+
 .blocked-account-list {
   display: block;
   max-height: 160px;
@@ -850,6 +1074,12 @@ useRaListRefreshOnReturn(() => Promise.all([loadTasks(), loadEmailProfiles()]));
 
 .selection-summary strong {
   color: var(--el-color-primary);
+}
+
+.original-serial {
+  color: var(--el-text-color-secondary);
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .employee-selection-table {

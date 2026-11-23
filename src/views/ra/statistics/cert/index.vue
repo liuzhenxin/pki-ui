@@ -15,32 +15,36 @@
               clearable
               style="width: 260px"
             />
-            <el-button v-hasPermi="['ra:stat:cert']" type="primary" icon="Search" @click="getData">查询</el-button>
-            <el-button v-hasPermi="['ra:stat:cert']" icon="Refresh" @click="resetQuery">重置</el-button>
+            <el-button v-hasPermi="['ra:stat:cert']" type="primary" icon="Search" :disabled="loading" @click="getData">查询</el-button>
+            <el-button v-hasPermi="['ra:stat:cert']" icon="Refresh" :disabled="loading" @click="resetQuery">重置</el-button>
           </div>
         </div>
       </template>
 
       <div v-loading="loading" class="stat-content">
-        <div class="overview-grid">
+        <el-alert v-if="loadFailed" title="证书统计加载失败，请重新查询" type="error" show-icon :closable="false" />
+        <div v-show="!loadFailed" class="overview-grid">
           <div v-for="item in overviewCards" :key="item.key" class="overview-item">
             <div class="overview-label">{{ item.label }}</div>
             <div class="overview-value">{{ item.value }}</div>
           </div>
         </div>
 
-        <div class="chart-grid">
+        <div v-show="!loadFailed" class="chart-grid">
           <section class="chart-section">
             <div class="section-title">证书状态分布</div>
-            <div ref="statusChartRef" class="chart"></div>
+            <div v-show="hasStatusData || !loaded" ref="statusChartRef" class="chart"></div>
+            <el-empty v-if="loaded && !hasStatusData" class="chart" description="暂无统计数据" :image-size="60" />
           </section>
           <section class="chart-section">
             <div class="section-title">根 CA 分布</div>
-            <div ref="rootChartRef" class="chart"></div>
+            <div v-show="hasRootData || !loaded" ref="rootChartRef" class="chart"></div>
+            <el-empty v-if="loaded && !hasRootData" class="chart" description="暂无统计数据" :image-size="60" />
           </section>
           <section class="chart-section trend-section">
             <div class="section-title">新增趋势</div>
-            <div ref="trendChartRef" class="chart"></div>
+            <div v-show="hasTrendData || !loaded" ref="trendChartRef" class="chart"></div>
+            <el-empty v-if="loaded && !hasTrendData" class="chart" description="暂无统计数据" :image-size="60" />
           </section>
           <section class="chart-section">
             <div class="section-title">模板排行</div>
@@ -77,13 +81,14 @@ const emptyOverview = {
 };
 
 const loading = ref(false);
+const loaded = ref(false);
+const loadFailed = ref(false);
 const dateRange = ref<[string, string] | []>([]);
 const statusChartRef = ref<HTMLDivElement>();
 const rootChartRef = ref<HTMLDivElement>();
 const trendChartRef = ref<HTMLDivElement>();
-let statusChart: echarts.ECharts | null = null;
-let rootChart: echarts.ECharts | null = null;
-let trendChart: echarts.ECharts | null = null;
+const chartRefs = [statusChartRef, rootChartRef, trendChartRef];
+let chartObserver: ResizeObserver | undefined;
 
 const statistics = reactive<CertStatistics>({
   overview: { ...emptyOverview },
@@ -94,6 +99,9 @@ const statistics = reactive<CertStatistics>({
 });
 
 const unwrap = (response: any) => response?.data ?? response;
+const hasStatusData = computed(() => statistics.statusStats.some((item) => item.value > 0));
+const hasRootData = computed(() => statistics.rootStats.length > 0);
+const hasTrendData = computed(() => statistics.trendStats.some((item) => item.value > 0));
 const overviewCards = computed(() => [
   { key: 'total', label: '证书总数', value: statistics.overview.totalCertCount },
   { key: 'valid', label: '有效证书', value: statistics.overview.validCertCount },
@@ -109,21 +117,31 @@ const overviewCards = computed(() => [
 ]);
 
 async function getData() {
+  if (loading.value) return;
   loading.value = true;
   try {
     const [startDate, endDate] = dateRange.value || [];
     const response = await getRaCertStatistics({ startDate, endDate });
-    const data = unwrap(response) || {};
-    Object.assign(statistics.overview, emptyOverview, data.overview || {});
+    const data = unwrap(response);
+    if (!data?.overview) {
+      loadFailed.value = true;
+      return;
+    }
+    Object.assign(statistics.overview, emptyOverview, data.overview);
     statistics.statusStats = data.statusStats || [];
     statistics.rootStats = data.rootStats || [];
     statistics.profileStats = data.profileStats || [];
     statistics.trendStats = data.trendStats || [];
-    await nextTick();
-    renderCharts();
+    loaded.value = true;
+    loadFailed.value = false;
+  } catch {
+    loadFailed.value = true;
+    return;
   } finally {
     loading.value = false;
   }
+  await nextTick();
+  renderCharts();
 }
 
 function resetQuery() {
@@ -132,14 +150,24 @@ function resetQuery() {
 }
 
 function renderCharts() {
+  if (!loaded.value || loadFailed.value) return;
   renderStatusChart();
   renderRootChart();
   renderTrendChart();
 }
 
+function getChart(element?: HTMLDivElement) {
+  if (!element?.clientWidth || !element.clientHeight) return;
+  const chart = echarts.getInstanceByDom(element) ?? echarts.init(element);
+  if (chart.getWidth() !== element.clientWidth || chart.getHeight() !== element.clientHeight) {
+    chart.resize();
+  }
+  return chart;
+}
+
 function renderStatusChart() {
-  if (!statusChartRef.value) return;
-  statusChart = statusChart || echarts.init(statusChartRef.value);
+  const statusChart = getChart(statusChartRef.value);
+  if (!statusChart) return;
   statusChart.setOption({
     tooltip: { trigger: 'item' },
     legend: { bottom: 0 },
@@ -156,8 +184,8 @@ function renderStatusChart() {
 }
 
 function renderRootChart() {
-  if (!rootChartRef.value) return;
-  rootChart = rootChart || echarts.init(rootChartRef.value);
+  const rootChart = getChart(rootChartRef.value);
+  if (!rootChart) return;
   rootChart.setOption({
     grid: { left: 42, right: 20, top: 28, bottom: 70 },
     tooltip: { trigger: 'axis' },
@@ -179,8 +207,8 @@ function renderRootChart() {
 }
 
 function renderTrendChart() {
-  if (!trendChartRef.value) return;
-  trendChart = trendChart || echarts.init(trendChartRef.value);
+  const trendChart = getChart(trendChartRef.value);
+  if (!trendChart) return;
   trendChart.setOption({
     grid: { left: 42, right: 24, top: 30, bottom: 44 },
     tooltip: { trigger: 'axis' },
@@ -200,22 +228,24 @@ function renderTrendChart() {
   });
 }
 
-function resizeCharts() {
-  statusChart?.resize();
-  rootChart?.resize();
-  trendChart?.resize();
-}
-
 onMounted(() => {
+  if (typeof ResizeObserver === 'function') {
+    chartObserver = new ResizeObserver(renderCharts);
+    for (const element of chartRefs) {
+      if (element.value) chartObserver.observe(element.value);
+    }
+  } else {
+    window.addEventListener('resize', renderCharts);
+  }
   getData();
-  window.addEventListener('resize', resizeCharts);
 });
 
 onBeforeUnmount(() => {
-  window.removeEventListener('resize', resizeCharts);
-  statusChart?.dispose();
-  rootChart?.dispose();
-  trendChart?.dispose();
+  chartObserver?.disconnect();
+  window.removeEventListener('resize', renderCharts);
+  for (const element of chartRefs) {
+    if (element.value) echarts.getInstanceByDom(element.value)?.dispose();
+  }
 });
 </script>
 

@@ -6,6 +6,7 @@ export interface RaCertIssueQuery {
   pageSize: number;
   businessType?: string;
   keyword?: string;
+  userInfo?: string;
 }
 
 export interface RaCertIssue {
@@ -14,6 +15,7 @@ export interface RaCertIssue {
   businessId: string | number;
   userId?: string | number;
   userName?: string;
+  domainAccount?: string;
   deptId?: string | number;
   deptName?: string;
   rootId?: string | number;
@@ -22,6 +24,7 @@ export interface RaCertIssue {
   profileName?: string;
   profileConf?: string;
   encryptionProfileValidity?: string;
+  issuerNotAfter?: string;
   oldCertId?: string | number;
   serialNumber?: string;
   subject?: string;
@@ -48,6 +51,9 @@ export interface RaCertIssueForm {
   subject?: string;
   notBefore?: string;
   notAfter?: string;
+  startAtIssuance?: boolean;
+  validityAmount?: number;
+  validityUnit?: string;
   extensions?: string;
   fileFormat?: 'PKCS12';
   filePassword?: string;
@@ -99,6 +105,29 @@ export function issueRaCert(businessType: string, businessId: string | number, d
     method: 'post',
     data
   }) as any;
+}
+
+export function downloadRaIssuedChain(certId: string | number) {
+  return request({ url: `/ra/v1/cert-issues/${certId}/issued-download/p7b`, method: 'get', responseType: 'blob' });
+}
+
+export function packageRaIssuedPfx(certId: string | number, form: {
+  privateKey: string;
+  keyPassword: string;
+  password: string;
+}, verifyOnly: boolean) {
+  return request({
+    url: `/ra/v1/cert-issues/${certId}/issued-download/pfx`,
+    method: 'post',
+    data: {
+      privateKey: form.privateKey,
+      keyPassword: form.keyPassword,
+      password: verifyOnly ? undefined : form.password,
+      verifyOnly
+    },
+    headers: { repeatSubmit: false, sensitive: true, hideErrorNotify: true },
+    responseType: verifyOnly ? 'json' : 'blob'
+  });
 }
 
 export function requestRaIssueNotification(certId: string | number): Promise<Result<void>> {

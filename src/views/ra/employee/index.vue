@@ -120,12 +120,6 @@
                 </el-select>
               </el-form-item>
               <el-form-item label="在职状态" prop="status">
-                <template #label="{ label }">
-                  {{ label }}
-                  <el-tooltip content="以大众同步名册为准，离职标记与 RA 本地启停独立" placement="top">
-                    <el-icon class="query-help"><InfoFilled /></el-icon>
-                  </el-tooltip>
-                </template>
                 <el-select v-model="queryParams.status" clearable placeholder="全部状态">
                   <el-option label="在职" value="A" />
                   <el-option label="离职" value="I" />
@@ -138,12 +132,12 @@
             </el-form>
           </div>
 
-          <el-row :gutter="10" class="mb8 toolbar-row">
-            <el-col v-if="!localSelected" :span="1.5">
-              <el-button v-hasPermi="['ra:employee:manage']" type="primary" plain icon="Plus" @click="openCreate">新增员工</el-button>
+          <el-row class="mb8 toolbar-row">
+            <el-col v-if="!localSelected && auth.hasPermi('ra:employee:manage')" :span="1.5">
+              <el-button type="primary" plain icon="Plus" @click="openCreate">新增员工</el-button>
             </el-col>
-            <el-col v-if="!localSelected" :span="1.5">
-              <el-button v-hasPermi="['ra:employee:manage']" plain icon="Upload" @click="openImport">外部导入</el-button>
+            <el-col v-if="!localSelected && auth.hasPermi('ra:employee:manage')" :span="1.5">
+              <el-button plain icon="Upload" @click="openImport">外部导入</el-button>
             </el-col>
             <el-col v-if="canReadApplicants" :span="1.5">
               <el-button plain type="primary" icon="Plus" @click="localDialogs?.openAccount(selectedLocalDeptId)">新增用户</el-button>
@@ -160,16 +154,20 @@
             <el-col v-if="selectedLocalDeptId && canRemoveSelectedDept" :span="1.5">
               <el-button type="danger" plain icon="Delete" :loading="removingDept" @click="removeLocalDepartment">删除部门</el-button>
             </el-col>
-            <el-col v-if="!localSelected" :span="1.5">
-              <el-button v-hasPermi="['ra:employee:sync']" type="primary" plain icon="Refresh" :loading="syncing" @click="handleSync">{{
+            <el-col v-if="!localSelected && auth.hasPermi('ra:employee:sync')" :span="1.5">
+              <el-button type="primary" plain icon="Refresh" :loading="syncing" @click="handleSync">{{
                 syncing ? '同步中' : '立即同步'
               }}</el-button>
             </el-col>
-            <el-col v-if="!localSelected" :span="1.5">
-              <el-button v-hasPermi="['ra:employee:config']" plain icon="Setting" @click="openConfig">同步配置</el-button>
+            <el-col v-if="!localSelected && auth.hasPermi('ra:employee:config')" :span="1.5">
+              <el-button plain icon="Setting" @click="openConfig">同步配置</el-button>
             </el-col>
             <el-col v-if="!localSelected" :span="1.5">
               <el-button plain icon="Clock" @click="openLogs">同步记录</el-button>
+            </el-col>
+            <el-col v-if="summary.exportAllowed && auth.hasPermi('ra:employee:export')" :span="1.5">
+              <el-button plain icon="Download" :loading="exportingEmployees"
+                :disabled="loading || employeeListFailed || !appliedEmployeeFilters" @click="downloadEmployeeInfo">导出信息</el-button>
             </el-col>
             <right-toolbar v-model:showSearch="showSearch" @queryTable="loadEmployees" />
           </el-row>
@@ -191,9 +189,7 @@
             </el-table-column>
             <el-table-column v-if="!localSelected" label="在职状态" width="120" align="center">
               <template #default="{ row }">
-                <el-tag :type="row.sourceStatusName === '离职' ? 'danger' : row.sourceStatusName === '在职' ? 'success' : 'info'" effect="plain">{{
-                  row.recordSource === 'API' ? (row.sourceStatusName || row.employeeStatus) : '-'
-                }}</el-tag>
+                <el-tag :type="employmentTagType(row)" effect="plain">{{ employmentTagText(row) }}</el-tag>
               </template>
             </el-table-column>
             <el-table-column label="本地状态" width="120" align="center">
@@ -216,6 +212,7 @@
           </el-table>
 
           <pagination
+            class="employee-pagination"
             :auto-scroll="false"
             v-show="total > 0"
             v-model:page="queryParams.pageNum"
@@ -227,14 +224,22 @@
       </div>
     </div>
 
-    <LocalDirectoryDialogs ref="localDialogs" :departments="localDepartments" @departments-changed="refreshLocalDirectory" @accounts-changed="refreshApplicants" />
-    <el-drawer v-model="detailOpen" title="员工详情" size="min(700px, 95vw)" append-to-body>
+    <LocalDirectoryDialogs
+      ref="localDialogs"
+      :departments="localDepartments"
+      :allow-local-recovery="canRecoverLocalAccounts"
+      @departments-changed="refreshLocalDirectory"
+      @accounts-changed="refreshApplicants"
+    />
+    <el-drawer v-model="detailOpen" title="员工详情" size="min(860px, 95vw)" append-to-body>
       <el-tabs v-model="detailTab">
         <el-tab-pane label="基本资料" name="profile">
-      <el-descriptions :column="1" border>
+      <el-descriptions class="employee-detail-descriptions" :column="1" label-width="9rem" border>
         <el-descriptions-item label="姓名">{{ detail.cnName || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="性别">{{ detail.genderName || '-' }}</el-descriptions-item>
         <el-descriptions-item label="域账号">{{ detail.domainAccount || '-' }}</el-descriptions-item>
         <el-descriptions-item label="工号">{{ detail.employeeNo || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="入职时间">{{ detail.enterTime || '-' }}</el-descriptions-item>
         <el-descriptions-item label="生日">{{ detail.birthday || '-' }}</el-descriptions-item>
         <el-descriptions-item label="邮箱">{{ detail.email || '-' }}</el-descriptions-item>
         <el-descriptions-item label="部门编码">{{ detail.departmentCode || '-' }}</el-descriptions-item>
@@ -245,65 +250,74 @@
         <el-descriptions-item label="经理级别">{{ detail.managerLevel || '-' }}</el-descriptions-item>
         <el-descriptions-item v-if="detail.identityKey && !isLocalAccount(detail)">
           <template #label>
-            <el-tooltip content="系统根据规范化后的域账号与出生日期生成，用于区分人员身份，不是工号或证书序列号。" placement="top">
-              <span tabindex="0">自然人识别键 <el-icon><QuestionFilled /></el-icon></span>
+            <el-tooltip content="这是系统内部的档案识别键。大众员工同步优先按工号匹配；原工号在本轮名单中缺席、新工号尚未建档时，再用姓名、域账号和出生日期核对是否为同一人。" placement="top">
+              <span class="employee-identity-label" tabindex="0">自然人识别键 <el-icon><QuestionFilled /></el-icon></span>
             </el-tooltip>
           </template>
           <span class="identity-key">{{ detail.identityKey || '-' }}</span>
         </el-descriptions-item>
       </el-descriptions>
-      <el-divider content-position="left">公钥信息</el-divider>
-      <section v-loading="publicKeysLoading" class="employee-public-keys">
-        <el-alert v-if="publicKeysFailed" type="error" :closable="false" title="公钥信息加载失败" />
-        <el-collapse v-else-if="publicKeys.length">
-          <el-collapse-item v-for="key in publicKeys" :key="key.id" :name="key.id" :title="key.keyName">
-            <el-descriptions :column="1" border size="small">
-              <el-descriptions-item label="算法">{{ key.keyAlgorithm || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="来源">{{ key.keySource === 'MANUAL' ? '手工录入' : key.keySource || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="状态">{{ key.enabled ? '启用' : '停用' }}</el-descriptions-item>
-              <el-descriptions-item label="录入时间">{{ key.createTime?.replace('T', ' ').slice(0, 19) || '-' }}</el-descriptions-item>
-            </el-descriptions>
-            <el-input v-if="key.publicKey" :model-value="key.publicKey" type="textarea" readonly :rows="6" class="mt12" aria-label="公钥正文" />
-            <el-alert v-else type="warning" :closable="false" title="该记录的正文无法解析为公钥" class="mt12" />
-          </el-collapse-item>
-        </el-collapse>
-        <el-empty v-else-if="!publicKeysLoading" description="暂无已登记公钥" :image-size="48" />
-      </section>
         </el-tab-pane>
         <el-tab-pane label="办理状态" name="qualification">
-          <el-descriptions :column="1" border>
-            <el-descriptions-item label="数据来源">{{ sourceLabel(detail.recordSource) }}</el-descriptions-item>
+          <el-descriptions class="employee-detail-descriptions" :column="1" label-width="9rem" border>
+            <el-descriptions-item label="数据来源">{{ detail.localRecoveryRequired ? '待恢复本地账号' : sourceLabel(detail.recordSource) }}</el-descriptions-item>
             <el-descriptions-item label="本地状态">{{ detail.localEnabled === false || applicantDisabled ? '已停用' : '启用' }}</el-descriptions-item>
             <el-descriptions-item label="申请用户">
               {{ detail.raUserId ? '已就绪' : '未同步到系统用户' }}
             </el-descriptions-item>
             <el-descriptions-item v-if="linkedApplicant" label="办理部门">{{ linkedApplicant.deptName || '-' }}</el-descriptions-item>
-            <el-descriptions-item v-if="linkedApplicant?.status != null" label="申请账号状态">
+            <el-descriptions-item v-if="linkedApplicant?.status != null" label="账号状态">
               {{ Number(linkedApplicant.status) === 0 ? '启用' : '停用' }}
             </el-descriptions-item>
             <el-descriptions-item v-if="isLocalAccount(detail) && !detail.domainAccount" label="员工制证">{{ linkedApplicant?.userCategory === 'individual' ? '缺少域账号' : '仅限个人用户' }}</el-descriptions-item>
           </el-descriptions>
           <div class="mt12">
             <el-button v-if="isLocalAccount(detail) && canReadApplicants" @click="localDialogs?.openAccount(undefined, detail.raUserId, detail)">管理本地账号</el-button>
-            <el-button v-if="!isLocalAccount(detail) && detail.localEnabled !== false" v-hasPermi="['ra:employee:manage']" type="warning" plain @click="changeEmployeeEnabled(false)">停用员工</el-button>
-            <el-button v-if="!isLocalAccount(detail) && detail.localEnabled === false" v-hasPermi="['ra:employee:manage']" type="success" plain @click="changeEmployeeEnabled(true)">恢复员工</el-button>
+            <el-button v-if="canRecoverLocalAccounts && detail.localRecoveryRequired"
+              @click="localDialogs?.openAccount(undefined, detail.raUserId, detail, true)">恢复本地账号</el-button>
+            <span v-else-if="canViewLocalRecovery && detail.localRecoveryRequired">恢复账号需要申请用户维护权限</span>
+            <el-button v-if="!isLocalAccount(detail) && !detail.localRecoveryRequired && detail.localEnabled !== false" v-hasPermi="['ra:employee:manage']" type="warning" plain @click="changeEmployeeEnabled(false)">停用员工</el-button>
+            <el-button v-if="!isLocalAccount(detail) && !detail.localRecoveryRequired && detail.localEnabled === false" v-hasPermi="['ra:employee:manage']" type="success" plain @click="changeEmployeeEnabled(true)">恢复员工</el-button>
           </div>
+          <el-divider content-position="left">名下证书</el-divider>
+          <EmployeeCertificateInventory v-bind="certificateInventory" @page-change="changeCertificatePage" @retry="reloadCertificateInventory" @certificate="openCertificate" />
+          <el-divider content-position="left">AD 上传记录</el-divider>
+          <el-descriptions class="employee-detail-descriptions mb12" :column="1" label-width="9rem" border>
+            <el-descriptions-item label="最近成功上传证书">-</el-descriptions-item>
+            <el-descriptions-item label="最近成功上传时间">-</el-descriptions-item>
+          </el-descriptions>
+          <el-table :data="[]" size="small" empty-text="AD 发布未接入，暂无上传记录">
+            <el-table-column label="证书序列号" min-width="160" />
+            <el-table-column label="上传时间" min-width="145" />
+            <el-table-column label="操作人" min-width="88" />
+            <el-table-column label="结果" min-width="88" />
+          </el-table>
         </el-tab-pane>
         <el-tab-pane label="申请与证书" name="activity">
           <div class="mb8">
             <el-button v-if="canStartBusiness && detail.raUserId" v-hasPermi="['ra:apply']" type="primary" @click="startStandardApply">发起标准证书申请</el-button>
             <el-button v-if="canStartBusiness && detail.id && detail.domainAccount && detail.identityKey" v-hasPermi="['ra:employee-cert:issue']" @click="startEmployeeCert">员工证书制作</el-button>
           </div>
-          <el-table v-loading="activityLoading" :data="activity.applies" size="small" empty-text="暂无标准申请">
-            <el-table-column label="申请编号" prop="id" min-width="130" />
-            <el-table-column label="状态" prop="status" width="100" />
-            <el-table-column label="提交时间" prop="create_time" min-width="170" />
-          </el-table>
-          <el-divider content-position="left">员工证书</el-divider>
-          <el-table v-loading="activityLoading" :data="activity.employeeCertificates" size="small" empty-text="暂无员工证书">
-            <el-table-column label="证书序列号" prop="serial_number" min-width="170" show-overflow-tooltip />
-            <el-table-column label="签发状态" prop="issue_status" width="120" />
-            <el-table-column label="制作任务" prop="task_no" min-width="170" show-overflow-tooltip />
+          <el-divider content-position="left">近期办理记录</el-divider>
+          <el-table v-loading="activityLoading" :data="processRecords" row-key="key" size="small" empty-text="暂无办理记录">
+            <el-table-column label="办理类型" prop="type" min-width="115" />
+            <el-table-column label="申请编号 / 任务号" prop="reference" min-width="158" show-overflow-tooltip />
+            <el-table-column label="时间" min-width="145">
+              <template #default="{ row }">{{ employeeDetailTime(row.time) }}</template>
+            </el-table-column>
+            <el-table-column label="状态" width="94">
+              <template #default="{ row }"><el-tag :type="row.tone">{{ row.status }}</el-tag></template>
+            </el-table-column>
+            <el-table-column label="办理结果" min-width="170">
+              <template #default="{ row }">
+                <div v-for="certificate in row.certificates" :key="certificate.cert_id">
+                  <el-button link type="primary" @click="openCertificate(certificate.cert_id)">{{ certificate.serial_number }}</el-button>
+                  <div>{{ certificate.profile_name || '未关联模板' }}</div>
+                </div>
+                <div v-if="row.message">{{ row.message }}</div>
+                <span v-else-if="!row.certificates.length">-</span>
+              </template>
+            </el-table-column>
           </el-table>
         </el-tab-pane>
       </el-tabs>
@@ -314,6 +328,47 @@
         </el-alert>
       </section>
     </el-drawer>
+
+    <el-dialog v-model="certificateOpen" title="证书详情" width="min(660px, 95vw)" append-to-body>
+      <div v-loading="certificateDetailLoading" class="employee-certificate-detail">
+        <el-alert v-if="certificateDetailFailed" title="证书不存在、已变更或无权查看" type="error" :closable="false" />
+        <el-descriptions v-if="selectedCertificate" :column="1" size="small" border>
+          <el-descriptions-item label="证书序列号">{{ selectedCertificate.serialNumber }}</el-descriptions-item>
+          <el-descriptions-item label="证书模板">{{ selectedCertificate.profileName || '未关联模板' }}</el-descriptions-item>
+          <el-descriptions-item label="主题">{{ formatCertificateSubject(selectedCertificate.subject) }}</el-descriptions-item>
+          <el-descriptions-item label="颁发机构">{{ selectedCertificate.issuerName || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="证书用途">{{ selectedCertificate.usage || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="来源">{{ certificateSourceLabel(selectedCertificate.source) }}</el-descriptions-item>
+          <el-descriptions-item label="记录时间">{{ employeeDetailTime(selectedCertificate.createTime) }}</el-descriptions-item>
+          <el-descriptions-item label="有效期">{{ employeeDetailTime(selectedCertificate.notBefore) }} 至 {{ employeeDetailTime(selectedCertificate.notAfter) }}</el-descriptions-item>
+          <el-descriptions-item v-if="selectedCertificate.taskNo" label="制作任务">{{ selectedCertificate.taskNo }}</el-descriptions-item>
+          <el-descriptions-item
+            v-if="selectedCertificate.superseded || ['RECOVER', 'RENEW'].includes(selectedCertificate.productionAction ?? '')"
+            label="制作记录"
+          >
+            <template v-if="['RECOVER', 'RENEW'].includes(selectedCertificate.productionAction ?? '')"
+              >已{{ selectedCertificate.productionTime ? '于 ' + employeeDetailTime(selectedCertificate.productionTime) + ' ' : '' }}{{
+                selectedCertificate.productionAction === 'RECOVER' ? '密钥恢复' : '续签'
+              }}</template
+            >
+            <template v-else>已有后续制作记录</template>
+          </el-descriptions-item>
+        </el-descriptions>
+      </div>
+      <template #footer>
+        <el-button @click="certificateOpen = false">关闭</el-button>
+        <el-dropdown v-if="selectedCertificate" v-hasPermi="['ra:cert']" class="ml8" @command="downloadEmployeeCertificate">
+          <el-button type="primary" icon="Download" :loading="certificateDownloading">下载证书</el-button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="cer">CER</el-dropdown-item>
+              <el-dropdown-item command="pem">PEM</el-dropdown-item>
+              <el-dropdown-item command="p7b">P7B</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
+      </template>
+    </el-dialog>
 
     <el-dialog v-model="createOpen" title="新增员工" width="min(560px, 96vw)" :show-close="!creating" :close-on-click-modal="!creating" :close-on-press-escape="!creating" append-to-body>
       <el-form :model="createForm" :disabled="creating" label-width="90px">
@@ -357,6 +412,7 @@
       <el-form :model="syncConfig" label-width="100px">
         <el-form-item label="自动同步">
           <el-switch v-model="syncConfig.enabled" />
+          <el-switch v-model="syncConfig.exportAllowed" class="ml16" active-text="允许导出" aria-label="允许导出" />
         </el-form-item>
         <el-form-item label="同步方式">
           <el-radio-group v-model="syncConfig.scheduleType">
@@ -408,7 +464,6 @@
       <template #header>
         <div class="flex items-center justify-between pr-6">
           <span>同步记录</span>
-          <el-button icon="InfoFilled" @click="openDataExplanation">用户数据说明</el-button>
         </div>
       </template>
       <el-table v-loading="logsLoading" :data="syncLogs" height="min(420px, 55dvh)" border>
@@ -425,6 +480,14 @@
         <el-table-column label="员工" prop="totalEmployees" width="90" align="right" />
         <el-table-column label="新增" prop="createdCount" width="80" align="right" />
         <el-table-column label="更新" prop="updatedCount" width="80" align="right" />
+        <el-table-column label="工号变更" width="95" align="center">
+          <template #default="{ row }">
+            <el-button v-if="row.employeeNoChangeCount" link type="primary" @click="openNumberChanges(row.taskNo)">
+              {{ row.employeeNoChangeCount }}
+            </el-button>
+            <span v-else>0</span>
+          </template>
+        </el-table-column>
         <el-table-column label="本轮离职标记" prop="disabledCount" width="126" align="right">
           <template #header="{ column }">
             <el-tooltip content="本轮未出现在大众名册中、因此新标记为离职的员工。不含历史离职员工。" placement="top">
@@ -457,33 +520,6 @@
       />
     </el-dialog>
 
-    <el-dialog v-model="dataExplanationOpen" title="用户数据说明" width="min(780px, 96vw)" append-to-body>
-      <div v-loading="dataExplanationLoading">
-        <template v-if="dataExplanation">
-          <el-descriptions title="员工信息页当前统计" :column="1" border>
-            <el-descriptions-item label="可办理员工">{{ dataExplanation.summary.activeEmployees }}：非本地档案中，身份有效、本地启用；接口来源还须处于 3/A 状态并关联有效的个人申请用户。重复域账号不计入；已关联用户须未停用且无后台角色。</el-descriptions-item>
-            <el-descriptions-item label="中方员工">{{ dataExplanation.summary.chineseEmployees }}：非本地档案、非外方且员工类型不为空；包含离职或停用档案。</el-descriptions-item>
-            <el-descriptions-item label="外方员工">{{ dataExplanation.summary.foreignEmployees }}：非本地档案且标记为外方；包含离职或停用档案。</el-descriptions-item>
-            <el-descriptions-item label="本地员工">{{ dataExplanation.summary.localEmployees }}：按系统用户表统计当前管理员可见部门内、未关联接口档案的本地用户；不含已删除用户、超级管理员及有后台角色的用户。</el-descriptions-item>
-            <el-descriptions-item label="组织科室">{{ dataExplanation.summary.departments }}：已保存的大众组织科室数，不含本地自建部门。</el-descriptions-item>
-            <el-descriptions-item label="最近同步">{{ dataExplanation.summary.latestSyncStatus || '未同步' }}，{{ dataExplanation.summary.latestSyncTime?.replace('T', ' ').slice(0, 19) || '暂无时间' }}；本轮处理 {{ dataExplanation.summary.latestSyncEmployees ?? '—' }} 人。这是最近任务的处理量，不是当前档案数。</el-descriptions-item>
-          </el-descriptions>
-          <el-descriptions title="当前档案拆解" :column="2" border class="mt-4">
-            <el-descriptions-item label="档案总数">{{ dataExplanation.totalRecords }}</el-descriptions-item>
-            <el-descriptions-item label="接口档案">{{ dataExplanation.apiRecords }}</el-descriptions-item>
-            <el-descriptions-item label="本地员工档案">{{ dataExplanation.localRecords }}</el-descriptions-item>
-            <el-descriptions-item label="其他来源档案">{{ dataExplanation.totalRecords - dataExplanation.apiRecords - dataExplanation.localRecords }}</el-descriptions-item>
-            <el-descriptions-item label="离职档案">{{ dataExplanation.leftRecords }}</el-descriptions-item>
-            <el-descriptions-item label="本地停用档案">{{ dataExplanation.disabledRecords }}</el-descriptions-item>
-            <el-descriptions-item label="有效未关联用户">{{ dataExplanation.activeUnlinkedRecords }}：接口档案有效、启用且状态为 3/A，但未关联系统用户；不能进入以系统用户为基础的列表。</el-descriptions-item>
-            <el-descriptions-item label="离职未关联用户">{{ dataExplanation.leftUnlinkedRecords }}：离职的接口档案未关联系统用户；不能进入以系统用户为基础的列表。</el-descriptions-item>
-            <el-descriptions-item label="中方类型缺失">{{ dataExplanation.chineseTypeMissing }}：未计入中方员工。</el-descriptions-item>
-          </el-descriptions>
-          <p class="mt-3 text-sm text-gray-500">拆解项可能交叉；员工列表分页还受所选部门、搜索条件和管理员权限范围影响。</p>
-        </template>
-      </div>
-    </el-dialog>
-
     <el-dialog v-model="invalidOpen" title="无效员工记录" width="720px" append-to-body>
       <el-table v-loading="invalidLoading" :data="invalidRecords" height="min(420px, 55dvh)" border empty-text="当前同步任务没有无效记录">
         <el-table-column label="员工号" prop="employeeNo" min-width="130" />
@@ -506,33 +542,52 @@
         @pagination="loadInvalidRecords"
       />
     </el-dialog>
+    <el-dialog v-model="numberChangesOpen" title="工号变更" width="min(640px, 95vw)" append-to-body>
+      <el-table v-loading="numberChangesLoading" :data="numberChanges" height="min(420px, 55dvh)" border empty-text="本轮没有工号变更">
+        <el-table-column label="姓名" prop="cnName" min-width="110" show-overflow-tooltip />
+        <el-table-column label="域账号" prop="domainAccount" min-width="140" show-overflow-tooltip />
+        <el-table-column label="原工号" prop="previousEmployeeNo" min-width="130" show-overflow-tooltip />
+        <el-table-column label="新工号" prop="employeeNo" min-width="130" show-overflow-tooltip />
+      </el-table>
+      <pagination
+        v-show="numberChangesTotal > 0"
+        v-model:page="numberChangesQuery.pageNum"
+        v-model:limit="numberChangesQuery.pageSize"
+        :total="numberChangesTotal"
+        :auto-scroll="false"
+        @pagination="loadNumberChanges"
+      />
+    </el-dialog>
   </div>
 </template>
 
 <script setup name="RaEmployee" lang="ts">
+import { formatCertificateSubject } from '@/utils/raCertificateSubject';
 import { useRaListRefreshOnReturn } from '@/hooks/useRaListRefreshOnReturn';
 import { computed, onMounted, onUnmounted, reactive, ref, shallowRef, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { useRoute, useRouter } from 'vue-router';
 import FileSaver from 'file-saver';
-import { listEmployeePublicKeys, type EmployeePublicKey } from '@/api/ra/employeeCert';
+import { downloadRaCert } from '@/api/ra/cert';
+import { certificateDownloadBlob } from '@/utils/raCertificateDownload';
 import { listDeptSelectTree, removeDept } from '@/api/ra/dept';
 import { getUser, type RaApplicantUserInfo } from '@/api/ra/user';
 import type { RaDeptTreeOption } from '@/api/ra/dept/types';
 import auth from '@/plugins/auth';
 import LocalDirectoryDialogs from './LocalDirectoryDialogs.vue';
+import EmployeeCertificateInventory from './EmployeeCertificateInventory.vue';
 import { directoryQueryId, employeeDirectoryPath } from '@/utils/fawvwEmployeeNavigation';
 import { isFawvwEmployeeSourceActive } from '@/utils/fawvwEmployeeStatus';
 import {
   FawvwEmployee,
   FawvwEmployeeQuery,
   FawvwEmployeeSummary,
-  type FawvwEmployeeDataExplanation,
   FawvwOrgNode,
   FawvwSyncConfig,
   FawvwSyncLog,
   type EmployeeInput,
   type EmployeeActivity,
+  type EmployeeCertificateRecord,
   createFawvwEmployee,
   deleteFawvwEmployee,
   downloadFawvwEmployeeImportTemplate,
@@ -541,16 +596,20 @@ import {
   setFawvwEmployeeEnabled,
   confirmFawvwAccountOwner,
   getFawvwEmployeeActivity,
+  getEmployeeCertificates,
   getFawvwEmployee,
   getFawvwEmployeeSummary,
-  getFawvwEmployeeDataExplanation,
   getFawvwSyncConfig,
   getFawvwSyncTask,
   pageEmployeeDirectory,
+  exportEmployeeDirectory,
+  type EmployeeDirectoryQuery,
   getEmployeeDirectoryDetails,
   type EmployeeDirectoryRow,
   pageFawvwInvalidEmployees,
   pageFawvwSyncLogs,
+  pageFawvwEmployeeNumberChanges,
+  type FawvwEmployeeNumberChange,
   saveFawvwSyncConfig,
   syncFawvwEmployees
 } from '@/api/ra/employee';
@@ -617,6 +676,35 @@ const detailOpen = ref(false);
 const detailTab = ref('profile');
 const activityLoading = ref(false);
 const activity = ref<EmployeeActivity>({ applies: [], employeeCertificates: [] });
+const certificateInventory = reactive({
+  rows: [] as EmployeeCertificateRecord[], total: 0, page: 1, pageSize: 10, loading: false, failed: false
+});
+const certificateRefresh = ref(0);
+const certificateOpen = ref(false);
+const certificateDetailLoading = ref(false);
+const certificateDetailFailed = ref(false);
+const certificateDownloading = ref(false);
+const selectedCertificate = ref<EmployeeCertificateRecord>();
+let certificateDetailRequest = 0;
+const applyStatuses: Record<number, string> = { 0: '新申请', 1: '待签发', 2: '审核拒绝', 3: '已签发' };
+const issueStatuses: Record<string, string> = { PENDING: '待签发', ISSUING: '签发中', FAILED: '签发失败', ISSUED: '已签发' };
+const processRecords = computed(() => [
+  ...(activity.value.applies || []).map((item) => ({
+    key: `apply-${item.id}`, type: '标准证书申请', reference: item.id, time: item.create_time,
+    status: applyStatuses[Number(item.status)] || '状态未知',
+    tone: Number(item.status) === 3 ? 'success' : Number(item.status) === 2 ? 'danger' : 'warning',
+    certificates: item.certificates || [], message: Number(item.status) === 2 ? item.review_comment : ''
+  })),
+  ...(activity.value.employeeCertificates || []).map((item) => ({
+    key: `issue-${item.id}`, type: item.key_source === 'LEGACY_PFX' ? '存量证书导入' : '员工证书制作',
+    reference: item.task_no || '-', time: item.process_time || item.create_time,
+    status: issueStatuses[item.issue_status] || '状态未知',
+    tone: item.issue_status === 'ISSUED' ? 'success' : item.issue_status === 'FAILED' ? 'danger' : 'warning',
+    certificates: item.issue_status === 'ISSUED' && item.ra_cert_id && item.serial_number
+      ? [{ cert_id: item.ra_cert_id, serial_number: item.serial_number, profile_name: item.profile_name }] : [],
+    message: item.issue_status === 'ISSUED' && item.ra_cert_id ? '' : item.issue_message
+  }))
+].sort((a, b) => employeeDetailTime(b.time).localeCompare(employeeDetailTime(a.time))));
 const createOpen = ref(false);
 const creating = ref(false);
 const deletingEmployee = ref(false);
@@ -626,21 +714,22 @@ const importPreviewOpen = ref(false);
 const importPreviewRows = ref<EmployeeInput[]>([]);
 const importPicker = ref<HTMLInputElement>();
 const createForm = reactive<EmployeeInput>({ employeeNo: '', domainAccount: '', birthday: '', cnName: '', email: '', departmentId: '', gender: '', jobName: '' });
-const publicKeys = ref<EmployeePublicKey[]>([]);
-const publicKeysLoading = ref(false);
-const publicKeysFailed = ref(false);
 let detailRequestId = 0;
 const configOpen = ref(false);
 const logsOpen = ref(false);
-const dataExplanationOpen = ref(false);
-const dataExplanationLoading = ref(false);
-const dataExplanation = ref<FawvwEmployeeDataExplanation>();
 const invalidOpen = ref(false);
 const invalidLoading = ref(false);
-type EmployeeListRow = Partial<FawvwEmployee> & { applicant?: RaApplicantUserInfo };
+type EmployeeListRow = Partial<FawvwEmployee> & { applicant?: RaApplicantUserInfo; localRecoveryRequired?: boolean };
 const employeeList = ref<EmployeeListRow[]>([]);
 const syncLogs = ref<FawvwSyncLog[]>([]);
 const invalidRecords = ref<any[]>([]);
+const numberChangesOpen = ref(false);
+const numberChangesLoading = ref(false);
+const numberChanges = ref<FawvwEmployeeNumberChange[]>([]);
+const numberChangesTotal = ref(0);
+const numberChangesQuery = reactive({ pageNum: 1, pageSize: 10 });
+let numberChangesTaskNo = '';
+let numberChangesRequest = 0;
 const invalidTotal = ref(0);
 const invalidTaskNo = ref('');
 const orgTree = computed(() => directoryDepartments(localDepartments.value, 1));
@@ -650,9 +739,16 @@ const linkedApplicant = computed(() => detail.value.applicant || fetchedApplican
 const applicantDisabled = computed(() => linkedApplicant.value?.status != null && Number(linkedApplicant.value.status) !== 0);
 const isLocalAccount = (row: EmployeeListRow) => row.recordSource === 'LOCAL_USER' && row.raUserId != null;
 const isLocallyDisabled = (row: EmployeeListRow) => row.localEnabled === false || (row.applicant?.status != null && Number(row.applicant.status) !== 0);
+const employmentTagType = (row: EmployeeListRow): 'warning' | 'danger' | 'success' | 'info' => {
+  if (row.recordSource !== 'API') return 'warning';
+  if (row.sourceStatusName === '离职') return 'danger';
+  if (row.sourceStatusName === '在职') return 'success';
+  return 'info';
+};
+const employmentTagText = (row: EmployeeListRow) => (row.recordSource !== 'API' ? '本地' : row.sourceStatusName || row.employeeStatus);
 const employeeCanStartBusiness = (employee: Partial<FawvwEmployee>) => employee.identityStatus === 'VALID' && employee.localEnabled !== false
   && (employee.recordSource !== 'API' || isFawvwEmployeeSourceActive(employee.sourceStatus));
-const canStartBusiness = computed(() => !applicantDisabled.value && (detail.value.id != null
+const canStartBusiness = computed(() => !applicantDisabled.value && !detail.value.localRecoveryRequired && (detail.value.id != null
   ? employeeCanStartBusiness(detail.value) : isLocalAccount(detail.value)));
 const canDeleteEmployee = (employee: Partial<FawvwEmployee>) => ['MANUAL', 'IMPORT'].includes(employee.recordSource || '');
 const summary = reactive<FawvwEmployeeSummary>({
@@ -663,11 +759,14 @@ const summary = reactive<FawvwEmployeeSummary>({
   departments: 0,
   demoEnabled: true
 });
+const canViewLocalRecovery = computed(() => summary.canViewLocalRecovery ?? auth.hasPermi('ra:admin'));
+const canRecoverLocalAccounts = computed(() => summary.canRestoreLocalAccounts ?? (canReadApplicants.value && auth.hasPermi('ra:admin')));
 const summaryReady = ref(false);
 const summaryFailed = ref(false);
 let summaryRequestId = 0;
 const syncConfig = reactive<FawvwSyncConfig>({
   enabled: true,
+  exportAllowed: false,
   scheduleType: 'DAILY',
   dailyTime: '02:00:00',
   intervalHours: 24,
@@ -779,7 +878,7 @@ const loadOrgTree = async () => {
   orgLoading.value = true;
   orgLoadFailed.value = false;
   try {
-    const { data } = await listDeptSelectTree();
+    const { data } = await listDeptSelectTree({ hideEmptyEmployeeOther: true });
     if (!pageDisposed) {
       localDepartments.value = data || [];
       if (queryParams.departmentId && !selectedOrg.value) clearOrgSelection();
@@ -791,6 +890,22 @@ const loadOrgTree = async () => {
   }
 };
 
+let appliedEmployeeFilters: EmployeeDirectoryQuery | undefined;
+const exportingEmployees = ref(false);
+
+async function downloadEmployeeInfo() {
+  if (exportingEmployees.value || loading.value || employeeListFailed.value || !appliedEmployeeFilters || !summary.exportAllowed) return;
+  exportingEmployees.value = true;
+  try {
+    const response = await exportEmployeeDirectory(appliedEmployeeFilters);
+    FileSaver.saveAs(await certificateDownloadBlob(response, 'text/csv'), '员工信息.csv');
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '导出员工信息失败');
+  } finally {
+    exportingEmployees.value = false;
+  }
+}
+
 const loadEmployees = () => {
   const requestId = ++employeeRequestId;
   employeeListRequest?.abort();
@@ -799,11 +914,13 @@ const loadEmployees = () => {
   loading.value = true;
   employeeListFailed.value = false;
   const filters = localSelected.value ? { status: '', foreignFlag: null } : {};
-  return pageEmployeeDirectory({ ...queryParams, ...filters, departmentId: selectedLocalDeptId.value }, request.signal)
+  const requestedFilters = { ...queryParams, ...filters, departmentId: selectedLocalDeptId.value };
+  return pageEmployeeDirectory(requestedFilters, request.signal)
     .then((response) => {
       if (!isCurrent()) return;
       const page = unwrap(response) || {};
       employeeList.value = (page.records || []).map(toEmployeeListRow);
+      appliedEmployeeFilters = requestedFilters;
       total.value = Number(page.total || 0);
     })
     .catch(() => {
@@ -820,10 +937,15 @@ const loadEmployees = () => {
     });
 };
 
-function toEmployeeListRow({ employee, applicant }: EmployeeDirectoryRow): EmployeeListRow {
+function displayedEmployeeDepartment(employee: FawvwEmployee, mappedDepartment?: string) {
+  if (employee.recordSource === 'API' && !employee.departmentId && mappedDepartment === '其他') return undefined;
+  return mappedDepartment || employee.departmentName;
+}
+
+function toEmployeeListRow({ employee, applicant, localRecoveryRequired }: EmployeeDirectoryRow): EmployeeListRow {
   const categories: Record<string, string> = { individual: '个人用户', organization: '企业用户', device: '设备用户' };
   if (employee && employee.recordSource !== 'LOCAL_USER') {
-    return { ...employee, applicant, departmentName: applicant?.deptName || employee.departmentName };
+    return { ...employee, applicant, localRecoveryRequired, departmentName: displayedEmployeeDepartment(employee, applicant?.deptName) };
   }
   return { ...employee, applicant, recordSource: 'LOCAL_USER', raUserId: applicant.id, cnName: applicant.username,
     domainAccount: applicant.domainAccount, email: applicant.mail, departmentName: applicant.deptName,
@@ -888,8 +1010,8 @@ function refreshApplicants(deletedId?: string | number) {
   applicantRefresh.value++;
   handleQuery();
   loadSummary();
-  if (!detailOpen.value || !isLocalAccount(detail.value)) return;
-  if (deletedId != null && String(detail.value.raUserId) === String(deletedId)) {
+  if (!detailOpen.value || (!isLocalAccount(detail.value) && !detail.value.localRecoveryRequired)) return;
+  if (detail.value.localRecoveryRequired || (deletedId != null && String(detail.value.raUserId) === String(deletedId))) {
     ++detailRequestId;
     detailOpen.value = false;
   } else {
@@ -901,19 +1023,13 @@ const openDetail = (row: EmployeeListRow, tab = 'profile', refresh = true) => {
   const requestId = ++detailRequestId;
   const isCurrent = () => requestId === detailRequestId && !pageDisposed;
   detail.value = row;
+  certificateOpen.value = false;
+  ++certificateDetailRequest;
   detailOpen.value = true;
   detailTab.value = tab;
   activity.value = { applies: [], employeeCertificates: [] };
-  publicKeys.value = [];
-  publicKeysFailed.value = false;
-  publicKeysLoading.value = false;
-  const loadKeys = (id: string | number) => {
-    publicKeysLoading.value = true;
-    listEmployeePublicKeys(id)
-      .then((response) => { if (isCurrent()) publicKeys.value = unwrap(response) || []; })
-      .catch(() => { if (isCurrent()) publicKeysFailed.value = true; })
-      .finally(() => { if (isCurrent()) publicKeysLoading.value = false; });
-  };
+  Object.assign(certificateInventory, { rows: [], total: 0, page: 1, loading: false, failed: false });
+  reloadCertificateInventory();
   const loadActivity = (request: Promise<unknown>) => {
     activityLoading.value = true;
     request.catch(() => { if (isCurrent()) ElMessage.error('申请与证书记录加载失败'); })
@@ -925,7 +1041,6 @@ const openDetail = (row: EmployeeListRow, tab = 'profile', refresh = true) => {
       if (!isCurrent()) return;
       detail.value = toEmployeeListRow(data.person);
       activity.value = data.activity;
-      if (detail.value.id != null) loadKeys(detail.value.id);
     }));
     return;
   }
@@ -936,13 +1051,97 @@ const openDetail = (row: EmployeeListRow, tab = 'profile', refresh = true) => {
   if (refresh) {
     getFawvwEmployee(row.id).then((response) => {
       const employee = unwrap(response);
-      if (isCurrent() && employee) detail.value = { ...row, ...employee, departmentName: row.applicant?.deptName || employee.departmentName };
+      if (isCurrent() && employee) detail.value = { ...row, ...employee, departmentName: displayedEmployeeDepartment(employee, row.applicant?.deptName) };
     }).catch(() => {
       // Keep the selected list record when the detail refresh fails.
     });
   }
-  loadKeys(row.id);
 };
+
+function changeCertificatePage(page: number) {
+  certificateInventory.page = page;
+}
+
+function reloadCertificateInventory() {
+  certificateRefresh.value++;
+}
+
+function employeeDetailTime(value?: string | number) {
+  if (typeof value === 'number') return new Date(value).toLocaleString('sv-SE', { hour12: false });
+  return String(value ?? '').replace('T', ' ').slice(0, 19) || '-';
+}
+
+function certificateSourceLabel(source?: string) {
+  const labels: Record<string, string> = { LEGACY_PFX: '存量 PFX 导入', LEGACY_SQL: '历史数据迁移', RA: 'RA 制作', CSR: 'CSR 申请', KMC: 'KMC 托管' };
+  return source ? labels[source] || source : '-';
+}
+
+async function openCertificate(id: string | number) {
+  const userId = detail.value.raUserId;
+  const employeeId = userId == null ? detail.value.id : undefined;
+  if (userId == null && employeeId == null) return;
+  const request = ++certificateDetailRequest;
+  const current = () => request === certificateDetailRequest && !pageDisposed && detailOpen.value && certificateOpen.value;
+  selectedCertificate.value = undefined;
+  certificateDetailFailed.value = false;
+  certificateDetailLoading.value = true;
+  certificateOpen.value = true;
+  try {
+    const { data } = await getEmployeeCertificates({ userId, employeeId, certificateId: id, pageNum: 1, pageSize: 1 });
+    if (!current()) return;
+    selectedCertificate.value = data?.records?.[0];
+    certificateDetailFailed.value = !selectedCertificate.value;
+  } catch {
+    if (current()) certificateDetailFailed.value = true;
+  } finally {
+    if (current()) certificateDetailLoading.value = false;
+  }
+}
+
+const certificateMimeTypes = { cer: 'application/pkix-cert', pem: 'application/x-pem-file', p7b: 'application/x-pkcs7-certificates' };
+async function downloadEmployeeCertificate(format: keyof typeof certificateMimeTypes) {
+  const certificate = selectedCertificate.value;
+  if (!certificate || certificateDownloading.value || !Object.hasOwn(certificateMimeTypes, format)) return;
+  certificateDownloading.value = true;
+  try {
+    const response = await downloadRaCert(certificate.id, format);
+    FileSaver.saveAs(await certificateDownloadBlob(response, certificateMimeTypes[format]), `${certificate.serialNumber}.${format}`);
+  } catch {
+    ElMessage.error('下载失败，请确认有证书下载权限且证书文件仍可用');
+  } finally {
+    certificateDownloading.value = false;
+  }
+}
+
+watch(detailOpen, (open) => {
+  if (!open) certificateOpen.value = false;
+});
+
+watch([
+  () => detailOpen.value && detailTab.value === 'qualification' ? detail.value.raUserId : undefined,
+  () => detailOpen.value && detailTab.value === 'qualification' && detail.value.raUserId == null ? detail.value.id : undefined,
+  () => certificateInventory.page,
+  certificateRefresh
+], async ([userId, employeeId, page], _, onCleanup) => {
+  if (userId == null && employeeId == null) {
+    certificateInventory.loading = false;
+    return;
+  }
+  let current = true;
+  onCleanup(() => { current = false; });
+  certificateInventory.failed = false;
+  certificateInventory.loading = true;
+  try {
+    const { data } = await getEmployeeCertificates({ userId, employeeId, pageNum: page, pageSize: certificateInventory.pageSize });
+    if (!current || pageDisposed) return;
+    certificateInventory.rows = data?.records || [];
+    certificateInventory.total = Number(data?.total) || 0;
+  } catch {
+    if (current && !pageDisposed) certificateInventory.failed = true;
+  } finally {
+    if (current && !pageDisposed) certificateInventory.loading = false;
+  }
+});
 
 watch(() => [detailOpen.value && canReadApplicants.value && !detail.value.applicant ? detail.value.raUserId : undefined, applicantRefresh.value] as const, async ([userId], _, onCleanup) => {
   fetchedApplicant.value = undefined;
@@ -1125,8 +1324,7 @@ const watchSyncTask = (taskNo: string) => {
         ElMessage.error(log.errorMessage || '同步失败，请查看同步记录');
       }
       loadSummary();
-      loadOrgTree();
-      loadEmployees();
+      void refreshLocalDirectory();
       if (logsOpen.value) loadLogs();
     } catch {
       if (pageDisposed || version !== syncPollVersion) return;
@@ -1174,6 +1372,7 @@ const saveConfig = () => {
     .then((response) => {
       Object.assign(syncConfig, unwrap(response) || syncConfig);
       syncConfig.apiSecretKey = '';
+      summary.exportAllowed = syncConfig.exportAllowed === true;
       ElMessage.success('同步配置已保存');
       configOpen.value = false;
       loadSummary();
@@ -1188,23 +1387,6 @@ const openLogs = () => {
   loadLogs();
 };
 
-const openDataExplanation = async () => {
-  dataExplanation.value = undefined;
-  dataExplanationOpen.value = true;
-  dataExplanationLoading.value = true;
-  try {
-    dataExplanation.value = unwrap(await getFawvwEmployeeDataExplanation());
-    if (dataExplanation.value?.summary) {
-      summaryRequestId++;
-      Object.assign(summary, dataExplanation.value.summary);
-      summaryReady.value = true;
-      summaryFailed.value = false;
-    }
-  } finally {
-    dataExplanationLoading.value = false;
-  }
-};
-
 const loadLogs = () => {
   logsLoading.value = true;
   pageFawvwSyncLogs(logQuery)
@@ -1217,6 +1399,28 @@ const loadLogs = () => {
       logsLoading.value = false;
     });
 };
+
+function openNumberChanges(taskNo: string) {
+  numberChangesTaskNo = taskNo;
+  numberChangesQuery.pageNum = 1;
+  numberChanges.value = [];
+  numberChangesTotal.value = 0;
+  numberChangesOpen.value = true;
+  void loadNumberChanges();
+}
+
+async function loadNumberChanges() {
+  const request = ++numberChangesRequest;
+  numberChangesLoading.value = true;
+  try {
+    const page = unwrap(await pageFawvwEmployeeNumberChanges(numberChangesTaskNo, numberChangesQuery.pageNum, numberChangesQuery.pageSize));
+    if (request !== numberChangesRequest) return;
+    numberChanges.value = page.records || [];
+    numberChangesTotal.value = page.total || 0;
+  } finally {
+    if (request === numberChangesRequest) numberChangesLoading.value = false;
+  }
+}
 
 const openInvalidRecords = (row: FawvwSyncLog) => {
   invalidTaskNo.value = row.taskNo;
@@ -1268,8 +1472,9 @@ useRaListRefreshOnReturn(() => {
 </script>
 
 <style scoped lang="scss">
-.employee-public-keys {
-  min-height: 56px;
+.employee-certificate-detail {
+  min-height: 48px;
+  overflow-wrap: anywhere;
 }
 
 .fawvw-employee-page {
@@ -1488,7 +1693,6 @@ useRaListRefreshOnReturn(() => {
     padding: 14px 16px;
     border: 1px solid var(--el-border-color-lighter);
     border-radius: 6px;
-    background: var(--el-fill-color-extra-light);
   }
 
   .query-form {
@@ -1528,20 +1732,47 @@ useRaListRefreshOnReturn(() => {
     }
   }
 
-  .query-help {
-    margin-left: 2px;
-    vertical-align: middle;
-    color: var(--el-text-color-secondary);
-  }
-
   .toolbar-row {
     display: flex;
     align-items: center;
-    row-gap: 8px;
+    gap: 8px 10px;
+  }
+
+  .employee-pagination {
+    max-width: 100%;
+    overflow-x: auto;
+
+    :deep(.el-pagination) {
+      float: none;
+      width: max-content;
+      min-width: 100%;
+      flex-wrap: nowrap;
+      justify-content: flex-end;
+    }
   }
 
   .employee-table {
     width: 100%;
+  }
+}
+
+.employee-detail-descriptions {
+  :deep(.el-descriptions__table) {
+    table-layout: fixed;
+  }
+
+  :deep(.el-descriptions__label) {
+    white-space: nowrap;
+  }
+
+  :deep(.el-descriptions__content) {
+    overflow-wrap: anywhere;
+  }
+
+  .employee-identity-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
   }
 
   .identity-key {

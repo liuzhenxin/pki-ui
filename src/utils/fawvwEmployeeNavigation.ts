@@ -1,5 +1,6 @@
 import type { RouteRecordRaw, Router } from 'vue-router';
 
+export const employeeCertLedgerPath = '/ra-cert-management/ra-employee-cert';
 export const employeeDirectoryPath = '/ra-employees/ra-employee';
 export const isRaApplicantDirectory = (component: unknown): boolean => /^ra\/user(?:\/index)?$/.test(String(component ?? ''));
 export const isRaDepartmentDirectory = (component: unknown): boolean => /^ra\/dept(?:\/index)?$/.test(String(component ?? ''));

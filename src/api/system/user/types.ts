@@ -37,6 +37,7 @@ export interface UserVO {
   roles?: RoleVO[];
   id: number;
   username: string;
+  displayName?: string;
   userName?: string;
   nickName?: string;
   avatar: string | null;

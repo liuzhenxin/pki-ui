@@ -3,7 +3,6 @@
     <template v-for="(item, index) in modelValue" :key="item.type + index">
       <!-- Handle standard single values -->
       <el-form-item
-        v-if="!isFileSubjectSerialNumber(item.type) || item.minOccurs !== 0"
         :label="getFieldMeta(item.type).label"
         :prop="propPrefix ? `${propPrefix}.${index}.value` : `${index}.value`"
         :rules="getRules(item)"
@@ -99,10 +98,7 @@ const emit = defineEmits(['update:modelValue']);
 
 const isFileSubjectSerialNumber = (type: string) => props.fileIssuance && type === 'serialNumber';
 
-const getFieldMeta = (type: string) => {
-  const meta = typeMapping[type] || { label: type, key: type.toUpperCase() };
-  return isFileSubjectSerialNumber(type) ? { ...meta, label: '主题序列号' } : meta;
-};
+const getFieldMeta = (type: string) => typeMapping[type] || { label: type, key: type.toUpperCase() };
 
 const getRules = (item: SubjectItem) => {
   const rules: any[] = [];

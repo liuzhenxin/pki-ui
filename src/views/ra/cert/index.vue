@@ -8,16 +8,23 @@
         <el-form-item label="证书主题" prop="subject">
           <el-input v-model="queryParams.subject" clearable placeholder="请输入主题关键字" @keyup.enter="handleQuery" />
         </el-form-item>
+        <el-form-item label="用户信息" prop="userInfo">
+          <el-input v-model="queryParams.userInfo" clearable placeholder="用户名、域账号或部门" @keyup.enter="handleQuery" />
+        </el-form-item>
         <el-form-item label="证书状态" prop="status">
           <el-select v-model="queryParams.status" clearable placeholder="全部状态">
             <el-option v-for="item in statusOptions" :key="item.value" :label="item.label" :value="item.value" />
           </el-select>
         </el-form-item>
-        <el-form-item label="证书模板" prop="profileName">
-          <el-input v-model="queryParams.profileName" clearable placeholder="请输入模板名称" @keyup.enter="handleQuery" />
+        <el-form-item label="证书模板" prop="profileId">
+          <el-select v-model="queryParams.profileId" clearable filterable placeholder="全部模板" :loading="filterOptionsLoading">
+            <el-option v-for="item in profileOptions" :key="item.id" :label="item.name" :value="item.id" />
+          </el-select>
         </el-form-item>
-        <el-form-item label="颁发机构" prop="issuer">
-          <el-input v-model="queryParams.issuer" clearable placeholder="请输入证书颁发者名称或 DN" @keyup.enter="handleQuery" />
+        <el-form-item label="颁发机构" prop="rootId">
+          <el-select v-model="queryParams.rootId" clearable filterable placeholder="全部颁发机构" :loading="filterOptionsLoading">
+            <el-option v-for="item in issuerOptions" :key="item.id" :label="item.name" :value="item.id" />
+          </el-select>
         </el-form-item>
         <el-form-item label="有效期" prop="validity">
           <el-date-picker
@@ -42,14 +49,17 @@
         <span class="list-title">证书列表</span>
         <el-tag type="info" effect="plain" round>{{ total }}</el-tag>
       </div>
-      <right-toolbar v-model:showSearch="showSearch" @queryTable="getList" />
+      <right-toolbar v-model:showSearch="showSearch" @queryTable="refreshPage" />
     </div>
 
     <el-table v-loading="loading" :data="rows" border stripe :empty-text="loadFailed ? '证书查询失败，请重试' : '暂无符合条件的内网已签发证书'" class="cert-table">
       <el-table-column label="证书序列号" prop="serialNumber" min-width="180" show-overflow-tooltip>
         <template #default="{ row }"><el-button link type="primary" @click="handleDetail(row)">{{ row.serialNumber || '查看详情' }}</el-button></template>
       </el-table-column>
-      <el-table-column label="证书主题" prop="subject" min-width="260" show-overflow-tooltip />
+      <el-table-column label="证书主题" prop="subject" min-width="260" :formatter="formatCertificateSubjectColumn" show-overflow-tooltip />
+      <el-table-column label="申请用户" prop="userName" min-width="140" show-overflow-tooltip>
+        <template #default="{ row }">{{ row.userName || '-' }}</template>
+      </el-table-column>
       <el-table-column label="所属部门" prop="deptName" min-width="140" show-overflow-tooltip />
       <el-table-column label="签发 CA" prop="rootName" min-width="150" show-overflow-tooltip />
       <el-table-column label="证书模板" prop="profileName" min-width="150" show-overflow-tooltip />
@@ -91,11 +101,12 @@
         <el-descriptions-item label="证书状态">
           <el-tag :type="statusTagType(detail.status)" effect="light">{{ detail.statusName || statusName(detail.status) }}</el-tag>
         </el-descriptions-item>
-        <el-descriptions-item label="证书主题" :span="2">{{ detail.x509?.subjectDn || detail.subject || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="证书主题" :span="2">{{ formatCertificateSubject(detail.x509?.subjectDn || detail.subject) }}</el-descriptions-item>
         <el-descriptions-item v-if="detail.x509" label="颁发者 DN" :span="2">{{ detail.x509.issuerDn }}</el-descriptions-item>
-        <el-descriptions-item label="请求主题" :span="2">{{ detail.requestSubject || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="请求主题" :span="2">{{ formatCertificateSubject(detail.requestSubject) }}</el-descriptions-item>
+        <el-descriptions-item label="申请用户">{{ detail.userName || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="域账号">{{ detail.domainAccount || '-' }}</el-descriptions-item>
         <el-descriptions-item label="所属部门">{{ detail.deptName || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="申请用户ID">{{ detail.userId || '-' }}</el-descriptions-item>
         <el-descriptions-item label="签发 CA">{{ detail.rootName || '-' }}</el-descriptions-item>
         <el-descriptions-item label="证书模板">{{ detail.profileName || detail.profileId || '-' }}</el-descriptions-item>
         <el-descriptions-item label="生效时间">{{ parseTime(detail.notBefore) || '-' }}</el-descriptions-item>
@@ -278,6 +289,7 @@
 </template>
 
 <script setup name="RaCert" lang="ts">
+import { formatCertificateSubject, formatCertificateSubjectColumn } from '@/utils/raCertificateSubject';
 import CertRowAction from '../components/CertRowAction.vue';
 import { useRaListRefreshOnReturn } from '@/hooks/useRaListRefreshOnReturn';
 import { ElMessage, FormInstance, FormRules } from 'element-plus';
@@ -285,6 +297,8 @@ import {
   downloadRaCert,
   downloadRaPkcs12,
   getRaCert,
+  getRaCertFilterOptions,
+  type RaCertFilterOption,
   pageRaCert,
   queryRaKmcKeyStatus,
   recoverRaKey,
@@ -309,6 +323,28 @@ import HistoricalRecoveryDialog from '@/views/ca/archive-cert/HistoricalRecovery
 const rows = ref<RaCertSummary[]>([]);
 const router = useRouter();
 const loading = ref(false);
+const filterOptionsLoading = ref(false);
+const profileOptions = ref<RaCertFilterOption[]>([]);
+const issuerOptions = ref<RaCertFilterOption[]>([]);
+
+async function loadFilterOptions() {
+  if (filterOptionsLoading.value) return;
+  filterOptionsLoading.value = true;
+  try {
+    const { data } = await getRaCertFilterOptions();
+    const labelDuplicates = (options: RaCertFilterOption[]) => {
+      const names = new Map<string, number>();
+      for (const item of options) names.set(item.name, (names.get(item.name) ?? 0) + 1);
+      return options.map(item => names.get(item.name) === 1 ? item : { ...item, name: `${item.name}（ID: ${item.id}）` });
+    };
+    profileOptions.value = labelDuplicates(data?.profiles ?? []);
+    issuerOptions.value = labelDuplicates(data?.issuers ?? []);
+  } catch {
+    // The request interceptor reports the error; other filters remain usable.
+  } finally {
+    filterOptionsLoading.value = false;
+  }
+}
 const loadFailed = ref(false);
 const canSyncIntranet = computed(() => auth.hasPermiAnd(['ra:intranet-cert', 'ra:intranet-cert:add']));
 let listRequestId = 0;
@@ -442,9 +478,10 @@ const queryParams = reactive({
   pageSize: 10,
   serialNumber: '',
   subject: '',
+  userInfo: '',
   status: '' as RaCertStatus | '',
-  profileName: '',
-  issuer: '',
+  profileId: '',
+  rootId: '',
   validity: null as [string, string] | null
 });
 
@@ -464,9 +501,10 @@ async function getList() {
         pageSize: queryParams.pageSize,
         serialNumber: queryParams.serialNumber || undefined,
         subject: queryParams.subject || undefined,
+        userInfo: queryParams.userInfo || undefined,
         status: queryParams.status || undefined,
-        profileName: queryParams.profileName.trim() || undefined,
-        issuer: queryParams.issuer.trim() || undefined,
+        profileId: queryParams.profileId || undefined,
+        rootId: queryParams.rootId || undefined,
         validFrom: queryParams.validity?.[0],
         validTo: queryParams.validity?.[1]
       })
@@ -493,9 +531,10 @@ function resetQuery() {
   queryFormRef.value?.resetFields();
   queryParams.serialNumber = '';
   queryParams.subject = '';
+  queryParams.userInfo = '';
   queryParams.status = '';
-  queryParams.profileName = '';
-  queryParams.issuer = '';
+  queryParams.profileId = '';
+  queryParams.rootId = '';
   queryParams.validity = null;
   handleQuery();
 }
@@ -587,7 +626,7 @@ async function handleDownload(format: string, row: RaCertSummary) {
       cer: 'application/pkix-cert',
       p7b: 'application/x-pkcs7-certificates'
     };
-    saveBlob(await certificateDownloadBlob(response, mimeTypes[format]), `${row.serialNumber}.${format}`);
+    saveBlob(await certificateDownloadBlob(response, mimeTypes[format], 'RA_CERT_DOWNLOAD_'), `${row.serialNumber}.${format}`);
   } catch {
     ElMessage.error('证书下载失败');
   }
@@ -935,8 +974,13 @@ async function submitRecover() {
   }
 }
 
-onMounted(getList);
-useRaListRefreshOnReturn(getList);
+function refreshPage() {
+  void loadFilterOptions();
+  return getList();
+}
+
+onMounted(refreshPage);
+useRaListRefreshOnReturn(refreshPage);
 </script>
 
 <style scoped lang="scss">

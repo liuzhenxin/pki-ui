@@ -32,7 +32,7 @@
       <el-table ref="tableRef" v-loading="loading" :data="rows" border @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="48" align="center" />
         <el-table-column prop="serialNumber" label="证书序列号" min-width="180" show-overflow-tooltip />
-        <el-table-column prop="subject" label="主体名称" min-width="180" show-overflow-tooltip />
+        <el-table-column prop="subject" label="主体名称" min-width="180" :formatter="formatCertificateSubjectColumn" show-overflow-tooltip />
         <el-table-column prop="profileName" label="证书模板" min-width="150" show-overflow-tooltip />
         <el-table-column prop="notAfter" label="到期时间" width="170" />
         <el-table-column label="状态" width="110" align="center">
@@ -121,6 +121,7 @@
 </template>
 
 <script setup lang="ts">
+import { formatCertificateSubjectColumn } from '@/utils/raCertificateSubject';
 import CertRowAction from './CertRowAction.vue';
 import { useRaListRefreshOnReturn } from '@/hooks/useRaListRefreshOnReturn';
 import { computed, reactive, ref } from 'vue';

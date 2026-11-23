@@ -53,9 +53,8 @@
             <span>{{ proxy?.parseTime(row.dept.createTime) }}</span>
           </template>
         </el-table-column>
-        <el-table-column fixed="right" align="center" label="操作" :width="applicantPath ? 232 : 150">
+        <el-table-column fixed="right" align="center" label="操作" width="150">
           <template #default="{ row }">
-            <el-button v-if="applicantPath" link type="primary" icon="User" @click="openDepartmentApplicants(row.dept)">申请用户</el-button>
             <el-tooltip v-if="row.dept.writable" content="修改" placement="top">
               <el-button v-hasPermi="['sys:dept:modify', 'ra:dept']" link type="primary" icon="Edit" @click="handleUpdate(row.dept)" />
             </el-tooltip>
@@ -131,18 +130,10 @@ import { getAssignableRaRoles } from '@/api/ra/adminUser';
 import { getOrganizationCertScopes, listUserCertScopeOptions, saveOrganizationCertScopes } from '@/api/ra/userCertScope';
 import type { RaUserCertScopeRoot } from '@/api/ra/userCertScope';
 import { useUserStore } from '@/store/modules/user';
-import { useRouter } from 'vue-router';
 import { shallowRef } from 'vue';
-import { applicantDirectoryPath } from '@/utils/fawvwEmployeeNavigation';
 import { usePagedDepartmentTree } from '@/hooks/usePagedDepartmentTree';
 
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
-const router = useRouter();
-const applicantPath = computed(() => applicantDirectoryPath(router));
-
-function openDepartmentApplicants(row: RaDeptVO) {
-  if (applicantPath.value && row.id != null) void router.push({ path: applicantPath.value, query: { deptId: String(row.id) } });
-}
 
 const isRaAdmin = ref(false);
 const organizationLocked = ref(false);

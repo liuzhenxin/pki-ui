@@ -65,11 +65,19 @@ test('standard certificate application finds employees by department and domain 
   const employeeLookups: string[] = [];
   let finishOptions: (() => void) | undefined;
   let delayOptions = false;
+  let roots: unknown[] = [];
+  const user = { userId: 'operator', tenantId: '5' };
+  const storedDefaults = new Map<string, unknown>();
+  const localCache = {
+    getJSON: (key: string) => storedDefaults.get(key),
+    setJSON: (key: string, value: unknown) => storedDefaults.set(key, value),
+    remove: (key: string) => storedDefaults.delete(key)
+  };
   const api = {
     listDeptSelectTree: async () => ({ data: [{ id: 'ra-1', name: 'RA部门' }] }),
     listMyUserCertScopeOptions: async () => {
       if (delayOptions) await new Promise<void>((resolve) => { finishOptions = resolve; });
-      return { data: [] };
+      return { data: roots };
     },
     getFawvwEmployee: async (id: string) => { employeeLookups.push(id); return { data: employee }; },
     getFawvwEmployeeApplicant: async () => ({ data: applicant }),
@@ -80,6 +88,8 @@ test('standard certificate application finds employees by department and domain 
     (name: string) => name === 'vue' ? vue : name === 'vue-router' ? { useRoute: () => route }
       : name === '@/hooks/useRaListRefreshOnReturn' ? { useRaListRefreshOnReturn: () => {} }
       : name === '@/plugins/auth' ? { default: { hasPermi: () => true } }
+      : name === '@/store/modules/user' ? { useUserStore: () => user }
+      : name === '@/plugins/cache' ? { default: { local: localCache } }
       : name === '@/utils/fawvwEmployeeStatus' ? { isFawvwEmployeeSourceActive: (status: string) => status === '3' } : api,
     module, module.exports, vue.ref, vue.reactive, vue.computed, vue.shallowRef, vue.watch, () => {}, () => ({ proxy: {} })
   );
@@ -123,6 +133,46 @@ test('standard certificate application finds employees by department and domain 
   await new Promise((resolve) => setTimeout(resolve, 0));
   expect(employeeLookups).toEqual([employee.id]);
   expect(picker.open.value).toBe(false);
+
+  delayOptions = false;
+  Object.assign(route, { path: applyPath, fullPath: applyPath, query: {} });
+  const singleRoot = { id: '9007199254740993', name: 'Root A', algorithm: 'RSA', profiles: [{ id: '7', name: 'TLS' }] };
+  const pair = { signProfileId: '11', encryptProfileId: '12', signProfileName: '签名', encryptProfileName: '加密' };
+  const dualRoot = { id: '2', name: 'Root B', algorithm: 'SM2', profiles: [], dualProfiles: [pair] };
+  roots = [singleRoot, dualRoot];
+  await picker.handleAdd();
+  picker.openDefaultSettings();
+  picker.defaultDraft.rootId = singleRoot.id;
+  expect(picker.defaultTemplateOptions.value.map((option: { key: string }) => option.key)).toEqual(['single:7']);
+  picker.defaultDraft.templateKey = 'single:7';
+  picker.saveDefaultSettings();
+  await picker.handleAdd();
+  expect(picker.form).toMatchObject({ rootId: singleRoot.id, rootName: 'Root A', profileId: '7', profileName: 'TLS' });
+  picker.form.rootId = dualRoot.id;
+  picker.handleRootChange(dualRoot.id);
+  expect(picker.form.profileId).toBeUndefined();
+
+  picker.openDefaultSettings();
+  picker.defaultDraft.rootId = dualRoot.id;
+  expect(picker.defaultTemplateOptions.value.map((option: { key: string }) => option.key)).toEqual(['dual:11:12']);
+  picker.defaultDraft.templateKey = 'dual:11:12';
+  picker.saveDefaultSettings();
+  roots = [singleRoot, { ...dualRoot, dualProfiles: [{ ...pair, signProfileId: '99' }, pair] }];
+  await picker.handleAdd();
+  expect(picker.form).toMatchObject({ rootId: '2', certMode: 'dual', dualProfileIndex: 1, signProfileId: '11', encryptProfileId: '12' });
+
+  user.userId = 'another-operator';
+  await picker.handleAdd();
+  expect(picker.form.rootId).toBeUndefined();
+  user.userId = 'operator';
+  roots = [singleRoot, { ...dualRoot, dualProfiles: [] }];
+  await picker.handleAdd();
+  expect(picker.form).toMatchObject({ rootId: '2', certMode: 'single', profileId: undefined });
+  picker.openDefaultSettings();
+  picker.defaultDraft.rootId = undefined;
+  picker.saveDefaultSettings();
+  await picker.handleAdd();
+  expect(picker.form.rootId).toBeUndefined();
 });
 
 test('certificate application search, reset and add align at normal zoom', async ({ page }) => {
@@ -230,16 +280,36 @@ test('employee workspace switches sources and adds an applicant to the selected 
       addUser:async (form,domainAccount)=>{window.savedDept=form.deptId;accounts.push({...form,domainAccount,id:'23',deptName:department.name});},
       removeDept:async ids=>{window.removedDept=ids[0];department.children=[];return {data:true};},
       getUser:async id=>({data:accounts.find(item=>item.id===id)}),
-      getEmployeeDirectoryDetails:async id=>({data:{person:localRow(accounts.find(item=>item.id===id)),activity:{applies:[{id:'108',status:0}],employeeCertificates:[]}}}),
-      listEmployeePublicKeys:async id=>{window.lastPublicKeysId=id;return {data:[]};}};
+      downloadRaCert:async (id,format)=>{
+        window.employeeCertificateDownload={id,format};
+        return new Blob(['fixture']);
+      },
+      certificateDownloadBlob:async blob=>blob,
+      getEmployeeDirectoryDetails:async id=>({data:{person:localRow(accounts.find(item=>item.id===id)),activity:{
+        applies:[{id:'108',status:3,certificates:id==='23'?[{cert_id:'2',serial_number:'STANDARD-LOCAL-23',profile_name:'通用证书模板'}]:[]},
+          {id:'109',status:2,review_comment:'请重新核对 CSR 主题'}],
+        employeeCertificates:id==='23'?[{id:'99',task_no:'EC-FAILED',issue_status:'FAILED',issue_message:'CA 模板不可用',
+          process_time:'2026-11-02T10:00:05',update_time:'2026-11-22T16:00:00'}]:[]}}}),
+      getEmployeeCertificates:async ({userId,pageNum,certificateId})=>{
+        window.certificateRequests=(window.certificateRequests||0)+1;
+        const number=certificateId?Number(certificateId):pageNum;
+        const records=userId==='23'?[{
+          id:String(number),serialNumber:number===1?'MAIL-LOCAL-23':'STANDARD-LOCAL-23',status:'VALID',
+          subject:'CN=local-tester, 邮箱=person@example.test',profileName:number===1?'邮件模板':'通用证书模板',adUploadEligible:number===1
+        }]:[];
+        return {data:{records,total:records.length?11:0}};
+      }};
     const require=name=>name==='vue'?Vue:name==='element-plus'?ElementPlus:
       name==='@/hooks/useRaListRefreshOnReturn'?{useRaListRefreshOnReturn(){}}:
       name==='vue-router'?{useRoute:()=>route,useRouter:()=>({push:target=>{window.lastEmployeePush=target;}})}:
+      name==='file-saver'?{default:{saveAs:(_blob,name)=>{window.employeeCertificateDownloadName=name;}}}:
       name==='@/plugins/auth'?{default:{hasPermi:p=>p!=='write',hasPermiAnd:ps=>!ps.includes('write')}}:
       name.endsWith('/fawvwEmployeeNavigation')?{employeeDirectoryPath:route.path,directoryQueryId:()=>undefined}:
       name.endsWith('/fawvwEmployeeStatus')?{isFawvwEmployeeSourceActive:value=>['A','3'].includes(value)}:
-      name==='./LocalDirectoryDialogs.vue'?{default:Dialogs}:api;
+      name==='./LocalDirectoryDialogs.vue'?{default:Dialogs}:
+      name==='./EmployeeCertificateInventory.vue'?{default:Certificates}:api;
     const Dialogs=${component('src/views/ra/employee/LocalDirectoryDialogs.vue')};
+    const Certificates=${component('src/views/ra/employee/EmployeeCertificateInventory.vue')};
     const Employee=${component('src/views/ra/employee/index.vue')};
     Employee.__scopeId='data-v-employee-layout-test';
     const app=Vue.createApp(Employee).use(ElementPlus);
@@ -321,17 +391,47 @@ test('employee workspace switches sources and adds an applicant to the selected 
   expect(await page.evaluate(() => (window as any).savedDept)).toBe('9007199254740993');
   await list.getByRole('row').filter({ hasText: 'local-tester' }).getByRole('button', { name: '员工详情' }).click();
   const details = page.getByRole('dialog', { name: '员工详情' });
+  await expect(details.getByRole('tab', { name: '基本资料' })).toHaveAttribute('aria-selected', 'true');
+  await expect(details.getByText('公钥信息', { exact: true })).toHaveCount(0);
+  expect(await page.evaluate(() => (window as any).certificateRequests || 0)).toBe(0);
   await details.getByRole('tab', { name: '申请与证书' }).click();
   await expect(details.getByText('108', { exact: true })).toBeVisible();
+  await expect(details.getByText('CA 模板不可用', { exact: true })).toBeVisible();
+  await expect(details.getByText('请重新核对 CSR 主题', { exact: true })).toBeVisible();
+  await expect(details.getByRole('row').filter({ hasText: 'EC-FAILED' })).toContainText('2026-11-02 10:00:05');
+  await expect(details.getByRole('region', { name: '员工证书' })).not.toBeVisible();
+  await details.getByRole('button', { name: 'STANDARD-LOCAL-23' }).click();
+  const certificate = page.getByRole('dialog', { name: '证书详情' });
+  await expect(certificate.getByText('CN=local-tester, 邮箱=person@example.test', { exact: true })).toBeVisible();
+  await certificate.getByRole('button', { name: '下载证书' }).click();
+  await page.getByRole('menuitem', { name: 'CER', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => (window as any).employeeCertificateDownload)).toEqual({ id: '2', format: 'cer' });
+  await expect.poll(() => page.evaluate(() => (window as any).employeeCertificateDownloadName)).toBe('STANDARD-LOCAL-23.cer');
+  await certificate.getByRole('button', { name: '关闭', exact: true }).click();
   await details.getByRole('button', { name: '员工证书制作' }).click();
   expect(await page.evaluate(() => (window as any).lastEmployeePush.query)).toMatchObject({ employeeId: '25', identityKey: 'local-identity-23' });
   await details.getByRole('button', { name: '发起标准证书申请' }).click();
   expect(await page.evaluate(() => (window as any).lastEmployeePush.query)).toMatchObject({ employeeId: '25' });
   await details.getByRole('tab', { name: '办理状态' }).click();
   await expect(details.getByRole('button', { name: '管理本地账号' })).toBeVisible();
+  await expect(details.getByText('MAIL-LOCAL-23', { exact: true }).filter({ visible: true })).toBeVisible();
+  await expect(details.getByText('邮件模板', { exact: true })).toBeVisible();
+  await expect(details.getByText('最近成功上传 AD 的证书', { exact: true })).toBeVisible();
+  await expect(details.getByText('AD 发布未接入，暂无上传记录', { exact: true })).toBeVisible();
+  await expect(details.getByRole('button', { name: '上传 AD' })).toBeDisabled();
+  await details.locator('.certificate-pagination .btn-next:visible').click();
+  await expect(details.getByText('STANDARD-LOCAL-23', { exact: true }).filter({ visible: true })).toBeVisible();
+  await expect(details.getByRole('button', { name: '上传 AD' })).toHaveCount(0);
+  expect(await page.evaluate(() => (window as any).certificateRequests)).toBe(3);
+  await page.setViewportSize({ width: 390, height: 820 });
+  const mobileInventory = details.getByRole('region', { name: '员工证书' }).filter({ visible: true });
+  await expect(mobileInventory).toBeVisible();
+  await expect.poll(async () => (await mobileInventory.boundingBox())!.width).toBeLessThan(390);
+  await page.setViewportSize({ width: 1360, height: 900 });
   await page.keyboard.press('Escape');
   await list.getByRole('row').filter({ hasText: 'local-no-domain' }).getByRole('button', { name: '员工详情' }).click();
   await details.getByRole('tab', { name: '申请与证书' }).click();
+  await expect(details.getByRole('button', { name: 'STANDARD-LOCAL-23' })).toHaveCount(0);
   await expect(details.getByRole('button', { name: '员工证书制作' })).toHaveCount(0);
   await details.getByRole('button', { name: '发起标准证书申请' }).click();
   expect(await page.evaluate(() => (window as any).lastEmployeePush.query)).toMatchObject({ applicantId: '24' });
@@ -415,8 +515,9 @@ test('department bounds mounted rows and opens scoped applicants', async ({ page
     const route=Vue.reactive({path:'/ra-dept/departments',query:{},meta:{}});
     const router={getRoutes:()=>[{path:employeeDirectoryPath,meta:{}},{path:userPath,meta:{fawvwApplicantDirectory:true}}],
       push:async target=>{window.lastPush=target;route.path=target.path;route.query=target.query;route.meta={fawvwApplicantDirectory:target.path===userPath};}};
+    window.openApplicantDirectory=id=>router.push({path:userPath,query:id ? {deptId:id,from:'departments'} : {}});
     const department={id:deptId,name:'设备保障部',sort:1,children:Array.from({length:5000},(_,i)=>({id:String(i+1),name:'科室'+i,sort:i}))};
-    const applicant={id:'5017',username:'employee-applicant',userCategory:'individual',deptName:department.name,status:0};
+    const applicant={id:'5017',username:'ra-faw-0123456789abcdef0123456',displayName:'张三',userCategory:'individual',deptName:department.name,status:0};
     const api={listDeptTree:async()=>({data:[department]}),listDeptSelectTree:async()=>({data:[{...department,children:[]}]}),
       listUser:async query=>{window.lastApplicantQuery=query;return {data:{records:[applicant],total:1}};},
       getUser:async()=>({data:applicant}),getFawvwEmployeeIdByApplicant:async id=>{window.lastApplicantId=id;return {data:'45'};}};
@@ -441,12 +542,18 @@ test('department bounds mounted rows and opens scoped applicants', async ({ page
   await expect(rows).toHaveCount(50);
   await page.getByRole('button', { name: '折叠下级部门' }).click();
   await expect(rows).toHaveCount(1);
-  await page.getByRole('button', { name: '申请用户', exact: true }).click();
+  await page.evaluate(() => (window as any).openApplicantDirectory('9007199254740993'));
   await expect.poll(() => page.evaluate(() => (window as any).lastApplicantQuery?.deptId)).toBe('9007199254740993');
+  await expect(page.getByRole('button', { name: '新增', exact: true })).toHaveCount(0);
+  await expect(page.getByText('张三', { exact: true })).toBeVisible();
+  await expect(page.getByText('ra-faw-0123456789abcdef0123456', { exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: '申请用户详情' }).click();
   const detail = page.getByRole('dialog', { name: '申请用户详情' });
   await expect(detail.getByText('设备保障部', { exact: true })).toBeVisible();
+  await expect(detail.getByText('张三', { exact: true })).toBeVisible();
   await detail.getByRole('button', { name: '查看关联员工' }).click();
   expect(await page.evaluate(() => (window as any).lastApplicantId)).toBe('5017');
   expect(await page.evaluate(() => (window as any).lastPush)).toMatchObject({ path: '/ra-employees/ra-employee', query: { employeeId: '45' } });
+  await page.evaluate(() => (window as any).openApplicantDirectory());
+  await expect(page.getByRole('button', { name: '新增', exact: true })).toBeVisible();
 });

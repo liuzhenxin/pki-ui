@@ -61,7 +61,7 @@
         <el-descriptions-item label="申请用户">{{ detail.userName || '-' }}</el-descriptions-item>
         <el-descriptions-item label="所属部门">{{ detail.deptName || '-' }}</el-descriptions-item>
         <el-descriptions-item label="证书序列号">{{ detail.serialNumber || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="证书主题">{{ detail.subject || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="证书主题">{{ formatCertificateSubject(detail.subject) }}</el-descriptions-item>
         <el-descriptions-item label="根证书">{{ detail.rootName || '-' }}</el-descriptions-item>
         <el-descriptions-item label="证书模板">{{ detail.profileName || '-' }}</el-descriptions-item>
         <el-descriptions-item label="申请原因">{{ detail.reason || '-' }}</el-descriptions-item>
@@ -75,6 +75,7 @@
 </template>
 
 <script setup name="RaWorkflowInstance" lang="ts">
+import { formatCertificateSubject } from '@/utils/raCertificateSubject';
 import { useRaListRefreshOnReturn } from '@/hooks/useRaListRefreshOnReturn';
 import { getRaWorkflowTask, pageRaWorkflowDone, RaWorkflowTask } from '@/api/ra/workflowTask';
 import { FormInstance } from 'element-plus';

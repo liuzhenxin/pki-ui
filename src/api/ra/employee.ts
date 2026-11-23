@@ -90,13 +90,54 @@ export function previewFawvwEmployeeFile(file: File): Promise<Result<EmployeeInp
   return request({ url: '/ra/v1/employees/import-preview', method: 'post', data }) as any;
 }
 
+export interface EmployeeActivityCertificate {
+  cert_id: number | string;
+  serial_number: string;
+  profile_name?: string;
+}
+
 export interface EmployeeActivity {
-  applies: Array<{ id: number | string; status: number; create_time: string }>;
-  employeeCertificates: Array<{ id: number | string; task_no?: string; serial_number?: string; issue_status: string; create_time: string }>;
+  applies: Array<{
+    id: number | string; status: number; create_time: string; review_comment?: string; certificates?: EmployeeActivityCertificate[];
+  }>;
+  employeeCertificates: Array<{
+    id: number | string; task_no?: string; serial_number?: string; ra_cert_id?: string | number;
+    issue_status: string; issue_message?: string; profile_name?: string; key_source?: string; create_time: string; process_time?: string;
+  }>;
 }
 
 export function getFawvwEmployeeActivity(id: number | string): Promise<Result<EmployeeActivity>> {
   return request({ url: `/ra/v1/employees/${id}/activity`, method: 'get' }) as any;
+}
+
+export interface EmployeeCertificateRecord {
+  id: string;
+  serialNumber: string;
+  subject?: string;
+  usage?: string;
+  employeeCertificateType?: string;
+  profileName?: string;
+  issuerName?: string;
+  status: 'VALID' | 'NOT_YET_VALID' | 'EXPIRED' | 'HOLD' | 'REVOKED' | 'UNKNOWN';
+  source?: string;
+  taskNo?: string;
+  superseded: boolean;
+  productionAction?: string;
+  productionTime?: string;
+  adUploadEligible?: boolean;
+  createTime?: string;
+  notBefore?: string;
+  notAfter?: string;
+}
+
+export function getEmployeeCertificates(params: {
+  userId?: number | string;
+  employeeId?: number | string;
+  certificateId?: number | string;
+  pageNum: number;
+  pageSize: number;
+}): Promise<Result<{ records: EmployeeCertificateRecord[]; total: number }>> {
+  return request({ url: '/ra/v1/employees/certificates', method: 'get', params, headers: { hideErrorNotify: true } }) as any;
 }
 
 export function setFawvwEmployeeEnabled(id: number | string, enabled: boolean): Promise<Result<void>> {
@@ -126,6 +167,7 @@ export interface FawvwOrgNode {
 }
 
 export interface FawvwEmployeeSummary {
+  exportAllowed?: boolean;
   localEmployees: number;
   activeEmployees: number;
   foreignEmployees: number;
@@ -135,6 +177,8 @@ export interface FawvwEmployeeSummary {
   latestSyncTime?: string;
   latestSyncEmployees?: number;
   demoEnabled: boolean;
+  canViewLocalRecovery?: boolean;
+  canRestoreLocalAccounts?: boolean;
 }
 
 export interface FawvwEmployeeDataExplanation {
@@ -150,6 +194,7 @@ export interface FawvwEmployeeDataExplanation {
 }
 
 export interface FawvwSyncConfig {
+  exportAllowed?: boolean;
   enabled: boolean;
   scheduleType: string;
   dailyTime: string;
@@ -175,9 +220,17 @@ export interface FawvwSyncLog {
   updatedCount: number;
   disabledCount: number;
   invalidCount: number;
+  employeeNoChangeCount?: number;
   errorMessage?: string;
   startTime?: string;
   finishTime?: string;
+}
+
+export interface FawvwEmployeeNumberChange {
+  domainAccount: string;
+  cnName: string;
+  previousEmployeeNo: string;
+  employeeNo: string;
 }
 
 function withPage(query: FawvwEmployeeQuery) {
@@ -202,13 +255,14 @@ export function pageFawvwEmployees(query: FawvwEmployeeQuery): Promise<Result<an
   }) as any;
 }
 
-export type EmployeeDirectoryRow = { employee?: FawvwEmployee; applicant: RaApplicantUserInfo; name: string; source: 'API' | 'LOCAL'; eligible: boolean };
+export type EmployeeDirectoryRow = { employee?: FawvwEmployee; applicant: RaApplicantUserInfo; name: string; source: 'API' | 'LOCAL'; eligible: boolean; localRecoveryRequired?: boolean };
+export type EmployeeDirectoryQuery = FawvwEmployeeQuery & { source?: string; userCategory?: string; mobile?: string };
 
 export function getEmployeeDirectoryDetails(userId: number | string): Promise<Result<{ person: EmployeeDirectoryRow; activity: EmployeeActivity }>> {
   return request({ url: `/ra/v1/employees/directory/${userId}`, method: 'get' }) as any;
 }
 
-export function pageEmployeeDirectory(query: FawvwEmployeeQuery & { source?: string; userCategory?: string; mobile?: string }, signal?: AbortSignal):
+export function pageEmployeeDirectory(query: EmployeeDirectoryQuery, signal?: AbortSignal):
   Promise<Result<{ records: EmployeeDirectoryRow[]; total: number }>> {
   return request({
     url: '/ra/v1/employees/directory/page',
@@ -217,6 +271,16 @@ export function pageEmployeeDirectory(query: FawvwEmployeeQuery & { source?: str
     signal,
     data: { ...query, departmentId: query.departmentId || undefined }
   }) as any;
+}
+
+export function exportEmployeeDirectory(query: EmployeeDirectoryQuery): Promise<Blob> {
+  return request({
+    url: '/ra/v1/employees/directory/export',
+    method: 'post',
+    headers: { repeatSubmit: false },
+    data: { ...query, departmentId: query.departmentId || undefined },
+    responseType: 'blob'
+  }) as unknown as Promise<Blob>;
 }
 
 export function getFawvwEmployee(id: number | string): Promise<Result<FawvwEmployee>> {
@@ -290,6 +354,18 @@ export function pageFawvwSyncLogs(query: { pageNum: number; pageSize: number; st
 export function pageFawvwInvalidEmployees(taskNo: string, pageNum = 1, pageSize = 10): Promise<Result<any>> {
   return request({
     url: `/ra/v1/employees/sync-tasks/${taskNo}/invalid-records`,
+    method: 'get',
+    params: { pageNum, pageSize }
+  }) as any;
+}
+
+export function pageFawvwEmployeeNumberChanges(
+  taskNo: string,
+  pageNum: number,
+  pageSize: number
+): Promise<Result<{ records: FawvwEmployeeNumberChange[]; total: number }>> {
+  return request({
+    url: `/ra/v1/employees/sync-tasks/${encodeURIComponent(taskNo)}/employee-number-changes`,
     method: 'get',
     params: { pageNum, pageSize }
   }) as any;

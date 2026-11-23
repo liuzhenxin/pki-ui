@@ -8,9 +8,12 @@ export interface RaCertQuery {
   pageSize: number;
   serialNumber?: string;
   subject?: string;
+  userInfo?: string;
   status?: RaCertStatus | '';
   profileName?: string;
   issuer?: string;
+  profileId?: string;
+  rootId?: string;
   validFrom?: string;
   validTo?: string;
 }
@@ -20,6 +23,8 @@ export interface RaCertSummary {
   serialNumber: string;
   subject: string;
   userId?: string | number | null;
+  userName?: string;
+  domainAccount?: string;
   deptId?: string | number;
   deptName?: string;
   rootId?: string | number | null;
@@ -56,6 +61,15 @@ export interface RaCertDetail {
     subjectAlternativeNames: string[];
   };
   parseWarning?: string;
+}
+
+export interface RaCertFilterOption {
+  id: string;
+  name: string;
+}
+
+export function getRaCertFilterOptions(): Promise<Result<{ profiles: RaCertFilterOption[]; issuers: RaCertFilterOption[] }>> {
+  return request({ url: '/ra/v1/certs/filter-options', method: 'get' }) as any;
 }
 
 export function pageRaCert(query: RaCertQuery): Promise<Result<any>> {

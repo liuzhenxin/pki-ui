@@ -15,11 +15,17 @@
             :height="Math.max(240, treeHeight)"
             :expand-on-click-node="false"
             :filter-method="filterDeptNode"
-            :default-expanded-keys="[ALL_DEPT_ID]"
+            :default-expanded-keys="defaultExpandedDeptKeys"
             :current-node-key="selectedDeptId"
+            aria-label="部门列表"
             highlight-current
             @node-click="handleDeptNodeClick"
-          />
+            @wheel.capture="handleDeptTreeWheel"
+          >
+            <template #default="{ data }">
+              <span class="dept-tree-label" :title="data.name">{{ data.name }}</span>
+            </template>
+          </el-tree-v2>
         </el-card>
         <div class="dept-resize-handle" role="separator" aria-label="调整部门列表宽度" aria-orientation="vertical"
           :aria-valuenow="deptWidth" :aria-valuemin="240" :aria-valuemax="640" tabindex="0"
@@ -196,7 +202,7 @@
             <el-form-item label="业务角色" prop="roleIds">
               <el-select v-model="form.roleIds" multiple filterable placeholder="请选择业务角色" style="width: 100%">
                 <el-option
-                  v-for="role in raBizRoleOptions"
+                  v-for="role in adminFormRoleOptions"
                   :key="role.value"
                   :label="role.label"
                   :value="role.value"
@@ -396,9 +402,13 @@ const isDataLoaded = ref(false);
 const assignableRoles = ref<typeof RA_BUSINESS_ROLE_OPTIONS>([]);
 const isRaAdministrator = computed(() => assignableRoles.value.some((role) => role.roleId === '507'));
 const raBizRoleOptions = computed(() => assignableRoles.value.map(({ roleId, roleName }) => ({ label: roleName, value: roleId })));
+const adminFormRoleOptions = computed(() =>
+  form.value.id == null ? raBizRoleOptions.value.filter((role) => role.value !== '507') : raBizRoleOptions.value
+);
 const RA_BIZ_ROLE_IDS = RA_BUSINESS_ROLE_OPTIONS.map((role) => role.roleId);
 const RA_DEFAULT_BIZ_ROLE_IDS = ['503'];
 const ALL_DEPT_ID = '__ALL__';
+const defaultExpandedDeptKeys = [ALL_DEPT_ID];
 const deptOptions = shallowRef<RaDeptTreeOption[]>([]);
 const writableDeptOptions = computed(() => writableRaDepartments(deptOptions.value));
 const deptName = ref('');
@@ -628,7 +638,7 @@ watch(
   deptName,
   (value) => {
     deptTreeRef.value?.filter(value);
-    if (!value) deptTreeRef.value?.setExpandedKeys([ALL_DEPT_ID]);
+    if (!value) deptTreeRef.value?.setExpandedKeys(defaultExpandedDeptKeys);
   },
   { flush: 'post' }
 );
@@ -641,6 +651,13 @@ function filterDeptNode(value: string, data: RaDeptTreeOption) {
     return true;
   }
   return data.name?.includes(value);
+}
+
+function handleDeptTreeWheel(event: WheelEvent) {
+  // Leave horizontal gestures to the browser and vertical scrolling to the virtual list.
+  if (event.shiftKey || Math.abs(event.deltaX) > Math.abs(event.deltaY)) {
+    event.stopPropagation();
+  }
 }
 
 function handleDeptNodeClick(data: RaDeptTreeOption) {
@@ -1144,7 +1161,7 @@ onUnmounted(() => {
   .admin-layout {
     display: grid;
     grid-template-columns: minmax(240px, var(--dept-width)) minmax(0, 1fr);
-    gap: 16px;
+    gap: 20px;
   }
 
   .dept-column { position: relative; min-width: 0; }
@@ -1152,8 +1169,8 @@ onUnmounted(() => {
   .dept-resize-handle {
     position: absolute;
     z-index: 1;
-    inset: 0 -14px 0 auto;
-    width: 14px;
+    inset: 0 -16px 0 auto;
+    width: 12px;
     cursor: col-resize;
     touch-action: none;
     outline: none;
@@ -1184,6 +1201,36 @@ onUnmounted(() => {
   .dept-tree {
     margin-top: 10px;
     width: 100%;
+
+    :deep(.el-tree-virtual-list) {
+      overflow-x: auto;
+      overflow-y: auto !important;
+      scrollbar-width: thin;
+    }
+
+    :deep(.el-tree-virtual-list::-webkit-scrollbar) {
+      display: block;
+      width: 8px;
+      height: 8px;
+    }
+
+    :deep(.el-tree-virtual-list::-webkit-scrollbar-thumb) {
+      background: var(--el-border-color-darker);
+      border-radius: 4px;
+    }
+
+    :deep(.el-virtual-scrollbar) {
+      display: none;
+    }
+
+    :deep(.el-tree-node__content) {
+      min-width: max-content;
+      padding-right: 8px;
+    }
+  }
+
+  .dept-tree-label {
+    white-space: nowrap;
   }
 }
 
