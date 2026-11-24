@@ -62,6 +62,7 @@ test('a longer email maximum saves, reopens and matches the constraints view', a
   await page.locator('.validity-input-group input[role="spinbutton"]').fill('20');
   await page.getByRole('button', { name: '保存', exact: true }).click();
   await expect.poll(() => saved).toEqual(['20y']);
+  await expect(page.locator('.validity-input-group')).toHaveCount(0);
   await page.goto('/ca/profile/form?id=10');
   await expect(page.locator('.validity-input-group input[role="spinbutton"]')).toHaveValue('20');
   await page.getByRole('tab', { name: '约束视图' }).click();
