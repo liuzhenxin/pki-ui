@@ -34,5 +34,6 @@
 | 261113-imv | 修复 KMC 首页卡片底边错位 | 2026-11-13 | 5609573 | [261113-imv-kmc](./quick/261113-imv-kmc/) |
 | 261113-jcp | 简化 KMC 健康事件的加密提供方文案 | 2026-11-13 | fb5d3cf | [261113-jcp-kmc](./quick/261113-jcp-kmc/) |
 | 261113-mu9 | 移除 KMC 首页密码机详情面板 | 2026-11-13 | cfdc364 | [261113-mu9-kmc](./quick/261113-mu9-kmc/) |
+| 261124-ia0 | 修复证书模板主题字段 OID 可读名称 | 2026-11-24 | — | [261124-ia0-oid](./quick/261124-ia0-oid/) |
 
-Last activity: 2026-11-13 - Completed quick task 261113-mu9: 移除 KMC 首页密码机详情面板
+Last activity: 2026-11-24 - Completed quick task 261124-ia0: 修复证书模板主题字段 OID 可读名称
