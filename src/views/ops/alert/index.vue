@@ -111,9 +111,10 @@
         <el-tab-pane label="服务事件日志" name="logs">
           <div class="toolbar">
             <el-button icon="Refresh" :loading="loading" @click="loadLogs">刷新</el-button>
-            <span class="hint">最近 200 条上报与投递结果（DELIVERED/COOLDOWN/CHANNEL_DISABLED/失败原因）。</span>
+            <el-input v-model.trim="logQuery" clearable aria-label="筛选服务事件" placeholder="筛选服务、事件或渠道 ID" style="max-width: 300px" />
+            <span class="hint">最近 200 条服务事件</span>
           </div>
-          <el-table :data="logs" border v-loading="loading" size="small">
+          <el-table :data="visibleLogs" border v-loading="loading" size="small">
             <el-table-column prop="createTime" label="时间" width="170" />
             <el-table-column prop="serviceCode" label="服务" width="120" />
             <el-table-column prop="eventCode" label="事件" width="170" />
@@ -124,7 +125,15 @@
                 <el-tag :type="row.delivered ? 'success' : 'info'" size="small">{{ row.delivered ? '已投递' : '未投递' }}</el-tag>
               </template>
             </el-table-column>
-            <el-table-column prop="channelResult" label="结果" min-width="180" show-overflow-tooltip />
+            <el-table-column prop="channelId" label="渠道 ID" width="100" />
+            <el-table-column label="投递结果" min-width="180" show-overflow-tooltip
+              ><template #default="{ row }">{{ eventResult(row) }}</template></el-table-column
+            >
+            <el-table-column label="操作" width="120"
+              ><template #default="{ row }"
+                ><el-button link type="primary" @click="showServiceRules(row.serviceCode)">查看服务规则</el-button></template
+              ></el-table-column
+            >
           </el-table>
         </el-tab-pane>
       </el-tabs>
@@ -277,6 +286,32 @@ const loading = ref(false);
 const channels = ref<AlertChannel[]>([]);
 const rules = ref<AlertRule[]>([]);
 const logs = ref<AlertEventLog[]>([]);
+const logQuery = ref('');
+const visibleLogs = computed(() =>
+  logs.value.filter((row) =>
+    [row.serviceCode, row.eventCode, row.channelId].some((value) =>
+      String(value ?? '')
+        .toLowerCase()
+        .includes(logQuery.value.toLowerCase())
+    )
+  )
+);
+const eventReasons: Record<string, string> = {
+  DELIVERED: '已投递',
+  COOLDOWN: '冷却期内，已跳过',
+  CHANNEL_DISABLED: '渠道已关闭',
+  NOTIFICATIONS_DISABLED: '自动通知已关闭',
+  NO_RULE_OR_DISABLED: '没有匹配的启用规则',
+  DINGTALK_REJECTED: '钉钉网关拒绝投递'
+};
+function eventResult(row: AlertEventLog) {
+  return eventReasons[row.channelResult ?? ''] || row.channelResult || '未记录';
+}
+function showServiceRules(service: string) {
+  ruleSections.value = ['custom'];
+  ruleServiceFilter.value = service;
+  configure('rules');
+}
 const ruleServiceFilter = ref('');
 const ruleVisible = ref(false);
 const ruleSections = ref<string[]>([]);

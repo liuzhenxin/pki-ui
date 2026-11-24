@@ -309,6 +309,7 @@ export interface AlertDispatchResult {
 }
 
 export interface AlertEventLog {
+  channelId?: number | null;
   id: number;
   serviceCode: string;
   eventCode: string;
