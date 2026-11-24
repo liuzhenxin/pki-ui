@@ -56,9 +56,9 @@
       <el-space v-if="editable" wrap>
         <el-button type="primary" native-type="submit" :loading="saving" :disabled="stale">保存配置</el-button>
         <el-button :disabled="!canTest" :loading="testing === 'test-connection'" @click="testChannel('test-connection')">测试连接</el-button>
-        <el-button v-if="isMail" :disabled="!canTest || !gatewayConfigured" :loading="testing === 'test-send'" @click="testChannel('test-send')"
-          >试发邮件</el-button
-        >
+        <el-button :disabled="!canTest || !gatewayConfigured" :loading="testing === 'test-send'" @click="testChannel('test-send')">{{
+          isMail ? '试发邮件' : '发送测试消息'
+        }}</el-button>
       </el-space>
       <el-alert v-if="testResult" class="test-result" :title="testResult" type="info" :closable="false" show-icon />
     </el-form>
@@ -168,7 +168,10 @@ async function testChannel(action: 'test-connection' | 'test-send') {
   testResult.value = '';
   try {
     if (action === 'test-send') {
-      await ElMessageBox.confirm(`试发邮件将发送到 ${form.to}。`, '试发企业邮件', { type: 'warning', confirmButtonText: '发送' });
+      await ElMessageBox.confirm(`试发${isMail.value ? '邮件' : '消息'}将发送到 ${form.to}。`, isMail.value ? '试发企业邮件' : '试发企业钉钉', {
+        type: 'warning',
+        confirmButtonText: '发送'
+      });
     }
     testResult.value = (await testFawVwChannel(props.kind, action, revision)).message;
   } catch (error) {
