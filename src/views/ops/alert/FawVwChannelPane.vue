@@ -15,7 +15,7 @@
             <el-input v-model.trim="form.to" :maxlength="254" placeholder="多个地址用英文逗号分隔" />
           </el-form-item>
           <el-form-item label="SMTP 节点">
-            <el-select v-model="form.smtpServer" clearable placeholder="使用网关默认节点">
+            <el-select v-model="form.smtpServer" clearable placeholder="默认长春（CC）">
               <el-option label="长春（CC）" value="CC" />
               <el-option label="成都（CD）" value="CD" />
               <el-option label="佛山（FS）" value="FS" />
@@ -37,15 +37,10 @@
           </el-form-item>
         </template>
         <el-form-item label="正文类型">
-          <el-select v-model="form.messageType">
-            <template v-if="isMail">
-              <el-option label="TEXT（纯文本）" value="TEXT" />
-              <el-option label="MIXED（H5）" value="MIXED" />
-            </template>
-            <template v-else>
-              <el-option label="Markdown" value="markdown" />
-              <el-option label="text（纯文本）" value="text" />
-            </template>
+          <span v-if="isMail">TEXT（纯文本）</span>
+          <el-select v-else v-model="form.messageType">
+            <el-option label="Markdown" value="markdown" />
+            <el-option label="text（纯文本）" value="text" />
           </el-select>
         </el-form-item>
         <el-form-item label="启用通知">
@@ -116,7 +111,7 @@ function apply(settings: FawVwChannelSettings | null) {
     app: data.app,
     dingTalkTarget: data.dingTalkTarget,
     smtpServer: data.smtpServer,
-    messageType: data.messageType ?? emptyConfig().messageType
+    messageType: isMail.value ? 'TEXT' : (data.messageType ?? emptyConfig().messageType)
   });
   savedEnabled.value = data.enabled;
   stale.value = false;
