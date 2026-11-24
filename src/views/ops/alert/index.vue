@@ -155,6 +155,8 @@
     <el-drawer v-model="incidentVisible" title="告警详情" size="min(520px, 100vw)">
       <template v-if="incident">
         <h3>{{ incident.title }}</h3>
+        <el-tag :type="incident.recoveredAt ? 'success' : 'warning'">{{ incident.recoveredAt ? '已恢复' : '告警中' }}</el-tag>
+        <el-tag v-if="incident.acknowledgedAt" type="info">管理员已确认</el-tag>
         <p v-if="incident.reviewSample">
           最近队列采样 {{ dateTimeText(incident.reviewSample.sampledAt) }}
           <el-tag v-if="incident.reviewSample.stale" type="warning">采样已过期</el-tag>
@@ -179,6 +181,7 @@
           </el-timeline-item>
           <el-timeline-item v-if="incident.recoveredAt" :timestamp="dateTimeText(incident.recoveredAt)">已恢复</el-timeline-item>
         </el-timeline>
+        <IncidentNotificationResults :results="incident.notificationResults" :recovered="Boolean(incident.recoveredAt)" />
         <el-button v-if="!incident.acknowledgedAt && !incident.recoveredAt" type="primary" :loading="acknowledging" @click="acknowledgeIncident">
           确认告警
         </el-button>
@@ -218,6 +221,7 @@ import MailChannelPane from './MailChannelPane.vue';
 import NotificationTemplatePane from './NotificationTemplatePane.vue';
 import IncidentTemplateRulePane from './IncidentTemplateRulePane.vue';
 import UserDingTalkChannelPane from './UserDingTalkChannelPane.vue';
+import IncidentNotificationResults from './IncidentNotificationResults.vue';
 import type { AlertIncident } from '@/api/ops';
 import { dateTimeText } from '@/views/ops/utils';
 import { getIncidentTemplateRules } from '@/api/ops/incidentTemplateRules';

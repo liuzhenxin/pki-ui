@@ -300,8 +300,15 @@ export function getAlertEventLogs(limit = 100): Promise<AlertEventLog[]> {
   return request({ baseURL, url: '/v1/alert/logs', method: 'get', params: { limit } }) as any;
 }
 
+export interface IncidentNotificationResult {
+  phase: string;
+  channel: string;
+  status: string;
+}
+
 export interface AlertIncident {
   reviewSample?: { sampledAt: string; stale: boolean };
+  notificationResults?: IncidentNotificationResult[];
   id: string;
   source: string;
   objectKey: string;
