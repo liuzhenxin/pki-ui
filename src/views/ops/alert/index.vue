@@ -24,7 +24,8 @@
                     <el-radio-button value="history">告警历史</el-radio-button>
                   </el-radio-group>
                   <div>
-                    <el-button type="primary" plain @click="configure('rules')">管理通知规则</el-button>
+                    <el-button @click="monitorTab = 'resources'">查看告警资源</el-button
+                    ><el-button type="primary" plain @click="configure('rules')">管理通知规则</el-button>
                   </div>
                 </div>
                 <el-alert v-if="!incidentEnabled" title="告警实例功能未启用" type="info" :closable="false" />
@@ -48,6 +49,16 @@
                 </template>
               </template>
             </el-tab-pane>
+            <el-tab-pane label="告警资源" name="resources">
+              <CpuResourcePane
+                :initial-code="resourceCode"
+                v-if="activeTab === 'resources'"
+                @incident="openIncident"
+                @conditions="configure('conditions')"
+                @channels="configure('channels')"
+                @rules="configureCpuRules"
+              />
+            </el-tab-pane>
           </el-tabs>
         </el-tab-pane>
         <el-tab-pane label="告警配置" name="config">
@@ -56,7 +67,12 @@
               <AlertConditionPane v-if="activeTab === 'conditions'" />
             </el-tab-pane>
             <el-tab-pane label="通知规则" name="rules">
-              <IncidentTemplateRulePane v-if="activeTab === 'rules'" @custom="openCustomRule" @conditions="configure('conditions')" />
+              <IncidentTemplateRulePane
+                v-if="activeTab === 'rules'"
+                @custom="openCustomRule"
+                :initial-resource="ruleResource"
+                @conditions="configure('conditions')"
+              />
               <el-collapse v-model="ruleSections">
                 <el-collapse-item title="自定义服务事件" name="custom">
                   <div class="toolbar">
@@ -144,6 +160,17 @@
           <el-tag v-if="incident.reviewSample.stale" type="warning">采样已过期</el-tag>
         </p>
         <p>{{ incident.objectKey }} · {{ incident.occurrences }} 次异常观测</p>
+        <el-button v-if="incident.source === 'SERVER_CPU'" link type="primary" @click="openResource(incident.objectKey)">查看告警资源</el-button>
+        <el-button
+          v-if="incident.source === 'SERVER_CPU'"
+          link
+          type="primary"
+          @click="
+            incidentVisible = false;
+            configureCpuRules(incident.objectKey);
+          "
+          >查看资源通知规则</el-button
+        >
         <el-timeline>
           <el-timeline-item :timestamp="dateTimeText(incident.openedAt)">首次发生</el-timeline-item>
           <el-timeline-item :timestamp="dateTimeText(incident.lastSeenAt)">最近异常</el-timeline-item>
@@ -184,6 +211,7 @@
 </template>
 
 <script setup name="OpsAlertCenter" lang="ts">
+import CpuResourcePane from './CpuResourcePane.vue';
 import AlertConditionPane from './AlertConditionPane.vue';
 import FawVwGatewayPane from './FawVwGatewayPane.vue';
 import MailChannelPane from './MailChannelPane.vue';
@@ -218,6 +246,7 @@ onMounted(async () => {
 });
 const workspaces = [
   { key: 'records', title: '告警记录', description: '查看当前告警和恢复历史' },
+  { key: 'resources', title: '告警资源', description: '查看主机采样和生效条件' },
   { key: 'rules', title: '通知规则', description: '配置通知渠道、接收人与模板' },
   { key: 'logs', title: '服务事件日志', description: '核对服务上报与投递结果' }
 ] as const;
@@ -235,10 +264,22 @@ const monitorTab = ref('records');
 const incidentScope = ref('current');
 const configTab = ref('conditions');
 const channelTab = ref('user-dingtalk');
+const ruleResource = ref('');
+const resourceCode = ref('');
+function openResource(code: string) {
+  resourceCode.value = code;
+  incidentVisible.value = false;
+  group.value = 'monitor';
+  monitorTab.value = 'resources';
+}
 const activeTab = computed(() => (group.value === 'monitor' ? monitorTab.value : group.value === 'config' ? configTab.value : 'logs'));
 function configure(tab: string) {
   configTab.value = tab;
   group.value = 'config';
+}
+function configureCpuRules(code: string) {
+  ruleResource.value = code;
+  configure('rules');
 }
 const route = useRoute();
 const incidents = ref<AlertIncident[]>([]);
@@ -346,7 +387,9 @@ const loadLogs = async () => {
   }
 };
 
-watch([activeTab, incidentScope], ([tab]) => {
+watch([activeTab, incidentScope], ([tab], [previous]) => {
+  if (previous === 'resources' && tab !== 'resources') resourceCode.value = '';
+  if (previous === 'rules' && tab !== 'rules') ruleResource.value = '';
   if (tab === 'rules') loadRules();
   else if (tab === 'logs') loadLogs();
   else if (tab === 'records') {

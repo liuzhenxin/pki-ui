@@ -1,11 +1,15 @@
 <template>
   <section v-loading="loading">
-    <div class="rule-toolbar">
+    <div v-if="!resource" class="rule-toolbar">
       <el-button type="primary" :disabled="loading" @click="open()">新建规则</el-button>
       <el-button v-if="loadFailed" @click="load">重新加载</el-button>
     </div>
     <el-alert v-if="loadFailed" title="告警投递规则加载失败" type="error" :closable="false" />
-    <el-table v-else :data="view?.bindings.filter((binding) => binding.enabled !== false) ?? []" empty-text="暂无页面配置的告警投递规则">
+    <el-table
+      v-else-if="!resource"
+      :data="view?.bindings.filter((binding) => binding.enabled !== false) ?? []"
+      empty-text="暂无页面配置的告警投递规则"
+    >
       <el-table-column label="告警类型" min-width="145">
         <template #default="{ row }">{{ sourceLabel(row.source) }}</template>
       </el-table-column>
@@ -23,9 +27,26 @@
       </el-table-column>
     </el-table>
 
-    <el-dialog v-model="visible" :title="editing ? '编辑规则' : '新建规则'" width="min(880px, 95vw)" :before-close="close">
+    <template v-if="resource && !loadFailed && selection">
+      <strong>通知规则</strong>
+      <p>{{ notificationStatus }}</p>
+      <ul>
+        <li v-for="row in selectedRows" :key="row.channel.name">
+          {{ row.channel.name }} · {{ recipientText(row) }}<br />触发：{{ sampleRoute(row, 'trigger') }}　恢复：{{ sampleRoute(row, 'recovery') }}
+        </li>
+      </ul>
+      <p v-if="!selectedRows.length">暂无选中的投递渠道</p>
+      <el-button :disabled="!resource.condition" @click="visible = true">模拟此资源</el-button>
+    </template>
+    <el-button v-if="resource && loadFailed" @click="load">重新加载通知规则</el-button>
+    <el-dialog
+      v-model="visible"
+      :title="resource ? resource.code + ' · CPU 模拟' : editing ? '编辑规则' : '新建规则'"
+      width="min(880px, 95vw)"
+      :before-close="close"
+    >
       <div v-if="visible" class="rule-editor">
-        <div class="rule-toolbar">
+        <div v-if="!resource" class="rule-toolbar">
           <el-select
             v-model="source"
             aria-label="告警类型"
@@ -39,7 +60,7 @@
         </div>
 
         <template v-if="selection">
-          <section aria-label="告警条件">
+          <section v-if="!resource" aria-label="告警条件">
             <div class="section-heading">
               <strong>告警条件</strong>
               <el-button link type="primary" :disabled="busy" @click="openConditions">查看告警条件</el-button>
@@ -59,7 +80,7 @@
             </el-table>
           </section>
 
-          <section aria-label="投递渠道和模板">
+          <section v-if="!resource" aria-label="投递渠道和模板">
             <div class="section-heading"><strong>投递渠道和模板</strong></div>
             <p>{{ source === 'RA_CERT_EXPIRY' ? '收件人使用 RA 上报的证书使用者。' : '收件人沿用所选渠道的配置。' }}</p>
             <el-alert v-if="stale" title="规则已由其他操作更新。重新加载会丢弃本窗口未保存的选择。" type="warning" :closable="false" />
@@ -104,6 +125,50 @@
               <p class="preview-body">{{ previewResult.body }}</p>
             </div>
           </section>
+          <section v-if="source === 'SERVER_CPU' && !conditionsLoading && !conditionsFailed" class="rule-preview" aria-label="CPU 模拟匹配结果">
+            <strong>模拟匹配结果 · CPU 使用率</strong>
+            <p>按当前表单模拟连续有效采样，仅预览，不发送通知。</p>
+            <div class="template-controls">
+              <label
+                >示例资源
+                <el-select v-model="sampleServer" :disabled="Boolean(resource)" aria-label="示例资源">
+                  <el-option v-for="server in sampleServers" :key="server" :value="server" :label="server" />
+                </el-select>
+              </label>
+              <label
+                >初始状态
+                <el-select v-model="samplePhase" aria-label="初始状态">
+                  <el-option label="正常，检查触发" value="trigger" />
+                  <el-option label="告警中，检查恢复" value="recovery" />
+                </el-select>
+              </label>
+              <label>CPU 使用率（%）<el-input-number v-model="sampleUsage" :min="0" :max="100" aria-label="模拟 CPU 使用率" /></label>
+              <label>持续时间（秒）<el-input-number v-model="sampleSeconds" :min="0" :precision="0" aria-label="模拟持续时间" /></label>
+            </div>
+            <div aria-live="polite">
+              <p v-if="!sampleCondition">该资源没有页面条件，需核对部署阈值。</p>
+              <template v-else>
+                <p>
+                  采用{{
+                    selectedResource?.condition
+                      ? conditionOrigins[selectedResource.condition.origin]
+                      : sampleCondition.target
+                        ? '资源专属条件'
+                        : '类型默认条件'
+                  }}
+                  ·
+                  {{ describeCondition(sampleCondition, samplePhase === 'trigger') }}
+                </p>
+                <p>{{ sampleMatched ? (samplePhase === 'trigger' ? '命中触发条件' : '命中恢复条件') : '未达到条件，本次没有状态变化' }}</p>
+                <ul v-if="sampleMatched">
+                  <li v-for="row in selectedRows" :key="row.channel.name">
+                    {{ row.channel.name }} · {{ sampleRoute(row) }} · {{ recipientText(row) }}
+                  </li>
+                </ul>
+              </template>
+              <p>{{ notificationStatus }}</p>
+            </div>
+          </section>
         </template>
       </div>
       <template #footer><el-button :disabled="busy" @click="visible = false">关闭</el-button></template>
@@ -125,6 +190,8 @@ import {
 } from '@/api/ops/notificationTemplates';
 import { describeCondition } from './alertConditionText';
 
+import { conditionOrigins, getCpuResources, type CpuResource } from '@/api/ops/alertResources';
+const props = defineProps<{ resource?: CpuResource; initialResource?: string }>();
 type Phase = 'trigger' | 'recovery';
 type ChannelRow = {
   channel: IncidentTemplateRules['channels'][number];
@@ -169,6 +236,58 @@ const previewResult = ref<NotificationTemplateDraft & { label: string }>();
 const selection = computed(() => view.value?.sources.find((item) => item.source === source.value));
 const phases = computed<Phase[]>(() => (selection.value?.recovery ? ['trigger', 'recovery'] : ['trigger']));
 const selectedConditions = computed(() => conditions.value.filter((item) => item.type === source.value));
+const servers = ref<string[]>([]);
+const sampleServers = computed(() => [
+  ...new Set([
+    props.resource?.code ?? 'demo-cpu-01',
+    'demo-cpu-01',
+    ...servers.value,
+    ...selectedConditions.value.map((item) => item.target).filter(Boolean)
+  ])
+]);
+const sampleServer = ref(props.resource?.code ?? 'demo-cpu-01');
+const samplePhase = ref<Phase>('trigger');
+const sampleUsage = ref(95);
+const sampleSeconds = ref(300);
+const directory = ref<CpuResource[]>([]);
+const selectedResource = computed(() => props.resource ?? directory.value.find((item) => item.code === sampleServer.value));
+const sampleCondition = computed(() =>
+  selectedResource.value
+    ? selectedResource.value.condition
+      ? { type: 'SERVER_CPU' as const, target: selectedResource.value.code, ...selectedResource.value.condition }
+      : undefined
+    : (selectedConditions.value.find((item) => item.target === sampleServer.value) ?? selectedConditions.value.find((item) => !item.target))
+);
+const sampleMatched = computed(() => {
+  const rule = sampleCondition.value;
+  if (!rule || !Number.isFinite(sampleUsage.value) || !Number.isFinite(sampleSeconds.value)) return false;
+  return samplePhase.value === 'trigger'
+    ? rule.triggerPercent != null &&
+        rule.triggerSeconds != null &&
+        sampleUsage.value >= rule.triggerPercent &&
+        sampleSeconds.value >= rule.triggerSeconds
+    : rule.recoveryPercent != null &&
+        rule.recoverySeconds != null &&
+        sampleUsage.value <= rule.recoveryPercent &&
+        sampleSeconds.value >= rule.recoverySeconds;
+});
+const notificationStatus = computed(() => {
+  if (view.value?.notificationsEnabled === undefined) return '自动通知状态未知';
+  return view.value.notificationsEnabled ? '自动通知已开启，本次仅模拟规则匹配' : '自动通知已关闭';
+});
+function sampleRoute(row: ChannelRow, selectedPhase: Phase = samplePhase.value) {
+  if (row.channel.available === false) return '渠道未启用或配置不完整';
+  const routes = view.value?.cpuRoutes?.filter((item) => item.channel === row.channel.name);
+  if (!routes) return '部署规则未知';
+  const phase = selectedPhase === 'trigger' ? 'TRIGGERED' : 'RECOVERED';
+  const deployed = routes.find((item) => item.phase === phase && item.deploymentTemplate);
+  const kind = row[selectedPhase];
+  if (!kind && !deployed) return '无匹配的投递规则';
+  const guard = deployed ?? routes[0];
+  if (guard?.objectPrefix && !sampleServer.value.startsWith(guard.objectPrefix)) return '未匹配部署规则的资源范围';
+  if (kind) return templateLabel(selectedPhase, kind) + (changed(row) ? '（当前草稿）' : '');
+  return '使用部署模板';
+}
 const conditionEmptyText = computed(() =>
   source.value === 'RA_CERT_EXPIRY' ? '尚未配置 RA 到期条件，当前没有预警节点' : '尚未配置页面条件，具体阈值以部署设置为准'
 );
@@ -236,6 +355,10 @@ async function load() {
     if (!Array.isArray(rules.sources) || !Array.isArray(rules.bindings) || !Array.isArray(rules.channels)) throw new Error();
     view.value = rules;
     catalog.value = metadata;
+    if (props.resource) {
+      source.value = 'SERVER_CPU';
+      resetDrafts();
+    }
     return true;
   } catch {
     loadFailed.value = true;
@@ -258,7 +381,11 @@ async function open(initialSource?: string) {
   conditionsLoading.value = true;
   conditionsFailed.value = false;
   try {
-    conditions.value = (await getAlertConditions()).settings.rules;
+    const [conditionView, resources] = await Promise.all([getAlertConditions(), getCpuResources().catch(() => [])]);
+    directory.value = resources ?? [];
+    conditions.value = conditionView.settings.rules;
+    servers.value = [...(conditionView.servers ?? []), ...directory.value.map((item) => item.code)];
+    if (!sampleServers.value.includes(sampleServer.value)) sampleServer.value = 'demo-cpu-01';
   } catch {
     conditions.value = [];
     conditionsFailed.value = true;
@@ -331,7 +458,12 @@ async function preview(row: ChannelRow, phase: Phase) {
   }
 }
 
-onMounted(load);
+onMounted(async () => {
+  if ((await load()) && props.initialResource) {
+    sampleServer.value = props.initialResource;
+    await open('SERVER_CPU');
+  }
+});
 </script>
 
 <style scoped>

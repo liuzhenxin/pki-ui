@@ -175,3 +175,58 @@ it('uses reported RA recipients, hides recovery and restricts normal group robot
     wrapper.unmount();
   }
 });
+
+it('simulates CPU transitions for the selected resource and draft without saving or sending', async () => {
+  const wrapper = await openEditor();
+  try {
+    const panel = wrapper.get('[aria-label="CPU 模拟匹配结果"]');
+    expect(panel.text()).toContain('类型默认条件');
+    expect(panel.text()).toContain('命中触发条件');
+    expect(panel.text()).toContain('使用部署模板');
+    expect(panel.text()).toContain('自动通知已关闭');
+    await wrapper.get('select[aria-label="corp-mail 触发模板"]').setValue('EMAIL');
+    expect(panel.text()).toContain('系统告警触发 · 邮件（SMTP）（当前草稿）');
+    await panel.get('select[aria-label="示例资源"]').setValue('node-2');
+    expect(panel.text()).toContain('资源专属条件');
+    expect(panel.text()).toContain('未达到条件');
+    await panel.get('select[aria-label="初始状态"]').setValue('recovery');
+    await wrapper.get('select[aria-label="corp-mail 恢复模板"]').setValue('EMAIL');
+    const [usage, seconds] = panel.findAllComponents({ name: 'ElInputNumber' });
+    usage.vm.$emit('update:modelValue', 70);
+    seconds.vm.$emit('update:modelValue', 179);
+    await flushPromises();
+    expect(panel.text()).toContain('未达到条件');
+    seconds.vm.$emit('update:modelValue', 180);
+    await flushPromises();
+    expect(panel.text()).toContain('命中恢复条件');
+    expect(panel.text()).toContain('未匹配部署规则的资源范围');
+    expect(mocks.request.mock.calls.every(([request]) => request.method === 'get')).toBe(true);
+  } finally {
+    wrapper.unmount();
+  }
+});
+
+it('matches CPU monitor trigger and recovery boundaries with the configured SMTP destination', async () => {
+  const wrapper = await openEditor();
+  try {
+    const panel = wrapper.get('[aria-label="CPU 模拟匹配结果"]');
+    await panel.get('select[aria-label="示例资源"]').setValue('cpu-demo');
+    const [usage, seconds] = panel.findAllComponents({ name: 'ElInputNumber' });
+    for (const [phase, percent, label] of [
+      ['trigger', 90, '触发'],
+      ['recovery', 65, '恢复']
+    ] as const) {
+      await panel.get('select[aria-label="初始状态"]').setValue(phase);
+      usage.vm.$emit('update:modelValue', percent);
+      seconds.vm.$emit('update:modelValue', 9);
+      await flushPromises();
+      expect(panel.text()).toContain('未达到条件');
+      seconds.vm.$emit('update:modelValue', 10);
+      await flushPromises();
+      expect(panel.text()).toContain('命中' + label + '条件');
+      expect(panel.text()).toContain('smtp-demo · 系统告警' + label + ' · 邮件（SMTP） · 收件人：receiver@example.invalid');
+    }
+  } finally {
+    wrapper.unmount();
+  }
+});
