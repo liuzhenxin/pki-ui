@@ -78,8 +78,8 @@ it('keeps standard channels on their tabs and loads both enterprise channels onl
     expect(mail.text()).toContain('SMTP 主机');
     expect(mail.text()).not.toContain('企业邮件');
     expect(mail.text()).not.toContain('企业钉钉');
-    expect(mail.text()).toContain('授权 RA 使用此 SMTP 渠道');
-    expect(mocks.request).toHaveBeenCalledWith(requested('/v1/application-notifications/ra/mail'));
+    expect(mail.text()).not.toContain('授权 RA 使用此 SMTP 渠道');
+    expect(mail.text()).not.toContain('请先登记 RA 业务邮件服务账号');
     expect(mocks.request).toHaveBeenCalledWith(requested('/v1/alert/mail-channel'));
     expect(mocks.request).not.toHaveBeenCalledWith(requested('/v1/alert/faw-vw-channels/FAW_VW_EMAIL'));
 
@@ -105,6 +105,7 @@ it('keeps standard channels on their tabs and loads both enterprise channels onl
     expect(mocks.request).toHaveBeenCalledWith(requested('/v1/alert/channels'));
     const ruleDialog = wrapper.findAll('[role="dialog"]').find((dialog) => dialog.text().includes('新建规则'));
     expect(ruleDialog?.text()).toContain('值班群机器人');
+    expect(mocks.request).not.toHaveBeenCalledWith(expect.objectContaining({ url: '/v1/application-notifications/ra/mail' }));
     expect(mocks.request.mock.calls.every(([request]) => request.method === 'get')).toBe(true);
   } finally {
     wrapper.unmount();

@@ -92,12 +92,7 @@
             <el-tab-pane label="通知渠道" name="channels">
               <el-tabs v-if="activeTab === 'channels'" v-model="channelTab">
                 <el-tab-pane label="用户钉钉" name="user-dingtalk"><UserDingTalkChannelPane v-if="channelTab === 'user-dingtalk'" /></el-tab-pane>
-                <el-tab-pane label="SMTP 邮件" name="mail">
-                  <template v-if="channelTab === 'mail'">
-                    <MailChannelPane @saved="smtpRevision++" />
-                    <ApplicationMailChannelPane :key="smtpRevision" />
-                  </template>
-                </el-tab-pane>
+                <el-tab-pane label="SMTP 邮件" name="mail"><MailChannelPane v-if="channelTab === 'mail'" /></el-tab-pane>
                 <el-tab-pane label="企业网关（钉钉 / 邮件）" name="enterprise-gateway"
                   ><FawVwGatewayPane v-if="channelTab === 'enterprise-gateway'"
                 /></el-tab-pane>
@@ -190,7 +185,6 @@
 import AlertConditionPane from './AlertConditionPane.vue';
 import FawVwGatewayPane from './FawVwGatewayPane.vue';
 import MailChannelPane from './MailChannelPane.vue';
-import ApplicationMailChannelPane from './ApplicationMailChannelPane.vue';
 import NotificationTemplatePane from './NotificationTemplatePane.vue';
 import IncidentTemplateRulePane from './IncidentTemplateRulePane.vue';
 import UserDingTalkChannelPane from './UserDingTalkChannelPane.vue';
@@ -230,7 +224,6 @@ const monitorTab = ref('records');
 const incidentScope = ref('current');
 const configTab = ref('conditions');
 const channelTab = ref('user-dingtalk');
-const smtpRevision = ref(0);
 const activeTab = computed(() => (group.value === 'monitor' ? monitorTab.value : group.value === 'config' ? configTab.value : 'logs'));
 function configure(tab: string) {
   configTab.value = tab;
