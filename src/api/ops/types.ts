@@ -355,6 +355,8 @@ export type AlertConditionType =
   | 'COMPONENT'
   | 'KMC_HSM'
   | 'CA_HSM'
+  | 'RA_STANDARD_REVIEW'
+  | 'RA_PUBLIC_REVIEW'
   | 'RA_CERT_EXPIRY';
 
 export interface AlertConditionRule {
@@ -367,6 +369,8 @@ export interface AlertConditionRule {
   timeoutSeconds?: number;
   triggerSamples?: number;
   recoverySamples?: number;
+  pendingLimit?: number;
+  waitHours?: number;
   expiryDays?: number[];
 }
 

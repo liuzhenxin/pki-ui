@@ -107,6 +107,10 @@
     <el-drawer v-model="incidentVisible" title="告警详情" size="min(520px, 100vw)">
       <template v-if="incident">
         <h3>{{ incident.title }}</h3>
+        <p v-if="incident.reviewSample">
+          最近队列采样 {{ dateTimeText(incident.reviewSample.sampledAt) }}
+          <el-tag v-if="incident.reviewSample.stale" type="warning">采样已过期</el-tag>
+        </p>
         <p>{{ incident.objectKey }} · {{ incident.occurrences }} 次异常观测</p>
         <el-timeline>
           <el-timeline-item :timestamp="dateTimeText(incident.openedAt)">首次发生</el-timeline-item>

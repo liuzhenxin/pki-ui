@@ -301,6 +301,7 @@ export function getAlertEventLogs(limit = 100): Promise<AlertEventLog[]> {
 }
 
 export interface AlertIncident {
+  reviewSample?: { sampledAt: string; stale: boolean };
   id: string;
   source: string;
   objectKey: string;

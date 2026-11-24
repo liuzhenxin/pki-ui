@@ -54,6 +54,8 @@ const sourceLabels: Record<string, string> = {
   COMPONENT: '组件健康',
   CA_HSM: 'CA 密码机',
   KMC_HSM: 'KMC 密码机',
+  RA_STANDARD_REVIEW: 'RA 标准版审核积压',
+  RA_PUBLIC_REVIEW: 'RA 公网证书审核积压',
   RA_CERT_EXPIRY: 'RA 证书有效期'
 };
 
