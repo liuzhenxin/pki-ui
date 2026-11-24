@@ -13,7 +13,7 @@
       </button>
     </nav>
     <el-card shadow="never">
-      <el-tabs v-model="group">
+      <el-tabs v-model="group" :before-leave="guardTemplate">
         <el-tab-pane label="告警监控" name="monitor">
           <el-tabs v-model="monitorTab">
             <el-tab-pane label="告警记录" name="records">
@@ -62,7 +62,7 @@
           </el-tabs>
         </el-tab-pane>
         <el-tab-pane label="告警配置" name="config">
-          <el-tabs v-model="configTab">
+          <el-tabs v-model="configTab" :before-leave="guardTemplate">
             <el-tab-pane label="告警条件" name="conditions">
               <AlertConditionPane v-if="activeTab === 'conditions'" />
             </el-tab-pane>
@@ -117,7 +117,7 @@
               </el-tabs>
             </el-tab-pane>
             <el-tab-pane label="通知模板" name="notification-templates"
-              ><NotificationTemplatePane v-if="activeTab === 'notification-templates'"
+              ><NotificationTemplatePane ref="templateEditor" v-if="activeTab === 'notification-templates'"
             /></el-tab-pane>
           </el-tabs>
         </el-tab-pane>
@@ -254,7 +254,12 @@ const workspaces = [
   { key: 'rules', title: '通知规则', description: '配置通知渠道、接收人与模板' },
   { key: 'logs', title: '服务事件日志', description: '核对服务上报与投递结果' }
 ] as const;
-function openWorkspace(key: (typeof workspaces)[number]['key']) {
+const templateEditor = ref<InstanceType<typeof NotificationTemplatePane>>();
+function guardTemplate() {
+  return templateEditor.value?.allowLeave() ?? true;
+}
+async function openWorkspace(key: (typeof workspaces)[number]['key']) {
+  if (!(await guardTemplate())) return;
   if (key === 'rules') return configure('rules');
   if (key === 'logs') {
     group.value = 'logs';

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { flushPromises, mount } from '@vue/test-utils';
-import ElementPlus from 'element-plus';
+import ElementPlus, { ElMessageBox } from 'element-plus';
 import { beforeEach, expect, it, vi } from 'vitest';
 import NotificationTemplatePane from '@/views/ops/alert/NotificationTemplatePane.vue';
 
@@ -29,7 +29,9 @@ const catalog = {
   editable: true
 };
 
-beforeEach(() => mocks.request.mockReset());
+beforeEach(() => {
+  mocks.request.mockReset();
+});
 
 it('edits the selected default, previews it without saving, then saves the same draft', async () => {
   mocks.request
@@ -75,6 +77,67 @@ it('does not offer saving for a read-only session', async () => {
     await wrapper.get('form').trigger('submit');
     expect(mocks.request).toHaveBeenCalledTimes(2);
   } finally {
+    wrapper.unmount();
+  }
+});
+
+it.each([
+  ['触发', 'EMAIL'],
+  ['恢复', 'EMAIL'],
+  ['触发', 'DINGTALK'],
+  ['恢复', 'DINGTALK']
+])('preserves the CPU %s draft and previews %s', async (phase, channel) => {
+  const scene = { value: 'CPU', label: 'CPU ' + phase, variables: [{ name: 'usage', label: 'CPU 使用率', sample: '90%' }] };
+  mocks.request
+    .mockResolvedValueOnce({
+      ...catalog,
+      channels: [{ value: channel, label: channel === 'EMAIL' ? '邮件' : '钉钉' }],
+      applications: [{ value: 'OPS', label: 'OPS', scenes: [scene] }]
+    })
+    .mockResolvedValueOnce({ ...defaults, title: 'CPU XX', body: '正文' })
+    .mockResolvedValueOnce({ title: 'CPU 90%', body: '正文' });
+  const wrapper = mount(NotificationTemplatePane, { global: { plugins: [ElementPlus] } });
+  const confirm = vi.spyOn(ElMessageBox, 'confirm').mockRejectedValue('close');
+  try {
+    await flushPromises();
+    const title = wrapper.get<HTMLInputElement>('input[maxlength="255"]');
+    await title.trigger('focus');
+    title.element.setSelectionRange(4, 6);
+    const button = (label: string) => wrapper.findAll('button').find((item) => item.text() === label)!;
+    await button('CPU 使用率').trigger('click');
+    expect(title.element.value).toBe('CPU {{usage}}');
+    await button('重新加载').trigger('click');
+    await flushPromises();
+    expect(mocks.request).toHaveBeenCalledTimes(2);
+    await button('模拟预览').trigger('click');
+    await flushPromises();
+    expect(wrapper.get('.preview').text()).toContain('CPU 90%');
+    expect(wrapper.get('.preview').text()).toContain(scene.label);
+    expect(wrapper.get('.preview').text().includes('主题')).toBe(channel === 'EMAIL');
+  } finally {
+    confirm.mockRestore();
+    wrapper.unmount();
+  }
+});
+
+it.each(['save', 'discard', 'conflict'])('guards a dirty draft before navigation (%s)', async (choice) => {
+  mocks.request.mockResolvedValueOnce(catalog).mockResolvedValueOnce(defaults);
+  const wrapper = mount(NotificationTemplatePane, { global: { plugins: [ElementPlus] } });
+  const confirm = vi.spyOn(ElMessageBox, 'confirm');
+  try {
+    await flushPromises();
+    await wrapper.get('textarea').setValue('新的正文');
+    if (choice === 'discard') confirm.mockRejectedValueOnce('cancel');
+    else {
+      confirm.mockResolvedValueOnce('confirm');
+      if (choice === 'conflict') mocks.request.mockRejectedValueOnce({ response: { status: 409 } });
+      else mocks.request.mockResolvedValueOnce({ ...defaults, body: '新的正文', revision: 'saved' });
+    }
+    expect(await wrapper.vm.allowLeave()).toBe(choice !== 'conflict');
+    expect(mocks.request).toHaveBeenCalledTimes(choice === 'discard' ? 2 : 3);
+    if (choice !== 'discard') expect(mocks.request).toHaveBeenLastCalledWith(expect.objectContaining({ url, method: 'put' }));
+  } finally {
+    confirm.mockRestore();
     wrapper.unmount();
   }
 });

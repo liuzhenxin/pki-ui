@@ -3,17 +3,17 @@
     <el-form label-position="top" @submit.prevent="save">
       <div class="selectors">
         <el-form-item label="应用">
-          <el-select v-model="selection.application" :disabled="busy" @change="changeApplication">
+          <el-select :model-value="selection.application" :disabled="busy" @update:model-value="selectTemplate('application', $event)">
             <el-option v-for="option in catalog?.applications" :key="option.value" :label="option.label" :value="option.value" />
           </el-select>
         </el-form-item>
         <el-form-item label="场景">
-          <el-select v-model="selection.scene" :disabled="busy" @change="loadTemplate">
+          <el-select :model-value="selection.scene" :disabled="busy" @update:model-value="selectTemplate('scene', $event)">
             <el-option v-for="option in application?.scenes" :key="option.value" :label="option.label" :value="option.value" />
           </el-select>
         </el-form-item>
         <el-form-item label="渠道">
-          <el-select v-model="selection.channel" :disabled="busy" @change="loadTemplate">
+          <el-select :model-value="selection.channel" :disabled="busy" @update:model-value="selectTemplate('channel', $event)">
             <el-option v-for="option in catalog?.channels" :key="option.value" :label="option.label" :value="option.value" />
           </el-select>
         </el-form-item>
@@ -27,20 +27,32 @@
         <section>
           <div class="template-toolbar">
             <el-tag v-if="template" effect="plain">{{ sourceLabel }}</el-tag>
-            <el-button link type="primary" :disabled="busy" @click="loadTemplate">重新加载</el-button>
+            <el-tag v-if="dirty" type="warning">未保存</el-tag>
+            <el-button link type="primary" :disabled="busy" @click="reload">重新加载</el-button>
           </div>
           <el-form-item label="标题" required>
-            <el-input v-model="draft.title" :maxlength="255" :disabled="!template || busy" />
+            <el-input ref="titleInput" v-model="draft.title" @focus="activeField = 'title'" :maxlength="255" :disabled="!template || busy" />
           </el-form-item>
           <el-form-item label="正文" required>
-            <el-input v-model="draft.body" type="textarea" :rows="9" :maxlength="8000" show-word-limit :disabled="!template || busy" />
+            <el-input
+              ref="bodyInput"
+              v-model="draft.body"
+              @focus="activeField = 'body'"
+              type="textarea"
+              :rows="9"
+              :maxlength="8000"
+              show-word-limit
+              :disabled="!template || busy"
+            />
           </el-form-item>
           <el-form-item label="可用变量">
             <div class="variables">
-              <el-tooltip v-for="variable in scene?.variables" :key="variable.name" :content="`${variable.label} · ${variable.sample}`">
-                <el-button size="small" :disabled="!template || busy" @click="insertVariable(variable.name)">{{
-                  formatVariable(variable.name)
-                }}</el-button>
+              <el-tooltip
+                v-for="variable in scene?.variables"
+                :key="variable.name"
+                :content="`${formatVariable(variable.name)} · ${variable.sample}`"
+              >
+                <el-button size="small" :disabled="!template || busy" @click="insertVariable(variable.name)">{{ variable.label }}</el-button>
               </el-tooltip>
             </div>
           </el-form-item>
@@ -50,11 +62,14 @@
           </el-space>
         </section>
         <section class="preview" aria-label="模拟预览">
-          <h3>模拟预览</h3>
-          <p v-if="!previewResult" class="preview-hint">使用当前场景的示例数据渲染。</p>
+          <h3>{{ channelLabel }} · {{ scene?.label }}</h3>
+          <small>模拟数据</small>
+          <p v-if="!previewResult" class="preview-hint">{{ dirty ? '内容已修改，请重新预览。' : '点击模拟预览查看示例。' }}</p>
           <template v-else>
+            <div v-if="isEmail">主题</div>
             <strong class="preview-title">{{ previewResult.title }}</strong>
-            <p class="preview-body">{{ previewResult.body }}</p>
+            <div v-if="isEmail">正文</div>
+            <p class="preview-body" :class="{ message: !isEmail }">{{ previewResult.body }}</p>
           </template>
         </section>
       </div>
@@ -63,7 +78,8 @@
 </template>
 
 <script setup lang="ts">
-import { ElMessage } from 'element-plus';
+import { onBeforeRouteLeave } from 'vue-router';
+import { ElMessage, ElMessageBox, type InputInstance } from 'element-plus';
 import {
   getNotificationTemplate,
   getNotificationTemplateCatalog,
@@ -86,6 +102,52 @@ const previewResult = ref<NotificationTemplateDraft>();
 const application = computed(() => catalog.value?.applications.find((item) => item.value === selection.application));
 const scene = computed(() => application.value?.scenes.find((item) => item.value === selection.scene));
 const canUseDraft = computed(() => !!template.value && !busy.value && !!draft.title.trim() && !!draft.body.trim());
+const channelLabel = computed(() => catalog.value?.channels.find((item) => item.value === selection.channel)?.label);
+const isEmail = computed(() => /EMAIL|SMTP|MAIL/i.test(selection.channel));
+const dirty = computed(() => !!template.value && (draft.title !== template.value.title || draft.body !== template.value.body));
+const titleInput = ref<InputInstance>();
+const bodyInput = ref<InputInstance>();
+const activeField = ref<'title' | 'body'>('body');
+async function allowLeave() {
+  if (busy.value) return false;
+  if (!dirty.value) return true;
+  try {
+    await ElMessageBox.confirm('当前模板有未保存的修改。关闭此对话框可继续编辑。', '离开模板编辑', {
+      confirmButtonText: catalog.value?.editable ? '保存并继续' : '放弃修改',
+      cancelButtonText: catalog.value?.editable ? '放弃修改' : '继续编辑',
+      distinguishCancelAndClose: true,
+      closeOnClickModal: false
+    });
+    if (!catalog.value?.editable) return true;
+    await save();
+    return !dirty.value;
+  } catch (action) {
+    if (action === 'cancel' && catalog.value?.editable && template.value) {
+      show(template.value);
+      return true;
+    }
+    return false;
+  }
+}
+async function selectTemplate(key: keyof NotificationTemplateKey, value: string) {
+  if (selection[key] === value || !(await allowLeave())) return;
+  selection[key] = value;
+  if (key === 'application') await changeApplication();
+  else await loadTemplate();
+}
+async function reload() {
+  if (await allowLeave()) await loadTemplate();
+}
+function beforeUnload(event: BeforeUnloadEvent) {
+  if (dirty.value) {
+    event.preventDefault();
+    event.returnValue = '';
+  }
+}
+onMounted(() => window.addEventListener('beforeunload', beforeUnload));
+onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload));
+onBeforeRouteLeave(allowLeave);
+defineExpose({ allowLeave });
 const sourceLabel = computed(() => {
   if (template.value?.origin === 'CUSTOM') return '已自定义';
   if (template.value?.origin === 'INHERITED') {
@@ -140,9 +202,22 @@ function formatVariable(name: string) {
   return `{{${name}}}`;
 }
 
-function insertVariable(name: string) {
-  const next = draft.body + formatVariable(name);
-  if (next.length <= 8000) draft.body = next;
+async function insertVariable(name: string) {
+  const key = activeField.value;
+  const input = key === 'title' ? titleInput.value?.input : bodyInput.value?.textarea;
+  if (!input) return;
+  const start = input.selectionStart ?? draft[key].length;
+  const end = input.selectionEnd ?? start;
+  const token = formatVariable(name);
+  const value = draft[key].slice(0, start) + token + draft[key].slice(end);
+  if (value.length > input.maxLength) {
+    ElMessage.warning('插入变量后超过字数限制');
+    return;
+  }
+  draft[key] = value;
+  await nextTick();
+  input.focus();
+  input.setSelectionRange(start + token.length, start + token.length);
 }
 
 async function save() {
@@ -216,6 +291,11 @@ onMounted(loadCatalog);
   border-radius: var(--el-border-radius-base);
 }
 
+.preview-body.message {
+  background: var(--el-fill-color-light);
+  border-radius: 8px;
+  padding: 12px;
+}
 .preview h3 {
   margin: 0 0 16px;
 }
