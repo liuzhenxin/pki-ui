@@ -50,5 +50,14 @@ jobs:
         run: yarn playwright test --config tests/ca-profile/playwright.config.ts --output "$RUNNER_TEMP/ca-profile-playwright"
 
       - name: Build the production frontend
+        id: build
         if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
         run: yarn build:${{ matrix.product }}
+
+      - name: Upload the production build
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: pki-ui-${{ matrix.product }}
+          path: dist/
+          if-no-files-found: error
