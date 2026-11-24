@@ -17,12 +17,12 @@
           </el-select>
         </el-form-item>
         <el-form-item label="证书模板" prop="profileId">
-          <el-select v-model="queryParams.profileId" clearable filterable placeholder="全部模板" :loading="filterOptionsLoading">
+          <el-select v-model="queryParams.profileId" clearable filterable placeholder="全部模板" :loading="filterOptionsLoading" @visible-change="handleFilterOptionsVisibility">
             <el-option v-for="item in profileOptions" :key="item.id" :label="item.name" :value="item.id" />
           </el-select>
         </el-form-item>
         <el-form-item label="颁发机构" prop="rootId">
-          <el-select v-model="queryParams.rootId" clearable filterable placeholder="全部颁发机构" :loading="filterOptionsLoading">
+          <el-select v-model="queryParams.rootId" clearable filterable placeholder="全部颁发机构" :loading="filterOptionsLoading" @visible-change="handleFilterOptionsVisibility">
             <el-option v-for="item in issuerOptions" :key="item.id" :label="item.name" :value="item.id" />
           </el-select>
         </el-form-item>
@@ -77,15 +77,16 @@
       <el-table-column label="操作" width="156" align="center" fixed="right">
         <template #default="{ row }">
           <CertRowAction label="查看详情" icon="View" @click="handleDetail(row)" />
-          <CertRowAction v-if="canSyncIntranet" label="同步到内网" icon="DocumentAdd" @click="openIntranetCertLedger(row)" />
+          <CertRowAction v-if="canSyncIntranet" label="同步到证书管理" icon="DocumentAdd" @click="openIntranetCertLedger(row)" />
           <CertRowAction v-if="canRecoverKey(row)" label="密钥恢复" icon="Key" :disabled="recoverOpening" @click="openRecover(row)" />
           <CertRowAction label="下载证书" icon="Download" @command="(format) => handleDownload(format, row)">
             <template #dropdown>
               <el-dropdown-menu>
                 <el-dropdown-item command="pem">PEM 证书 (.pem)</el-dropdown-item>
                 <el-dropdown-item command="cer">CER 证书 (.cer)</el-dropdown-item>
+                <el-dropdown-item command="der">DER 证书 (.der)</el-dropdown-item>
                 <el-dropdown-item command="p7b">P7B 证书链 (.p7b)</el-dropdown-item>
-                <el-dropdown-item v-if="row.pkcs12Available" command="pkcs12" divided>PKCS#12 (.p12)</el-dropdown-item>
+                <el-dropdown-item command="pfx" divided>PFX 证书包 (.pfx)</el-dropdown-item>
               </el-dropdown-menu>
             </template>
           </CertRowAction>
@@ -95,64 +96,84 @@
 
     <pagination v-show="total > 0" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" :total="total" :auto-scroll="false" @pagination="getList" />
 
-    <el-dialog v-model="detailOpen" title="证书详情" width="920px" append-to-body class="ra-cert-detail-dialog">
-      <el-descriptions :column="2" border class="detail-descriptions">
-        <el-descriptions-item label="证书序列号">{{ detail.serialNumber || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="证书状态">
-          <el-tag :type="statusTagType(detail.status)" effect="light">{{ detail.statusName || statusName(detail.status) }}</el-tag>
-        </el-descriptions-item>
-        <el-descriptions-item label="证书主题" :span="2">{{ formatCertificateSubject(detail.x509?.subjectDn || detail.subject) }}</el-descriptions-item>
-        <el-descriptions-item v-if="detail.x509" label="颁发者 DN" :span="2">{{ detail.x509.issuerDn }}</el-descriptions-item>
-        <el-descriptions-item label="请求主题" :span="2">{{ formatCertificateSubject(detail.requestSubject) }}</el-descriptions-item>
-        <el-descriptions-item label="申请用户">{{ detail.userName || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="域账号">{{ detail.domainAccount || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="所属部门">{{ detail.deptName || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="签发 CA">{{ detail.rootName || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="证书模板">{{ detail.profileName || detail.profileId || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="生效时间">{{ parseTime(detail.notBefore) || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="失效时间">{{ parseTime(detail.notAfter) || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="SHA-1指纹" :span="2">{{ detail.sha1 || '-' }}</el-descriptions-item>
-        <el-descriptions-item v-if="detail.status === 'HOLD'" label="冻结时间">{{ parseTime(detail.revocationTime) || '-' }}</el-descriptions-item>
-        <el-descriptions-item v-if="detail.status === 'HOLD'" label="冻结原因">证书挂起</el-descriptions-item>
-        <el-descriptions-item v-if="detail.revoked && detail.status !== 'HOLD'" label="注销时间">{{
-          parseTime(detail.revocationTime) || '-'
-        }}</el-descriptions-item>
-        <el-descriptions-item v-if="detail.revoked && detail.status !== 'HOLD'" label="注销原因">{{
-          revocationReasonName(detail.revocationReason)
-        }}</el-descriptions-item>
-        <el-descriptions-item v-if="kmcKeyStatus" label="KMC密钥标识">{{ kmcKeyStatus.keyId || '-' }}</el-descriptions-item>
-        <el-descriptions-item v-if="kmcKeyStatus" label="KMC密钥状态"
-          >{{ kmcKeyStatus.statusText || '-' }}（{{ kmcKeyStatus.algorithm || 'RSA' }} {{ kmcKeyStatus.keySize || '' }}）</el-descriptions-item
-        >
-      </el-descriptions>
+    <el-dialog v-model="detailOpen" title="证书详情" width="920px" append-to-body class="ra-cert-detail-dialog" @close="markDetailClosing" @closed="reopenQueuedDetail">
+      <el-alert v-if="detailLoadFailed" title="证书详情加载失败，当前显示列表信息" type="warning" :closable="false" />
+      <div v-loading="detailLoading">
+        <el-descriptions :column="2" border class="detail-descriptions">
+          <el-descriptions-item label="证书序列号">{{ detail.serialNumber || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="证书状态">
+            <el-tag :type="statusTagType(detail.status)" effect="light">{{ detail.statusName || statusName(detail.status) }}</el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="证书主题" :span="2">{{ formatCertificateSubject(detail.x509?.subjectDn || detail.subject) }}</el-descriptions-item>
+          <el-descriptions-item v-if="detail.x509" label="颁发者 DN" :span="2">{{ detail.x509.issuerDn }}</el-descriptions-item>
+          <el-descriptions-item label="请求主题" :span="2">{{ formatCertificateSubject(detail.requestSubject) }}</el-descriptions-item>
+          <el-descriptions-item label="申请用户 ID">{{ Number(detail.userId) > 0 ? detail.userId : '-' }}</el-descriptions-item>
+          <el-descriptions-item label="用户名">{{ detail.userName || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="用户域账号">{{ detail.domainAccount || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="所属部门">{{ detail.deptName || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="签发 CA">{{ detail.rootName || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="证书模板">{{ detail.profileName || detail.profileId || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="生效时间">{{ parseTime(detail.notBefore) || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="失效时间">{{ parseTime(detail.notAfter) || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="SHA-1指纹" :span="2">{{ detail.sha1 || '-' }}</el-descriptions-item>
+          <el-descriptions-item v-if="detail.status === 'HOLD'" label="冻结时间">{{ parseTime(detail.revocationTime) || '-' }}</el-descriptions-item>
+          <el-descriptions-item v-if="detail.status === 'HOLD'" label="冻结原因">证书挂起</el-descriptions-item>
+          <el-descriptions-item v-if="detail.revoked && detail.status !== 'HOLD'" label="注销时间">{{
+            parseTime(detail.revocationTime) || '-'
+          }}</el-descriptions-item>
+          <el-descriptions-item v-if="detail.revoked && detail.status !== 'HOLD'" label="注销原因">{{
+            revocationReasonName(detail.revocationReason)
+          }}</el-descriptions-item>
+          <el-descriptions-item v-if="kmcKeyStatus" label="KMC密钥标识">{{ kmcKeyStatus.keyId || '-' }}</el-descriptions-item>
+          <el-descriptions-item v-if="kmcKeyStatus" label="KMC密钥状态"
+            >{{ kmcKeyStatus.statusText || '-' }}（{{ kmcKeyStatus.algorithm || 'RSA' }} {{ kmcKeyStatus.keySize || '' }}）</el-descriptions-item
+          >
+        </el-descriptions>
 
-      <el-alert v-if="detail.parseWarning" :title="detail.parseWarning" type="warning" :closable="false" show-icon class="mt12" />
-      <el-descriptions v-if="detail.x509" title="X.509 属性" :column="2" border class="detail-descriptions mt12">
-        <el-descriptions-item label="版本">V{{ detail.x509.version }}</el-descriptions-item>
-        <el-descriptions-item label="公钥算法">{{ detail.x509.publicKeyAlgorithm }}</el-descriptions-item>
-        <el-descriptions-item label="签名算法" :span="2">{{ detail.x509.signatureAlgorithm }}</el-descriptions-item>
-        <el-descriptions-item label="密钥用途" :span="2">{{ detail.x509.keyUsages.join('、') || '未声明' }}</el-descriptions-item>
-        <el-descriptions-item label="增强密钥用途" :span="2">{{ extendedUsageText(detail.x509.extendedKeyUsages) || '未声明' }}</el-descriptions-item>
-        <el-descriptions-item label="主题备用名称" :span="2">{{ detail.x509.subjectAlternativeNames.join('、') || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="SHA-256 指纹" :span="2">{{ detail.x509.sha256 }}</el-descriptions-item>
-      </el-descriptions>
+        <el-alert v-if="detail.parseWarning" :title="detail.parseWarning" type="warning" :closable="false" show-icon class="mt12" />
+        <el-descriptions v-if="detail.x509" title="X.509 属性" :column="2" border class="detail-descriptions mt12">
+          <el-descriptions-item label="版本">V{{ detail.x509.version }}</el-descriptions-item>
+          <el-descriptions-item label="公钥算法">{{ detail.x509.publicKeyAlgorithm }}</el-descriptions-item>
+          <el-descriptions-item label="签名算法" :span="2">{{ detail.x509.signatureAlgorithm }}</el-descriptions-item>
+          <el-descriptions-item label="密钥用途" :span="2">{{ detail.x509.keyUsages.join('、') || '未声明' }}</el-descriptions-item>
+          <el-descriptions-item label="增强密钥用途" :span="2">{{ extendedUsageText(detail.x509.extendedKeyUsages) || '未声明' }}</el-descriptions-item>
+          <el-descriptions-item label="主题备用名称" :span="2">{{ detail.x509.subjectAlternativeNames.join('、') || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="SHA-256 指纹" :span="2">{{ detail.x509.sha256 }}</el-descriptions-item>
+        </el-descriptions>
 
-      <div class="pem-header">
-        <span>PEM 证书</span>
-        <div class="pem-actions">
-          <el-button icon="CopyDocument" @click="copyPem">复制</el-button>
-          <el-button type="primary" icon="Download" @click="downloadPem">下载 PEM</el-button>
+        <div class="pem-header">
+          <div class="pem-actions">
+            <span>PEM 证书</span>
+            <el-radio-group v-model="certificateView" aria-label="证书显示格式" size="small">
+              <el-radio-button value="pem">原始</el-radio-button>
+              <el-radio-button value="readable">查看</el-radio-button>
+            </el-radio-group>
+          </div>
+          <div class="pem-actions">
+            <el-button icon="CopyDocument" :disabled="!detail.cert" @click="copyPem">复制</el-button>
+            <el-button type="primary" icon="Download" :disabled="!detail.cert" @click="downloadPem">下载 PEM</el-button>
+          </div>
         </div>
-      </div>
-      <el-input v-model="detail.cert" type="textarea" :rows="11" readonly class="pem-textarea" />
+        <el-input v-if="certificateView === 'pem'" :model-value="detail.cert" type="textarea" :rows="11" readonly class="pem-textarea" />
+        <X509Cert v-else-if="detail.cert" :cert-pem="detail.cert" class="pem-readable" />
+        <el-empty v-else-if="!detailLoading" description="暂无证书内容" :image-size="64" />
 
+      </div>
       <template #footer>
-        <RaIssueNotificationButton v-if="detail.id && detail.status === 'VALID'" :cert-id="detail.id" />
+        <RaIssueNotificationButton v-if="!detailLoading && !detailLoadFailed && detail.id && detail.status === 'VALID'" :cert-id="detail.id" />
         <el-button type="primary" @click="detailOpen = false">关闭</el-button>
       </template>
     </el-dialog>
 
-    <el-dialog v-model="pkcs12Open" title="导出 PKCS#12" width="480px" append-to-body @closed="resetPkcs12Form">
+    <PfxExportDialog
+      v-model="uploadedPfxOpen"
+      :cert-id="selectedCert?.id"
+      :serial-number="selectedCert?.serialNumber"
+      :request-pfx="packageRaCertPfx"
+      @download="saveBlob"
+    />
+
+    <el-dialog v-model="pkcs12Open" title="导出 PFX" width="480px" append-to-body @closed="resetPkcs12Form">
       <el-alert type="warning" :closable="false" show-icon title="PKCS#12 包含证书私钥，请设置高强度导出口令并妥善保管。" />
       <el-form ref="pkcs12FormRef" :model="pkcs12Form" :rules="pkcs12Rules" label-width="92px" class="pkcs12-form">
         <el-form-item label="证书序列号">
@@ -290,12 +311,15 @@
 
 <script setup name="RaCert" lang="ts">
 import { formatCertificateSubject, formatCertificateSubjectColumn } from '@/utils/raCertificateSubject';
+import PfxExportDialog from '../components/PfxExportDialog.vue';
 import CertRowAction from '../components/CertRowAction.vue';
 import { useRaListRefreshOnReturn } from '@/hooks/useRaListRefreshOnReturn';
+import { defineAsyncComponent } from 'vue';
 import { ElMessage, FormInstance, FormRules } from 'element-plus';
 import {
   downloadRaCert,
-  downloadRaPkcs12,
+  downloadRaManagedPfx,
+  packageRaCertPfx,
   getRaCert,
   getRaCertFilterOptions,
   type RaCertFilterOption,
@@ -320,12 +344,20 @@ import { intranetCertSyncLocation } from '@/utils/raIntranetCertNavigation';
 import RaIssueNotificationButton from '../issue/RaIssueNotificationButton.vue';
 import HistoricalRecoveryDialog from '@/views/ca/archive-cert/HistoricalRecoveryDialog.vue';
 
+const X509Cert = defineAsyncComponent(() => import('@/components/X509Cert/index.vue'));
+
 const rows = ref<RaCertSummary[]>([]);
 const router = useRouter();
 const loading = ref(false);
 const filterOptionsLoading = ref(false);
 const profileOptions = ref<RaCertFilterOption[]>([]);
 const issuerOptions = ref<RaCertFilterOption[]>([]);
+
+let filterOptionsLoaded = false;
+
+function handleFilterOptionsVisibility(open: boolean) {
+  if (open && !filterOptionsLoaded) void loadFilterOptions();
+}
 
 async function loadFilterOptions() {
   if (filterOptionsLoading.value) return;
@@ -339,6 +371,7 @@ async function loadFilterOptions() {
     };
     profileOptions.value = labelDuplicates(data?.profiles ?? []);
     issuerOptions.value = labelDuplicates(data?.issuers ?? []);
+    filterOptionsLoaded = true;
   } catch {
     // The request interceptor reports the error; other filters remain usable.
   } finally {
@@ -352,9 +385,32 @@ const showSearch = ref(true);
 const total = ref(0);
 const detailOpen = ref(false);
 let detailRequestId = 0;
+let detailClosing = false;
+let queuedDetail: RaCertSummary | undefined;
+const detailLoading = ref(false);
+const detailLoadFailed = ref(false);
+function markDetailClosing() {
+  if (detailClosing) return;
+  detailClosing = true;
+  detailRequestId++;
+}
+
+watch(detailOpen, (open) => {
+  if (!open) markDetailClosing();
+}, { flush: 'sync' });
+
+async function reopenQueuedDetail() {
+  await nextTick();
+  detailClosing = false;
+  const row = queuedDetail;
+  queuedDetail = undefined;
+  if (row) void handleDetail(row);
+}
 const detail = ref<Record<string, any>>({});
+const certificateView = ref<'pem' | 'readable'>('pem');
 const queryFormRef = ref<FormInstance>();
 const pkcs12Open = ref(false);
+const uploadedPfxOpen = ref(false);
 const pkcs12Loading = ref(false);
 const selectedCert = ref<RaCertSummary>();
 const pkcs12FormRef = ref<FormInstance>();
@@ -544,12 +600,28 @@ function canRecoverKey(row: RaCertSummary) {
 }
 
 async function handleDetail(row: RaCertSummary) {
+  if (detailClosing) {
+    queuedDetail = row;
+    return;
+  }
   const requestId = ++detailRequestId;
-  const data = unwrapData<RaCertDetail>(await getRaCert(row.id));
-  if (requestId !== detailRequestId) return;
-  detail.value = { ...(data?.summary || row), ...data };
+  detail.value = { ...row };
+  certificateView.value = 'pem';
   kmcKeyStatus.value = null;
+  detailLoadFailed.value = false;
+  detailLoading.value = true;
   detailOpen.value = true;
+  let data: RaCertDetail;
+  try {
+    data = unwrapData<RaCertDetail>(await getRaCert(row.id));
+    if (requestId !== detailRequestId) return;
+    detail.value = { ...(data?.summary || row), ...data };
+  } catch {
+    if (requestId === detailRequestId) detailLoadFailed.value = true;
+    return;
+  } finally {
+    if (requestId === detailRequestId) detailLoading.value = false;
+  }
   if (canRecoverKey(data?.summary || row)) {
     try {
       const status = unwrapData<RaKmcKeyStatus>(await queryRaKmcKeyStatus(row.id));
@@ -614,21 +686,23 @@ function downloadPem() {
 }
 
 async function handleDownload(format: string, row: RaCertSummary) {
-  if (format === 'pkcs12') {
+  if (format === 'pfx') {
     selectedCert.value = row;
-    pkcs12Open.value = true;
+    if (row.pkcs12Available) pkcs12Open.value = true;
+    else uploadedPfxOpen.value = true;
     return;
   }
   try {
-    const response = await downloadRaCert(row.id, format as 'pem' | 'cer' | 'p7b');
+    const response = await downloadRaCert(row.id, format as 'pem' | 'cer' | 'der' | 'p7b');
     const mimeTypes: Record<string, string> = {
       pem: 'application/x-pem-file',
       cer: 'application/pkix-cert',
+      der: 'application/pkix-cert',
       p7b: 'application/x-pkcs7-certificates'
     };
     saveBlob(await certificateDownloadBlob(response, mimeTypes[format], 'RA_CERT_DOWNLOAD_'), `${row.serialNumber}.${format}`);
-  } catch {
-    ElMessage.error('证书下载失败');
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '证书下载失败');
   }
 }
 
@@ -636,12 +710,12 @@ async function submitPkcs12Export() {
   if (!selectedCert.value || !(await pkcs12FormRef.value?.validate().catch(() => false))) return;
   pkcs12Loading.value = true;
   try {
-    const response = await downloadRaPkcs12(selectedCert.value.id, pkcs12Form.password);
-    saveBlob(await certificateDownloadBlob(response, 'application/x-pkcs12'), `${selectedCert.value.serialNumber}.p12`);
+    const response = await downloadRaManagedPfx(selectedCert.value.id, pkcs12Form.password);
+    saveBlob(await certificateDownloadBlob(response, 'application/x-pkcs12', 'RA_CERT_DOWNLOAD_'), `${selectedCert.value.serialNumber}.pfx`);
     pkcs12Open.value = false;
-    ElMessage.success('PKCS#12 下载已开始');
-  } catch {
-    ElMessage.error('PKCS#12 导出失败');
+    ElMessage.success('PFX 下载已开始');
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : 'PFX 导出失败');
   } finally {
     pkcs12Loading.value = false;
   }
@@ -975,7 +1049,7 @@ async function submitRecover() {
 }
 
 function refreshPage() {
-  void loadFilterOptions();
+  filterOptionsLoaded = false;
   return getList();
 }
 
@@ -1099,7 +1173,15 @@ useRaListRefreshOnReturn(refreshPage);
 
 :global(.ra-cert-detail-dialog .pem-actions) {
   display: flex;
+  align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
+}
+
+:global(.ra-cert-detail-dialog .pem-readable) {
+  box-sizing: border-box;
+  max-height: 320px;
+  overflow: auto;
 }
 
 :global(.ra-cert-detail-dialog .pem-textarea textarea) {

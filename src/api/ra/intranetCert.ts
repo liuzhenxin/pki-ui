@@ -62,6 +62,8 @@ export interface IntranetCert {
 
 export interface IntranetCertPrefill {
   existing?: IntranetCert;
+  applicant?: Pick<IntranetCert, 'applicantEmployeeId' | 'applicantIdentityKey' | 'applicantName' |
+    'applicantAccount' | 'applicantEmail' | 'applicantDeptId' | 'applicantDeptName' | 'applicantDeptPath' | 'applicantStatus'>;
   cert?: {
     id: string | number;
     serialNumber: string;

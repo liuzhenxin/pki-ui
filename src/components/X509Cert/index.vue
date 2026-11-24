@@ -33,7 +33,8 @@ const formatDateString = (zStr: string) => {
   try {
     let y, m, d, h, min, s;
     if (zStr.length === 13) {
-      y = '20' + zStr.substring(0, 2);
+      const shortYear = Number(zStr.slice(0, 2));
+      y = (shortYear < 50 ? 2000 : 1900) + shortYear;
       m = parseInt(zStr.substring(2, 4)) - 1;
       d = zStr.substring(4, 6);
       h = zStr.substring(6, 8);
@@ -60,11 +61,7 @@ const formatDateString = (zStr: string) => {
 const formatDN = (array: any[]) => {
   if (!array || array.length === 0) return '';
   return array
-    .map((e: any) => {
-      const type = e[0].type;
-      const val = e[0].value;
-      return `${type} = ${val}`;
-    })
+    .map((rdn: any[]) => rdn.map(({ type, value }) => `${type} = ${value}`).join(' + '))
     .join(', ');
 };
 
@@ -261,13 +258,16 @@ const certText = computed(() => {
 
   let sigAlgName = 'Unknown';
   try {
-    sigAlgName = x509.getSignatureAlgorithmName();
+    sigAlgName = x509.getSignatureAlgorithmName() || 'Unknown';
   } catch (e) {}
 
   if (algMap[sigAlgName]) {
     sigAlgName = algMap[sigAlgName];
-  } else if (sigAlgName === 'Unknown' || props.certPem.includes('SM2')) {
-    sigAlgName = 'sm2sign_with_sm3';
+  } else if (sigAlgName === 'Unknown') {
+    try {
+      const oid = ASN1HEX.hextooidstr(ASN1HEX.getVbyList(x509.hex, 0, [1, 0]));
+      sigAlgName = algMap[oid] || oid || 'Unknown';
+    } catch (e) {}
   }
 
   text += `        Signature Algorithm: ${sigAlgName}\n`;
@@ -323,16 +323,11 @@ const certText = computed(() => {
 
   text += `            Public Key Algorithm: ${pubKeyAlg}\n`;
 
-  if (pubKeyAlg === 'id-ecPublicKey' || pubKeyOID === '1.2.156.10197.1.301' || (pubKeyAlg === 'Unknown' && props.certPem.includes('SM2'))) {
-    text += `                Public-Key: (256 bit)\n`;
-  } else if (pubKeyAlg === 'rsaEncryption') {
-    try {
-      const pub = x509.getPublicKey();
-      if (pub && (pub as any).n) {
-        text += `                Public-Key: (${(pub as any).n.bitLength()} bit)\n`;
-      }
-    } catch (e) {}
-  }
+  try {
+    const pub = x509.getPublicKey() as any;
+    const bits = pub?.n?.bitLength() ?? pub?.ecparams?.keylen;
+    if (bits) text += `                Public-Key: (${bits} bit)\n`;
+  } catch (e) {}
 
   let pub16 = '';
   try {
@@ -475,18 +470,10 @@ KJUR.crypto.ECParameterDB.regist(
   '1.2.156.10197.1.301'
 );
 
-KJUR.crypto.ECDSA.getName = function (s: any) {
-  if (s === '2a811ccf5501822d') return 'sm2p256v1';
-  if (s === '2b8104001f') return 'secp192k1';
-  if (s === '2a8648ce3d030107') return 'secp256r1';
-  if (s === '2b8104000a') return 'secp256k1';
-  if (s === '2b81040021') return 'secp224r1';
-  if (s === '2b81040022') return 'secp384r1';
-  if ('|secp256r1|NIST P-256|P-256|prime256v1|'.indexOf(s) !== -1) return 'secp256r1';
-  if ('|secp256k1|'.indexOf(s) !== -1) return 'secp256k1';
-  if ('|secp224r1|NIST P-224|P-224|'.indexOf(s) !== -1) return 'secp224r1';
-  if ('|secp384r1|NIST P-384|P-384|'.indexOf(s) !== -1) return 'secp384r1';
-  return null;
+const getCurveName = KJUR.crypto.ECDSA.getName;
+KJUR.crypto.ECDSA.getName = function (name: string) {
+  if (name === '2a811ccf5501822d' || name === 'sm2p256v1') return 'sm2p256v1';
+  return getCurveName.call(this, name);
 };
 </script>
 

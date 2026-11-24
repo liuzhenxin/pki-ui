@@ -1,3 +1,4 @@
+import { requestRaPfx, type PfxExportFields } from './cert';
 import request from '@/utils/request';
 import { Result } from '@/api/types';
 
@@ -111,23 +112,8 @@ export function downloadRaIssuedChain(certId: string | number) {
   return request({ url: `/ra/v1/cert-issues/${certId}/issued-download/p7b`, method: 'get', responseType: 'blob' });
 }
 
-export function packageRaIssuedPfx(certId: string | number, form: {
-  privateKey: string;
-  keyPassword: string;
-  password: string;
-}, verifyOnly: boolean) {
-  return request({
-    url: `/ra/v1/cert-issues/${certId}/issued-download/pfx`,
-    method: 'post',
-    data: {
-      privateKey: form.privateKey,
-      keyPassword: form.keyPassword,
-      password: verifyOnly ? undefined : form.password,
-      verifyOnly
-    },
-    headers: { repeatSubmit: false, sensitive: true, hideErrorNotify: true },
-    responseType: verifyOnly ? 'json' : 'blob'
-  });
+export function packageRaIssuedPfx(certId: string | number, form: PfxExportFields, verifyOnly: boolean) {
+  return requestRaPfx(`/ra/v1/cert-issues/${certId}/issued-download/pfx`, form, verifyOnly);
 }
 
 export function requestRaIssueNotification(certId: string | number): Promise<Result<void>> {

@@ -87,10 +87,40 @@ export function getRaCert(id: string | number): Promise<Result<RaCertDetail>> {
   }) as any;
 }
 
-export function downloadRaCert(id: string | number, format: 'pem' | 'cer' | 'p7b'): Promise<Blob> {
+export function downloadRaCert(id: string | number, format: 'pem' | 'cer' | 'der' | 'p7b'): Promise<Blob> {
   return request({
     url: `/ra/v1/certs/${id}/download/${format}`,
     method: 'get',
+    responseType: 'blob'
+  }) as any;
+}
+
+export interface PfxExportFields {
+  privateKey: string;
+  keyPassword: string;
+  password: string;
+}
+
+export function requestRaPfx(url: string, form: PfxExportFields, verifyOnly: boolean) {
+  return request({
+    url,
+    method: 'post',
+    data: { privateKey: form.privateKey, keyPassword: form.keyPassword, password: verifyOnly ? undefined : form.password, verifyOnly },
+    headers: { repeatSubmit: false, sensitive: true, hideErrorNotify: true },
+    responseType: verifyOnly ? 'json' : 'blob'
+  });
+}
+
+export function packageRaCertPfx(id: string | number, form: PfxExportFields, verifyOnly: boolean) {
+  return requestRaPfx(`/ra/v1/certs/${id}/pfx`, form, verifyOnly);
+}
+
+export function downloadRaManagedPfx(id: string | number, password: string): Promise<Blob> {
+  return request({
+    url: `/ra/v1/certs/${id}/pfx-managed`,
+    method: 'post',
+    data: { password },
+    headers: { repeatSubmit: false, sensitive: true, hideErrorNotify: true },
     responseType: 'blob'
   }) as any;
 }

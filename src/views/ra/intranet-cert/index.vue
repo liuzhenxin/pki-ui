@@ -184,7 +184,7 @@
         <el-form-item label="申请人" prop="applicantName">
           <div class="employee-line">
             <el-input v-model="form.applicantName" readonly placeholder="请选择申请人" />
-            <el-button icon="User" @click="openEmployeePicker">选择</el-button>
+            <el-button icon="User" @click="openEmployeePicker">{{ form.applicantEmployeeId ? '重新选择' : '选择' }}</el-button>
           </div>
         </el-form-item>
         <el-row :gutter="12">
@@ -647,7 +647,7 @@ async function loadPrefillFromRoute(path: string, source: unknown, serial: unkno
       detailOpen.value = false;
       resetForm();
       const { id, ...cert } = data.cert;
-      Object.assign(form, cert, { sourceType: 'ISSUED', sourceCertId: id });
+      Object.assign(form, cert, data.applicant, { sourceType: 'ISSUED', sourceCertId: id });
       formOpen.value = true;
     }
   } catch {

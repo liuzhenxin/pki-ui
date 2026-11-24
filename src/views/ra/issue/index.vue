@@ -464,8 +464,8 @@
         <el-descriptions-item label="证书ID">{{ issueResult.certId || '-' }}</el-descriptions-item>
         <el-descriptions-item label="序列号">{{ issueResult.serialNumber || '-' }}</el-descriptions-item>
         <el-descriptions-item label="证书主题" :span="2">{{ formatCertificateSubject(issueResult.subject) }}</el-descriptions-item>
-        <el-descriptions-item label="生效时间">{{ issuedDates.notBefore || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="到期时间">{{ issuedDates.notAfter || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="生效时间">{{ parseTime(issuedDates.notBefore) || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="到期时间">{{ parseTime(issuedDates.notAfter) || '-' }}</el-descriptions-item>
       </el-descriptions>
       <div v-if="issueResult.storageType === 'USB_KEY' || issueResult.encStorageType === 'USB_KEY'" class="renewal-result-storage">
         <el-alert :title="`${issueResultLabel}证书已写入 USBKey`" type="success" show-icon :closable="false" />
@@ -553,30 +553,13 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="pfxOpen" title="下载 PFX 证书包" width="600px" append-to-body
-      :close-on-click-modal="false" :close-on-press-escape="!pfxPending" :show-close="!pfxPending" @closed="clearPfx">
-      <el-form label-width="112px" @submit.prevent>
-        <el-form-item label="私钥">
-          <el-input v-model="pfxForm.privateKey" type="textarea" :rows="6" placeholder="粘贴 PEM 格式私钥"
-            autocomplete="off" :disabled="pfxPending" @input="pfxVerified = false" />
-          <input ref="pfxKeyFileInput" type="file" accept=".key,.pem" hidden @change="loadPfxKeyFile" />
-          <el-button link type="primary" :disabled="pfxPending" @click="pfxKeyFileInput?.click()">选择私钥文件</el-button>
-        </el-form-item>
-        <el-form-item label="私钥密码">
-          <el-input v-model="pfxForm.keyPassword" type="password" show-password placeholder="加密私钥请填写"
-            autocomplete="off" :disabled="pfxPending" @input="pfxVerified = false" />
-        </el-form-item>
-        <el-form-item v-if="pfxVerified" label="PFX 密码">
-          <el-input v-model="pfxForm.password" type="password" show-password placeholder="可以留空"
-            autocomplete="new-password" :disabled="pfxPending" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button :disabled="pfxPending" @click="pfxOpen = false">取消</el-button>
-        <el-button type="primary" :loading="pfxPending" :disabled="!pfxForm.privateKey.trim()"
-          @click="submitPfx">{{ pfxVerified ? '下载 PFX' : '验证私钥' }}</el-button>
-      </template>
-    </el-dialog>
+    <PfxExportDialog
+      v-model="pfxOpen"
+      :cert-id="issueResult.certId"
+      :serial-number="issueResult.serialNumber"
+      :request-pfx="packageRaIssuedPfx"
+      @download="saveResultDownload"
+    />
 
     <el-dialog v-model="detailOpen" title="待签发详情" width="720px" append-to-body>
       <el-descriptions :column="1" border>
@@ -603,6 +586,7 @@ import { formatCertificateSubject, formatCertificateSubjectColumn } from '@/util
 import CertRowAction from '../components/CertRowAction.vue';
 import { useRaListRefreshOnReturn } from '@/hooks/useRaListRefreshOnReturn';
 import { ElMessage, FormInstance, FormRules } from 'element-plus';
+import PfxExportDialog from '../components/PfxExportDialog.vue';
 import RaIssueNotificationButton from './RaIssueNotificationButton.vue';
 import {
   confirmRaRenewalDistribution,
@@ -629,7 +613,8 @@ import auth from '@/plugins/auth';
 import { intranetCertSyncLocation } from '@/utils/raIntranetCertNavigation';
 import { certificateDownloadBlob, issuedCertificateBlob, type IssuedCertificateFormat } from '@/utils/raCertificateDownload';
 
-import { X509 } from 'jsrsasign';
+import { readIssuedCertificateValidity } from '@/utils/raIssuedCertificateValidity';
+import { parseTime } from '@/utils/ruoyi';
 
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
 const router = useRouter();
@@ -896,7 +881,6 @@ function applyDefaultIssueDuration(start = issueForm.notBefore) {
 
 function issueValidityRequest(validity: ReturnType<typeof getIssueValidity>) {
   if (showIssueValidity.value && issueForm.notBefore && issueForm.notBefore.getTime() <= Date.now()) {
-    applyDefaultIssueDuration(new Date());
     return { startAtIssuance: true, validityAmount: issueForm.validityAmount, validityUnit: issueForm.validityUnit };
   }
   return { notBefore: validity.notBefore, notAfter: validity.notAfter };
@@ -1992,61 +1976,11 @@ const resultDownloadFormats: { format: IssuedCertificateFormat; label: string }[
 ];
 
 const pfxOpen = ref(false);
-const pfxPending = ref(false);
-const pfxKeyFileInput = ref<HTMLInputElement>();
-const pfxVerified = ref(false);
-const pfxForm = reactive({ privateKey: '', keyPassword: '', password: '' });
-
-async function loadPfxKeyFile(event: Event) {
-  const input = event.target as HTMLInputElement;
-  const file = input.files?.[0];
-  input.value = '';
-  if (!file) return;
-  try {
-    const pem = await file.text();
-    if (!pfxOpen.value) return;
-    pfxForm.privateKey = pem;
-    pfxVerified.value = false;
-  } catch {
-    ElMessage.error('无法读取私钥文件');
-  }
-}
-
-function clearPfx() {
-  pfxForm.privateKey = '';
-  pfxForm.keyPassword = '';
-  pfxForm.password = '';
-  pfxVerified.value = false;
-}
-
-async function submitPfx() {
-  const certId = issueResult.value.certId;
-  if (!certId || pfxPending.value) return;
-  const verifyOnly = !pfxVerified.value;
-  pfxPending.value = true;
-  try {
-    const response = await packageRaIssuedPfx(certId, pfxForm, verifyOnly);
-    if (verifyOnly) {
-      pfxVerified.value = true;
-      ElMessage.success('私钥与证书匹配');
-    } else {
-      const blob = await certificateDownloadBlob(response, 'application/x-pkcs12', 'RA_CERT_DOWNLOAD_');
-      saveResultDownload(blob, `${issueResult.value.serialNumber || 'ra-cert'}.pfx`);
-      clearPfx();
-      pfxOpen.value = false;
-    }
-  } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : verifyOnly ? '私钥验证失败' : 'PFX 下载失败');
-  } finally {
-    pfxPending.value = false;
-  }
-}
 
 async function downloadResultCertificate(
   certId: string | number | undefined, certPem: string | undefined, fileName: string, format: IssuedCertificateFormat | 'pfx'
 ) {
   if (format === 'pfx') {
-    clearPfx();
     pfxOpen.value = true;
     return;
   }
@@ -2066,28 +2000,7 @@ async function downloadResultCertificate(
   }
 }
 
-function displayIssuedDate(value: string) {
-  const time = /^(?:(\d{4})|(\d{2}))(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})Z$/.exec(value);
-  if (!time) return value;
-  const [, fullYear, shortYear, month, day, hour, minute, second] = time;
-  const year = fullYear || (Number(shortYear) < 50 ? `20${shortYear}` : `19${shortYear}`);
-  return parseTime(new Date(`${year}-${month}-${day}T${hour}:${minute}:${second}Z`));
-}
-
-const issuedDates = computed(() => {
-  if (!issueResult.value.cert) return {};
-  try {
-    const cert = new X509() as unknown as {
-      readCertPEM(pem: string): void;
-      getNotBefore(): string;
-      getNotAfter(): string;
-    };
-    cert.readCertPEM(issueResult.value.cert);
-    return { notBefore: displayIssuedDate(cert.getNotBefore()), notAfter: displayIssuedDate(cert.getNotAfter()) };
-  } catch {
-    return {};
-  }
-});
+const issuedDates = computed(() => readIssuedCertificateValidity(issueResult.value.cert));
 
 function openIntranetCertLedger(result: Partial<RaCertIssueResult>) {
   if (!result.certId && !result.serialNumber) {
