@@ -53,13 +53,16 @@
           <span v-if="!gatewayConfigured" class="gateway-hint">启用前请保存共享凭据</span>
         </el-form-item>
       </div>
-      <el-space v-if="editable" wrap>
+      <div v-if="editable" class="channel-actions">
         <el-button type="primary" native-type="submit" :loading="saving" :disabled="stale">保存配置</el-button>
-        <el-button :disabled="!canTest" :loading="testing === 'test-connection'" @click="testChannel('test-connection')">测试连接</el-button>
-        <el-button :disabled="!canTest || !gatewayConfigured" :loading="testing === 'test-send'" @click="testChannel('test-send')">{{
-          isMail ? '试发邮件' : '发送测试消息'
-        }}</el-button>
-      </el-space>
+        <div class="test-actions">
+          <span>使用已保存的配置测试</span>
+          <el-button :disabled="!canTest" :loading="testing === 'test-connection'" @click="testChannel('test-connection')">测试连接</el-button>
+          <el-button :disabled="!canTest || !gatewayConfigured" :loading="testing === 'test-send'" @click="testChannel('test-send')">{{
+            isMail ? '试发邮件' : '发送测试消息'
+          }}</el-button>
+        </div>
+      </div>
       <el-alert v-if="testResult" class="test-result" :title="testResult" type="info" :closable="false" show-icon />
     </el-form>
     <el-button v-if="loadFailed || stale" class="reload" :disabled="busy" @click="load">刷新配置</el-button>
@@ -191,6 +194,25 @@ onMounted(load);
   gap: 12px;
 }
 
+.channel-actions,
+.test-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.channel-actions {
+  justify-content: space-between;
+  border-top: 1px solid var(--el-border-color-lighter);
+  padding-top: 16px;
+}
+.test-actions span {
+  color: var(--el-text-color-regular);
+  font-size: 13px;
+}
+.test-actions :deep(.el-button) {
+  margin-left: 0;
+}
 .channel-fields {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
