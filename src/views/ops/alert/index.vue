@@ -1,88 +1,114 @@
 <template>
   <div class="ops-alert-page">
+    <header class="workspace-header">
+      <h1>告警中心</h1>
+    </header>
+    <nav class="workspace-shortcuts" aria-label="告警工作区">
+      <button v-for="entry in workspaces" :key="entry.key" type="button" @click="openWorkspace(entry.key)">
+        <strong>{{ entry.title }}</strong
+        ><span>{{ entry.description }}</span>
+      </button>
+    </nav>
     <el-card shadow="never">
-      <el-tabs v-model="activeTab">
-        <el-tab-pane v-for="tab in incidentTabs" :key="tab.name" :label="tab.label" :name="tab.name">
-          <template v-if="activeTab === tab.name">
-            <el-alert v-if="!incidentEnabled" title="告警实例功能未启用" type="info" :closable="false" />
-            <template v-else>
-              <el-button :loading="loading" @click="loadIncidents">刷新</el-button>
-              <el-table :data="incidents" v-loading="loading">
-                <el-table-column prop="title" label="告警" min-width="180" />
-                <el-table-column prop="objectKey" label="对象" min-width="130" />
-                <el-table-column label="首次发生" min-width="170">
-                  <template #default="{ row }">{{ dateTimeText(row.openedAt) }}</template>
-                </el-table-column>
-                <el-table-column label="状态" width="110">
-                  <template #default="{ row }">{{ row.recoveredAt ? '已恢复' : row.acknowledgedAt ? '已确认' : '待确认' }}</template>
-                </el-table-column>
-                <el-table-column label="操作" width="90">
-                  <template #default="{ row }"><el-button link type="primary" @click="openIncident(row.id)">详情</el-button></template>
-                </el-table-column>
-              </el-table>
-              <el-button :disabled="incidentOffset === 0 || loading" @click="changeIncidentPage(-50)">上一页</el-button>
-              <el-button :disabled="incidents.length < 50 || loading" @click="changeIncidentPage(50)">下一页</el-button>
-            </template>
-          </template>
-        </el-tab-pane>
-        <el-tab-pane label="钉钉渠道" name="channels">
-          <div v-if="activeTab === 'channels'" class="channel-sections">
-            <UserDingTalkChannelPane />
-          </div>
-        </el-tab-pane>
-
-        <el-tab-pane label="邮件渠道" name="mail">
-          <div v-if="activeTab === 'mail'" class="channel-sections">
-            <el-card shadow="never">
-              <template #header><strong>SMTP 邮件</strong></template>
-              <MailChannelPane @saved="smtpRevision++" />
-              <ApplicationMailChannelPane :key="smtpRevision" />
-            </el-card>
-          </div>
-        </el-tab-pane>
-
-        <el-tab-pane label="通知模板" name="notification-templates">
-          <NotificationTemplatePane v-if="activeTab === 'notification-templates'" />
-        </el-tab-pane>
-        <el-tab-pane label="企业网关" name="enterprise-gateway">
-          <FawVwGatewayPane v-if="activeTab === 'enterprise-gateway'" />
-        </el-tab-pane>
-
-        <el-tab-pane label="告警条件" name="conditions">
-          <AlertConditionPane v-if="activeTab === 'conditions'" />
-        </el-tab-pane>
-
-        <el-tab-pane label="告警规则" name="rules">
-          <IncidentTemplateRulePane v-if="activeTab === 'rules'" />
-          <div class="toolbar">
-            <el-button type="primary" icon="Plus" @click="openRuleDialog()">新建规则</el-button>
-            <el-select v-model="ruleServiceFilter" clearable placeholder="按服务过滤" style="width: 200px">
-              <el-option label="pki-crypto" value="pki-crypto" /><el-option label="pki-kmc" value="pki-kmc" />
-              <el-option label="pki-ca" value="pki-ca" /><el-option label="pki-ra" value="pki-ra" /><el-option label="pki-ocsp" value="pki-ocsp" />
-            </el-select>
-            <el-button icon="Search" @click="loadRules">刷新</el-button>
-            <span class="hint">服务与事件码均可自定义（在各服务内定义并上报）。</span>
-          </div>
-          <el-table :data="rules" border v-loading="loading">
-            <el-table-column prop="serviceCode" label="服务" width="130" />
-            <el-table-column prop="eventCode" label="事件" min-width="150" />
-            <el-table-column prop="level" label="级别" width="90" />
-            <el-table-column prop="cooldownSeconds" label="冷却(秒)" width="110" />
-            <el-table-column label="启用" width="90" align="center">
-              <template #default="{ row }">
-                <el-switch v-model="row.enabled" @change="persistRule(row)" />
+      <el-tabs v-model="group">
+        <el-tab-pane label="告警监控" name="monitor">
+          <el-tabs v-model="monitorTab">
+            <el-tab-pane label="告警记录" name="records">
+              <template v-if="activeTab === 'records'">
+                <div class="record-actions">
+                  <el-radio-group v-model="incidentScope" aria-label="告警记录范围">
+                    <el-radio-button value="current">当前告警</el-radio-button>
+                    <el-radio-button value="history">告警历史</el-radio-button>
+                  </el-radio-group>
+                  <div>
+                    <el-button type="primary" plain @click="configure('rules')">管理通知规则</el-button>
+                  </div>
+                </div>
+                <el-alert v-if="!incidentEnabled" title="告警实例功能未启用" type="info" :closable="false" />
+                <template v-else>
+                  <el-button :loading="loading" @click="loadIncidents">刷新</el-button>
+                  <el-table :data="incidents" v-loading="loading">
+                    <el-table-column prop="title" label="告警" min-width="180" />
+                    <el-table-column prop="objectKey" label="对象" min-width="130" />
+                    <el-table-column label="首次发生" min-width="170">
+                      <template #default="{ row }">{{ dateTimeText(row.openedAt) }}</template>
+                    </el-table-column>
+                    <el-table-column label="状态" width="110">
+                      <template #default="{ row }">{{ row.recoveredAt ? '已恢复' : row.acknowledgedAt ? '已确认' : '待确认' }}</template>
+                    </el-table-column>
+                    <el-table-column label="操作" width="90">
+                      <template #default="{ row }"><el-button link type="primary" @click="openIncident(row.id)">详情</el-button></template>
+                    </el-table-column>
+                  </el-table>
+                  <el-button :disabled="incidentOffset === 0 || loading" @click="changeIncidentPage(-50)">上一页</el-button>
+                  <el-button :disabled="incidents.length < 50 || loading" @click="changeIncidentPage(50)">下一页</el-button>
+                </template>
               </template>
-            </el-table-column>
-            <el-table-column label="操作" width="160" fixed="right">
-              <template #default="{ row }">
-                <el-button link type="primary" @click="openRuleDialog(row)">编辑</el-button>
-                <el-button link type="danger" @click="handleDeleteRule(row)">删除</el-button>
-              </template>
-            </el-table-column>
-          </el-table>
+            </el-tab-pane>
+          </el-tabs>
         </el-tab-pane>
+        <el-tab-pane label="告警配置" name="config">
+          <el-tabs v-model="configTab">
+            <el-tab-pane label="告警条件" name="conditions">
+              <AlertConditionPane v-if="activeTab === 'conditions'" />
+            </el-tab-pane>
+            <el-tab-pane label="通知规则" name="rules">
+              <IncidentTemplateRulePane v-if="activeTab === 'rules'" />
+              <el-collapse v-model="ruleSections">
+                <el-collapse-item title="自定义服务事件" name="custom">
+                  <div class="toolbar">
+                    <el-button type="primary" icon="Plus" @click="openRuleDialog()">新建自定义服务事件</el-button>
+                    <el-select v-model="ruleServiceFilter" clearable placeholder="按服务过滤" style="width: 200px">
+                      <el-option label="pki-crypto" value="pki-crypto" /><el-option label="pki-kmc" value="pki-kmc" />
+                      <el-option label="pki-ca" value="pki-ca" /><el-option label="pki-ra" value="pki-ra" /><el-option
+                        label="pki-ocsp"
+                        value="pki-ocsp"
+                      />
+                    </el-select>
+                    <el-button icon="Search" @click="loadRules">刷新</el-button>
+                    <span class="hint">服务与事件码均可自定义（在各服务内定义并上报）。</span>
+                  </div>
+                  <el-table :data="rules" border v-loading="loading">
+                    <el-table-column prop="serviceCode" label="服务" width="130" />
+                    <el-table-column prop="eventCode" label="事件" min-width="150" />
+                    <el-table-column prop="level" label="级别" width="90" />
+                    <el-table-column prop="cooldownSeconds" label="冷却(秒)" width="110" />
+                    <el-table-column label="启用" width="90" align="center">
+                      <template #default="{ row }">
+                        <el-switch v-model="row.enabled" @change="persistRule(row)" />
+                      </template>
+                    </el-table-column>
+                    <el-table-column label="操作" width="160" fixed="right">
+                      <template #default="{ row }">
+                        <el-button link type="primary" @click="openRuleDialog(row)">编辑</el-button>
+                        <el-button link type="danger" @click="handleDeleteRule(row)">删除</el-button>
+                      </template>
+                    </el-table-column>
+                  </el-table>
+                </el-collapse-item>
+              </el-collapse>
+            </el-tab-pane>
 
-        <el-tab-pane label="事件日志" name="logs">
+            <el-tab-pane label="通知渠道" name="channels">
+              <el-tabs v-if="activeTab === 'channels'" v-model="channelTab">
+                <el-tab-pane label="用户钉钉" name="user-dingtalk"><UserDingTalkChannelPane v-if="channelTab === 'user-dingtalk'" /></el-tab-pane>
+                <el-tab-pane label="SMTP 邮件" name="mail">
+                  <template v-if="channelTab === 'mail'">
+                    <MailChannelPane @saved="smtpRevision++" />
+                    <ApplicationMailChannelPane :key="smtpRevision" />
+                  </template>
+                </el-tab-pane>
+                <el-tab-pane label="企业网关（钉钉 / 邮件）" name="enterprise-gateway"
+                  ><FawVwGatewayPane v-if="channelTab === 'enterprise-gateway'"
+                /></el-tab-pane>
+              </el-tabs>
+            </el-tab-pane>
+            <el-tab-pane label="通知模板" name="notification-templates"
+              ><NotificationTemplatePane v-if="activeTab === 'notification-templates'"
+            /></el-tab-pane>
+          </el-tabs>
+        </el-tab-pane>
+        <el-tab-pane label="服务事件日志" name="logs">
           <div class="toolbar">
             <el-button icon="Refresh" :loading="loading" @click="loadLogs">刷新</el-button>
             <span class="hint">最近 200 条上报与投递结果（DELIVERED/COOLDOWN/CHANNEL_DISABLED/失败原因）。</span>
@@ -176,12 +202,31 @@ import {
 } from '@/api/ops';
 import type { AlertChannel, AlertEventLog, AlertRule, AlertRuleSave } from '@/api/ops/types';
 
-const incidentTabs = [
-  { label: '当前告警', name: 'current' },
-  { label: '告警历史', name: 'history' }
-];
-const activeTab = ref('current');
+const workspaces = [
+  { key: 'records', title: '告警记录', description: '查看当前告警和恢复历史' },
+  { key: 'rules', title: '通知规则', description: '配置通知渠道、接收人与模板' },
+  { key: 'logs', title: '服务事件日志', description: '核对服务上报与投递结果' }
+] as const;
+function openWorkspace(key: (typeof workspaces)[number]['key']) {
+  if (key === 'rules') return configure('rules');
+  if (key === 'logs') {
+    group.value = 'logs';
+    return;
+  }
+  group.value = 'monitor';
+  monitorTab.value = key;
+}
+const group = ref('monitor');
+const monitorTab = ref('records');
+const incidentScope = ref('current');
+const configTab = ref('conditions');
+const channelTab = ref('user-dingtalk');
 const smtpRevision = ref(0);
+const activeTab = computed(() => (group.value === 'monitor' ? monitorTab.value : group.value === 'config' ? configTab.value : 'logs'));
+function configure(tab: string) {
+  configTab.value = tab;
+  group.value = 'config';
+}
 const route = useRoute();
 const incidents = ref<AlertIncident[]>([]);
 const incident = ref<AlertIncident>();
@@ -189,14 +234,17 @@ const incidentEnabled = ref(true);
 const incidentVisible = ref(false);
 const acknowledging = ref(false);
 const incidentOffset = ref(0);
+let incidentRequest = 0;
 const loadIncidents = async () => {
+  const request = ++incidentRequest;
   loading.value = true;
   try {
-    const page = await getAlertIncidents(activeTab.value === 'history', incidentOffset.value);
+    const page = await getAlertIncidents(incidentScope.value === 'history', incidentOffset.value);
+    if (request !== incidentRequest) return;
     incidents.value = page.items;
     incidentEnabled.value = page.enabled;
   } finally {
-    loading.value = false;
+    if (request === incidentRequest) loading.value = false;
   }
 };
 const changeIncidentPage = (step: number) => {
@@ -231,6 +279,7 @@ const rules = ref<AlertRule[]>([]);
 const logs = ref<AlertEventLog[]>([]);
 const ruleServiceFilter = ref('');
 const ruleVisible = ref(false);
+const ruleSections = ref<string[]>([]);
 const ruleForm = reactive<AlertRuleSave & { id?: number }>({
   id: undefined,
   channelId: undefined as unknown as number,
@@ -258,10 +307,10 @@ const loadLogs = async () => {
   }
 };
 
-watch(activeTab, (tab) => {
+watch([activeTab, incidentScope], ([tab]) => {
   if (tab === 'rules') loadRules();
   else if (tab === 'logs') loadLogs();
-  else if (tab === 'current' || tab === 'history') {
+  else if (tab === 'records') {
     incidentOffset.value = 0;
     loadIncidents();
   }
@@ -321,7 +370,50 @@ onMounted(loadIncidents);
 
 <style scoped lang="scss">
 .ops-alert-page {
-  padding: 12px;
+  padding: 16px;
+  background: var(--el-fill-color-light);
+}
+.workspace-header,
+.record-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.workspace-header h1 {
+  margin: 0;
+  font-size: 24px;
+  color: var(--el-text-color-primary);
+}
+.workspace-shortcuts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+  button {
+    display: grid;
+    gap: 5px;
+    padding: 14px 18px;
+    text-align: left;
+    cursor: pointer;
+    color: var(--el-text-color-primary);
+    background: var(--el-bg-color);
+    border: 1px solid var(--el-border-color);
+    border-radius: 8px;
+    &:hover,
+    &:focus-visible {
+      border-color: var(--el-color-primary);
+    }
+    strong {
+      font-size: 16px;
+    }
+    span {
+      color: var(--el-text-color-regular);
+      font-size: 13px;
+    }
+  }
 }
 .channel-sections {
   display: grid;
