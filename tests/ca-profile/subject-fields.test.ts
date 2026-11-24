@@ -57,10 +57,10 @@ const NumberInput = defineComponent({
 let wrapper: ReturnType<typeof mount>;
 let component = CaProfileForm;
 let subject: Array<{ type: string | { oid?: string; description?: string }; minOccurs: number; maxOccurs: number }> = [];
-async function open() {
+async function open(name = '通用证书模板') {
   const profile = {
     id: '10',
-    name: '通用证书模板',
+    name,
     type: 'EndEntity',
     conf: JSON.stringify({
       certLevel: 'EndEntity',
@@ -96,7 +96,7 @@ async function open() {
         ElInputNumber: NumberInput,
         ElSelect: Select,
         ElOption: { props: ['value', 'label'], template: '<option :value="value">{{ label }}</option>' },
-        ElButton: { template: '<button><slot /></button>' }
+        ElButton: { template: '<button type="button"><slot /></button>' }
       },
       config: { warnHandler: () => {} }
     }
@@ -170,6 +170,27 @@ describe.each([
     }
   );
 
+  it('shows the name and OID for a saved field outside the template suggestions', async () => {
+    subject.push({ type: { oid: '2.5.4.16' }, minOccurs: 0, maxOccurs: 1 });
+    await open('TLS服务器证书模板');
+    const rdn = wrapper.findAll('.rdn-item')[1];
+    expect(rdn.get('.rdn-title').text()).toBe('邮政地址');
+    expect(rdn.get('option[value="postalAddress"]').text()).toBe('邮政地址 (2.5.4.16)');
+    expect(rdn.get('select').element.value).toBe('postalAddress');
+    expect(wrapper.findAll('.rdn-item')[0].find('option[value="postalAddress"]').exists()).toBe(false);
+  });
+
+  it('preserves the OID and description of an existing custom field when saved', async () => {
+    const type = { oid: '1.3.6.1.4.1.99999.1', description: '企业内部编号' };
+    subject.push({ type, minOccurs: 0, maxOccurs: 1 });
+    await open();
+    const rdn = wrapper.findAll('.rdn-item')[1];
+    expect(rdn.get('.rdn-title').text()).toBe(type.description);
+    expect(rdn.get('select').element.selectedOptions[0].text).toBe('企业内部编号 (1.3.6.1.4.1.99999.1)');
+    await save();
+    expect(savedConf().subject[1].type).toEqual(type);
+  });
+
   it('preserves one DC rule that permits multiple values', async () => {
     subject.push({ ...dc(), minOccurs: 2, maxOccurs: 3 });
     await open();
@@ -183,8 +204,9 @@ describe.each([
       .findAll('button')
       .find((button) => button.text() === '添加字段')!
       .trigger('click');
-    const selects = wrapper.findAll('.rdn-item select');
-    await selects[2].setValue('commonName');
+    const rdns = wrapper.findAll('.rdn-item');
+    expect(rdns).toHaveLength(2);
+    await rdns[1].get('select').setValue('commonName');
     await save();
     expect(modifyProfile).not.toHaveBeenCalled();
     expect(ElMessage.error).toHaveBeenCalledWith(expect.stringContaining('主题字段重复：通用名称(CN)'));

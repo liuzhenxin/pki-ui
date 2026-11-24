@@ -57,8 +57,8 @@
         <el-table :data="subjectData" border style="width: 100%" size="small" :header-cell-style="{ background: '#f5f7fa', color: '#606266' }">
           <el-table-column prop="type" label="类型" min-width="150">
             <template #default="{ row }">
-              <span class="type-label">{{ getSubjectTypeLabel(row.type) }}</span>
-              <span class="type-code" v-if="typeof row.type === 'object' && row.type.oid"> ({{ row.type.oid }})</span>
+              <span class="type-label">{{ row.typeDisplay.label || '-' }}</span>
+              <span class="type-code" v-if="row.typeDisplay.oid && row.typeDisplay.oid !== row.typeDisplay.label"> ({{ row.typeDisplay.oid }})</span>
             </template>
           </el-table-column>
           <el-table-column prop="minOccurs" label="最小出现次数" align="center" width="120">
@@ -86,7 +86,7 @@
           <div class="sub-section-title">主题到备用名称映射 (Subject to SAN Mapping)</div>
           <el-table :data="profile.subjectToSubjectAltNames" border size="small">
             <el-table-column label="源字段">
-              <template #default="{ row }"> {{ getSubjectTypeLabel(row.source) }} ({{ getTypeLabel(row.source) }}) </template>
+              <template #default="{ row }"> {{ formatSubjectTypeLabel(getSubjectTypeDisplay(row.source)) || '-' }} </template>
             </el-table-column>
             <el-table-column prop="target" label="目标类型" />
           </el-table>
@@ -233,6 +233,7 @@
 import { PropType, computed } from 'vue';
 import { InfoFilled, User, Connection } from '@element-plus/icons-vue';
 import { parseKeyAlgorithms } from '@/utils/json';
+import { formatSubjectTypeLabel, getSubjectTypeDisplay } from '@/utils/ca/profile-subject';
 
 const props = defineProps({
   profile: {
@@ -254,10 +255,8 @@ const dualCertInfo = computed(() => props.profile?.dualCert || {});
 /** 处理主体数据，支持直接数组或 { rdns: [] } 结构 */
 const subjectData = computed(() => {
   const s = props.profile?.subject;
-  if (!s) return [];
-  if (Array.isArray(s)) return s;
-  if (s.rdns && Array.isArray(s.rdns)) return s.rdns;
-  return [];
+  const rdns = Array.isArray(s) ? s : s?.rdns;
+  return Array.isArray(rdns) ? rdns.map((row) => ({ ...row, typeDisplay: getSubjectTypeDisplay(row.type) })) : [];
 });
 
 function formatKeypairGeneration(value: any) {
@@ -281,34 +280,6 @@ const getTypeLabel = (type: any): string => {
   if (!type) return '';
   if (typeof type === 'string') return type;
   return type.description || type.oid || '';
-};
-
-const subjectTypeMap: Record<string, string> = {
-  country: '国家 (C)',
-  c: '国家 (C)',
-  organization: '组织 (O)',
-  o: '组织 (O)',
-  organizationalUnit: '组织单位 (OU)',
-  ou: '组织单位 (OU)',
-  commonName: '通用名称 (CN)',
-  cn: '通用名称 (CN)',
-  serialNumber: '序列号 (SN)',
-  sn: '序列号 (SN)',
-  locality: '地区 (L)',
-  l: '地区 (L)',
-  stateOrProvince: '省/州 (ST)',
-  st: '省/州 (ST)',
-  domainComponent: '域名组件 (DC)',
-  dc: '域名组件 (DC)',
-  emailAddress: '电子邮件 (E)',
-  e: '电子邮件 (E)',
-  organizationIdentifier: '组织标识符'
-};
-
-const getSubjectTypeLabel = (type: any) => {
-  const label = getTypeLabel(type);
-  const lowerLabel = label.toLowerCase();
-  return subjectTypeMap[lowerLabel] || label;
 };
 
 const extensionTypeMap: Record<string, string> = {

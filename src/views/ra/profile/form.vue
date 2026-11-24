@@ -6,6 +6,13 @@ import { Plus, Delete, Top, Bottom, Postcard, CollectionTag, Timer, Calendar, Ed
 import { getProfile, saveProfile, modifyProfile } from '@/api/ca/profile';
 import { ProfileForm } from '@/api/ca/profile/types';
 import { parseJson, parseKeyAlgorithms } from '@/utils/json';
+import {
+  formatSubjectTypeLabel,
+  getSubjectTypeDisplay,
+  getSubjectTypeOid,
+  getSubjectTypeValue,
+  subjectFieldOptions as commonOIDs
+} from '@/utils/ca/profile-subject';
 
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
 const router = useRouter();
@@ -319,43 +326,6 @@ const extensionTypeOIDMap: Record<string, { oid: string; description: string }> 
   'SMIMECapabilities': { oid: '1.2.840.113549.1.9.15', description: 'SMIMECapatibilities' }
 };
 
-// 常用字段列表（包含 OID 映射）
-const commonOIDs = [
-  { value: 'country', label: '国家(C)', oid: '2.5.4.6' },
-  { value: 'organization', label: '组织(O)', oid: '2.5.4.10' },
-  { value: 'organizationalUnit', label: '组织单位(OU)', oid: '2.5.4.11' },
-  { value: 'commonName', label: '通用名称(CN)', oid: '2.5.4.3' },
-  { value: 'stateOrProvince', label: '省/州(ST)', oid: '2.5.4.8' },
-  { value: 'locality', label: '城市(L)', oid: '2.5.4.7' },
-  { value: 'serialNumber', label: '序列号(SN)', oid: '2.5.4.5' },
-  { value: 'emailAddress', label: '邮箱(E)', oid: '1.2.840.113549.1.9.1' },
-  { value: 'givenName', label: '名字(GN)', oid: '2.5.4.42' },
-  { value: 'surname', label: '姓氏(SN)', oid: '2.5.4.4' },
-  { value: 'title', label: '头衔(T)', oid: '2.5.4.12' },
-  { value: 'userId', label: '用户ID(UID)', oid: '0.9.2342.19200300.100.1.1' },
-  { value: 'domainComponent', label: '域名组件(DC)', oid: '0.9.2342.19200300.100.1.25' },
-  { value: 'organizationIdentifier', label: '组织标识符', oid: '2.5.4.97' }
-];
-
-// 字段标签映射
-const subjectLabelMap: Record<string, string> = {
-  country: '国家(C)',
-  organization: '组织(O)',
-  organizationalUnit: '组织单位(OU)',
-  commonName: '通用名称(CN)',
-  stateOrProvince: '省/州(ST)',
-  locality: '城市(L)',
-  serialNumber: '序列号(SN)',
-  emailAddress: '邮箱(E)',
-  givenName: '名字(GN)',
-  surname: '姓氏(SN)',
-  title: '头衔(T)',
-  userId: '用户ID(UID)',
-  domainComponent: '域名组件(DC)',
-  description: '描述',
-  organizationIdentifier: '组织标识符'
-};
-
 // 主题字段值到描述的映射（用于 JSON 文件格式转换）
 const subjectValueToDescriptionMap: Record<string, string> = {
   c: 'country',
@@ -611,6 +581,20 @@ const allowedSubjectOptions = computed(() => {
   return commonOIDs.filter((item) => allowed.has(item.value));
 });
 
+type SubjectRdn = { type: string; originalType?: { oid: string; description?: string } };
+
+function getRdnTypeDisplay(rdn: SubjectRdn) {
+  return getSubjectTypeDisplay(rdn.originalType?.oid === rdn.type ? rdn.originalType : rdn.type);
+}
+
+function subjectOptionsForRdn(rdn: SubjectRdn) {
+  const allowed = allowedSubjectOptions.value;
+  if (!rdn.type || allowed.some((option) => option.value === rdn.type)) {
+    return allowed;
+  }
+  return [...allowed, { value: rdn.type, ...getRdnTypeDisplay(rdn) }];
+}
+
 const availableKeyUsageOptions = computed(() => {
   const allowed = new Set(activeConstraint.value.keyUsages);
   return keyUsageOptions.filter((item) => allowed.has(item.value));
@@ -720,8 +704,8 @@ function buildProfileConf() {
     signatureAlgorithms: form.signatureAlgorithms || [],
     subject: (form.subjectItems || []).map((item: any) => ({
       type: {
-        oid: commonOIDs.find((oid) => oid.value === item.type)?.oid || '',
-        description: subjectDescriptionToValueMap[item.type] || item.type
+        oid: getSubjectTypeOid(item.type),
+        description: item.originalType?.oid === item.type ? item.originalType.description : subjectDescriptionToValueMap[item.type] || item.type
       },
       minOccurs: item.minOccurs,
       maxOccurs: item.maxOccurs,
@@ -928,7 +912,7 @@ function getExtensionLabel(type: string): string {
 
 /** 获取主题字段标签 */
 function getSubjectLabel(type: string): string {
-  return subjectLabelMap[type] || type;
+  return getSubjectTypeDisplay(type).label;
 }
 
 /** 添加扩展 */
@@ -1246,16 +1230,10 @@ async function getProfileDetail(id: string | number) {
       // 解析subject（处理可能存在的 rdns 嵌套）
       const subjectRaw = conf.subject?.rdns || (Array.isArray(conf.subject) ? conf.subject : []);
       form.subjectItems = subjectRaw.map((item: any) => {
-        const typeText = typeof item.type === 'string' ? item.type : item.type?.description || '';
-        const oid = typeof item.type === 'string' ? item.type : item.type?.oid;
-        // OID 是字段标识，描述仅用于兼容旧模板的别名。
-        const typeValue =
-          commonOIDs.find((item) => item.oid === oid)?.value ||
-          subjectValueToDescriptionMap[typeText.toLowerCase()] ||
-          commonOIDs.find((item) => item.value.toLowerCase() === typeText.toLowerCase())?.value ||
-          typeText;
+        const type = getSubjectTypeValue(item.type);
         return {
-          type: typeValue || '',
+          type,
+          originalType: item.type?.oid === type ? item.type : undefined,
           minOccurs: item.minOccurs !== undefined ? item.minOccurs : 1,
           maxOccurs: item.maxOccurs,
           regex: item.regex
@@ -1621,7 +1599,7 @@ onMounted(() => {
                   <el-card shadow="hover">
                     <template #header>
                       <div class="rdn-header">
-                        <span class="rdn-title">{{ getSubjectLabel(rdn.type) || rdn.type }}</span>
+                        <span class="rdn-title">{{ getRdnTypeDisplay(rdn).label }}</span>
                         <div class="rdn-actions">
                           <el-button type="primary" size="small" icon="Top" @click="moveUp(index)" :disabled="index === 0">上移</el-button>
                           <el-button
@@ -1642,10 +1620,10 @@ onMounted(() => {
                         <el-form-item label="字段类型" :prop="`subjectItems.${index}.type`">
                           <el-select v-model="rdn.type" placeholder="请选择字段类型" style="width: 100%" filterable>
                             <el-option
-                              v-for="oid in allowedSubjectOptions"
-                              :key="oid.value"
-                              :label="`${oid.label} (${oid.oid})`"
-                              :value="oid.value"
+                              v-for="option in subjectOptionsForRdn(rdn)"
+                              :key="option.value"
+                              :label="formatSubjectTypeLabel(option)"
+                              :value="option.value"
                             />
                           </el-select>
                         </el-form-item>
