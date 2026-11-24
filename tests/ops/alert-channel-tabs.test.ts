@@ -37,6 +37,7 @@ it('keeps standard channels on their tabs and loads both enterprise channels onl
 
   try {
     await flushPromises();
+    expect(wrapper.get('.workspace-header').text()).toContain('自动通知已关闭');
     expect(wrapper.get('.record-actions').text()).toContain('管理通知规则');
     expect(wrapper.find('#tab-faw-vw').exists()).toBe(false);
     expect(tab('monitor').text()).toBe('告警监控');
@@ -96,14 +97,18 @@ it('keeps standard channels on their tabs and loads both enterprise channels onl
 
     await tab('rules').trigger('click');
     await flushPromises();
-    await wrapper.get('#pane-rules .el-collapse-item__header').trigger('click');
     await wrapper
       .findAll('button')
-      .find((button) => button.text() === '新建自定义服务事件')!
+      .find((button) => button.text() === '新建规则')!
+      .trigger('click');
+    await flushPromises();
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === '自定义服务事件')!
       .trigger('click');
     await flushPromises();
     expect(mocks.request).toHaveBeenCalledWith(requested('/v1/alert/channels'));
-    const ruleDialog = wrapper.findAll('[role="dialog"]').find((dialog) => dialog.text().includes('新建规则'));
+    const ruleDialog = wrapper.findAll('[role="dialog"]').find((dialog) => dialog.text().includes('新建自定义服务事件'));
     expect(ruleDialog?.text()).toContain('值班群机器人');
     expect(mocks.request).not.toHaveBeenCalledWith(expect.objectContaining({ url: '/v1/application-notifications/ra/mail' }));
     expect(mocks.request.mock.calls.every(([request]) => request.method === 'get')).toBe(true);

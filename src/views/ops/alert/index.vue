@@ -2,6 +2,9 @@
   <div class="ops-alert-page">
     <header class="workspace-header">
       <h1>告警中心</h1>
+      <el-tag :type="notificationStatus === true ? 'success' : 'info'" effect="plain">
+        {{ notificationStatus === undefined ? '自动通知状态未知' : notificationStatus ? '自动通知已开启' : '自动通知已关闭' }}
+      </el-tag>
     </header>
     <nav class="workspace-shortcuts" aria-label="告警工作区">
       <button v-for="entry in workspaces" :key="entry.key" type="button" @click="openWorkspace(entry.key)">
@@ -53,11 +56,10 @@
               <AlertConditionPane v-if="activeTab === 'conditions'" />
             </el-tab-pane>
             <el-tab-pane label="通知规则" name="rules">
-              <IncidentTemplateRulePane v-if="activeTab === 'rules'" />
+              <IncidentTemplateRulePane v-if="activeTab === 'rules'" @custom="openCustomRule" @conditions="configure('conditions')" />
               <el-collapse v-model="ruleSections">
                 <el-collapse-item title="自定义服务事件" name="custom">
                   <div class="toolbar">
-                    <el-button type="primary" icon="Plus" @click="openRuleDialog()">新建自定义服务事件</el-button>
                     <el-select v-model="ruleServiceFilter" clearable placeholder="按服务过滤" style="width: 200px">
                       <el-option label="pki-crypto" value="pki-crypto" /><el-option label="pki-kmc" value="pki-kmc" />
                       <el-option label="pki-ca" value="pki-ca" /><el-option label="pki-ra" value="pki-ra" /><el-option
@@ -156,7 +158,7 @@
       </template>
     </el-drawer>
 
-    <el-dialog v-model="ruleVisible" :title="ruleForm.id ? '编辑规则' : '新建规则'" width="520px">
+    <el-dialog v-model="ruleVisible" :title="ruleForm.id ? '编辑自定义服务事件' : '新建自定义服务事件'" width="520px">
       <el-form :model="ruleForm" label-width="100px">
         <el-form-item label="渠道" required>
           <el-select v-model="ruleForm.channelId" style="width: 100%">
@@ -190,6 +192,7 @@ import IncidentTemplateRulePane from './IncidentTemplateRulePane.vue';
 import UserDingTalkChannelPane from './UserDingTalkChannelPane.vue';
 import type { AlertIncident } from '@/api/ops';
 import { dateTimeText } from '@/views/ops/utils';
+import { getIncidentTemplateRules } from '@/api/ops/incidentTemplateRules';
 import { useRoute } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import {
@@ -205,6 +208,14 @@ import {
 } from '@/api/ops';
 import type { AlertChannel, AlertEventLog, AlertRule, AlertRuleSave } from '@/api/ops/types';
 
+const notificationStatus = ref<boolean>();
+onMounted(async () => {
+  try {
+    notificationStatus.value = (await getIncidentTemplateRules()).notificationsEnabled;
+  } catch {
+    notificationStatus.value = undefined;
+  }
+});
 const workspaces = [
   { key: 'records', title: '告警记录', description: '查看当前告警和恢复历史' },
   { key: 'rules', title: '通知规则', description: '配置通知渠道、接收人与模板' },
@@ -362,6 +373,10 @@ const openRuleDialog = async (row?: AlertRule) => {
       : { id: undefined, channelId: channels.value[0]?.id, serviceCode: '', eventCode: '', level: 'WARN', enabled: true, cooldownSeconds: 900 }
   );
   ruleVisible.value = true;
+};
+const openCustomRule = () => {
+  ruleSections.value = ['custom'];
+  void openRuleDialog();
 };
 const saveRule = async () => {
   if (!ruleForm.channelId || !ruleForm.serviceCode || !ruleForm.eventCode) return ElMessage.warning('请填写渠道/服务/事件');
