@@ -26,26 +26,8 @@ export const addArchiveKey = (data: ArchiveKeyForm) => {
   });
 };
 
-export const updateArchiveKey = (data: ArchiveKeyForm) => {
-  return request({
-    url: '/kmc/v1/archive-keys',
-    method: 'put',
-    data: data
-  });
-};
-
-export const delArchiveKey = (id: Array<string | number> | string | number) => {
-  return request({
-    url: '/kmc/v1/archive-keys',
-    method: 'delete',
-    data: Array.isArray(id) ? id : [id]
-  });
-};
-
 export default {
   listArchiveKey,
   getArchiveKey,
-  addArchiveKey,
-  updateArchiveKey,
-  delArchiveKey
+  addArchiveKey
 };

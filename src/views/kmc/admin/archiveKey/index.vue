@@ -17,19 +17,10 @@
       <el-col :span="1.5">
         <el-button type="primary" plain icon="Plus" @click="handleAdd" v-hasPermi="['kmc:archivekey:save']">新增</el-button>
       </el-col>
-      <el-col :span="1.5">
-        <el-button type="success" plain icon="Edit" :disabled="single" @click="handleUpdate()" v-hasPermi="['kmc:archivekey:modify']">修改</el-button>
-      </el-col>
-      <el-col :span="1.5">
-        <el-button type="danger" plain icon="Delete" :disabled="multiple" @click="handleDelete()" v-hasPermi="['kmc:archivekey:remove']"
-          >删除</el-button
-        >
-      </el-col>
       <right-toolbar v-model:showSearch="showSearch" @queryTable="getList" />
     </el-row>
 
-    <el-table v-loading="loading" :data="archiveKeyList" @selection-change="handleSelectionChange">
-      <el-table-column type="selection" width="55" align="center" />
+    <el-table v-loading="loading" :data="archiveKeyList">
       <el-table-column label="ID" align="center" prop="id" width="80" />
       <el-table-column label="证书序列号" align="center" prop="serialNumber" show-overflow-tooltip />
       <el-table-column label="证书主题" align="center" prop="subject" show-overflow-tooltip />
@@ -39,24 +30,16 @@
           <span>{{ scope.row.archiveTime }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="操作" align="center" class-name="small-padding fixed-width">
+      <el-table-column label="操作" align="center" width="116">
         <template #default="scope">
-          <el-tooltip content="密钥恢复" placement="top">
-            <el-button link type="primary" icon="Key" @click="handleRecovery(scope.row)" v-hasPermi="['kmc:keyrecovery:submit']" />
-          </el-tooltip>
-          <el-tooltip content="修改" placement="top">
-            <el-button link type="primary" icon="Edit" @click="handleUpdate(scope.row)" v-hasPermi="['kmc:archivekey:modify']" />
-          </el-tooltip>
-          <el-tooltip content="删除" placement="top">
-            <el-button link type="primary" icon="Delete" @click="handleDelete(scope.row)" v-hasPermi="['kmc:archivekey:remove']" />
-          </el-tooltip>
+          <el-button link type="primary" icon="Key" @click="handleRecovery(scope.row)" v-hasPermi="['kmc:keyrecovery:submit']"> 密钥恢复 </el-button>
         </template>
       </el-table-column>
     </el-table>
 
     <pagination v-show="total > 0" :total="total" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" @pagination="getList" />
 
-    <!-- 添加或修改归档密钥对话框 -->
+    <!-- 添加归档密钥对话框 -->
     <el-dialog :title="dialog.title" v-model="dialog.visible" width="600px" append-to-body>
       <el-form ref="archiveKeyFormRef" :model="form" :rules="rules" label-width="100px">
         <el-form-item label="CA机构ID" prop="caId">
@@ -89,11 +72,11 @@
 
 <script setup name="ArchiveKey" lang="ts">
 import { ref, reactive, toRefs, onMounted } from 'vue';
-import { ElMessage, ElMessageBox } from 'element-plus';
+import { ElMessage } from 'element-plus';
 import type { FormInstance } from 'element-plus';
-import { listArchiveKey, getArchiveKey, delArchiveKey, addArchiveKey, updateArchiveKey } from '@/api/kmc/archiveKey/index';
+import { listArchiveKey, addArchiveKey } from '@/api/kmc/archiveKey/index';
 import { ArchiveKeyVO, ArchiveKeyQuery, ArchiveKeyForm } from '@/api/kmc/archiveKey/types';
-import { readKmcPage, unwrapKmcData } from '@/api/kmc/common';
+import { readKmcPage } from '@/api/kmc/common';
 import KeyRecoveryDialog from '@/views/kmc/components/KeyRecoveryDialog.vue';
 
 const queryFormRef = ref<FormInstance>();
@@ -102,9 +85,6 @@ const keyRecoveryDialogRef = ref<InstanceType<typeof KeyRecoveryDialog>>();
 const archiveKeyList = ref<ArchiveKeyVO[]>([]);
 const loading = ref(true);
 const showSearch = ref(true);
-const ids = ref<Array<string | number>>([]);
-const single = ref(true);
-const multiple = ref(true);
 const total = ref(0);
 
 const dialog = reactive<DialogOption>({
@@ -178,27 +158,10 @@ const resetQuery = () => {
   handleQuery();
 };
 
-const handleSelectionChange = (selection: ArchiveKeyVO[]) => {
-  ids.value = selection.map((item) => item.id);
-  single.value = selection.length !== 1;
-  multiple.value = !selection.length;
-};
-
 const handleAdd = () => {
   reset();
   dialog.visible = true;
   dialog.title = '添加归档密钥';
-};
-
-const handleUpdate = async (row?: ArchiveKeyVO) => {
-  reset();
-  const id = row?.id || ids.value[0];
-  const res = await getArchiveKey(id);
-
-  Object.assign(form.value, unwrapKmcData(res));
-
-  dialog.visible = true;
-  dialog.title = '修改归档密钥';
 };
 
 const handleRecovery = (row: ArchiveKeyVO) => {
@@ -206,38 +169,24 @@ const handleRecovery = (row: ArchiveKeyVO) => {
     targetType: 'ARCHIVE_KEY',
     targetId: row.id,
     serialNumber: row.serialNumber,
-    subject: row.subject
+    subject: row.subject,
+    archiveSummary: {
+      time: row.archiveTime,
+      algorithm: row.keyType,
+      bits: row.keyBits
+    }
   });
 };
 
 const submitForm = () => {
   archiveKeyFormRef.value?.validate(async (valid: boolean) => {
     if (valid) {
-      if (form.value.id) {
-        await updateArchiveKey(form.value);
-        ElMessage.success('修改成功');
-      } else {
-        await addArchiveKey(form.value);
-        ElMessage.success('新增成功');
-      }
+      await addArchiveKey(form.value);
+      ElMessage.success('新增成功');
       dialog.visible = false;
       getList();
     }
   });
-};
-
-const handleDelete = async (row?: ArchiveKeyVO) => {
-  const opIds = row?.id ? [row.id] : ids.value;
-  try {
-    await ElMessageBox.confirm('是否确认删除所选的归档密钥数据项？', '警告', {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      type: 'warning'
-    });
-    await delArchiveKey(opIds);
-    getList();
-    ElMessage.success('删除成功');
-  } catch (error) {}
 };
 
 onMounted(() => {

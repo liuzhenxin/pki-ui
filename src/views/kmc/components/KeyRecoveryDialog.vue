@@ -1,109 +1,143 @@
 <template>
-  <el-dialog v-model="visible" :title="title" width="1080px" append-to-body class="key-recovery-dialog" @close="reset">
-    <el-alert
-      :title="
-        direct
-          ? 'CA证书管理可直接恢复KMC在用密钥，无需司法取证员门限签名；恢复操作及介质写入结果将完整记录。'
-          : '密钥恢复属于高敏感操作，必须达到司法取证员 m-of-n 门限签名后才允许执行恢复。'
-      "
-      :type="direct ? 'info' : 'warning'"
-      show-icon
-      :closable="false"
-    />
+  <el-dialog v-model="visible" :title="title" width="min(1080px, calc(100vw - 32px))" append-to-body class="key-recovery-dialog" @close="reset">
+    <div class="recovery-scroll">
+      <el-alert
+        class="recovery-notice"
+        :title="
+          direct
+            ? 'CA证书管理可直接恢复KMC在用密钥，无需司法取证员门限签名；恢复操作及介质写入结果将完整记录。'
+            : '密钥恢复属于高敏感操作，必须达到司法取证员门限签名后才允许执行恢复。'
+        "
+        :type="direct ? 'info' : 'warning'"
+        show-icon
+        :closable="false"
+      />
 
-    <el-steps v-if="!direct" class="recovery-steps" :active="activeStep" finish-status="success" process-status="process" align-center>
-      <el-step title="申请" :status="stepStatus(1)" @click="activeStep >= 1 && (activeStep = 1)" />
-      <el-step title="待签名" :status="stepStatus(2)" @click="activeStep >= 2 && (activeStep = 2)" />
-      <el-step title="门限通过" :status="stepStatus(3)" @click="activeStep >= 3 && (activeStep = 3)" />
-      <el-step title="恢复完成" :status="stepStatus(4)" @click="activeStep >= 4 && (activeStep = 4)" />
-    </el-steps>
+      <ol v-if="!direct" class="recovery-steps" aria-label="恢复进度">
+        <li
+          v-for="(step, index) in recoverySteps"
+          :key="step"
+          class="recovery-step"
+          :class="{ 'is-current': activeStep === index + 1, 'is-complete': activeStep > index + 1 || Boolean(detail?.recovered) }"
+          :aria-current="activeStep === index + 1 ? 'step' : undefined"
+        >
+          <span class="recovery-step-marker" aria-hidden="true">
+            <el-icon v-if="activeStep > index + 1 || detail?.recovered"><Check /></el-icon>
+            <template v-else>{{ index + 1 }}</template>
+          </span>
+          <span>{{ step }}</span>
+        </li>
+      </ol>
 
-    <el-scrollbar max-height="64vh">
-      <!-- 一、密钥信息 -->
-      <el-card shadow="never" class="section-card">
-        <template #header>
-          <div class="card-title">
-            <el-icon><InfoFilled /></el-icon> 一、密钥信息
-          </div>
-        </template>
-        <el-descriptions :column="3" border size="small">
-          <el-descriptions-item label="恢复对象">{{ targetLabel }}</el-descriptions-item>
-          <el-descriptions-item label="密钥类型">{{ detail?.keyType || target?.keyType || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="密钥长度">{{ detail?.keyBits || target?.keyBits || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="序列号">{{ detail?.serialNumber || target?.serialNumber || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="主题" :span="3">{{ detail?.subject || target?.subject || '-' }}</el-descriptions-item>
-        </el-descriptions>
-      </el-card>
-
-      <!-- 二、恢复申请信息 -->
-      <el-card shadow="never" class="section-card">
-        <template #header>
-          <div class="card-title">
-            <el-icon><EditPen /></el-icon> 二、恢复申请信息
-          </div>
-        </template>
-        <el-form ref="formRef" :model="form" :rules="rules" label-width="130px" :disabled="submitted">
-          <el-row :gutter="16">
-            <el-col :span="direct ? 24 : 12">
-              <el-form-item label="恢复场景" prop="recoveryScene">
-                <el-select v-model="form.recoveryScene" style="width: 100%">
-                  <el-option label="司法取证" value="司法取证" />
-                  <el-option label="数据解密" value="数据解密" />
-                  <el-option label="灾难恢复" value="灾难恢复" />
-                  <el-option label="安全事件调查" value="安全事件调查" />
-                  <el-option label="合规审计" value="合规审计" />
-                </el-select>
-              </el-form-item>
-            </el-col>
-            <el-col v-if="!direct" :span="12">
-              <el-form-item label="案件编号" prop="caseNo">
-                <el-input v-model="form.caseNo" maxlength="100" />
-              </el-form-item>
-            </el-col>
-            <el-col :span="12">
-              <el-form-item label="申请单位" prop="applicantOrg">
-                <el-input v-model="form.applicantOrg" maxlength="200" />
-              </el-form-item>
-            </el-col>
-            <el-col :span="12">
-              <el-form-item label="联系方式">
-                <el-input v-model="form.contact" maxlength="100" />
-              </el-form-item>
-            </el-col>
-            <el-col :span="24">
-              <el-form-item label="恢复原因" prop="reason">
-                <el-input v-model="form.reason" type="textarea" :rows="2" maxlength="500" show-word-limit />
-              </el-form-item>
-            </el-col>
-            <el-col :span="24">
-              <el-form-item label="授权材料" prop="authorizationMaterial">
-                <el-input v-model="form.authorizationMaterial" type="textarea" :rows="2" maxlength="1000" show-word-limit />
-              </el-form-item>
-            </el-col>
-          </el-row>
-        </el-form>
-      </el-card>
+      <div class="recovery-overview">
+        <el-card shadow="never" class="section-card key-summary">
+          <template #header>
+            <h3 class="card-title">
+              <el-icon><InfoFilled /></el-icon>{{ isArchiveTarget ? '归档信息' : '密钥信息' }}
+            </h3>
+          </template>
+          <dl class="key-details">
+            <div>
+              <dt>恢复对象</dt>
+              <dd>{{ isArchiveTarget ? '归档密钥' : '在用密钥' }}</dd>
+            </div>
+            <div>
+              <dt>密钥规格</dt>
+              <dd>{{ keySpecification }}</dd>
+            </div>
+            <div class="key-details-wide">
+              <dt>{{ isArchiveTarget ? '归档记录 ID' : '密钥 ID' }}</dt>
+              <dd class="key-identifier">{{ target?.targetId ?? '-' }}</dd>
+            </div>
+            <div v-if="isArchiveTarget && target?.archiveSummary?.time" class="key-details-wide">
+              <dt>归档时间</dt>
+              <dd class="archive-time">{{ target.archiveSummary.time }}</dd>
+            </div>
+            <div class="key-details-wide">
+              <dt>证书序列号</dt>
+              <dd class="key-identifier">{{ detail?.serialNumber || target?.serialNumber || '-' }}</dd>
+            </div>
+            <div class="key-details-wide">
+              <dt>证书主题</dt>
+              <dd>{{ detail?.subject || target?.subject || '-' }}</dd>
+            </div>
+          </dl>
+        </el-card>
+        <el-card shadow="never" class="section-card recovery-application">
+          <template #header>
+            <h3 class="card-title">
+              <el-icon><EditPen /></el-icon> 恢复申请
+            </h3>
+          </template>
+          <el-form ref="formRef" :model="form" :rules="rules" label-position="top" :disabled="submitted">
+            <el-row :gutter="16">
+              <el-col :xs="24" :sm="direct ? 24 : 12">
+                <el-form-item label="恢复场景" prop="recoveryScene">
+                  <el-select v-model="form.recoveryScene" style="width: 100%">
+                    <el-option label="司法取证" value="司法取证" />
+                    <el-option label="数据解密" value="数据解密" />
+                    <el-option label="灾难恢复" value="灾难恢复" />
+                    <el-option label="安全事件调查" value="安全事件调查" />
+                    <el-option label="合规审计" value="合规审计" />
+                  </el-select>
+                </el-form-item>
+              </el-col>
+              <el-col v-if="!direct" :xs="24" :sm="12">
+                <el-form-item label="案件编号" prop="caseNo" :required="form.recoveryScene === '司法取证'">
+                  <el-input v-model="form.caseNo" maxlength="100" />
+                </el-form-item>
+              </el-col>
+              <el-col :xs="24" :sm="12">
+                <el-form-item label="申请单位" prop="applicantOrg">
+                  <el-input v-model="form.applicantOrg" maxlength="200" />
+                </el-form-item>
+              </el-col>
+              <el-col :xs="24" :sm="12">
+                <el-form-item label="联系方式">
+                  <el-input v-model="form.contact" maxlength="100" />
+                </el-form-item>
+              </el-col>
+              <el-col :span="24">
+                <el-form-item label="恢复原因" prop="reason">
+                  <el-input v-model="form.reason" type="textarea" :rows="2" maxlength="500" show-word-limit />
+                </el-form-item>
+              </el-col>
+              <el-col :span="24">
+                <el-form-item label="授权材料" prop="authorizationMaterial">
+                  <el-input v-model="form.authorizationMaterial" type="textarea" :rows="2" maxlength="1000" show-word-limit />
+                </el-form-item>
+              </el-col>
+            </el-row>
+          </el-form>
+        </el-card>
+      </div>
 
       <!-- 三、门限签名 -->
       <el-card v-if="!direct" shadow="never" class="section-card">
         <template #header>
           <div class="card-title">
-            <el-icon><Checked /></el-icon> 三、司法取证员 m-of-n 门限签名
+            <el-icon><Checked /></el-icon> 司法取证员门限签名
           </div>
         </template>
-        <el-form :model="form" label-width="130px" :disabled="submitted">
+        <el-form :model="form" label-position="top" :disabled="submitted">
           <el-row :gutter="16">
-            <el-col :span="8">
+            <el-col :xs="24" :sm="8">
               <el-form-item label="最少签名 m" prop="requiredApprovers">
-                <el-input-number v-model="form.requiredApprovers" :min="1" :max="Math.max(1, configTotalApprovers)" style="width: 100%" />
+                <el-input-number
+                  v-model="form.requiredApprovers"
+                  :min="1"
+                  :max="Math.max(1, configTotalApprovers)"
+                  :disabled="!recoveryPolicyLoaded"
+                  style="width: 100%"
+                />
               </el-form-item>
             </el-col>
-            <el-col :span="8">
+            <el-col :xs="24" :sm="8">
               <el-form-item label="候选总数 n">
                 <el-input :model-value="`${configTotalApprovers} 人`" disabled />
               </el-form-item>
             </el-col>
-            <el-col :span="8">
+            <el-col :xs="24" :sm="8">
               <el-form-item label="签名有效期">
                 <el-date-picker v-model="form.expiresAt" type="datetime" value-format="YYYY-MM-DDTHH:mm:ssZ" style="width: 100%" />
               </el-form-item>
@@ -153,14 +187,14 @@
         <!-- 签名进度仪表盘 -->
         <template v-if="submitted">
           <el-row :gutter="16" class="progress-dashboard">
-            <el-col :span="5">
+            <el-col :xs="24" :sm="5" class="signature-progress">
               <el-progress type="circle" :percentage="signPercent" :color="signPercentColor" :width="100">
                 <template #default="{ percentage }">
                   <span class="progress-label">{{ percentage }}%</span>
                 </template>
               </el-progress>
             </el-col>
-            <el-col :span="19">
+            <el-col :xs="24" :sm="19">
               <el-row :gutter="12">
                 <el-col :span="8">
                   <div class="stat-card stat-success">
@@ -228,11 +262,11 @@
       <el-card shadow="never" class="section-card">
         <template #header>
           <div class="card-title">
-            <el-icon><Unlock /></el-icon> {{ direct ? '三' : '四' }}、密钥恢复执行
+            <el-icon><Unlock /></el-icon> 密钥恢复执行
           </div>
         </template>
         <el-alert v-if="!direct && submitted && !detail?.canRecover" :title="recoverDisabledText" type="info" show-icon :closable="false" />
-        <el-form ref="executeFormRef" :model="form" :rules="rules" label-width="130px">
+        <el-form ref="executeFormRef" :model="form" :rules="rules" label-position="top">
           <el-alert
             v-if="isMlKemRecovery"
             type="info"
@@ -250,7 +284,7 @@
               </el-form-item>
             </el-col>
             <template v-if="!isMlKemRecovery && form.mediaType === 'FILE'">
-              <el-col :span="12">
+              <el-col :xs="24" :sm="12">
                 <el-form-item label="文件口令" prop="filePassword">
                   <el-input v-model="form.filePassword" :disabled="!canRecover" type="password" show-password autocomplete="new-password" />
                 </el-form-item>
@@ -270,7 +304,7 @@
                 </div>
                 <el-alert type="info" show-icon :closable="false" title="请确认 USBKey 已插入电脑、应用已创建且 User PIN 正确" />
               </el-col>
-              <el-col :span="12">
+              <el-col :xs="24" :sm="12">
                 <el-form-item label="设备提供商" prop="providerAlias">
                   <el-select
                     v-model="form.providerAlias"
@@ -284,7 +318,7 @@
                   </el-select>
                 </el-form-item>
               </el-col>
-              <el-col :span="12">
+              <el-col :xs="24" :sm="12">
                 <el-form-item label="设备" prop="deviceName">
                   <el-select
                     v-model="form.deviceName"
@@ -298,7 +332,7 @@
                   </el-select>
                 </el-form-item>
               </el-col>
-              <el-col :span="12">
+              <el-col :xs="24" :sm="12">
                 <el-form-item label="应用" prop="appName">
                   <el-select
                     v-model="form.appName"
@@ -312,7 +346,7 @@
                   </el-select>
                 </el-form-item>
               </el-col>
-              <el-col :span="12">
+              <el-col :xs="24" :sm="12">
                 <el-form-item label="新容器" prop="containerName">
                   <el-input v-model="form.containerName" readonly :disabled="!canRecover" placeholder="选择应用后自动生成">
                     <template #append>
@@ -323,7 +357,7 @@
                   </el-input>
                 </el-form-item>
               </el-col>
-              <el-col :span="12">
+              <el-col :xs="24" :sm="12">
                 <el-form-item label="User PIN" prop="pin">
                   <el-input
                     v-model="form.pin"
@@ -347,7 +381,7 @@
       <el-card shadow="never" class="section-card">
         <template #header>
           <div class="card-title">
-            <el-icon><Document /></el-icon> {{ direct ? '四' : '五' }}、审计记录
+            <el-icon><Document /></el-icon> 审计记录
           </div>
         </template>
         <el-table :data="detail?.audits || []" border size="small">
@@ -359,7 +393,7 @@
           <el-table-column label="备注" prop="remark" min-width="200" show-overflow-tooltip />
         </el-table>
       </el-card>
-    </el-scrollbar>
+    </div>
 
     <template #footer>
       <div class="dialog-footer">
@@ -367,7 +401,7 @@
           v-if="!direct && !submitted"
           type="primary"
           :loading="submitLoading"
-          :disabled="form.approverIds.length < form.requiredApprovers || form.requiredApprovers > configTotalApprovers"
+          :disabled="!recoveryPolicyLoaded || form.approverIds.length < form.requiredApprovers || form.requiredApprovers > configTotalApprovers"
           v-hasPermi="['kmc:keyrecovery:submit', 'ca:cert:recover']"
           @click="submitRequest"
           >提交申请</el-button
@@ -449,17 +483,18 @@ import {
   approveKeyRecovery,
   confirmKeyRecovery,
   getKeyRecoveryDetail,
+  getKeyRecoveryPolicy,
+  listRecoveryApprovers,
   recoverKey,
   rejectKeyRecovery,
   submitDirectUsedKeyRecovery,
   submitKeyRecovery,
   type KeyRecoveryDetail,
   type KeyRecoveryMediaType,
+  type KeyRecoveryPolicy,
   type KeyRecoveryTargetType
 } from '@/api/kmc/keyRecovery';
 import { unwrapKmcData } from '@/api/kmc/common';
-import { getKmcRuntimeConfig } from '@/api/kmc/config';
-import { listRecoveryApprovers } from '@/api/kmc/keyRecovery';
 import SKFClient from '@/api/skf/skf_api';
 
 interface RecoveryTarget {
@@ -470,6 +505,7 @@ interface RecoveryTarget {
   keyType?: string;
   keyBits?: number;
   certificate?: string;
+  archiveSummary?: { time?: string; algorithm?: string; bits?: number };
 }
 
 const props = withDefaults(defineProps<{ direct?: boolean }>(), { direct: false });
@@ -508,7 +544,7 @@ const judgeUsers = ref<any[]>([]);
 const judgeLoaded = ref(false);
 const polling = ref(false);
 const configTotalApprovers = ref(5);
-const configRequiredApprovers = ref(3);
+const recoveryPolicyLoaded = ref(false);
 const usbProviders = ref<string[]>([]);
 const usbDevices = ref<string[]>([]);
 const usbApps = ref<string[]>([]);
@@ -595,10 +631,14 @@ const isMlKemRecovery = computed(() =>
     .replace(/_/g, '-')
     .startsWith('ML-KEM')
 );
-const title = computed(() => (direct.value ? 'CA在用密钥直接恢复' : target.value?.targetType === 'USED_KEY' ? '在用密钥恢复' : '归档密钥恢复'));
-const targetLabel = computed(() =>
-  target.value ? [target.value.targetType, target.value.targetId, target.value.serialNumber, target.value.subject].filter(Boolean).join(' / ') : ''
-);
+const isArchiveTarget = computed(() => target.value?.targetType === 'ARCHIVE_KEY');
+const title = computed(() => (direct.value ? 'CA在用密钥直接恢复' : isArchiveTarget.value ? '归档密钥恢复' : '在用密钥恢复'));
+const keySpecification = computed(() => {
+  const type = detail.value?.keyType || target.value?.keyType || target.value?.archiveSummary?.algorithm;
+  const bits = detail.value?.keyBits || target.value?.keyBits || target.value?.archiveSummary?.bits;
+  return [type, bits ? `${bits} 位` : undefined].filter(Boolean).join(' · ') || '-';
+});
+const recoverySteps = ['填写申请', '司法签名', '门限通过', '恢复完成'];
 const activeStep = computed(() => (detail.value?.recovered ? 4 : detail.value?.canRecover ? 3 : submitted.value ? 2 : 1));
 const pendingApprovers = computed(() => (detail.value?.approvers || []).filter((item) => item.status === 'PENDING'));
 const canSign = computed(() => pendingApprovers.value.length > 0 && !detail.value?.thresholdPassed && detail.value?.recoveryStatus !== 'REJECTED');
@@ -641,7 +681,6 @@ const stopPolling = () => {
     pollingTimer = null;
   }
 };
-const stepStatus = (step: number) => (activeStep.value > step ? 'success' : activeStep.value === step ? 'process' : 'wait');
 
 onUnmounted(stopPolling);
 watch(detail, (d) => {
@@ -657,16 +696,15 @@ watch(
 const avatarAbbr = (user: any) => (user?.username || '?').charAt(0).toUpperCase();
 const approverAvatarColor = (status?: string) => (status === 'APPROVED' ? '#67C23A' : status === 'REJECTED' ? '#F56C6C' : '#909399');
 
-const loadRecoveryConfig = async () => {
+const loadRecoveryPolicy = async (nextTarget: RecoveryTarget) => {
   try {
-    const res: any = await getKmcRuntimeConfig();
-    const config = unwrapKmcData<any>(res);
-    if (config?.keyRecovery) {
-      configTotalApprovers.value = config.keyRecovery.totalApprovers || 5;
-      configRequiredApprovers.value = config.keyRecovery.requiredApprovers || 3;
-    }
+    const policy = unwrapKmcData<KeyRecoveryPolicy>(await getKeyRecoveryPolicy());
+    if (!visible.value || target.value !== nextTarget) return;
+    configTotalApprovers.value = policy.totalApprovers;
+    form.requiredApprovers = policy.requiredApprovers;
+    recoveryPolicyLoaded.value = true;
   } catch {
-    /* use defaults */
+    // The request layer reports the failure. Keep submission disabled until the policy is available.
   }
 };
 
@@ -682,7 +720,7 @@ const open = async (nextTarget: RecoveryTarget) => {
     form.mediaType = 'KMC_SERVICE';
   }
   visible.value = true;
-  if (!direct.value) await Promise.all([loadRecoveryConfig(), loadJudgeUsers()]);
+  if (!direct.value) await Promise.all([loadRecoveryPolicy(target.value), loadJudgeUsers()]);
 };
 
 const reset = () => {
@@ -696,7 +734,9 @@ const reset = () => {
   form.applicantOrg = direct.value ? 'CA系统' : '';
   form.contact = '';
   form.authorizationMaterial = direct.value ? 'CA证书管理直接恢复授权' : '';
-  form.requiredApprovers = configRequiredApprovers.value;
+  recoveryPolicyLoaded.value = false;
+  configTotalApprovers.value = 5;
+  form.requiredApprovers = 3;
   form.approverIds = [];
   form.expiresAt = defaultExpiresAt();
   form.mediaType = 'FILE';
@@ -1142,31 +1182,238 @@ defineExpose({ open });
 </script>
 
 <style scoped>
-.key-recovery-dialog :deep(.el-dialog__body) {
-  padding-top: 12px;
+/* The dialog is teleported to body. Shell styles are scoped by its unique class. */
+:global(.el-dialog.key-recovery-dialog) {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100dvh - 2 * clamp(12px, 4vh, 36px));
+  margin: clamp(12px, 4vh, 36px) auto 0;
+  padding: 0;
+  overflow: hidden;
+  border-radius: 14px;
+}
+
+:global(.el-dialog.key-recovery-dialog > .el-dialog__header) {
+  padding: 19px 48px 17px 24px;
+  margin: 0;
+  border-bottom: 1px solid var(--el-border-color-light);
+}
+
+:global(.el-dialog.key-recovery-dialog > .el-dialog__header .el-dialog__title) {
+  font-size: 19px;
+  font-weight: 650;
+}
+
+:global(.el-dialog.key-recovery-dialog > .el-dialog__body) {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+  background: var(--el-fill-color-lighter);
+}
+
+:global(.el-dialog.key-recovery-dialog > .el-dialog__footer) {
+  padding: 13px 24px;
+  border-top: 1px solid var(--el-border-color-light);
+}
+
+.recovery-scroll {
+  min-height: 0;
+  padding: 16px 24px 22px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.recovery-notice {
+  margin-bottom: 14px;
+  border: 1px solid var(--el-alert-border-color, var(--el-border-color-lighter));
+  border-radius: 8px;
 }
 
 .recovery-steps {
-  margin: 18px 0 20px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  padding: 8px;
+  margin: 0 0 14px;
+  list-style: none;
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 10px;
 }
-.recovery-steps :deep(.el-step__title) {
-  cursor: pointer;
+
+.recovery-step {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px 4px;
+  border-radius: 7px;
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
+}
+
+.recovery-step-marker {
+  display: grid;
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--el-fill-color-light);
+  color: var(--el-text-color-secondary);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.recovery-step.is-current {
+  background: var(--el-color-primary-light-9);
+  color: var(--el-color-primary-dark-2);
+  font-weight: 650;
+}
+
+.recovery-step.is-current .recovery-step-marker {
+  background: var(--el-color-primary);
+  color: var(--el-color-white);
+}
+
+.recovery-step.is-complete .recovery-step-marker {
+  background: var(--el-color-success-light-9);
+  color: var(--el-color-success-dark-2);
+}
+
+.recovery-overview {
+  display: grid;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.65fr);
+  gap: 14px;
+  align-items: start;
 }
 
 .section-card {
-  margin-bottom: 12px;
+  min-width: 0;
+  margin-bottom: 14px;
+  border-radius: 10px;
 }
+
 .section-card :deep(.el-card__header) {
-  padding: 10px 16px;
-  background: var(--el-fill-color-lighter);
+  padding: 13px 17px;
 }
+
+.section-card :deep(.el-card__body) {
+  padding: 16px 17px 6px;
+}
+
 .card-title {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-weight: 600;
-  font-size: 14px;
+  gap: 8px;
+  margin: 0;
+  font-weight: 650;
+  font-size: 15px;
+  line-height: 22px;
   color: var(--el-text-color-primary);
+}
+
+.card-title :deep(.el-icon) {
+  color: var(--el-color-primary-dark-2);
+}
+
+.key-summary :deep(.el-card__body) {
+  padding-bottom: 16px;
+}
+
+.key-details {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 13px 14px;
+  margin: 0;
+}
+
+.key-details-wide {
+  grid-column: 1 / -1;
+  padding-top: 10px;
+  border-top: 1px solid var(--el-border-color-lighter);
+}
+
+.key-details dt {
+  margin-bottom: 4px;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+}
+
+.key-details dd {
+  margin: 0;
+  color: var(--el-text-color-primary);
+  font-size: 13px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.archive-time {
+  font-variant-numeric: tabular-nums;
+}
+
+.key-identifier {
+  font-family: var(--el-font-family-monospace, ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+}
+
+.section-card :deep(.el-form-item__label) {
+  padding-bottom: 0;
+  margin-bottom: 6px;
+  font-weight: 500;
+}
+
+.section-card :deep(.el-form-item) {
+  margin-bottom: 17px;
+}
+
+.signature-progress {
+  display: flex;
+  justify-content: center;
+}
+
+@media (max-width: 767px) {
+  .recovery-overview {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+
+  .signature-progress {
+    margin-bottom: 12px;
+  }
+}
+
+@media (max-width: 540px) {
+  :global(.el-dialog.key-recovery-dialog > .el-dialog__header) {
+    padding-left: 15px;
+  }
+
+  :global(.el-dialog.key-recovery-dialog > .el-dialog__footer),
+  .recovery-scroll {
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+
+  .recovery-steps {
+    padding: 5px;
+    gap: 2px;
+  }
+
+  .recovery-step {
+    flex-direction: column;
+    gap: 4px;
+    padding-inline: 0;
+    font-size: 11px;
+  }
+
+  .section-card :deep(.el-card__header),
+  .section-card :deep(.el-card__body) {
+    padding-inline: 12px;
+  }
 }
 
 .usb-key-header {
@@ -1307,8 +1554,12 @@ defineExpose({ open });
 }
 .dialog-footer {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
+}
+.dialog-footer :deep(.el-button + .el-button) {
+  margin-left: 0;
 }
 </style>

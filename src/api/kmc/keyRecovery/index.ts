@@ -199,3 +199,10 @@ export const resolveUsedKeyByCertificate = (certificate: string) => {
 
 /** Minimal trusted projection for recovery candidate selection. */
 export const listRecoveryApprovers = (keyword?: string) => request({ url: '/kmc/v1/key-recovery/approvers', method: 'get', params: { keyword } });
+
+export interface KeyRecoveryPolicy {
+  totalApprovers: number;
+  requiredApprovers: number;
+}
+
+export const getKeyRecoveryPolicy = () => request({ url: '/kmc/v1/key-recovery/policy', method: 'get' });
