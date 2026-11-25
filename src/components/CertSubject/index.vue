@@ -2,12 +2,8 @@
   <div class="cert-subject-container">
     <template v-for="(item, index) in modelValue" :key="item.type + index">
       <!-- Handle standard single values -->
-      <el-form-item
-        :label="getFieldMeta(item.type).label"
-        :prop="propPrefix ? `${propPrefix}.${index}.value` : `${index}.value`"
-        :rules="getRules(item)"
-      >
-        <template v-if="getFieldMeta(item.type).isSelect">
+      <el-form-item :label="getFieldMeta(item).label" :prop="propPrefix ? `${propPrefix}.${index}.value` : `${index}.value`" :rules="getRules(item)">
+        <template v-if="getFieldMeta(item).isSelect">
           <el-select v-if="item.type === 'country'" v-model="item.value" placeholder="请选择国家" style="width: 100%" clearable>
             <el-option label="中国 (CN)" value="CN" />
             <el-option label="中国香港 (HK)" value="HK" />
@@ -16,7 +12,7 @@
           </el-select>
         </template>
         <template v-else>
-          <el-input v-model="item.value" :placeholder="`请输入${getFieldMeta(item.type).label}`" clearable />
+          <el-input v-model="item.value" :placeholder="`请输入${getFieldMeta(item).label}`" clearable />
         </template>
       </el-form-item>
     </template>
@@ -26,6 +22,7 @@
 <script lang="ts">
 export interface SubjectItem {
   type: string;
+  label?: string;
   minOccurs?: number;
   maxOccurs?: number;
   value?: string;
@@ -92,13 +89,13 @@ const props = defineProps<{
 
 const emit = defineEmits(['update:modelValue']);
 
-const getFieldMeta = (type: string) => {
-  return typeMapping[type] || { label: type, key: type.toUpperCase() };
+const getFieldMeta = ({ type, label }: SubjectItem) => {
+  return typeMapping[type] || { label: label || type, key: type.toUpperCase() };
 };
 
 const getRules = (item: SubjectItem) => {
   const rules: any[] = [];
-  const meta = getFieldMeta(item.type);
+  const meta = getFieldMeta(item);
 
   // 1. Required validation
   const isRequired = item.minOccurs === undefined || item.minOccurs > 0;

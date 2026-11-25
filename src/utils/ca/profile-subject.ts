@@ -39,7 +39,7 @@ export const subjectFieldOptions = [
   { value: 'countryOfResidence', label: '居住国', oid: '1.3.6.1.5.5.7.9.5' }
 ];
 
-type SubjectFieldType = string | { oid?: string; description?: string } | null | undefined;
+export type SubjectFieldType = string | { oid?: string; description?: string } | null | undefined;
 
 const fieldAliases = new Map(
   Object.entries({

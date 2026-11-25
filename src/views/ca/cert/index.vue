@@ -912,6 +912,7 @@ import { ArrowDown, MoreFilled, Refresh } from '@element-plus/icons-vue';
 import X509Cert from '@/components/X509Cert/index.vue';
 import SecurityConfirm from '@/components/SecurityConfirm/index.vue';
 import CertSubject, { type SubjectItem, typeMapping, sortSubjectItems } from '@/components/CertSubject/index.vue';
+import { buildCaIssueSubjectItems, formatCaIssueSubject } from '@/utils/ca/issue-subject';
 import {
   pageCert,
   getCert,
@@ -1233,7 +1234,7 @@ const data = reactive({
     signProfileId: undefined as string | number | undefined,
     encProfileId: undefined as string | number | undefined,
     name: '',
-    subjectItems: [] as any[],
+    subjectItems: [] as SubjectItem[],
     provider: '',
     device: '',
     appName: '',
@@ -1560,23 +1561,7 @@ async function handleProfileChange(val: any) {
     const conf = parseJson(res.data.conf);
     const smimeSingle = certMode.value === 'single' && isSmimeManagedProfile(res.data);
     if ((issueType.value !== 'p10' || smimeSingle) && conf && conf.subject) {
-      const items: any[] = [];
-      const rdns = conf.subject.rdns || (Array.isArray(conf.subject) ? conf.subject : []);
-      rdns.forEach((rdn: any) => {
-        const rdnType = (typeof rdn.type === 'object' ? rdn.type.description : rdn.type) || '';
-        let compType = rdnType.toLowerCase();
-        for (const [type, meta] of Object.entries(typeMapping)) {
-          if (meta.key.toLowerCase() === compType || type.toLowerCase() === compType) {
-            compType = type;
-            break;
-          }
-        }
-        const count = Math.max(1, rdn.minOccurs === undefined ? 1 : rdn.minOccurs);
-        for (let i = 0; i < count; i++) {
-          items.push({ type: compType, value: '', minOccurs: rdn.minOccurs, maxOccurs: rdn.maxOccurs });
-        }
-      });
-      issueForm.value.subjectItems = sortSubjectItems(items);
+      issueForm.value.subjectItems = buildCaIssueSubjectItems(conf.subject);
     }
     issueForm.value.extensionItems = buildIssueExtensionItems(conf?.extensions || []);
     // S/MIME 单证：只走 KMC（RSA 2048/4096）+ 上传封装CSR，切换到上传模式并清空旧 CSR。
@@ -2215,13 +2200,7 @@ async function submitIssue() {
       let attemptedKmcSingleEncryption = false;
       try {
         const appPath = `${issueForm.value.provider}/${issueForm.value.device}/${issueForm.value.appName}`;
-        const subject = issueForm.value.subjectItems
-          .filter((i: any) => i.value)
-          .map((i: any) => {
-            const key = typeMapping[i.type as keyof typeof typeMapping]?.key || i.type;
-            return `${key}=${i.value}`;
-          })
-          .join(',');
+        const subject = formatCaIssueSubject(issueForm.value.subjectItems);
 
         if (issueType.value === 'key' && !isSmimeSingleProfile.value) {
           skf = await getSkfClient();
@@ -2231,7 +2210,7 @@ async function submitIssue() {
 
         if (isSmimeSingleProfile.value) {
           // S/MIME 单证：KMC 生成并托管 RSA 加密私钥（2048/4096），上传客户端临时密钥对的封装CSR。
-          if (!issueForm.value.subjectItems.some((i: any) => i.value)) {
+          if (!subject) {
             throw new Error('请填写证书主题（主体信息）');
           }
           const wrapCsrPem = String(issueForm.value.csr || '').trim();
