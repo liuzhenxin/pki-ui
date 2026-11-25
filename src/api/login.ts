@@ -162,11 +162,12 @@ export function logout() {
 /**
  * 根据UUID获取验证码
  */
-export function getCodeImg(uuid: string | number, tenantCode?: string): Promise<Result<string>> {
+export function getCodeImg(uuid: string | number, tenantCode?: string, hideErrorNotify = false): Promise<Result<string>> {
   return request({
     url: '/auth/v1/username-password/captchas' + '/' + uuid,
     headers: {
-      isToken: false
+      isToken: false,
+      ...(hideErrorNotify ? { sensitive: true, hideErrorNotify: true } : {})
     },
     method: 'get',
     params: tenantCode ? { tenantCode } : undefined,
@@ -193,7 +194,9 @@ export function getSecrets(): Promise<Result<SecretsResult>> {
   return request({
     url: '/auth/v1/secrets',
     headers: {
-      isToken: false
+      isToken: false,
+      sensitive: true,
+      hideErrorNotify: true
     },
     method: 'get',
     timeout: 20000

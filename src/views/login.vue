@@ -146,6 +146,10 @@
                 <span v-else>{{ captchaLoading ? '加载中…' : '获取验证码' }}</span>
               </button>
             </el-form-item>
+            <el-alert v-if="captchaError" :title="captchaError" type="warning" :closable="false" show-icon />
+            <el-alert v-if="secretKeyError" :title="secretKeyError" type="warning" :closable="false" show-icon>
+              <el-button link type="primary" :loading="secretKeyLoading" @click="getSecretKey">重试获取公钥</el-button>
+            </el-alert>
             <div class="form-options">
               <el-checkbox v-if="loginForm.tenantId !== cspProduct.tenantId" v-model="loginForm.rememberMe">{{
                 proxy.$t('login.rememberPassword')
@@ -175,7 +179,7 @@
             <el-form-item class="login-action">
               <el-button
                 :loading="loading"
-                :disabled="captchaEnabled && (captchaLoading || !loginForm.uuid)"
+                :disabled="loginPreparationPending"
                 size="large"
                 type="primary"
                 class="login-button"
@@ -270,6 +274,7 @@
 <script setup lang="ts">
 import { createCertificateLoginChallenge, getCodeImg, getLoginHints, getSecrets, verifyCertificateLoginSignature } from '@/api/login';
 import SKFClient from '@/api/skf/skf_api';
+import { isAxiosError } from 'axios';
 import { calculateSm2SignatureDigest, normalizeSm2SignatureForApi } from '@/utils/sm2SignatureDigest';
 import { X509 } from 'jsrsasign';
 
@@ -348,6 +353,7 @@ const loading = ref(false);
 // 验证码开关
 const captchaEnabled = ref(true);
 const captchaLoading = ref(false);
+const captchaError = ref('');
 const CAPTCHA_REQUEST_INTERVAL_MS = 1200;
 let lastCaptchaRequestAt = 0;
 let captchaRequestId = 0;
@@ -368,6 +374,9 @@ const loginRef = ref<ElFormInstance>();
 
 // 密钥
 const secretKey = ref('');
+const secretKeyLoading = ref(false);
+const secretKeyError = ref('');
+const loginPreparationPending = computed(() => !secretKey.value || (captchaEnabled.value && (captchaLoading.value || !loginForm.value.uuid)));
 const loginTitle = ref(proxy.$t('login.title'));
 const authMode = ref<'password' | 'certificate'>('password');
 const radiusRequired = ref(false);
@@ -593,7 +602,7 @@ async function svsPostLoginPath(): Promise<string | null> {
 }
 
 const handleLogin = () => {
-  if (loading.value || (captchaEnabled.value && (captchaLoading.value || !loginForm.value.uuid))) {
+  if (loading.value || loginPreparationPending.value) {
     return;
   }
   if (tenantWhitelistMissed.value) {
@@ -602,7 +611,7 @@ const handleLogin = () => {
   }
   loginRef.value?.validate(async (valid: boolean, fields: any) => {
     if (valid) {
-      if (loading.value || (captchaEnabled.value && (captchaLoading.value || !loginForm.value.uuid))) {
+      if (loading.value || loginPreparationPending.value) {
         return;
       }
       loading.value = true;
@@ -779,6 +788,7 @@ const getCode = async (tenantCode = String(loginForm.value.tenantCode || ''), fo
   }
 
   captchaLoading.value = true;
+  captchaError.value = '';
   const requestId = ++captchaRequestId;
   lastCaptchaRequestAt = now;
   loginForm.value.code = '';
@@ -786,7 +796,7 @@ const getCode = async (tenantCode = String(loginForm.value.tenantCode || ''), fo
   codeUrl.value = '';
   try {
     const uuid = uuidv4();
-    const res = await getCodeImg(uuid, tenantCode);
+    const res = await getCodeImg(uuid, tenantCode, true);
     if (requestId !== captchaRequestId || tenantCode !== String(loginForm.value.tenantCode || '')) {
       return;
     }
@@ -794,7 +804,9 @@ const getCode = async (tenantCode = String(loginForm.value.tenantCode || ''), fo
     const { data } = res;
     codeUrl.value = data;
   } catch (err) {
-    console.error('获取验证码请求异常', err);
+    if (requestId === captchaRequestId && tenantCode === String(loginForm.value.tenantCode || '')) {
+      captchaError.value = isPreparationRateLimited(err) ? '验证码请求过于频繁，请稍后点击刷新验证码。' : '验证码获取失败，请点击刷新验证码。';
+    }
   } finally {
     if (requestId === captchaRequestId) {
       captchaLoading.value = false;
@@ -810,6 +822,7 @@ const loadLoginHints = async () => {
   const requestId = ++loginHintsRequestId;
   captchaRequestId++;
   captchaLoading.value = false;
+  captchaError.value = '';
   captchaEnabled.value = true;
   loginForm.value.code = '';
   loginForm.value.uuid = '';
@@ -837,10 +850,25 @@ const loadLoginHints = async () => {
 /**
  * 获取密钥
  */
+function isPreparationRateLimited(error: unknown) {
+  return isAxiosError(error) && (error.code === 'Too_Many_Requests' || error.code === '429' || error.response?.status === 429);
+}
+
 const getSecretKey = async () => {
-  const res = await getSecrets();
-  const { data } = res;
-  secretKey.value = data.publicKey;
+  if (secretKeyLoading.value) return;
+  secretKeyLoading.value = true;
+  secretKeyError.value = '';
+  try {
+    const { data } = await getSecrets();
+    secretKey.value = data?.publicKey || '';
+    if (!secretKey.value) {
+      secretKeyError.value = '登录公钥获取失败，请重试。';
+    }
+  } catch (error) {
+    secretKeyError.value = isPreparationRateLimited(error) ? '登录公钥请求过于频繁，请稍后重试。' : '登录公钥获取失败，请重试。';
+  } finally {
+    secretKeyLoading.value = false;
+  }
 };
 
 const getLoginData = () => {
