@@ -40,7 +40,7 @@
 
     <ManagementFrame v-else class="portal-workspace" :class="{ hideSidebar: !portalSidebarVisible, openSidebar: portalSidebarVisible }" :sidebar-hidden="compactLedger" :has-tags-view="true">
       <template #navigation>
-        <aside v-if="!compactLedger" class="sidebar-container portal-sidebar" style="background: var(--el-bg-color)">
+        <aside v-if="!compactLedger" class="sidebar-container portal-sidebar">
           <div class="portal-brand"><span class="portal-logo">RA</span><h1 v-if="portalSidebarVisible">证书统一管理</h1></div>
           <el-menu v-if="access.granted" :default-active="portalSection" :collapse="!portalSidebarVisible" class="portal-menu" aria-label="证书统一管理菜单" @select="changePortalSection">
             <el-menu-item index="records"><el-icon><Document /></el-icon><span>录入信息</span></el-menu-item>
@@ -87,12 +87,20 @@
                 <span class="portal-heading-icon"><el-icon><component :is="portalSection === 'todo' ? List : Document" /></el-icon></span>
                 <h2>{{ portalSection === 'todo' ? '待办详情' : '证书录入' }}</h2>
               </div>
-              <el-button v-if="portalSection === 'records'" type="primary" icon="Plus" :disabled="saving" @click="openCreate">新增录入</el-button>
+            <el-button
+              v-if="portalSection === 'records'"
+              type="primary"
+              icon="Plus"
+              class="portal-primary-action"
+              :disabled="saving"
+              @click="openCreate"
+              >新增录入</el-button
+            >
             </div>
             <section class="portal-ledger" :aria-label="sectionTitle">
               <div class="portal-ledger-heading">
                 <h3>{{ portalSection === 'todo' ? '待处理记录' : '录入记录' }}</h3>
-                <span class="portal-count">共 {{ total }} 条</span>
+                <el-tag class="portal-count" type="info" effect="plain" round>共 {{ total }} 条</el-tag>
               </div>
               <el-form :model="queryParams" label-position="top" class="portal-query" @submit.prevent="handleQuery">
                 <el-form-item label="域名" prop="domainName">
@@ -372,7 +380,7 @@ const portalSection = ref<'records' | 'todo'>('records');
 const portalSidebarVisible = ref(true);
 const portalMobileMenuOpen = ref(false);
 const sectionTitle = computed(() => (portalSection.value === 'todo' ? '待办详情' : '录入信息'));
-const compactLedger = useMediaQuery('(max-width: 760px)');
+const compactLedger = useMediaQuery('(max-width: 960px)');
 const loginAccount = ref('');
 const loginLoading = ref(false);
 let lastInteraction = Date.now();
@@ -847,8 +855,23 @@ onUnmounted(() => {
 
 <style scoped lang="scss">
 .public-cert-self {
+  --portal-navy: #1d3557;
+  --portal-muted: #526779;
+  --portal-accent: #2b647e;
+  --portal-tint: #eaf4f5;
+  --portal-action: linear-gradient(135deg, #1b756d, #326886);
+  --portal-canvas: #f4f7fa;
+
   min-height: 100dvh;
   background: var(--el-fill-color-light);
+}
+
+:global(html.dark .public-cert-self) {
+  --portal-navy: #dce9f4;
+  --portal-muted: #adbecd;
+  --portal-accent: #9ed0e9;
+  --portal-tint: #20363b;
+  --portal-canvas: var(--el-bg-color-page);
 }
 
 .portal-login-shell {
@@ -1080,6 +1103,25 @@ onUnmounted(() => {
   --el-button-hover-border-color: #0b84ff;
 }
 
+.portal-primary-action {
+  --el-button-bg-color: #326886;
+  --el-button-border-color: #326886;
+  --el-button-hover-bg-color: #285976;
+  --el-button-hover-border-color: #285976;
+
+  border-radius: 999px;
+  font-weight: 700;
+
+  &:not(.is-disabled) {
+    background: var(--portal-action);
+    box-shadow: 0 6px 16px rgb(27 117 109 / 20%);
+  }
+
+  &:not(.is-disabled):hover {
+    background: var(--el-button-hover-bg-color);
+  }
+}
+
 .portal-brand {
   display: flex;
   align-items: center;
@@ -1102,46 +1144,45 @@ onUnmounted(() => {
   flex: 0 0 34px;
   place-items: center;
   height: 26px;
-  border: 1px solid var(--el-color-primary);
-  border-radius: 5px;
-  background: var(--el-color-primary-light-9);
-  color: var(--el-color-primary);
-  font-size: 14px;
+  border-radius: 6px;
+  background: var(--portal-action);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
 }
 
 .portal-workspace {
   min-height: 100dvh;
-  background: var(--el-bg-color);
+  background: var(--portal-canvas);
 
   :deep(.main-container) {
     min-height: 100dvh;
   }
 }
 
-.portal-sidebar {
+:global(#app .portal-sidebar.sidebar-container) {
+  border-right: 1px solid var(--el-border-color-light);
   background: var(--el-bg-color);
+  box-shadow: none;
+}
 
-  .portal-brand {
-    color: var(--el-text-color-primary);
-  }
+:global(#app .portal-sidebar .el-menu-item.is-active) {
+  color: var(--portal-accent);
+  font-weight: 700;
+}
 
-  .portal-logo {
-    border-color: var(--el-color-primary);
-    background: var(--el-color-primary-light-9);
-    color: var(--el-color-primary);
-  }
+.portal-sidebar {
+  --el-menu-active-color: var(--portal-tint);
 
   :deep(.el-menu) {
     background: transparent;
   }
 
   :deep(.el-menu-item) {
+    height: 44px;
+    margin: 4px 8px;
+    border-radius: 8px;
     color: var(--el-text-color-primary);
-  }
-
-  :deep(.el-menu-item.is-active) {
-    color: #fff;
-    background: var(--el-color-primary);
   }
 }
 
@@ -1168,8 +1209,8 @@ onUnmounted(() => {
   gap: 8px;
   height: 50px;
   padding: 0 12px;
-  background: var(--fixedHeaderBg);
-  box-shadow: 0 1px 4px rgba(0, 21, 41, 0.08);
+  border-bottom: 1px solid var(--el-border-color-light);
+  background: var(--el-bg-color);
 
   :deep(.el-dropdown) {
     min-width: 0;
@@ -1199,20 +1240,20 @@ onUnmounted(() => {
   align-items: center;
   height: 34px;
   padding: 0 14px;
-  border: 1px solid var(--el-border-color-light);
+  border-bottom: 1px solid var(--el-border-color-light);
   background: var(--el-bg-color);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
 .portal-tab {
   min-width: 74px;
   height: 26px;
   padding: 3px 10px;
-  border: 1px solid var(--el-color-primary);
-  border-radius: 4px;
-  background: var(--el-color-primary);
-  color: #fff;
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 6px;
+  background: var(--portal-tint);
+  color: var(--portal-accent);
   font-size: 12px;
+  font-weight: 600;
   text-align: center;
   white-space: nowrap;
 }
@@ -1257,26 +1298,32 @@ onUnmounted(() => {
   font-size: 11px;
 }
 
-.portal-avatar, .portal-heading-icon {
+.portal-avatar,
+.portal-heading-icon {
   display: grid;
   flex: none;
   place-items: center;
   width: 32px;
   height: 32px;
   border-radius: 6px;
-  background: var(--el-color-primary-light-9);
-  color: var(--el-color-primary);
+  background: var(--portal-tint);
+  color: var(--portal-accent);
 }
 
 .portal-heading-icon {
-  width: 36px;
-  height: 36px;
-  font-size: 18px;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: var(--portal-action);
+  color: #fff;
+  font-size: 22px;
 }
 
 .portal-content {
   width: 100%;
-  padding: 18px 20px;
+  max-width: 1420px;
+  margin-inline: auto;
+  padding: 24px;
 }
 
 .portal-heading,
@@ -1290,26 +1337,29 @@ onUnmounted(() => {
 .portal-heading {
   flex-wrap: wrap;
   justify-content: space-between;
-  margin-bottom: 12px;
+  margin-bottom: 18px;
+
   h2 {
     margin: 0;
-    color: var(--el-text-color-primary);
-    font-size: 20px;
-    line-height: 1.4;
+    color: var(--portal-navy);
+    font-size: clamp(21px, 3vw, 30px);
+    font-weight: 800;
+    line-height: 1.3;
   }
 }
 
 .portal-ledger {
   min-width: 0;
+  overflow: hidden;
   border: 1px solid var(--el-border-color-light);
-  border-radius: 6px;
+  border-radius: 10px;
   background: var(--el-bg-color);
 }
 
 .portal-query {
-  padding: 14px 16px;
-  background: var(--el-bg-color);
+  padding: 14px 18px;
   border-bottom: 1px solid var(--el-border-color-light);
+  background: var(--el-fill-color-extra-light);
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
@@ -1339,26 +1389,38 @@ onUnmounted(() => {
   flex-wrap: wrap;
   gap: 8px;
 
+  :deep(.el-button--primary.is-plain) {
+    --el-button-text-color: var(--portal-accent);
+    --el-button-bg-color: var(--portal-tint);
+    --el-button-border-color: var(--el-border-color);
+    --el-button-hover-bg-color: #326886;
+    --el-button-hover-border-color: #326886;
+  }
+
   :deep(.el-button + .el-button) {
     margin-inline-start: 0;
   }
 }
 
 .portal-ledger-heading {
-  padding: 10px 16px;
-  min-height: 48px;
+  min-height: 52px;
+  padding: 12px 18px;
   border-bottom: 1px solid var(--el-border-color-light);
 
   h3 {
     margin: 0;
-    font-size: 15px;
+    color: var(--portal-navy);
+    font-size: 16px;
+    font-weight: 700;
   }
 }
 
 .portal-count {
   margin-left: auto;
-  color: var(--el-text-color-secondary);
-  font-size: 13px;
+  border-color: var(--el-border-color-light);
+  background: var(--portal-tint);
+  color: var(--portal-accent);
+  font-variant-numeric: tabular-nums;
 }
 
 .portal-ledger-footer {
@@ -1368,22 +1430,27 @@ onUnmounted(() => {
 }
 
 .portal-record-table {
-  --el-table-header-bg-color: var(--el-fill-color-light);
+  --el-table-header-bg-color: var(--portal-tint);
   --el-table-row-hover-bg-color: var(--el-fill-color-extra-light);
   width: 100%;
 
   :deep(.el-table__header th.el-table__cell) {
-    color: var(--el-text-color-regular);
+    color: var(--portal-navy);
     font-size: 13px;
+    font-weight: 700;
   }
-
 }
 
 .portal-row-actions {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 6px;
+
+  :deep(.el-button) {
+    min-width: 26px;
+    min-height: 28px;
+  }
 
   :deep(.el-button + .el-button) {
     margin-inline-start: 0;
@@ -1536,13 +1603,21 @@ onUnmounted(() => {
   }
 }
 
-@media (max-width: 760px) {
-  .portal-workspace {
-    :deep(.main-container) {
-      margin-left: 0 !important;
-    }
+@media (max-width: 960px) {
+  .portal-content {
+    padding: 18px 20px;
   }
 
+  .portal-row-actions {
+    gap: 2px;
+
+    :deep(.el-button) {
+      min-width: 22px;
+    }
+  }
+}
+
+@media (max-width: 680px) {
   .portal-navbar {
     padding: 0 8px;
 
@@ -1555,7 +1630,10 @@ onUnmounted(() => {
     max-width: 80px;
   }
 
-  .portal-heading h2 {
+  .portal-heading-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 9px;
     font-size: 18px;
   }
 
