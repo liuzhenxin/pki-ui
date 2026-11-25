@@ -2,8 +2,8 @@
   <span class="cert-row-action">
     <el-tooltip :content="label" placement="top">
       <span class="cert-row-action-trigger">
-        <el-dropdown v-if="$slots.dropdown" trigger="click" @command="onCommand">
-          <el-button link :type="type" :icon="icon" :aria-label="label" />
+        <el-dropdown v-if="$slots.dropdown" trigger="click" :disabled="disabled" @command="onCommand">
+          <el-button link :type="type" :icon="icon" :aria-label="label" :disabled="disabled" />
           <template #dropdown><slot name="dropdown" /></template>
         </el-dropdown>
         <el-button v-else link :type="type" :icon="icon" :aria-label="label" :disabled="disabled" :loading="loading" @click="emit('click', $event)" />

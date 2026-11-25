@@ -1,5 +1,5 @@
 import dayjs from 'dayjs';
-import utc from 'dayjs/plugin/utc';
+import utc from 'dayjs/plugin/utc.js';
 import { parseProfileValidity } from '@/utils/ca/profile-validity';
 
 dayjs.extend(utc);
@@ -47,7 +47,7 @@ export function resolveIssueValidity(
   duration: number | undefined,
   unit: IssueValidityUnit,
   templateValidities: unknown[],
-  now = new Date()
+  now: Date | null = new Date()
 ): IssueValidity {
   if (!start) {
     if (duration != null) throw new Error('指定有效期时请选择生效时间');
@@ -55,14 +55,14 @@ export function resolveIssueValidity(
   }
   const effective = dayjs(start).startOf('second');
   if (!effective.isValid()) throw new Error('请选择有效的证书生效时间');
-  if (effective.isBefore(dayjs(now).startOf('second'))) throw new Error('证书生效时间不能早于当前时间');
+  if (now && effective.isBefore(dayjs(now).startOf('second'))) throw new Error('证书生效时间不能早于当前时间');
   const notBefore = effective.utc().format('YYYYMMDDHHmmss');
   if (duration == null) return { notBefore };
   if (!Number.isSafeInteger(duration) || duration < 1) throw new Error('有效期必须为正整数');
   const expiry = effective.utc().add(duration, unit);
   if (!expiry.isValid() || expiry.utc().year() > 9999) throw new Error('证书到期时间超出允许范围');
   if (templateValidities.some((validity) => expiry.isAfter(templateExpiry(effective.toDate(), validity)))) {
-    throw new Error('证书有效期不能超过证书模板允许的有效期');
+    throw new Error('有效期不能超过模板允许的时间');
   }
   return { notBefore, notAfter: expiry.utc().format('YYYYMMDDHHmmss'), expiry: expiry.toDate() };
 }

@@ -102,7 +102,14 @@ test('business administrator renders large department trees without mounting eve
   });
   await page.mouse.wheel(0, 200);
   await expect.poll(() => treeViewport.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
-  await page.mouse.wheel(0, -200);
+  await page.mouse.wheel(0, 1000000);
+  await expect.poll(() => treeViewport.evaluate(el => el.scrollHeight - el.clientHeight - el.scrollTop)).toBeLessThanOrEqual(1);
+  const lastDepartment = page.getByText('科室3904', { exact: true });
+  await expect(lastDepartment).toBeVisible();
+  const lastBox = (await lastDepartment.locator('..').boundingBox())!;
+  const viewportBox = (await treeViewport.boundingBox())!;
+  expect(lastBox.y + lastBox.height).toBeLessThanOrEqual(viewportBox.y + viewportBox.height - 12);
+  await treeViewport.evaluate(el => { el.scrollTop = 0; });
   await expect.poll(() => treeViewport.evaluate((el) => el.scrollTop)).toBe(0);
   await expandIcon.click();
   await expect(longDepartment).toHaveCount(0);

@@ -1,10 +1,16 @@
 <template>
   <div class="app-container employee-cert-page">
-    <el-tabs :model-value="managementTab" @update:model-value="switchManagementTab">
-      <el-tab-pane label="证书台账" name="ledger" />
-      <el-tab-pane label="发送记录" name="distribution" />
-      <el-tab-pane v-if="canManageLegacy" label="存量证书导入" name="legacy" />
-    </el-tabs>
+    <div class="management-header">
+      <el-tabs :model-value="managementTab" class="management-tabs" @update:model-value="switchManagementTab">
+        <el-tab-pane label="证书台账" name="ledger" />
+        <el-tab-pane label="发送记录" name="distribution" />
+        <el-tab-pane v-if="canManageLegacy" label="存量导入" name="legacy" />
+      </el-tabs>
+      <div v-if="managementTab !== 'legacy'" class="management-actions">
+        <CertRowAction v-hasPermi="['ra:employee-cert:template']" label="分发模板" icon="Message" @click="openTemplates" />
+        <CertRowAction v-hasPermi="['ra:employee-cert:distribute']" label="分发配置" icon="Setting" @click="openDistributionConfig" />
+      </div>
+    </div>
 
     <LegacyCertificates v-if="managementTab === 'legacy' && canManageLegacy" />
 
@@ -38,7 +44,6 @@
             <el-option label="已分发" value="SENT" />
             <el-option label="发送失败" value="FAILED" />
             <el-option label="发送中" value="SENDING" />
-            <el-option label="存量归档" value="ARCHIVED" />
           </el-select>
         </el-form-item>
         <div class="query-actions">
@@ -52,7 +57,7 @@
       <el-row :gutter="10" class="mb8">
         <el-col v-if="canDistribute" :span="1.5">
           <el-button type="primary" plain icon="Promotion" :disabled="loading || selectedRows.length === 0" @click="distributeSelected"
-            >分发证书（{{ selectedRows.length }}）</el-button
+            >批量分发（{{ selectedRows.length }}）</el-button
           >
         </el-col>
         <el-col v-if="canDistribute" :span="1.5">
@@ -69,29 +74,27 @@
             </span>
           </el-tooltip>
         </el-col>
-        <el-col :span="1.5">
-          <el-button type="success" plain icon="Download" @click="handleExport">导出台账</el-button>
+        <el-col v-if="canDistribute" :span="1.5">
+          <el-button type="danger" plain icon="Delete" :loading="deletingLedger" :disabled="!selectedRows.length || loading" @click="removeLedger">批量删除</el-button>
         </el-col>
-        <el-col :span="1.5">
-          <el-button v-hasPermi="['ra:employee-cert:template']" plain icon="Message" @click="openTemplates">分发模板</el-button>
-        </el-col>
-        <el-col :span="1.5">
-          <el-button v-hasPermi="['ra:employee-cert:distribute']" plain icon="Setting" @click="openDistributionConfig">分发配置</el-button>
+        <el-col v-if="canDistribute" :span="1.5">
+          <el-button type="success" plain icon="Download" :loading="exportingLedger" @click="handleExport">导出台账</el-button>
         </el-col>
         <right-toolbar v-model:showSearch="showSearch" @queryTable="loadList" />
       </el-row>
 
       <el-table v-loading="loading" :data="rows" row-key="id" border stripe empty-text="暂无员工证书台账" @selection-change="selectedRows = $event">
         <el-table-column v-if="canDistribute" type="selection" width="48" fixed :selectable="canDownloadCert" />
-        <el-table-column label="序列号" prop="serialNumber" min-width="170" fixed show-overflow-tooltip />
+        <el-table-column label="序列号" prop="serialNumber" min-width="170" fixed show-overflow-tooltip>
+          <template #default="{ row }">
+            <el-button v-if="row.serialNumber && row.raCertId != null" link type="primary"
+              @click="openLedgerCertificate(row)">{{ row.serialNumber }}</el-button>
+            <span v-else>{{ row.serialNumber || '-' }}</span>
+          </template>
+        </el-table-column>
         <el-table-column label="主题" prop="subject" min-width="260" :formatter="formatCertificateSubjectColumn" show-overflow-tooltip />
         <el-table-column label="姓名" prop="employeeName" width="110" />
         <el-table-column label="域账号" prop="domainAccount" width="120" />
-        <el-table-column label="任务号" prop="taskNo" min-width="210" show-overflow-tooltip />
-        <el-table-column label="科室" prop="departmentName" min-width="150" show-overflow-tooltip />
-        <el-table-column label="职位" prop="jobName" min-width="130" show-overflow-tooltip />
-        <el-table-column label="证书类型" prop="certTypeName" width="130" />
-        <el-table-column label="签发模板" prop="profileNameSnapshot" min-width="150" show-overflow-tooltip />
         <el-table-column label="密码" min-width="150">
           <template #header>
             <span>密码</span>
@@ -100,11 +103,11 @@
                 class="password-toggle"
                 link
                 type="primary"
-                :icon="ledgerPasswords ? 'Hide' : 'View'"
+                :icon="ledgerPasswordsVisible ? 'Hide' : 'View'"
                 :aria-label="passwordToggleLabel"
-                :aria-pressed="ledgerPasswords != null"
+                :aria-pressed="ledgerPasswordsVisible"
                 :loading="ledgerPasswordsLoading"
-                :disabled="!ledgerPasswords && (loading || !rows.some((row) => row.certPassword))"
+                :disabled="!ledgerPasswordsVisible && (loading || !rows.some((row) => row.certPassword))"
                 @click="toggleLedgerPasswords"
               />
             </el-tooltip>
@@ -113,6 +116,11 @@
             <span class="ledger-password">{{ ledgerPasswords?.[String(row.id)] ?? row.certPassword ?? '-' }}</span>
           </template>
         </el-table-column>
+        <el-table-column label="科室" prop="departmentName" min-width="150" show-overflow-tooltip />
+        <el-table-column label="职位" prop="jobName" min-width="130" show-overflow-tooltip />
+        <el-table-column label="证书类型" prop="certTypeName" width="130" />
+        <el-table-column label="签发模板" prop="profileNameSnapshot" min-width="150" show-overflow-tooltip />
+        <el-table-column label="任务号" prop="taskNo" min-width="210" show-overflow-tooltip />
         <el-table-column label="到期时间" prop="notAfter" width="180" align="center">
           <template #default="{ row }">
             <div>{{ formatDate(row.notAfter) }}</div>
@@ -125,7 +133,7 @@
           </template>
         </el-table-column>
         <el-table-column label="邮件" width="96" align="center">
-          <template #default="{ row }"><ChannelStatus :status="row.emailStatus" /></template>
+          <template #default="{ row }"><ChannelStatus :status="row.distributionStatus === 'SENDING' && row.emailStatus === 'UNKNOWN' ? 'SENDING' : row.emailStatus" /></template>
         </el-table-column>
         <el-table-column label="钉钉" width="96" align="center">
           <template #default="{ row }"><ChannelStatus :status="row.dingtalkStatus" :blocked="row.emailStatus === 'FAILED'" /></template>
@@ -140,8 +148,16 @@
               :label="row.distributionStatus === 'SENT' ? '重新分发' : '分发证书'"
               icon="Promotion"
               :disabled="!canDistributeEmployeeCert(row, true)"
-              @click="distribute(row)"
-            />
+              @command="distribute(row, $event)"
+            >
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="BOTH">邮件＋钉钉</el-dropdown-item>
+                  <el-dropdown-item command="EMAIL">仅邮件</el-dropdown-item>
+                  <el-dropdown-item command="DINGTALK">仅钉钉</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </CertRowAction>
             <CertRowAction
               v-if="row.issueStatus === 'ISSUED' && row.raCertId != null"
               v-hasPermi="['ra:employee-cert:distribute']"
@@ -170,6 +186,12 @@
         <el-form inline class="distribution-query" @submit.prevent="searchDistributionRecords()">
           <el-form-item label="任务号">
             <el-input v-model="distributionTaskNo" clearable maxlength="40" placeholder="请输入完整任务号" />
+          </el-form-item>
+          <el-form-item label="任务类型">
+            <el-select v-model="distributionBatchType" clearable placeholder="全部" style="width: 150px">
+              <el-option label="证书分发" value="DISTRIBUTION" />
+              <el-option label="证书上传" value="UPLOAD" />
+            </el-select>
           </el-form-item>
           <el-form-item>
             <el-button type="primary" native-type="submit" icon="Search">搜索</el-button>
@@ -200,17 +222,14 @@
           highlight-current-row
           border
           stripe
-          empty-text="暂无分发批次"
+          :empty-text="appliedDistributionBatchType === 'UPLOAD' ? '暂无证书上传记录，AD 发布接口尚未接入' : '暂无分发批次'"
         >
           <el-table-column label="发送时间" width="170"
             ><template #default="{ row }">{{ formatDate(row.createTime) }}</template></el-table-column
           >
-          <el-table-column label="用途" width="108"
-            ><template #default="{ row }">{{ row.notice ? '业务通知' : '证书分发' }}</template></el-table-column
+          <el-table-column label="任务类型" width="108"
+            ><template #default="{ row }">{{ batchTypeLabel(row) }}</template></el-table-column
           >
-          <el-table-column label="任务号" min-width="190" show-overflow-tooltip>
-            <template #default="{ row }">{{ row.taskNo || (row.taskCount > 1 ? '多个任务' : '-') }}</template>
-          </el-table-column>
           <el-table-column label="批次号" prop="batchNo" min-width="250" show-overflow-tooltip />
           <el-table-column label="记录数" prop="totalCount" width="80" />
           <el-table-column label="成功" prop="successCount" width="70" />
@@ -218,7 +237,7 @@
           <el-table-column label="处理中" width="90"
             ><template #default="{ row }">{{ row.totalCount - row.successCount - row.failedCount }}</template></el-table-column
           >
-          <el-table-column label="操作" width="90" align="center">
+          <el-table-column label="操作" width="90" align="center" fixed="right">
             <template #default="{ row }"><CertRowAction label="查看分发明细" icon="View" @click="selectDistributionBatch(row.batchNo)" /></template>
           </el-table-column>
         </el-table>
@@ -240,7 +259,7 @@
       />
       <el-drawer
         v-model="distributionDetailsOpen"
-        :title="activeDistributionBatch?.notice ? '通知明细' : '分发明细'"
+        :title="activeDistributionBatch?.taskType === 'UPLOAD' ? '上传明细' : activeDistributionBatch?.notice ? '通知明细' : '分发明细'"
         direction="rtl"
         size="min(1200px, 100vw)"
         append-to-body
@@ -257,52 +276,46 @@
               <el-button link type="primary" @click="loadDistributionRecords()">重试</el-button>
             </el-alert>
             <el-descriptions :column="2" border class="mb12">
-              <el-descriptions-item label="任务号">{{
-                activeDistributionBatch.taskNo || (activeDistributionBatch.taskCount > 1 ? '多个任务' : '-')
-              }}</el-descriptions-item>
               <el-descriptions-item label="分发批次">{{ activeDistributionBatch.batchNo }}</el-descriptions-item>
               <template v-if="distributionTaskDetail">
                 <el-descriptions-item label="证书类型">{{ distributionTaskDetail.certTypeName || '-' }}</el-descriptions-item>
                 <el-descriptions-item label="颁发 CA">{{ distributionTaskDetail.rootName || '-' }}</el-descriptions-item>
                 <el-descriptions-item label="签发模板">{{ distributionTaskDetail.profileNameSnapshot || '-' }}</el-descriptions-item>
-                <el-descriptions-item label="分发方案">
+                <el-descriptions-item v-if="activeDistributionBatch.taskType !== 'UPLOAD'" label="分发方案">
                   <span :title="distributionTaskDetail.schemeRevision || undefined">{{ distributionTaskDetail.schemeName || '-' }}</span>
                 </el-descriptions-item>
-                <el-descriptions-item label="有效期">{{
-                  distributionTaskDetail.validityYears ? `${distributionTaskDetail.validityYears} 年` : '按 CA 模板'
-                }}</el-descriptions-item>
               </template>
+              <el-descriptions-item label="任务类型">{{ batchTypeLabel(activeDistributionBatch) }}</el-descriptions-item>
               <el-descriptions-item label="分发时间">{{ formatDate(activeDistributionBatch.createTime) }}</el-descriptions-item>
-              <el-descriptions-item label="分发结果">
+              <el-descriptions-item :label="activeDistributionBatch.taskType === 'UPLOAD' ? '上传结果' : '分发结果'">
                 共 {{ activeDistributionBatch.totalCount }} 人，成功 {{ activeDistributionBatch.successCount }}，失败
                 {{ activeDistributionBatch.failedCount }}，处理中
                 {{ activeDistributionBatch.totalCount - activeDistributionBatch.successCount - activeDistributionBatch.failedCount }}
               </el-descriptions-item>
             </el-descriptions>
             <el-table :data="distributionRecords" row-key="certId" border stripe empty-text="暂无本批明细">
-              <el-table-column v-if="!activeDistributionBatch.taskNo" label="任务号" prop="taskNo" min-width="190" show-overflow-tooltip />
               <el-table-column label="姓名" prop="employeeName" min-width="100" />
               <el-table-column label="域账号" prop="domainAccount" min-width="110" show-overflow-tooltip />
               <el-table-column label="序列号" prop="serialNumber" min-width="170" show-overflow-tooltip />
               <el-table-column label="邮箱" prop="recipientEmail" min-width="180" show-overflow-tooltip />
-              <el-table-column label="分发结果" width="100" align="center">
+              <el-table-column :label="activeDistributionBatch.taskType === 'UPLOAD' ? '上传结果' : '分发结果'" width="100" align="center" sortable :sort-method="(a, b) => a.sendStatus - b.sendStatus" :sort-orders="['descending', 'ascending', null]">
                 <template #default="{ row }"
                   ><el-tag :type="row.sendStatus === 1 ? 'success' : row.sendStatus === 2 ? 'danger' : 'warning'" effect="plain">{{
                     row.sendStatus === 1 ? '成功' : row.sendStatus === 2 ? '失败' : '处理中'
                   }}</el-tag></template
                 >
               </el-table-column>
-              <el-table-column label="邮件状态" width="100" align="center">
+              <el-table-column v-if="activeDistributionBatch.taskType !== 'UPLOAD'" label="邮件状态" width="100" align="center">
                 <template #default="{ row }">
                   <ChannelStatus :status="distributionChannelStatus(row, 'emailStatus')" />
                 </template>
               </el-table-column>
-              <el-table-column label="钉钉状态" width="100" align="center">
+              <el-table-column v-if="activeDistributionBatch.taskType !== 'UPLOAD'" label="钉钉状态" width="100" align="center">
                 <template #default="{ row }">
                   <ChannelStatus :status="distributionChannelStatus(row, 'dingtalkStatus')" :blocked="row.messageType === 'TEXT'" />
                 </template>
               </el-table-column>
-              <el-table-column label="AD 公钥发布" min-width="110">未接入</el-table-column>
+              <el-table-column v-if="activeDistributionBatch.taskType === 'UPLOAD'" label="AD 公钥发布" min-width="110">未接入</el-table-column>
               <el-table-column label="失败原因" prop="errorMessage" min-width="190" show-overflow-tooltip />
               <el-table-column label="日志" width="80" align="center"
                 ><template #default="{ row }"><CertRowAction label="查看分发日志" icon="View" @click="openDetail({ id: row.certId })" /></template
@@ -316,6 +329,7 @@
       </el-drawer>
     </template>
 
+    <RaCertDetailDialog ref="ledgerCertificateDetail" :load-detail="getEmployeeLedgerCertificate" />
     <DistributionDialog ref="distributionDialog" @submitted="onDistributionSubmitted" />
     <el-dialog
       v-model="batchDownloadOpen"
@@ -370,9 +384,9 @@
           >{{ formatDate(detail.cert?.notBefore) }} 至 {{ formatDate(detail.cert?.notAfter) }}</el-descriptions-item
         >
         <el-descriptions-item label="分发状态">{{ detail.cert?.distributionStatusName || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="邮件"><ChannelStatus :status="detail.cert?.emailStatus" /></el-descriptions-item>
+        <el-descriptions-item label="邮件"><ChannelStatus :status="detail.cert?.emailStatus" success-label="成功" /></el-descriptions-item>
         <el-descriptions-item label="钉钉">
-          <ChannelStatus :status="detail.cert?.dingtalkStatus" :blocked="detail.cert?.emailStatus === 'FAILED'" />
+          <ChannelStatus :status="detail.cert?.dingtalkStatus" :blocked="detail.cert?.emailStatus === 'FAILED'" success-label="成功" />
         </el-descriptions-item>
         <el-descriptions-item label="分发说明">{{ detail.cert?.distributionMessage || '-' }}</el-descriptions-item>
       </el-descriptions>
@@ -380,10 +394,10 @@
       <el-table :data="detail.logs || []" border stripe empty-text="暂无分发日志">
         <el-table-column label="渠道" width="120">
           <template #default="{ row }">{{
-            row.channel === 'EMAIL_TEXT' ? '邮件通知' : row.channel === 'DINGTALK_NOTICE' ? '钉钉通知' : row.channel
+            channelName(row.channel)
           }}</template>
         </el-table-column>
-        <el-table-column label="状态" prop="status" width="100" />
+        <el-table-column label="状态" width="100"><template #default="{ row }"><ChannelStatus :status="row.status" success-label="成功" /></template></el-table-column>
         <el-table-column label="日志编号" prop="id" min-width="130" show-overflow-tooltip />
         <el-table-column label="网关追踪 ID" min-width="150" show-overflow-tooltip>
           <template #default="{ row }">{{ row.gatewayTraceId || '-' }}</template>
@@ -445,8 +459,12 @@
             <el-tag :type="row.enabled ? 'success' : 'info'">{{ row.enabled ? '已启用' : '已停用' }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="74" align="center">
-          <template #default="{ row }"><CertRowAction label="编辑模板" icon="Edit" @click="row.builtin ? bindGeneralScheme() : editScheme(row.scheme)" /></template>
+        <el-table-column label="操作" width="94" align="center">
+          <template #default="{ row }">
+            <CertRowAction label="编辑模板" icon="Edit" :disabled="Boolean(deletingSchemeId)" @click="row.builtin ? bindGeneralScheme() : editScheme(row.scheme)" />
+            <CertRowAction v-if="row.scheme?.id" label="删除模板" icon="Delete" type="danger"
+              :loading="deletingSchemeId === row.scheme.id" :disabled="Boolean(deletingSchemeId)" @click="removeScheme(row.scheme)" />
+          </template>
         </el-table-column>
       </el-table>
     </el-dialog>
@@ -454,16 +472,23 @@
     <el-dialog v-model="schemeOpen" :title="schemeForm.id ? '编辑方案' : '新增方案'" width="min(740px, 96vw)" append-to-body>
       <el-form :model="schemeForm" label-width="90px">
         <el-form-item label="模板名称" required><el-input v-model.trim="schemeForm.name" maxlength="100" /></el-form-item>
-        <el-form-item label="证书模板" required>
-          <el-select v-model="schemeForm.profileId" filterable placeholder="请选择未绑定的证书模板" style="width: 100%">
+        <el-form-item label="证书模板" :required="mixedScheme">
+          <el-select v-model="schemeForm.profileId" filterable :clearable="!mixedScheme"
+            :placeholder="mixedScheme ? '请选择未绑定的证书模板' : '可选，留空适用于所有证书模板'" style="width: 100%">
             <el-option v-for="profile in availableDistributionProfiles" :key="profile.id" :value="String(profile.id)" :label="profile.name" />
           </el-select>
         </el-form-item>
         <el-form-item label="启用"><el-switch v-model="schemeForm.enabled" /></el-form-item>
         <el-divider content-position="left">邮件模板</el-divider>
+        <el-form-item label="消息类型">
+          <el-select v-model="schemeForm.email.type" style="width: 215px">
+            <el-option label="MIXED（HTML 和附件）" value="MIXED" />
+            <el-option label="TEXT（纯文本）" value="TEXT" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="邮件标题" required><el-input v-model="schemeForm.email.title" /></el-form-item>
         <el-form-item label="邮件正文" required><el-input v-model="schemeForm.email.body" type="textarea" :rows="5" /></el-form-item>
-        <el-form-item label="邮件附件">
+        <el-form-item v-if="mixedScheme" label="邮件附件">
           <div class="el-upload__tip">证书包会自动随邮件发送，这里只配置可选的附加文件。</div>
           <el-upload v-model:file-list="schemeNewFiles" :auto-upload="false" multiple accept=".pdf,.docx,.xlsx,.ppt,.pptx,.txt,.png,.jpg,.jpeg,.zip,.rar">
             <el-button icon="Upload">上传附件</el-button>
@@ -482,33 +507,36 @@
             <code>${serialNumber}</code> 证书序列号 · <code>${departmentName}</code> 部门 · <code>${jobName}</code> 岗位 ·
             <code>${certTypeName}</code> 证书类型 · <code>${notBefore}</code> 生效时间 · <code>${notAfter}</code> 到期时间
           </p>
-          <p class="template-help-example">
+          <p v-if="mixedScheme" class="template-help-example">
             示例：<code
               >&lt;p&gt;您好，${employeeName}：&lt;br&gt;您的${certTypeName}已签发，序列号 ${serialNumber}，有效期至 ${notAfter}。&lt;/p&gt;</code
             >
           </p>
-          <p class="template-help-note">邮件正文按 HTML 发送，换行请用 &lt;br&gt;；不能包含 ${password}，证书密码只通过钉钉发送。</p>
+          <p v-if="mixedScheme" class="template-help-note">邮件正文按 HTML 发送，换行可用 &lt;br&gt;。邮件正文禁止使用 ${password}，证书密码通过钉钉发送。</p>
+          <p v-else class="template-help-note">纯文本模板用于通知，按原文换行。证书包和模板附件仅随 MIXED 邮件发送。</p>
         </div>
-        <el-divider content-position="left">钉钉模板</el-divider>
-        <el-form-item label="消息类型">
-          <el-select v-model="schemeForm.dingtalk.type" style="width: 215px">
-            <el-option label="Markdown" value="markdown" />
-            <el-option label="纯文本" value="text" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="钉钉标题" required><el-input v-model="schemeForm.dingtalk.title" /></el-form-item>
-        <el-form-item label="钉钉正文" required><el-input v-model="schemeForm.dingtalk.body" type="textarea" :rows="5" /></el-form-item>
-        <div class="template-help">
-          <p class="template-help-title">钉钉正文可用变量</p>
-          <p>与邮件相同，另可用 <code>${password}</code> 证书密码。</p>
-          <p class="template-help-example">
-            示例：<code>${employeeName} 的${certTypeName}已签发。序列号：${serialNumber}；到期：${notAfter}；证书密码：${password}</code>
-          </p>
-          <p class="template-help-note">
-            自定义方案不强制包含 ${password}；如需随钉钉下发证书密码，请在正文中加入 ${password}。纯文本消息渲染后不能超过 500 字符。旧模板兼容
-            {domain_account}、{redomain_account}、{remail}、{password} 写法。
-          </p>
-        </div>
+        <template v-if="mixedScheme">
+          <el-divider content-position="left">钉钉模板</el-divider>
+          <el-form-item label="消息类型">
+            <el-select v-model="schemeForm.dingtalk.type" style="width: 215px">
+              <el-option label="Markdown" value="markdown" />
+              <el-option label="纯文本" value="text" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="钉钉标题" required><el-input v-model="schemeForm.dingtalk.title" /></el-form-item>
+          <el-form-item label="钉钉正文" required><el-input v-model="schemeForm.dingtalk.body" type="textarea" :rows="5" /></el-form-item>
+          <div class="template-help">
+            <p class="template-help-title">钉钉正文可用变量</p>
+            <p>与邮件相同，另可用 <code>${password}</code> 证书密码。</p>
+            <p class="template-help-example">
+              示例：<code>${employeeName} 的${certTypeName}已签发。序列号：${serialNumber}；到期：${notAfter}；证书密码：${password}</code>
+            </p>
+            <p class="template-help-note">
+              自定义方案不强制包含 ${password}；如需随钉钉下发证书密码，请在正文中加入 ${password}。纯文本消息渲染后不能超过 500 字符。旧模板兼容
+              {domain_account}、{redomain_account}、{remail}、{password} 写法。
+            </p>
+          </div>
+        </template>
       </el-form>
       <template #footer>
         <el-button :disabled="schemeSaving" @click="schemeOpen = false">取消</el-button>
@@ -581,12 +609,14 @@
 <script setup name="RaEmployeeCert" lang="ts">
 import { formatCertificateSubject, formatCertificateSubjectColumn } from '@/utils/raCertificateSubject';
 import CertRowAction from '../components/CertRowAction.vue';
+import RaCertDetailDialog from '../components/RaCertDetailDialog.vue';
 import { computed, ref, reactive, watch, onActivated, onDeactivated, onMounted, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { employeeCertLedgerPath } from '@/utils/fawvwEmployeeNavigation';
 import FileSaver from 'file-saver';
 import { certificateDownloadBlob } from '@/utils/raCertificateDownload';
 import auth from '@/plugins/auth';
+import { useUserStore } from '@/store/modules/user';
 import type { RaCertFilterOption } from '@/api/ra/cert';
 import ChannelStatus from './ChannelStatus.vue';
 import DistributionDialog from './DistributionDialog.vue';
@@ -598,6 +628,7 @@ import {
   type EmployeeCertDetail,
   type EmployeeCertStatus,
   EmployeeDistributionBatch,
+  type EmployeeDistributionBatchType,
   EmployeeDistributionBatchItem,
   type EmployeeDistributionSelection,
   type EmployeeMailType,
@@ -606,16 +637,20 @@ import {
   type EmployeeDistributionScheme,
   listEmployeeDistributionSchemes,
   saveEmployeeDistributionScheme,
+  deleteEmployeeDistributionScheme,
   downloadEmployeeCertPackage,
   downloadSelectedEmployeeCerts,
   type EmployeeCertDownloadFormat,
   getEmployeeCertDistributionConfig,
   getEmployeeCert,
+  exportEmployeeCertLedger,
+  getEmployeeLedgerCertificate,
   getEmployeeDistributionBatch,
   pageEmployeeDistributionBatches,
   listEmployeeCertTemplates,
   listEmployeeCertLedgerProfiles,
   getEmployeeCertPasswords,
+  removeEmployeeCertLedgerEntries,
   pageEmployeeCerts,
   saveEmployeeCertDistributionConfig,
   testEmployeeCertDistributionConfig,
@@ -625,17 +660,26 @@ import {
 const route = useRoute();
 const router = useRouter();
 const loading = ref(false);
+const exportingLedger = ref(false);
+const deletingLedger = ref(false);
+const ledgerCertificateDetail = ref<InstanceType<typeof RaCertDetailDialog>>();
 const managementTab = ref<'ledger' | 'distribution' | 'legacy'>('ledger');
 const canManageLegacy = computed(() => auth.hasPermi('ra:employee-cert') && auth.hasPermiOr(['ra:admin', 'ra:employee-cert:issue']));
 const showSearch = ref(true);
 const rows = ref<EmployeeCert[]>([]);
 const selectedRows = ref<EmployeeCert[]>([]);
 const adUploadSelectionReady = computed(() => selectedRows.value.length > 0 && selectedRows.value.every((row) => row.adUploadEligible === true));
-const distributableRows = computed(() => selectedRows.value.filter((row) => canDistributeEmployeeCert(row)));
+const distributableRows = computed(() => selectedRows.value.filter((row) => canDistributeEmployeeCert(row, true)));
 const canDistribute = computed(() => auth.hasPermi('ra:employee-cert:distribute'));
 const ledgerPasswords = ref<Record<string, string>>();
 const ledgerPasswordsLoading = ref(false);
-const passwordToggleLabel = computed(() => (ledgerPasswords.value ? '隐藏当前页密码' : '显示当前页密码'));
+const ledgerPasswordsVisible = ref(false);
+const passwordToggleLabel = computed(() => (ledgerPasswordsVisible.value ? '隐藏当前页密码' : '显示当前页密码'));
+const userStore = useUserStore();
+const passwordPreferenceKey = computed(() => {
+  const userId = String(userStore.userId ?? '');
+  return userId ? `ra.employee-cert.show-passwords.${userStore.tenantId}.${userId}` : '';
+});
 let ledgerPasswordRequest = 0;
 const total = ref(0);
 const queryParams = reactive({
@@ -656,7 +700,8 @@ const certificateStatuses = [
   { value: 'VALID', label: '有效' },
   { value: 'EXPIRED', label: '已过期' },
   { value: 'EXPIRING', label: '即将过期' },
-  { value: 'REVOKED', label: '已注销' }
+  { value: 'REVOKED', label: '已注销' },
+  { value: 'ARCHIVED', label: '已归档' }
 ] as const;
 
 function certificateStatusLabel(row: EmployeeCert) {
@@ -681,6 +726,7 @@ const passwordDraft = ref('');
 const templateOpen = ref(false);
 const schemeOpen = ref(false);
 const schemeSaving = ref(false);
+const deletingSchemeId = ref('');
 const distributionSchemes = ref<EmployeeDistributionScheme[]>([]);
 const distributionProfiles = ref<RaCertFilterOption[]>([]);
 const schemeNewFiles = ref<import('element-plus').UploadUserFile[]>([]);
@@ -693,15 +739,17 @@ const blankScheme = (): EmployeeDistributionScheme => ({
   dingtalk: { type: 'markdown', title: '', body: '' }
 });
 const schemeForm = ref<EmployeeDistributionScheme>(blankScheme());
+const mixedScheme = computed(() => schemeForm.value.email.type === 'MIXED');
 const availableDistributionProfiles = computed(() => distributionProfiles.value.filter(profile =>
-  !distributionSchemes.value.some(scheme => scheme.id !== schemeForm.value.id && scheme.email.type === 'MIXED' && scheme.profileId === String(profile.id))
+  !mixedScheme.value || !distributionSchemes.value.some(scheme =>
+    scheme.id !== schemeForm.value.id && scheme.email.type === 'MIXED' && scheme.profileId === String(profile.id))
 ));
 const templateLoading = ref(false);
 const templates = ref<EmployeeCertTemplate[]>([]);
 const generalEmail = computed(() => templates.value.find((row) => row.templateCode === 'EMP_CERT_EMAIL'));
 const generalDing = computed(() => templates.value.find((row) => row.templateCode === 'EMP_CERT_DINGTALK'));
 const templateRows = computed(() => {
-  const custom = distributionSchemes.value.filter((scheme) => scheme.email.type === 'MIXED');
+  const custom = distributionSchemes.value;
   const generalEnabled = !!generalEmail.value?.enabled && generalEmail.value.messageType !== 'TEXT' && !!generalDing.value?.enabled;
   return [
     ...(!custom.some(scheme => scheme.id === 'GENERAL') ? [{
@@ -747,6 +795,8 @@ const distributionTotal = ref(0);
 const distributionPage = reactive({ pageNum: 1, pageSize: 10 });
 const distributionDetailsOpen = ref(false);
 const distributionTaskNo = ref('');
+const distributionBatchType = ref<EmployeeDistributionBatchType | ''>('');
+const appliedDistributionBatchType = ref<EmployeeDistributionBatchType | ''>('');
 const appliedDistributionTaskNo = ref('');
 const requestedDistributionBatchNo = ref('');
 const distributionReadFailures = ref(0);
@@ -822,8 +872,10 @@ async function loadList() {
       })
     );
     if (request !== listRequest || pageDisposed) return;
+    clearLedgerPasswords();
     rows.value = page?.rows || page?.records || [];
     total.value = Number(page?.total || 0);
+    await revealLedgerPasswords();
     if (rows.value.some((row) => row.distributionStatus === 'SENDING')) watchDistribution();
   } finally {
     if (request === listRequest) loading.value = false;
@@ -843,7 +895,7 @@ function certFilters() {
 }
 
 function handleQuery() {
-  hideLedgerPasswords();
+  clearLedgerPasswords();
   appliedFilters.value = certFilters();
   total.value = 0;
   rows.value = [];
@@ -852,18 +904,31 @@ function handleQuery() {
   return loadList();
 }
 
-function hideLedgerPasswords() {
+function clearLedgerPasswords() {
   ledgerPasswordRequest++;
   ledgerPasswords.value = undefined;
   ledgerPasswordsLoading.value = false;
 }
 
 async function toggleLedgerPasswords() {
-  if (ledgerPasswords.value) {
-    hideLedgerPasswords();
-    return;
+  if (!canDistribute.value) return;
+  ledgerPasswordsVisible.value = !ledgerPasswordsVisible.value;
+  try {
+    const key = passwordPreferenceKey.value;
+    if (key) {
+      if (ledgerPasswordsVisible.value) sessionStorage.setItem(key, '1');
+      else sessionStorage.removeItem(key);
+    }
+  } catch {
+    // The current page can still toggle disclosure when browser storage is unavailable.
   }
-  if (!canDistribute.value || ledgerPasswordsLoading.value || loading.value) return;
+  if (!ledgerPasswordsVisible.value) clearLedgerPasswords();
+  else await revealLedgerPasswords();
+}
+
+async function revealLedgerPasswords() {
+  if (!canDistribute.value || !ledgerPasswordsVisible.value || ledgerPasswordsLoading.value
+    || managementTab.value !== 'ledger' || !pageActive || pageDisposed) return;
   const ids = rows.value.filter((row) => row.certPassword).map((row) => row.id);
   if (!ids.length) return;
   const request = ++ledgerPasswordRequest;
@@ -924,7 +989,7 @@ async function saveCertificatePassword() {
     const password = passwordDraft.value;
     await updateEmployeeCertPassword(cert.id, password);
     if (pageDisposed) return;
-    hideLedgerPasswords();
+    clearLedgerPasswords();
     if (detail.value.cert?.id === cert.id) detail.value.cert.certPassword = password;
     passwordOpen.value = false;
     ElMessage.success('证书密码已更新');
@@ -953,13 +1018,17 @@ function distributeSelected() {
   const ids = targets.map((row) => row.id);
   const taskNo = targets[0].taskNo;
   const commonTaskNo = targets.every((row) => row.taskNo === taskNo) ? taskNo : undefined;
-  distributionDialog.value?.open({ ids }, `所选 ${ids.length} 张证书对应的员工`, commonTaskNo);
+  distributionDialog.value?.open({ ids, freshBatch: true }, `所选 ${ids.length} 张证书对应的员工`, commonTaskNo);
 }
 
-function distribute(row: EmployeeCert) {
-  if (!canDistributeEmployeeCert(row, true)) return;
-  const resend = row.distributionStatus === 'SENT';
-  distributionDialog.value?.open({ ids: [row.id], resend }, `${row.employeeName}（${row.domainAccount}）${resend ? '，重新发送' : ''}`, row.taskNo);
+function distribute(row: EmployeeCert, channel: string) {
+  if (!canDistribute.value || !canDistributeEmployeeCert(row, true)) return;
+  const ids = [row.id];
+  const target = `${row.employeeName}（${row.domainAccount}）`;
+  if (channel === 'BOTH') distributionDialog.value?.open({ ids, freshBatch: true }, target, row.taskNo);
+  else if (channel === 'EMAIL' || channel === 'DINGTALK') {
+    distributionDialog.value?.open({ ids, certificateChannel: channel }, target, row.taskNo);
+  }
 }
 
 async function downloadPackage(row: EmployeeCert) {
@@ -1013,10 +1082,15 @@ async function downloadSelected() {
 function distributionChannelStatus(row: EmployeeDistributionBatchItem, channel: 'emailStatus' | 'dingtalkStatus') {
   if (channel === 'dingtalkStatus' && row.messageType === 'TEXT') return 'NOT_APPLICABLE';
   const status = row[channel];
-  if (status === 'NOT_APPLICABLE') return status;
+  if (status === 'NOT_APPLICABLE' || status === 'NOT_SENT') return status;
+  if (row.sendStatus === 0 && row.messageType === 'MIXED' && !status) return 'SENDING';
   if (row.messageType === 'NOTICE' && row.sendStatus !== 0 && status === 'PENDING') return 'NOT_SENT';
   if (row.sendStatus !== 0 && status !== 'SENT' && status !== 'FAILED') return 'UNKNOWN';
   return status;
+}
+
+function batchTypeLabel(batch: EmployeeDistributionBatch) {
+  return batch.taskType === 'UPLOAD' ? '证书上传' : batch.notice ? '业务通知' : '证书分发';
 }
 
 function summarizeDistributionBatch(batchNo: string, records: EmployeeDistributionBatchItem[]): EmployeeDistributionBatch | undefined {
@@ -1038,11 +1112,12 @@ async function loadDistributionRecords(retry = false) {
   const request = ++distributionRecordsRequest;
   const taskNo = appliedDistributionTaskNo.value;
   const requestedBatchNo = requestedDistributionBatchNo.value;
+  const batchType = appliedDistributionBatchType.value;
   if (!retry) distributionReadFailures.value = 0;
   distributionRecordsLoading.value = true;
   try {
     const [response, requestedDetails] = await Promise.all([
-      pageEmployeeDistributionBatches({ ...distributionPage, taskNo: taskNo || undefined }),
+      pageEmployeeDistributionBatches({ ...distributionPage, taskNo: taskNo || undefined, batchType: batchType || undefined }),
       requestedBatchNo ? getEmployeeDistributionBatch(requestedBatchNo) : undefined
     ]);
     if (request !== distributionRecordsRequest || pageDisposed) return;
@@ -1053,7 +1128,8 @@ async function loadDistributionRecords(retry = false) {
     const batch = requestedBatchNo ? undefined : batches.find((row) => row.batchNo === activeDistributionBatchNo.value) || batches[0];
     const details = batch ? await getEmployeeDistributionBatch(batch.batchNo) : requestedDetails;
     if (request !== distributionRecordsRequest || pageDisposed) return;
-    const records = details ? unwrapData<EmployeeDistributionBatchItem[]>(details) || [] : [];
+    const loaded = details ? unwrapData<EmployeeDistributionBatchItem[]>(details) || [] : [];
+    const records = batchType === 'UPLOAD' || (batchType === 'DISTRIBUTION' && loaded[0]?.messageType === 'NOTICE') ? [] : loaded;
     distributionRecords.value = taskNo ? records.filter((row) => row.taskNo?.toLowerCase() === taskNo.toLowerCase()) : records;
     activeDistributionBatch.value = requestedBatchNo ? summarizeDistributionBatch(requestedBatchNo, distributionRecords.value) : batch;
     distributionReadFailures.value = 0;
@@ -1074,7 +1150,8 @@ function updateManagementRoute(tab: 'ledger' | 'distribution', taskNo: string, b
   if (route.path.replace(/\/$/, '') !== employeeCertLedgerPath) return;
   return router.replace({
     path: route.path,
-    query: { ...route.query, tab: tab === 'distribution' ? tab : undefined, taskNo: taskNo || undefined, batchNo: batchNo || undefined }
+    query: { ...route.query, tab: tab === 'distribution' ? tab : undefined, taskNo: taskNo || undefined, batchNo: batchNo || undefined,
+      batchType: tab === 'distribution' ? appliedDistributionBatchType.value || undefined : undefined }
   });
 }
 
@@ -1089,6 +1166,7 @@ async function selectDistributionBatch(batchNo: string) {
 function searchDistributionRecords(batchNo = '', updateRoute = true) {
   distributionDetailsOpen.value = false;
   appliedDistributionTaskNo.value = distributionTaskNo.value.trim();
+  appliedDistributionBatchType.value = distributionBatchType.value;
   distributionPage.pageNum = 1;
   requestedDistributionBatchNo.value = batchNo;
   activeDistributionBatch.value = undefined;
@@ -1101,6 +1179,7 @@ function searchDistributionRecords(batchNo = '', updateRoute = true) {
 
 function resetDistributionQuery() {
   distributionTaskNo.value = '';
+  distributionBatchType.value = '';
   return searchDistributionRecords();
 }
 
@@ -1111,6 +1190,7 @@ function onDistributionSubmitted(
   taskNo = selection.taskNo
 ) {
   distributionTaskNo.value = taskNo || '';
+  distributionBatchType.value = '';
   managementTab.value = 'distribution';
   return searchDistributionRecords(batchNo);
 }
@@ -1141,12 +1221,15 @@ function applyManagementRoute() {
   if (route.query.tab === 'distribution') {
     const batch = route.query.batchNo;
     const batchNo = typeof batch === 'string' && /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(batch) ? batch.toLowerCase() : '';
-    if (managementTab.value === 'distribution' && appliedDistributionTaskNo.value === taskNo && requestedDistributionBatchNo.value === batchNo)
-      return false;
+    const type = route.query.batchType;
+    const batchType = type === 'DISTRIBUTION' || type === 'UPLOAD' ? type : '';
+    if (managementTab.value === 'distribution' && appliedDistributionTaskNo.value === taskNo
+      && requestedDistributionBatchNo.value === batchNo && appliedDistributionBatchType.value === batchType) return false;
     stopDistributionPolling();
     managementTab.value = 'distribution';
     detailOpen.value = false;
     distributionTaskNo.value = taskNo;
+    distributionBatchType.value = batchType;
     void searchDistributionRecords(batchNo, false);
     return true;
   }
@@ -1169,29 +1252,42 @@ function refreshCurrentTab() {
   if (managementTab.value === 'ledger') return loadList();
 }
 
-function handleExport() {
-  const header = ['序列号', '主题', '姓名', '域账号', '科室', '职位', '证书类型', '生效时间', '到期时间', '分发状态', '签发模板'];
-  const lines = rows.value.map((row) =>
-    [
-      row.serialNumber,
-      formatCertificateSubject(row.subject),
-      row.employeeName,
-      row.domainAccount,
-      row.departmentName,
-      row.jobName,
-      row.certTypeName,
-      formatDate(row.notBefore),
-      formatDate(row.notAfter),
-      row.distributionStatusName,
-      row.profileNameSnapshot
-    ]
-      .map(csvCell)
-      .join(',')
-  );
-  FileSaver.saveAs(
-    new Blob(['\uFEFF' + [header.join(','), ...lines].join('\n')], { type: 'text/csv;charset=utf-8' }),
-    `fawvw_employee_certs_${Date.now()}.csv`
-  );
+async function removeLedger() {
+  if (!canDistribute.value || deletingLedger.value || !selectedRows.value.length) return;
+  const ids = selectedRows.value.map(row => row.id);
+  deletingLedger.value = true;
+  try {
+    const confirmed = await ElMessageBox.confirm(`确认删除选中的 ${ids.length} 条台账记录？`, '批量删除', {
+      type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消'
+    }).then(() => true, () => false);
+    if (!confirmed) return;
+    await removeEmployeeCertLedgerEntries(ids);
+    selectedRows.value = [];
+    ElMessage.success('台账记录已删除');
+    await loadList();
+  } finally {
+    deletingLedger.value = false;
+  }
+}
+
+function openLedgerCertificate(row: EmployeeCert) {
+  ledgerCertificateDetail.value?.open({ id: row.id, serialNumber: row.serialNumber, subject: row.subject });
+}
+
+async function handleExport() {
+  if (!canDistribute.value || exportingLedger.value) return;
+  exportingLedger.value = true;
+  try {
+    const blob = await certificateDownloadBlob(
+      await exportEmployeeCertLedger({ ...appliedFilters.value }),
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'RA_EMPLOYEE_CERT_'
+    );
+    FileSaver.saveAs(blob, `fawvw_employee_certs_${Date.now()}.xlsx`);
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '导出台账失败');
+  } finally {
+    exportingLedger.value = false;
+  }
 }
 
 async function openTemplates() {
@@ -1228,7 +1324,8 @@ function bindGeneralScheme() {
   const initial = blankScheme();
   editScheme({
     ...initial, id: 'GENERAL', name: '证书分发模板',
-    email: { ...initial.email, title: generalEmail.value?.title || '', body: generalEmail.value?.content || '' },
+    email: { ...initial.email, type: generalEmail.value?.messageType === 'TEXT' ? 'TEXT' : 'MIXED',
+      title: generalEmail.value?.title || '', body: generalEmail.value?.content || '' },
     dingtalk: { ...initial.dingtalk, title: generalDing.value?.title || '', body: generalDing.value?.content || '' }
   });
 }
@@ -1237,11 +1334,12 @@ async function saveScheme() {
   if (schemeSaving.value) return;
   schemeSaving.value = true;
   try {
-    if (!schemeForm.value.profileId) {
+    if (mixedScheme.value && !schemeForm.value.profileId) {
       ElMessage.warning('请选择要绑定的证书模板');
       return;
     }
-    await saveEmployeeDistributionScheme(schemeForm.value, schemeNewFiles.value.flatMap(file => file.raw ? [file.raw] : []));
+    const files = mixedScheme.value ? schemeNewFiles.value.flatMap(file => file.raw ? [file.raw] : []) : [];
+    await saveEmployeeDistributionScheme(schemeForm.value, files);
     schemeOpen.value = false;
     ElMessage.success('分发方案已保存');
     await openTemplates();
@@ -1250,6 +1348,24 @@ async function saveScheme() {
   }
 }
 
+
+async function removeScheme(scheme: EmployeeDistributionScheme) {
+  const id = scheme.id;
+  if (!id || deletingSchemeId.value) return;
+  deletingSchemeId.value = id;
+  try {
+    const warning = scheme.email.type === 'MIXED' && scheme.profileId && scheme.profileId !== '0'
+      ? ' 删除后，对应证书模板需重新绑定分发模板才能发送证书。' : '';
+    const confirmed = await ElMessageBox.confirm(`确定删除分发模板「${scheme.name}」？${warning}`, '删除分发模板',
+      { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' }).then(() => true, () => false);
+    if (!confirmed) return;
+    await deleteEmployeeDistributionScheme(id, scheme.revision);
+    ElMessage.success('分发模板已删除');
+    await openTemplates();
+  } finally {
+    deletingSchemeId.value = '';
+  }
+}
 
 async function openDistributionConfig() {
   const config = unwrapData<EmployeeCertDistributionConfig>(await getEmployeeCertDistributionConfig());
@@ -1330,6 +1446,13 @@ async function saveDistributionConfig() {
   }
 }
 
+function channelName(channel?: string) {
+  const value = (channel || '').toUpperCase();
+  if (value.startsWith('EMAIL')) return '邮件';
+  if (value.startsWith('DINGTALK')) return '钉钉';
+  return channel || '-';
+}
+
 function distributionTag(status?: string) {
   const map: Record<string, 'success' | 'warning' | 'danger' | 'info'> = {
     SENT: 'success',
@@ -1338,11 +1461,6 @@ function distributionTag(status?: string) {
     FAILED: 'danger'
   };
   return map[status || ''] || 'info';
-}
-
-function csvCell(value: any) {
-  const text = String(value ?? '');
-  return `"${text.replace(/"/g, '""')}"`;
 }
 
 function formatDate(value?: string) {
@@ -1354,10 +1472,19 @@ onMounted(() => {
   if (!applyManagementRoute()) void loadList();
   void loadLedgerProfiles();
 });
-watch([() => route.path, () => route.query.taskNo, () => route.query.taskEntry, () => route.query.tab, () => route.query.batchNo], () => {
+watch([() => route.path, () => route.query.taskNo, () => route.query.taskEntry, () => route.query.tab, () => route.query.batchNo, () => route.query.batchType], () => {
   if (pageActive) applyManagementRoute();
 });
-watch([managementTab, () => queryParams.pageNum, () => queryParams.pageSize, canDistribute], hideLedgerPasswords, { flush: 'sync' });
+watch([managementTab, () => queryParams.pageNum, () => queryParams.pageSize], clearLedgerPasswords, { flush: 'sync' });
+watch([passwordPreferenceKey, canDistribute], ([key, allowed]) => {
+  clearLedgerPasswords();
+  ledgerPasswordsVisible.value = false;
+  try {
+    ledgerPasswordsVisible.value = Boolean(key && allowed && sessionStorage.getItem(key) === '1');
+  } catch {
+    // Browser storage can be unavailable.
+  }
+}, { immediate: true, flush: 'sync' });
 onActivated(() => {
   if (pageActive) return;
   pageActive = true;
@@ -1367,16 +1494,41 @@ onDeactivated(() => {
   pageActive = false;
   distributionDetailsOpen.value = false;
   stopDistributionPolling();
-  hideLedgerPasswords();
+  clearLedgerPasswords();
 });
 onUnmounted(() => {
-  hideLedgerPasswords();
+  clearLedgerPasswords();
   pageDisposed = true;
   stopDistributionPolling();
 });
 </script>
 
 <style scoped>
+.management-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 15px;
+}
+
+.management-tabs {
+  flex: 1;
+  min-width: 0;
+}
+
+.management-tabs :deep(.el-tabs__header) {
+  margin-bottom: 0;
+}
+
+.management-actions {
+  display: flex;
+  flex-shrink: 0;
+}
+
+.management-actions:empty {
+  display: none;
+}
+
 .distribution-test-row {
   display: grid;
   width: 100%;

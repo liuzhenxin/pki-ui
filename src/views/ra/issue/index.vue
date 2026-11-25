@@ -8,7 +8,7 @@
           </el-select>
         </el-form-item>
         <el-form-item label="关键字" prop="keyword">
-          <el-input v-model="queryParams.keyword" clearable placeholder="用户、部门、序列号或主题" class="keyword-input" @keyup.enter="handleQuery" />
+          <el-input v-model="queryParams.keyword" clearable placeholder="序列号、主题或证书模版" class="keyword-input" @keyup.enter="handleQuery" />
         </el-form-item>
         <el-form-item label="用户信息" prop="userInfo">
           <el-input v-model="queryParams.userInfo" clearable placeholder="用户名、域账号或部门" class="keyword-input" @keyup.enter="handleQuery" />
@@ -171,7 +171,7 @@
                     @change="applyDefaultIssueDuration()"
                   />
                 </el-form-item>
-                <el-form-item label="有效期" :error="issueValidityPreview.error">
+                <el-form-item label="有效期" class="issue-validity-field" :error="issueValidityPreview.error">
                   <div class="issue-validity-input">
                     <el-input-number v-model="issueForm.validityAmount" :min="1" :controls="false" placeholder="按模板默认" @change="customIssueDuration = true" />
                     <el-select v-model="issueForm.validityUnit" aria-label="有效期单位" @change="customIssueDuration = true">
@@ -179,7 +179,7 @@
                     </el-select>
                   </div>
                 </el-form-item>
-                <el-form-item label="模板有效期上限" class="issue-validity-limit">
+                <el-form-item label="模版上限" class="issue-validity-limit">
                   <span>{{ issueValidityLimits.map(formatProfileValidity).join(' / ') }}</span>
                 </el-form-item>
                 <el-form-item v-if="current.issuerNotAfter" label="签发 CA 到期">
@@ -241,7 +241,7 @@
                 <div class="section-subtitle">证书主题</div>
                 <template v-if="issueForm.issueType !== 'csr'">
                   <div v-if="issueForm.subjectItems.length > 0" class="subject-scroll-area">
-                    <CertSubject v-model="issueForm.subjectItems" propPrefix="subjectItems" :file-issuance="issueForm.issueType === 'file'" />
+                    <CertSubject v-model="issueForm.subjectItems" propPrefix="subjectItems" />
                   </div>
                   <el-form-item v-else label="证书主题" prop="subject">
                     <el-input v-model="issueForm.subject" clearable placeholder="请输入证书主题，例如：CN=user,O=org,C=CN" />
@@ -263,7 +263,7 @@
                     </div>
                     <template v-if="ext.kind === 'subjectAlternativeName'">
                       <div v-for="(name, nameIndex) in ext.names" :key="`${ext.key}-${nameIndex}`" class="san-row">
-                        <el-select v-model="name.type" placeholder="类型" style="width: 130px">
+                        <el-select v-model="name.type" placeholder="类型" class="san-type-select">
                           <el-option v-for="mode in ext.modes" :key="mode" :label="getSanModeLabel(mode)" :value="mode" />
                         </el-select>
                         <el-input v-model="name.value" :placeholder="getSanPlaceholder(name.type)" />
@@ -1969,9 +1969,9 @@ async function copyCert(cert?: string) {
 
 const resultDownloadFormats: { format: IssuedCertificateFormat; label: string }[] = [
   { format: 'pem', label: 'PEM 证书' },
-  { format: 'cer', label: 'CER 证书（DER）' },
+  { format: 'cer', label: 'CER 证书' },
   { format: 'der', label: 'DER 证书' },
-  { format: 'crt', label: 'CRT 证书（PEM）' },
+  { format: 'crt', label: 'CRT 证书' },
   { format: 'p7b', label: 'P7B 证书包' }
 ];
 
@@ -2066,7 +2066,6 @@ useRaListRefreshOnReturn(getList);
     padding: 14px 16px 0;
     border: 1px solid var(--el-border-color-lighter);
     border-radius: 6px;
-    background: var(--el-fill-color-extra-light);
   }
 
   .query-form {
@@ -2081,11 +2080,11 @@ useRaListRefreshOnReturn(getList);
   }
 
   .business-type-select {
-    width: 190px;
+    width: 160px;
   }
 
   .keyword-input {
-    width: 300px;
+    width: 240px;
   }
 
   .query-actions {
@@ -2630,6 +2629,12 @@ useRaListRefreshOnReturn(getList);
   white-space: nowrap;
 }
 
+:global(.cert-issue-dialog .issue-validity-field .el-form-item__error) {
+  position: static;
+  width: 100%;
+  line-height: 1.25;
+}
+
 .issue-validity-input {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 76px;
@@ -2797,6 +2802,11 @@ useRaListRefreshOnReturn(getList);
   font-weight: 600;
 }
 
+:global(.cert-issue-dialog .san-type-select) {
+  width: 150px;
+  flex: 0 0 150px;
+}
+
 :global(.cert-issue-dialog .san-row) {
   display: flex;
   gap: 8px;
@@ -2891,6 +2901,7 @@ useRaListRefreshOnReturn(getList);
   }
 
   :global(.cert-issue-dialog .san-row .el-select) {
+    flex-basis: 100%;
     width: 100% !important;
   }
 }

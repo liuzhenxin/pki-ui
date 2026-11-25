@@ -69,16 +69,16 @@
     <el-card shadow="never" class="table-card">
       <el-row :gutter="10" class="mb8 toolbar-row">
         <el-col :span="1.5">
-          <el-button v-hasPermi="['ra:intranet-cert:add']" type="primary" plain icon="Plus" @click="openCreate">新增</el-button>
+          <el-button v-if="auth.hasPermi('ra:intranet-cert:add')" type="primary" plain icon="Plus" @click="openCreate">新增</el-button>
         </el-col>
         <el-col :span="1.5">
-          <el-button v-hasPermi="['ra:intranet-cert:export']" type="success" plain icon="Download" @click="handleExport">导出</el-button>
+          <el-button v-if="auth.hasPermi('ra:intranet-cert:export')" type="success" plain icon="Download" @click="handleExport">导出</el-button>
         </el-col>
         <el-col :span="1.5">
-          <el-button v-hasPermi="['ra:intranet-cert:remind']" plain icon="RefreshRight" @click="refreshOwnerStatus">刷新离职状态</el-button>
+          <el-button v-if="auth.hasPermi('ra:intranet-cert:remind')" plain icon="RefreshRight" @click="refreshOwnerStatus">刷新离职状态</el-button>
         </el-col>
         <el-col :span="1.5">
-          <el-button v-hasPermi="['ra:intranet-cert:template']" plain icon="Message" @click="openTemplates">提醒模板</el-button>
+          <el-button v-if="auth.hasPermi('ra:intranet-cert:template')" plain icon="Message" @click="openTemplates">提醒模板</el-button>
         </el-col>
         <right-toolbar v-model:showSearch="showSearch" @queryTable="loadList" />
       </el-row>
@@ -102,7 +102,7 @@
           <template #default="{ row }">
             <el-switch
               v-model="row.reminderEnabled"
-              v-hasPermi="['ra:intranet-cert:remind']"
+              v-if="auth.hasPermi('ra:intranet-cert:remind')"
               inline-prompt
               active-text="开"
               inactive-text="关"
@@ -134,8 +134,8 @@
                 </el-dropdown-menu>
               </template>
             </CertRowAction>
-            <CertRowAction v-hasPermi="['ra:intranet-cert:edit']" label="修改" icon="Edit" @click="openEdit(row)" />
-            <CertRowAction v-hasPermi="['ra:intranet-cert:remove']" label="作废" type="danger" icon="Delete" @click="handleRemove(row)" />
+            <CertRowAction v-if="auth.hasPermi('ra:intranet-cert:edit')" label="修改" icon="Edit" @click="openEdit(row)" />
+            <CertRowAction v-if="auth.hasPermi('ra:intranet-cert:remove')" label="作废" type="danger" icon="Delete" @click="handleRemove(row)" />
           </template>
         </el-table-column>
       </el-table>
@@ -338,6 +338,7 @@ import { formatCertificateSubject } from '@/utils/raCertificateSubject';
 import CertRowAction from '../components/CertRowAction.vue';
 import { useRaListRefreshOnReturn } from '@/hooks/useRaListRefreshOnReturn';
 import FileSaver from 'file-saver';
+import auth from '@/plugins/auth';
 import { certificateDownloadBlob } from '@/utils/raCertificateDownload';
 import { isFawvwEmployeeSourceActive } from '@/utils/fawvwEmployeeStatus';
 import { ElMessage, ElMessageBox, FormInstance, FormRules } from 'element-plus';

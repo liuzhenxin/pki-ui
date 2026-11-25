@@ -17,9 +17,6 @@
         </template>
         <template v-else>
           <el-input v-model="item.value" :placeholder="`请输入${getFieldMeta(item.type).label}`" clearable />
-          <div v-if="isFileSubjectSerialNumber(item.type)" class="subject-field-tip">
-            请填写模板要求的设备编号等标识。证书序列号由 CA 签发时分配。
-          </div>
         </template>
       </el-form-item>
     </template>
@@ -37,6 +34,8 @@ export interface SubjectItem {
 
 // Map x509 component types to corresponding short codes and translations
 export const typeMapping: Record<string, { label: string; key: string; isSelect?: boolean }> = {
+  '1.3.6.1.4.1.311.60.2.1.1': { label: '注册城市', key: '1.3.6.1.4.1.311.60.2.1.1' },
+  '1.3.6.1.4.1.311.60.2.1.2': { label: '注册省份', key: '1.3.6.1.4.1.311.60.2.1.2' },
   country: { label: '国家(C)', key: 'C', isSelect: true },
   organization: { label: '组织(O)', key: 'O' },
   organizationalUnit: { label: '组织单位(OU)', key: 'OU' },
@@ -91,12 +90,9 @@ import { computed } from 'vue';
 const props = defineProps<{
   modelValue: Array<SubjectItem>;
   propPrefix?: string;
-  fileIssuance?: boolean;
 }>();
 
 const emit = defineEmits(['update:modelValue']);
-
-const isFileSubjectSerialNumber = (type: string) => props.fileIssuance && type === 'serialNumber';
 
 const getFieldMeta = (type: string) => typeMapping[type] || { label: type, key: type.toUpperCase() };
 
@@ -166,13 +162,5 @@ const getRules = (item: SubjectItem) => {
 <style scoped>
 .cert-subject-container {
   width: 100%;
-}
-
-.subject-field-tip {
-  flex-basis: 100%;
-  margin-top: 4px;
-  color: var(--el-text-color-secondary);
-  font-size: 12px;
-  line-height: 1.5;
 }
 </style>

@@ -1,15 +1,17 @@
 <template>
-  <el-button v-hasPermi="['ra:admin']" :loading="submitting" :disabled="submittedId === certId" @click="requestNotification">
+  <el-button v-if="canNotify" :loading="submitting" :disabled="submittedId === certId" @click="requestNotification">
     {{ submittedId === certId ? '通知任务已提交' : '发送签发通知' }}
   </el-button>
 </template>
 
 <script setup lang="ts">
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
+import auth from '@/plugins/auth';
 import { requestRaIssueNotification } from '@/api/ra/certIssue';
 
 const props = defineProps<{ certId: string | number }>();
+const canNotify = computed(() => auth.hasPermi('ra:admin'));
 const submitting = ref(false);
 const submittedId = ref<string | number>();
 

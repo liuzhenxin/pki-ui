@@ -23,7 +23,7 @@
             <el-option v-for="item in statusOptions" :key="item.value" :label="item.label" :value="item.value" />
           </el-select>
         </el-form-item>
-        <el-form-item class="query-actions">
+        <el-form-item class="query-actions" label-width="0px">
           <el-button type="primary" icon="Search" @click="handleQuery">查询</el-button>
           <el-button icon="Refresh" @click="resetQuery">重置</el-button>
         </el-form-item>
@@ -31,7 +31,11 @@
 
       <el-table ref="tableRef" v-loading="loading" :data="rows" border @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="48" align="center" />
-        <el-table-column prop="serialNumber" label="证书序列号" min-width="180" show-overflow-tooltip />
+        <el-table-column prop="serialNumber" label="证书序列号" min-width="180" show-overflow-tooltip>
+          <template #default="{ row }">
+            <el-button link type="primary" @click="certificateDetail?.open(row)">{{ row.serialNumber || '查看详情' }}</el-button>
+          </template>
+        </el-table-column>
         <el-table-column prop="subject" label="主体名称" min-width="180" :formatter="formatCertificateSubjectColumn" show-overflow-tooltip />
         <el-table-column prop="profileName" label="证书模板" min-width="150" show-overflow-tooltip />
         <el-table-column prop="notAfter" label="到期时间" width="170" />
@@ -47,6 +51,8 @@
         </el-table-column>
       </el-table>
       <pagination v-show="total > 0" :total="total" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" @pagination="getList" />
+
+      <RaCertDetailDialog ref="certificateDetail" :operation="action" />
 
       <el-drawer v-model="drawerOpen" :title="`${actionName}申请`" size="520px" append-to-body>
         <el-form :model="form" label-width="96px">
@@ -123,14 +129,16 @@
 <script setup lang="ts">
 import { formatCertificateSubjectColumn } from '@/utils/raCertificateSubject';
 import CertRowAction from './CertRowAction.vue';
+import RaCertDetailDialog from './RaCertDetailDialog.vue';
+import type { RaCertOperation } from '@/api/ra/cert';
 import { useRaListRefreshOnReturn } from '@/hooks/useRaListRefreshOnReturn';
 import { computed, reactive, ref } from 'vue';
 import { pageRaOperationCert, submitRaOperation, RaOperationCert } from '@/api/ra/workflowTask';
 
-type OperationAction = 'reissue' | 'freeze' | 'unfreeze' | 'renewal' | 'update' | 'revoke';
+const certificateDetail = ref<InstanceType<typeof RaCertDetailDialog>>();
 
 const props = defineProps<{
-  action: OperationAction;
+  action: RaCertOperation;
 }>();
 
 const actionMeta = {
@@ -406,7 +414,7 @@ useRaListRefreshOnReturn(getList);
     }
 
     .query-actions :deep(.el-form-item__content) {
-      justify-content: flex-end;
+      justify-content: flex-start;
     }
 
     @media (max-width: 560px) {

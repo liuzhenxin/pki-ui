@@ -87,6 +87,12 @@ export function getRaCert(id: string | number): Promise<Result<RaCertDetail>> {
   }) as any;
 }
 
+export type RaCertOperation = 'renewal' | 'update' | 'revoke' | 'reissue' | 'freeze' | 'unfreeze';
+
+export function getRaOperationCertDetail(id: string | number, operation: RaCertOperation): Promise<Result<RaCertDetail>> {
+  return request({ url: `/ra/v1/certs/${id}/operation-detail/${operation}`, method: 'get' }) as any;
+}
+
 export function downloadRaCert(id: string | number, format: 'pem' | 'cer' | 'der' | 'p7b'): Promise<Blob> {
   return request({
     url: `/ra/v1/certs/${id}/download/${format}`,

@@ -1,10 +1,10 @@
 <template>
   <div class="app-container ra-apply-page">
     <el-form ref="queryFormRef" v-show="showSearch" :model="queryParams" label-width="80px" class="apply-query" @submit.prevent="handleQuery">
-      <el-form-item label="申请用户" prop="userName">
+      <el-form-item label="申请用户" prop="userName" class="apply-query-compact">
         <el-input v-model="queryParams.userName" placeholder="请输入申请用户" clearable @keyup.enter="handleQuery" />
       </el-form-item>
-      <el-form-item label="申请状态" prop="status">
+      <el-form-item label="申请状态" prop="status" class="apply-query-compact">
         <el-select v-model="queryParams.status" placeholder="请选择状态" clearable>
           <el-option v-for="item in applyStatusOptions" :key="item.value" :label="item.label" :value="item.value" />
         </el-select>
@@ -1110,6 +1110,10 @@ useRaListRefreshOnReturn(getList);
     width: 100%;
     min-width: 0;
   }
+}
+
+.apply-query :deep(.apply-query-compact) {
+  flex: 0 1 260px;
 }
 
 .apply-query-actions {

@@ -33,8 +33,8 @@ describe('RA issuance validity', () => {
   it('respects both templates and treats the CA m suffix as minutes', () => {
     const start = new Date('2028-02-01T12:00:00Z');
     expect(resolveIssueValidity(start, 1, 'day', ['5y', '1d'], now).notAfter).toBe('20280202120000');
-    expect(() => resolveIssueValidity(start, 2, 'day', ['5y', '1d'], now)).toThrow('超过证书模板');
-    expect(() => resolveIssueValidity(start, 1, 'day', ['30m'], now)).toThrow('超过证书模板');
+    expect(() => resolveIssueValidity(start, 2, 'day', ['5y', '1d'], now)).toThrow('有效期不能超过模板允许的时间');
+    expect(() => resolveIssueValidity(start, 1, 'day', ['30m'], now)).toThrow('有效期不能超过模板允许的时间');
     expect(() => resolveIssueValidity(start, 1.5, 'day', ['5y'], now)).toThrow('正整数');
     expect(() => resolveIssueValidity(start, 1, 'day', ['5y', undefined], now)).toThrow('重新同步');
   });

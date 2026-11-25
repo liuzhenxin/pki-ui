@@ -6,6 +6,7 @@ import ts from 'typescript';
 import * as vue from 'vue';
 import { employeeCertLedgerPath } from '../src/utils/fawvwEmployeeNavigation';
 import * as certificateSubject from '../src/utils/raCertificateSubject';
+import * as issueValidity from '../src/utils/raIssueValidity';
 
 test.use({ channel: process.env.PLAYWRIGHT_CHANNEL });
 
@@ -16,14 +17,20 @@ test('employee certificate filters and search buttons align at desktop and narro
   const filename = 'employee-cert/index.vue';
   const source = readFileSync(new URL('../src/views/ra/employee-cert/index.vue', import.meta.url), 'utf8');
   const { descriptor } = parse(source, { filename });
+  const actionSource = readFileSync(new URL('../src/views/ra/components/CertRowAction.vue', import.meta.url), 'utf8');
+  const action = parse(actionSource).descriptor;
+  const actionStyle = compileStyle({
+    filename: 'CertRowAction.vue', id: 'employee-cert-action', source: action.styles[0].content, scoped: true
+  });
   const searchCard = descriptor.template!.content.split('</el-card>')[0] + '</el-card></div>';
   const style = compileStyle({ filename, id: 'employee-cert-search', source: descriptor.styles[0].content, scoped: true });
   expect(style.errors).toEqual([]);
+  expect(actionStyle.errors).toEqual([]);
 
   const modules = new URL('../node_modules/', import.meta.url);
   await page.setContent('<div id="app"></div>');
   await page.addStyleTag({ path: fileURLToPath(new URL('element-plus/dist/index.css', modules)) });
-  await page.addStyleTag({ content: 'body{margin:0}#app{padding:12px}@media(min-width:769px){#app{margin-left:220px}}' + style.code });
+  await page.addStyleTag({ content: 'body{margin:0}#app{padding:12px}@media(min-width:769px){#app{margin-left:220px}}' + style.code + actionStyle.code });
   for (const file of ['vue/dist/vue.global.prod.js', 'element-plus/dist/index.full.min.js']) {
     await page.addScriptTag({ path: fileURLToPath(new URL(file, modules)) });
   }
@@ -32,17 +39,34 @@ test('employee certificate filters and search buttons align at desktop and narro
     Vue.createApp({
       __scopeId: 'data-v-employee-cert-search',
       template: ${JSON.stringify(searchCard)},
-      data: () => ({ managementTab: 'ledger', showSearch: true, queryParams: {}, certificateStatuses: [], ledgerProfiles: [], ledgerProfilesLoading: false }),
-      methods: { handleQuery() {}, resetQuery() {}, switchManagementTab() {} }
-    }).use(ElementPlus).mount('#app');
+      data: () => ({ managementTab: 'ledger', canManageLegacy: true, showSearch: true, queryParams: {}, certificateStatuses: [], ledgerProfiles: [], ledgerProfilesLoading: false }),
+      methods: { handleQuery() {}, resetQuery() {}, switchManagementTab() {}, openTemplates() {}, openDistributionConfig() {} }
+    }).use(ElementPlus).directive('hasPermi', {}).component('CertRowAction', {
+      __scopeId: 'data-v-employee-cert-action',
+      props: ['label', 'icon'],
+      template: ${JSON.stringify(action.template!.content)}
+    }).mount('#app');
   `
   });
 
+  const header = page.locator('.management-header');
+  const tabs = header.getByRole('tablist');
+  const templates = header.getByRole('button', { name: '分发模板' });
+  const config = header.getByRole('button', { name: '分发配置' });
+  await expect(templates).toHaveText('');
+  await expect(config).toHaveText('');
   const form = page.locator('.query-form');
   const search = form.getByRole('button', { name: '搜索', exact: true });
   const reset = form.getByRole('button', { name: '重置', exact: true });
   for (const width of [1600, 1280, 980, 390]) {
     await page.setViewportSize({ width, height: 800 });
+    const tabBox = (await tabs.boundingBox())!;
+    const templateBox = (await templates.boundingBox())!;
+    const configBox = (await config.boundingBox())!;
+    expect(configBox.y).toBeCloseTo(templateBox.y, 0);
+    expect(Math.abs(configBox.y + configBox.height / 2 - tabBox.y - tabBox.height / 2)).toBeLessThan(2);
+    expect(templateBox.x).toBeGreaterThanOrEqual(tabBox.x + tabBox.width);
+    expect(configBox.x).toBeGreaterThan(templateBox.x);
     const searchBox = (await search.boundingBox())!;
     const resetBox = (await reset.boundingBox())!;
     const formBox = (await form.boundingBox())!;
@@ -62,7 +86,7 @@ test('employee certificate filters and search buttons align at desktop and narro
 });
 
 function harness(overrides: Record<string, unknown> = {}, permissions?: string[], initialQuery: Record<string, string | undefined> = {},
-  confirm: (message: string) => Promise<void> = async () => {}) {
+  confirm: (message: string) => Promise<void> = async () => {}, passwordPreferences = new Map<string, string>()) {
   const hasPermi = (permission: string) => permissions?.includes(permission) ?? true;
   const source = readFileSync(new URL('../src/views/ra/employee-cert/index.vue', import.meta.url), 'utf8');
   const { descriptor, errors } = parse(source);
@@ -100,7 +124,7 @@ function harness(overrides: Record<string, unknown> = {}, permissions?: string[]
   }, { get: (target, name) => target[name as keyof typeof target] || (async () => ({ data: {} })) });
   const module = { exports: {} as any };
   const message = Object.fromEntries(['success', 'warning', 'error', 'info'].map((type) => [type, (text: string) => messages.push({ type, text })]));
-  new Function('require', 'module', 'exports', 'ElMessage', 'ElMessageBox', 'setTimeout', 'clearTimeout', code)(
+  new Function('require', 'module', 'exports', 'ElMessage', 'ElMessageBox', 'setTimeout', 'clearTimeout', 'sessionStorage', code)(
     (name: string) => {
       if (name === 'vue')
         return {
@@ -115,12 +139,17 @@ function harness(overrides: Record<string, unknown> = {}, permissions?: string[]
       if (name === '@/utils/raCertificateSubject') return certificateSubject;
       if (name === 'file-saver') return { default: { saveAs: () => {} } };
       if (name === '@/api/ra/employeeCert') return api;
+      if (name === '@/store/modules/user') return { useUserStore: () => ({ tenantId: '5', userId: '501' }) };
       if (name === '@/utils/raCertificateDownload') return { certificateDownloadBlob: async (blob: Blob) => blob };
       if (name === '@/plugins/auth') return { default: { hasPermi, hasPermiOr: (entries: string[]) => entries.some(hasPermi) } };
       if (name.endsWith('.vue')) return { default: {} };
       throw new Error(name);
     }, module, module.exports, message, { confirm },
-    (callback: () => Promise<void>) => { timer = callback; return 1; }, () => (timer = undefined)
+    (callback: () => Promise<void>) => { timer = callback; return 1; }, () => (timer = undefined), {
+      getItem: (key: string) => passwordPreferences.get(key),
+      setItem: (key: string, value: string) => passwordPreferences.set(key, value),
+      removeItem: (key: string) => passwordPreferences.delete(key)
+    }
   );
   return {
     page: module.exports.default.setup({}, { expose: () => {} }),
@@ -340,15 +369,15 @@ test('submitted distributions open the matching task and batch and keep mixed se
   const second = { ...first, id: 2, taskNo: 'EC-002' };
   const selections: any[] = [];
   h.page.distributionDialog.value = { open: (selection: any, description: string, taskNo?: string) => selections.push({ selection, taskNo }) };
-  h.page.distribute(first);
+  h.page.distribute(first, 'BOTH');
   h.page.selectedRows.value = [first];
   h.page.distributeSelected();
   h.page.selectedRows.value = [first, second];
   h.page.distributeSelected();
   expect(selections).toEqual([
-    { selection: { ids: [1], resend: false }, taskNo: 'EC-001' },
-    { selection: { ids: [1] }, taskNo: 'EC-001' },
-    { selection: { ids: [1, 2] }, taskNo: undefined }
+    { selection: { ids: [1], freshBatch: true }, taskNo: 'EC-001' },
+    { selection: { ids: [1], freshBatch: true }, taskNo: 'EC-001' },
+    { selection: { ids: [1, 2], freshBatch: true }, taskNo: undefined }
   ]);
   await h.page.onDistributionSubmitted(selections[0].selection, 'TEXT', submittedBatchNo, selections[0].taskNo);
   expect(pages.at(-1).taskNo).toBe('EC-001');
@@ -358,6 +387,28 @@ test('submitted distributions open the matching task and batch and keep mixed se
   expect(details.at(-1)).toBe(mixedBatchNo);
   expect(h.page.distributionRecords.value).toEqual([one, two]);
   h.stop();
+});
+
+test('sending records combine task number and batch type and reset both filters', async () => {
+  const filters: unknown[] = [];
+  const { page, route, stop } = harness({
+    pageEmployeeDistributionBatches: async (query: unknown) => {
+      filters.push(query);
+      return { data: { records: [], total: 0 } };
+    }
+  });
+  page.managementTab.value = 'distribution';
+  page.distributionTaskNo.value = 'TASK-1';
+  page.distributionBatchType.value = 'DISTRIBUTION';
+  await page.searchDistributionRecords();
+  expect(filters.at(-1)).toMatchObject({ taskNo: 'TASK-1', batchType: 'DISTRIBUTION', pageNum: 1 });
+  expect(route.query).toMatchObject({ taskNo: 'TASK-1', batchType: 'DISTRIBUTION' });
+  page.distributionBatchType.value = 'UPLOAD';
+  await page.searchDistributionRecords();
+  expect(filters.at(-1)).toMatchObject({ taskNo: 'TASK-1', batchType: 'UPLOAD' });
+  await page.resetDistributionQuery();
+  expect(filters.at(-1)).toMatchObject({ taskNo: undefined, batchType: undefined });
+  stop();
 });
 
 test('a submitted batch stays selected outside the list page, across navigation and after reload', async () => {
@@ -479,10 +530,16 @@ test('production task preserves distribution only for roles authorized to send w
     );
     await page.openTask(task);
     page.distributionDialog.value = { open: (selection: unknown) => opened.push(selection) };
-    page.issueSelection.value = [{ id: 1 }];
+    expect(page.canIssueTaskCert({ id: 1, issueStatus: 'ISSUED' })).toBe(false);
     await page.distributeTask(task);
+    expect(page.distributionPickerOpen.value).toBe(Boolean(expectedOpens));
+    expect(opened).toEqual([]);
+    if (expectedOpens) {
+      page.distributionSelection.value = [{ id: 1 }];
+      page.confirmTaskDistribution();
+    }
     expect(locations).toEqual([]);
-    expect(opened).toEqual(expectedOpens ? [{ ids: ['1'] }] : []);
+    expect(opened).toEqual(expectedOpens ? [{ ids: ['1'], freshBatch: true }] : []);
     expect(page.taskOpen.value).toBe(true);
   }
 });
@@ -504,8 +561,15 @@ test('distribution submission is tracked without claiming completed delivery', a
   const h = harness();
   const selections: any[] = [];
   h.page.distributionDialog.value = { open: (selection: any) => selections.push(selection) };
-  h.page.distribute({ id: 1, employeeName: 'Employee', distributionStatus: 'PENDING', issueStatus: 'ISSUED', raCertId: 1, certStatus: 'VALID' });
-  expect(selections).toEqual([{ ids: [1], resend: false }]);
+  const row = { id: 1, employeeName: 'Employee', distributionStatus: 'SENT', issueStatus: 'ISSUED', raCertId: 1, certStatus: 'VALID' };
+  h.page.distribute(row, 'BOTH');
+  h.page.distribute(row, 'EMAIL');
+  h.page.distribute(row, 'DINGTALK');
+  expect(selections).toEqual([
+    { ids: [1], freshBatch: true },
+    { ids: [1], certificateChannel: 'EMAIL' },
+    { ids: [1], certificateChannel: 'DINGTALK' }
+  ]);
   expect(h.pending()).toBeUndefined();
   h.mount();
   await h.page.onDistributionSubmitted({ ids: [1] }, 'MIXED', submittedBatchNo);
@@ -536,23 +600,93 @@ test('legacy certificate import is available to issuers and administrators', () 
   }
 });
 
-test('ledger reveals all current-page passwords and hides them on page changes', async () => {
-  const ids = ['9007199254740993', '9007199254740994'];
-  const requests: string[][] = [];
-  const { page, stop } = harness({
-    getEmployeeCertPasswords: async (selected: string[]) => {
-      requests.push(selected);
-      return { data: { [ids[0]]: 'fixture password', [ids[1]]: '' } };
+test('ledger export uses applied filters without pagination and certificate details use the ledger link', async () => {
+  const exports: unknown[] = [];
+  const opened: unknown[] = [];
+  const page = harness({
+    exportEmployeeCertLedger: async (filters: object) => {
+      exports.push(filters);
+      return new Blob(['test']);
     }
   });
-  page.rows.value = ids.map(id => ({ id, certPassword: '******' }));
-  expect(page.ledgerPasswords.value).toBeUndefined();
-  await page.toggleLedgerPasswords();
-  expect(requests).toEqual([ids]);
-  expect(page.ledgerPasswords.value).toEqual({ [ids[0]]: 'fixture password', [ids[1]]: '' });
-  expect(page.rows.value.map(row => row.certPassword)).toEqual(['******', '******']);
-  page.queryParams.pageNum++;
-  expect(page.ledgerPasswords.value).toBeUndefined();
+  page.page.queryParams.domainAccount = 'applied';
+  await page.page.handleQuery();
+  page.page.queryParams.domainAccount = 'unsubmitted';
+  page.page.queryParams.pageNum = 4;
+  await page.page.handleExport();
+  expect(exports).toEqual([expect.objectContaining({ domainAccount: 'applied' })]);
+  expect(exports[0]).not.toHaveProperty('pageNum');
+  expect(exports[0]).not.toHaveProperty('pageSize');
+  page.page.ledgerCertificateDetail.value = { open: (row: unknown) => opened.push(row) };
+  page.page.openLedgerCertificate({ id: '42', raCertId: '51', serialNumber: 'ABC', subject: 'CN=test' });
+  expect(opened).toEqual([{ id: '42', serialNumber: 'ABC', subject: 'CN=test' }]);
+  page.stop();
+});
+
+test('ledger remembers password visibility after reload and fetches only current-page passwords', async () => {
+  const ids = ['9007199254740993', '9007199254740994'];
+  const requests: string[][] = [];
+  const preferences = new Map<string, string>();
+  const api = {
+    pageEmployeeCerts: async ({ pageNum }: { pageNum: number }) => ({
+      data: { records: [{ id: ids[pageNum - 1], certPassword: '******' }], total: 2 }
+    }),
+    getEmployeeCertPasswords: async (selected: string[]) => {
+      requests.push(selected);
+      return { data: { [selected[0]]: 'fixture password' } };
+    }
+  };
+  const first = harness(api, undefined, {}, undefined, preferences);
+  first.mount();
+  await first.page.loadList();
+  expect(first.page.ledgerPasswords.value).toBeUndefined();
+  await first.page.toggleLedgerPasswords();
+  expect(requests).toEqual([[ids[0]]]);
+  expect(first.page.ledgerPasswords.value).toEqual({ [ids[0]]: 'fixture password' });
+  expect(first.page.rows.value[0].certPassword).toBe('******');
+  expect([...preferences.values()]).toEqual(['1']);
+  first.stop();
+
+  const reopened = harness(api, undefined, {}, undefined, preferences);
+  reopened.mount();
+  await reopened.page.loadList();
+  expect(reopened.page.ledgerPasswords.value).toEqual({ [ids[0]]: 'fixture password' });
+  reopened.page.queryParams.pageNum++;
+  expect(reopened.page.ledgerPasswords.value).toBeUndefined();
+  await reopened.page.loadList();
+  expect(reopened.page.ledgerPasswords.value).toEqual({ [ids[1]]: 'fixture password' });
+  await reopened.page.toggleLedgerPasswords();
+  expect(reopened.page.ledgerPasswords.value).toBeUndefined();
+  expect(preferences.size).toBe(0);
+  reopened.stop();
+});
+
+test('distribution templates can save pure text and delete only after confirmation', async () => {
+  const text = { id: 'text', name: '业务通知', profileId: '0', revision: 'current', enabled: true,
+    email: { type: 'TEXT', title: 'Notice', body: 'Body' } };
+  const schemes = [text];
+  const calls: unknown[] = [];
+  let confirmed = false;
+  const { page, stop } = harness({
+    listEmployeeCertTemplates: async () => ({ data: [] }),
+    listEmployeeDistributionSchemes: async () => ({ data: { schemes: [...schemes] } }),
+    saveEmployeeDistributionScheme: async (scheme: object, files: File[]) => calls.push({ scheme, files }),
+    deleteEmployeeDistributionScheme: async (id: string, revision: string) => {
+      calls.push({ id, revision });
+      schemes.pop();
+    }
+  }, undefined, {}, async () => { if (!confirmed) throw new Error('cancelled'); });
+  await page.openTemplates();
+  expect(page.templateRows.value).toContainEqual(expect.objectContaining({ scheme: text }));
+  page.editScheme(text);
+  await page.saveScheme();
+  expect(calls).toEqual([{ scheme: expect.objectContaining({ email: text.email, profileId: '' }), files: [] }]);
+  await page.removeScheme(text);
+  expect(calls).toHaveLength(1);
+  confirmed = true;
+  await page.removeScheme(text);
+  expect(calls[1]).toEqual({ id: 'text', revision: 'current' });
+  expect(page.templateRows.value).not.toContainEqual(expect.objectContaining({ scheme: text }));
   stop();
 });
 
@@ -622,9 +756,9 @@ test('ledger status blocks single and batch channels and sends the selected sear
   const selections: any[] = [];
   page.distributionDialog.value = { open: (selection: any) => selections.push(selection) };
   const row = { id: 1, employeeName: 'Employee', distributionStatus: 'PENDING', issueStatus: 'ISSUED', raCertId: 1 };
-  for (const certStatus of ['EXPIRED', 'EXPIRING', 'REVOKED', 'NOT_YET_VALID', 'UNKNOWN']) {
+  for (const certStatus of ['EXPIRED', 'EXPIRING', 'REVOKED', 'NOT_YET_VALID', 'UNKNOWN', 'ARCHIVED']) {
     const invalid = { ...row, certStatus };
-    page.distribute(invalid);
+    for (const channel of ['BOTH', 'EMAIL', 'DINGTALK']) page.distribute(invalid, channel);
     page.selectedRows.value = [invalid];
     page.distributeSelected();
   }
@@ -633,9 +767,9 @@ test('ledger status blocks single and batch channels and sends the selected sear
   page.selectedRows.value = [{ ...row, id: 2, certStatus: 'EXPIRED' }, { ...row, certStatus: 'VALID' }];
   page.distributeSelected();
   expect(selections).toHaveLength(0);
-  page.selectedRows.value = [{ ...row, certStatus: 'VALID' }];
+  page.selectedRows.value = [{ ...row, certStatus: 'VALID', distributionStatus: 'SENT' }];
   page.distributeSelected();
-  expect(selections).toEqual([{ ids: [1] }]);
+  expect(selections).toEqual([{ ids: [1], freshBatch: true }]);
   page.queryParams.certStatus = 'REVOKED';
   await page.handleQuery();
   expect(queries.at(-1)).toMatchObject({ certStatus: 'REVOKED' });
@@ -651,9 +785,12 @@ test('certificate pages compile and remove arbitrary package uploads and passwor
   expect(source).not.toContain('row.certPassword,');
   expect(source).toContain('distributionConfig.smtpServer');
   expect(source).not.toContain('v-model="distributionConfig.guideHtml"');
-  expect(source).toContain('label="存量证书导入"');
+  expect(source).toContain('label="存量导入"');
   expect(source).toContain('label="证书台账"');
   expect(source).toContain('label="发送记录"');
+  const header = source.slice(source.indexOf('class="management-header"'), source.indexOf('<LegacyCertificates'));
+  expect(header).toContain('label="分发模板" icon="Message"');
+  expect(header).toContain('label="分发配置" icon="Setting"');
   expect(source).not.toContain('按任务分发');
   expect(source).not.toContain('发送通知');
   expect(source).toContain('label="邮件模板"');
@@ -666,11 +803,13 @@ test('certificate pages compile and remove arbitrary package uploads and passwor
   expect(compileTemplate({ source: descriptor.template!.content, filename: 'issue.vue', id: 'distribution-task' }).errors).toEqual([]);
   const taskActions = taskSource.match(/<el-table-column label="操作"[^>]*>([\s\S]*?)<\/el-table-column>/)?.[1];
   expect(taskActions).toContain('<CertRowAction label="详情" icon="View" @click="openTask(row)" />');
-  expect(taskActions).toContain('label="下载证书 ZIP"');
+  expect(taskActions).toContain('label="下载证书"');
   expect(taskActions).toContain(`v-hasPermi="['ra:employee-cert:distribute']"`);
   expect(taskActions).toContain(':disabled="row.successCount <= 0 || Boolean(downloadingTask)"');
   expect(taskActions).toContain('@click="downloadTaskPackage(row)"');
-  expect(taskSource).toContain('@click="issueSelectedCerts">签发</el-button>');
+  expect(taskSource).toContain('@click="issueSelectedCerts"');
+  expect(taskSource).toContain(": '重签'");
+  expect(taskSource).not.toContain(':disabled="!distributableTaskCerts.length"');
   expect(taskSource).toContain('@click="distributeTask(taskDetail.task)"');
   expect(taskSource).toContain('@submitted="onFallbackDistributionSubmitted"');
   expect(taskSource).toContain('prop="issueMessage"');
@@ -689,10 +828,11 @@ function issueHarness(
   const script = compileScript(descriptor, { id: 'issue-selected' });
   const code = ts.transpileModule(script.content, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   const module = { exports: {} as any };
+  let refreshOnReturn: (() => unknown) | undefined;
   new Function('require', 'module', 'exports', 'ElMessage', 'ElMessageBox', 'onMounted', 'watch', 'ref', 'reactive', 'computed', code)(
     (name: string) => {
-      if (name === 'vue') return { ...vue, onUnmounted: () => {} };
-      if (name === '@/hooks/useRaListRefreshOnReturn') return { useRaListRefreshOnReturn: () => {} };
+      if (name === 'vue') return { ...vue, onUnmounted: () => {}, onDeactivated: () => {} };
+      if (name === '@/hooks/useRaListRefreshOnReturn') return { useRaListRefreshOnReturn: (refresh: () => unknown) => { refreshOnReturn = refresh; } };
       if (name === 'vue-router') return {
         useRoute: () => ({ query: {}, fullPath: '/', path: '/' }),
         useRouter: () => ({ push, resolve: () => ({ matched: routeRegistered ? [{ path: employeeCertLedgerPath }] : [{ path: '/:pathMatch(.*)*' }] }) })
@@ -700,15 +840,19 @@ function issueHarness(
       if (name === '@/plugins/auth') return { default: { hasPermi: (permission: string) => permissions?.includes(permission) ?? true } };
       if (name === '@/utils/fawvwEmployeeNavigation') return { employeeCertLedgerPath };
       if (name === '@/utils/raCertificateSubject') return certificateSubject;
+      if (name === '@/utils/raIssueValidity') return issueValidity;
       if (name === '@/api/ra/employeeCert') return {
         pageEmployeeCertTasks: async () => ({ data: { records: [], total: 0 } }),
+        listEmployeeCertTaskProfiles: async () => ({ data: [] }),
+        getEmployeeProductionCandidateAvailability: async () => ({ data: [] }),
         ...api
       };
       return { default: {} };
     }, module, module.exports, { info: () => {}, success: () => {} }, { confirm: async () => true },
     () => {}, vue.watch, vue.ref, vue.reactive, vue.computed
   );
-  return module.exports.default.setup({}, { expose: () => {} });
+  const setup = module.exports.default.setup({}, { expose: () => {} });
+  return Object.assign(setup, { refreshOnReturn });
 }
 
 test('employee PFX default restores the selected length and symbols after reopening', async () => {
@@ -726,6 +870,7 @@ test('employee PFX default restores the selected length and symbols after reopen
   await reopened.loadDefaultPasswordRule();
   reopened.openPasswordRule();
   expect(reopened.passwordRuleDraft).toEqual(rule);
+  expect(reopened.passwordRuleSummary.value).toBe('12 位');
   expect(reopened.describePasswordRule(reopened.savedPasswordRule.value)).toContain('12 位');
   expect(reopened.describePasswordRule(reopened.savedPasswordRule.value)).toContain('特殊字符');
 });
@@ -761,16 +906,196 @@ test('employee issuance sends only selected eligible IDs and displays the return
   expect(page.taskDetail.value.certs[2].issueHistory).toBeUndefined();
 });
 
+test('employee renewal displays automatic choices and keeps per-employee overrides', async () => {
+  const first = { id: '9007199254740993', identityKey: 'first' };
+  const second = { id: '9007199254740994', identityKey: 'second' };
+  const submitted: unknown[] = [];
+  const page = issueHarness({
+    listEmployeeEmailCertProfiles: async () => ({ data: [{
+      rootId: '1', rootName: 'CA', profileId: '2', profileName: '安全Internet邮件证书模板',
+      enabled: true, supportedRsaKeySizes: [2048], templateValidity: '1y',
+      issuerNotAfter: new Date(Date.now() + 730 * 86400000).toISOString()
+    }] }),
+    getEmployeeCertIssuanceDefault: async () => ({ data: { issuanceMode: 'RENEW' } }),
+    getEmployeeProductionCandidateAvailability: async (data: Record<string, unknown>) => {
+      expect(data).toEqual({ rootId: '1', profileId: '2', rsaKeySize: 2048,
+        employeeIds: [first.id, second.id], identityKeys: [first.identityKey, second.identityKey] });
+      return { data: [first.id] };
+    },
+    listEmployeeProductionCandidates: async () => ({ data: [{ id: '99' }] }),
+    createEmployeeCertTask: async (data: unknown) => {
+      submitted.push(data);
+      return { data: { task: { taskNo: 'TEST' }, certs: [] } };
+    }
+  });
+  await page.loadEmailProfiles();
+  await page.loadIssuanceDefault();
+  page.form.rootId = '1';
+  page.form.profileId = '2';
+  page.selectedEmployees.value = [first, second];
+  await expect.poll(() => page.productionChoiceLabel(first)).toBe('续签');
+  expect(page.productionChoiceLabel(second)).toBe('新签');
+  await page.openKeys(first);
+  page.keyChoice.value = '99';
+  page.saveKeyChoice();
+  expect(page.productionChoiceLabel(first)).toBe('已指定');
+  await page.openKeys(first);
+  expect(page.keyChoice.value).toBe('99');
+  page.keyChoice.value = 'AUTO';
+  page.saveKeyChoice();
+  expect(page.productionChoiceLabel(first)).toBe('续签');
+  await page.openKeys(first);
+  page.keyChoice.value = 'NEW';
+  page.saveKeyChoice();
+  expect(page.productionChoiceLabel(first)).toBe('新签');
+  await page.createTask();
+  expect(submitted).toEqual([expect.objectContaining({
+    issuanceMode: 'RENEW', productionChoices: [{ employeeId: first.id, mode: 'NEW' }]
+  })]);
+});
+
+test('production details can open batch distribution before the ledger checks certificate eligibility', async () => {
+  const task = { taskNo: 'EC-001' };
+  const locations: unknown[] = [];
+  const page = issueHarness({
+    canDistributeEmployeeCert: () => false,
+    getEmployeeCertTask: async () => ({ data: { task, certs: [{ id: 1, issueStatus: 'ISSUED' }] } })
+  }, async location => { locations.push(location); return undefined; });
+  await page.openTask(task);
+  expect(page.distributableTaskCerts.value).toEqual([]);
+  await page.distributeTask(task);
+  expect(locations).toEqual([expect.objectContaining({ query: expect.objectContaining({ taskNo: task.taskNo }) })]);
+});
+
+test('employee automatic issuance refreshes progress and exposes only failed rows for retry', async () => {
+  const queued = { taskNo: 'AUTO', taskStatus: 'AUTO_QUEUED' };
+  const running = { ...queued, taskStatus: 'AUTO_ISSUING' };
+  const done = { ...queued, taskStatus: 'PARTIAL_FAILED' };
+  const issued = { id: '1', issueStatus: 'ISSUED', serialNumber: '81' };
+  const failed = { id: '2', issueStatus: 'FAILED' };
+  const pending = { ...failed, issueStatus: 'READY_FOR_ISSUE' };
+  const tasks = [queued, running, done];
+  const details = [
+    { task: queued, certs: [{ ...pending, id: issued.id }, pending] },
+    { task: running, certs: [issued, { ...pending, issueStatus: 'ISSUING' }] },
+    { task: done, certs: [issued, failed] }
+  ];
+  const calls: string[][] = [];
+  let listIndex = 0;
+  let detailIndex = 0;
+  const page = issueHarness({
+    pageEmployeeCertTasks: async () => {
+      if (listIndex++ === 1) throw new Error('temporary list refresh failure');
+      return { data: { records: [tasks[Math.max(0, Math.min(listIndex - 2, 2))]], total: 1 } };
+    },
+    getEmployeeCertTask: async () => ({ data: details[Math.min(detailIndex++, 2)] }),
+    issueEmployeeCertTask: async (_taskNo: string, certIds: string[]) => {
+      calls.push(certIds);
+      return { data: details[2] };
+    }
+  });
+  expect(tasks.concat({ ...done, taskStatus: 'ISSUED' }).map((task) =>
+    page.issueStatusType(page.taskIssueStatus(task.taskStatus))
+  )).toEqual(['info', 'warning', 'danger', 'success']);
+  page.activeTab.value = 'tasks';
+  await page.loadTasks();
+  await page.openTask(queued);
+  page.issueSelection.value = [pending];
+  await page.issueSelectedCerts();
+  expect(calls).toEqual([]);
+  await expect.poll(() => page.tasks.value[0]?.taskStatus, { timeout: 9000 }).toBe('AUTO_ISSUING');
+  await expect.poll(() => page.detailIssueStatus.value, { timeout: 9000 }).toBe('FAILED');
+  await expect.poll(() => page.tasks.value[0]?.taskStatus, { timeout: 9000 }).toBe('PARTIAL_FAILED');
+  expect(page.canIssueTaskCert(issued)).toBe(false);
+  expect(page.canIssueTaskCert(failed)).toBe(true);
+  page.issueSelection.value = [issued, failed];
+  await page.issueSelectedCerts();
+  expect(calls).toEqual([['2']]);
+});
+
+test('manual retry shows progress for submitted rows while the signing request is still open', async () => {
+  const task = { taskNo: 'RETRY', taskStatus: 'PARTIAL_FAILED' };
+  const first = { id: '1', version: 2, issueStatus: 'FAILED' };
+  const second = { id: '2', version: 2, issueStatus: 'FAILED' };
+  const unselected = { id: '3', version: 2, issueStatus: 'FAILED' };
+  const next = { ...first, version: 3, issueStatus: 'ISSUED', serialNumber: '81' };
+  const progressed = { task: { ...task, taskStatus: 'ISSUING' }, certs: [next, second, unselected] };
+  const finished = { task, certs: [next, { ...second, version: 3 }, unselected] };
+  let reads = 0;
+  let finish: () => void = () => {};
+  let deliverStale: () => void = () => {};
+  const page = issueHarness({
+    getEmployeeCertTask: async () => {
+      reads++;
+      if (reads === 1) return { data: { task, certs: [first, second, unselected] } };
+      if (reads === 2) return { data: progressed };
+      return new Promise((resolve) => { deliverStale = () => resolve({ data: progressed }); });
+    },
+    issueEmployeeCertTask: async () => new Promise((resolve) => { finish = () => resolve({ data: finished }); })
+  });
+  await page.openTask(task);
+  page.issueSelection.value = [first, second];
+  const retry = page.issueSelectedCerts();
+  await expect.poll(() => page.detailIssueStatus.value).toBe('ISSUING');
+  expect(page.displayIssueStatus(first)).toBe('ISSUING');
+  expect(page.displayIssueStatus(second)).toBe('ISSUING');
+  expect(page.displayIssueStatus(unselected)).toBe('FAILED');
+  await expect.poll(() => page.taskDetail.value.certs.map(page.displayIssueStatus)).toEqual(['ISSUED', 'ISSUING', 'FAILED']);
+  await expect.poll(() => reads).toBe(3);
+  finish();
+  await retry;
+  deliverStale();
+  await Promise.resolve();
+  expect(page.detailIssueStatus.value).toBe('FAILED');
+  expect(page.taskDetail.value.certs.map(page.displayIssueStatus)).toEqual(['ISSUED', 'FAILED', 'FAILED']);
+});
+
+test('task search combines task number and signing template and reset clears both', async () => {
+  const profile = { id: '9007199254740997', name: '旧版邮件模板' };
+  const queries: Record<string, unknown>[] = [];
+  const page = issueHarness({
+    listEmployeeCertTaskProfiles: async () => ({ data: [profile] }),
+    pageEmployeeCertTasks: async (query: Record<string, unknown>) => {
+      queries.push({ ...query });
+      return { data: { records: [], total: 0 } };
+    }
+  });
+  await page.handleTabChange('tasks');
+  expect(page.taskProfiles.value).toEqual([profile]);
+  Object.assign(page.taskQuery, { taskNo: 'EC123', profileId: profile.id, pageNum: 4 });
+  await page.searchTasks();
+  expect(queries.at(-1)).toMatchObject({ taskNo: 'EC123', profileId: profile.id, pageNum: 1 });
+  await page.resetTaskQuery();
+  expect(queries.at(-1)).toMatchObject({ taskNo: '', profileId: '', pageNum: 1 });
+});
+
 test('employee task requires explicit CA and template selection and resets it when CA changes', async () => {
   const rootA = '9007199254740993';
   const rootB = '9007199254740995';
   const profileId = '9007199254740997';
-  const rsa = { rootId: rootA, rootName: 'CA A', profileId, profileName: 'Mail', enabled: true, maxValidityYears: 2, supportedRsaKeySizes: [2048, 4096] };
-  const alternate = { ...rsa, rootId: rootB, rootName: 'CA B' };
+  const rsa = {
+    rootId: rootA,
+    rootName: 'CA A',
+    profileId,
+    profileName: '其他邮件模板',
+    enabled: true,
+    maxValidityYears: 2,
+    supportedRsaKeySizes: [2048, 4096],
+    templateValidity: '2y',
+    issuerNotAfter: '2099-01-01T00:00:00Z'
+  };
+  const alternate = {
+    ...rsa,
+    rootId: rootB,
+    rootName: 'CA B',
+    profileName: '安全Internet邮件证书模板',
+    issuerNotAfter: new Date(Date.now() + 540 * 86400000).toISOString()
+  };
   let profiles = [rsa];
   const submissions: unknown[] = [];
   const page = issueHarness({
     listEmployeeEmailCertProfiles: async () => ({ data: profiles }),
+    getEmployeeCertIssuanceDefault: async () => ({ data: { issuanceMode: 'RENEW' } }),
     createEmployeeCertTask: async (data: unknown) => {
       submissions.push(data);
       return { data: { task: { taskNo: 'TEST', rootId: rootB }, certs: [] } };
@@ -788,22 +1113,53 @@ test('employee task requires explicit CA and template selection and resets it wh
   expect(page.eligibleCas.value.map((item: { id: string }) => item.id)).toEqual([rootA, rootB]);
   page.form.rootId = rootA;
   page.form.profileId = profileId;
-  page.form.validityYears = 2;
+  expect(page.form.issuanceMode).toBe('NEW');
+  expect(page.supportsRenewal.value).toBe(false);
+  expect(page.form.validityAmount).toBe(2);
+  expect(page.form.validityUnit).toBe('year');
+  expect(Math.abs(page.form.notBefore.getTime() - Date.now())).toBeLessThan(10_000);
   expect(page.canCreateTask.value).toBe(true);
   page.form.rootId = rootB;
   expect(page.form.profileId).toBe('');
-  expect(page.form.validityYears).toBeUndefined();
+  expect(page.form.issuanceMode).toBeUndefined();
   expect(page.profilesForCa.value).toEqual([alternate]);
   await page.createTask();
   expect(submissions).toEqual([]);
   page.form.profileId = profileId;
-  page.form.validityYears = 3;
   expect(page.canCreateTask.value).toBe(false);
+  await page.loadIssuanceDefault();
+  expect(page.form.issuanceMode).toBe('RENEW');
+  expect(page.supportsRenewal.value).toBe(true);
+  expect(page.validityPreview.value.error).toBe('有效期不能超过上级签发 CA 的到期时间');
+  expect(page.canCreateTask.value).toBe(false);
+  page.form.validityAmount = 3;
+  expect(page.validityPreview.value.error).toBe('有效期不能超过模板允许的时间');
+  const current = new Date();
+  page.form.notBefore = new Date(Date.UTC(current.getUTCFullYear(), current.getUTCMonth() + 1, 9, 1, 2, 3));
+  page.form.validityAmount = 2;
+  page.form.validityUnit = 'month';
+  const start = page.form.notBefore.toISOString().slice(0, 19);
+  const end = new Date(page.form.notBefore);
+  end.setUTCMonth(end.getUTCMonth() + 2);
+  expect(page.canCreateTask.value).toBe(true);
+  page.form.issuanceMode = 'NEW';
   await page.createTask();
-  expect(submissions).toEqual([]);
-  page.form.validityYears = 2;
-  await page.createTask();
-  expect(submissions).toEqual([{ employeeIds: ['1'], identityKeys: ['verified'], userIds: ['42'], rootId: rootB, profileId, validityYears: 2, rsaKeySize: 2048, productionChoices: [], pfxPasswordRule: null, remark: '' }]);
+  expect(submissions).toEqual([
+    {
+      employeeIds: ['1'],
+      identityKeys: ['verified'],
+      userIds: ['42'],
+      rootId: rootB,
+      profileId,
+      issuanceMode: 'NEW',
+      notBefore: start,
+      notAfter: end.toISOString().slice(0, 19),
+      rsaKeySize: 2048,
+      productionChoices: [],
+      pfxPasswordRule: null,
+      remark: ''
+    }
+  ]);
   expect(page.taskCaName(page.taskDetail.value.task.rootId)).toBe('CA B');
 
   profiles = [rsa, { ...alternate, enabled: false }];
@@ -814,24 +1170,120 @@ test('employee task requires explicit CA and template selection and resets it wh
   expect(page.taskCaName(rootB)).toBe('CA B');
 });
 
+test('employee issuance defaults follow CA authorization and fill the request', async () => {
+  const rootA = '9007199254740993';
+  const rootB = '9007199254740995';
+  const profileA = '9007199254740997';
+  const profileB = '9007199254740999';
+  const options = { enabled: true, templateValidity: '2y', issuerNotAfter: '2099-01-01T00:00:00Z' };
+  const safe = {
+    ...options,
+    rootId: rootA,
+    rootName: 'CA A',
+    profileId: profileA,
+    profileName: '安全Internet邮件证书模板',
+    supportedRsaKeySizes: [2048, 4096]
+  };
+  const other = { ...options, rootId: rootB, rootName: 'CA B', profileId: profileB, profileName: '其他模板', supportedRsaKeySizes: [2048] };
+  let profiles = [safe, other];
+  const initial = { rootId: rootA, profileId: profileA, rsaKeySize: 4096, issuanceMode: 'RENEW' };
+  let saved: unknown = initial;
+  const page = issueHarness({
+    listEmployeeEmailCertProfiles: async () => ({ data: profiles }),
+    getEmployeeCertIssuanceDefault: async () => ({ data: saved }),
+    saveEmployeeCertIssuanceDefault: async (data: unknown) => {
+      saved = data;
+      return { data };
+    }
+  }, undefined, ['ra:employee-cert:issue']);
+  expect(page.canEditProfilePolicy.value).toBe(false);
+  await page.loadIssuanceDefault();
+  expect(page.form.rootId).toBe('');
+  await page.openProfilePolicy();
+  expect(page.profilePolicyOpen.value).toBe(true);
+  expect(page.form).toMatchObject(initial);
+  page.form.rsaKeySize = 2048;
+  page.form.rootId = rootB;
+  page.form.profileId = profileB;
+  expect(page.form).toMatchObject({ rootId: rootB, profileId: profileB, rsaKeySize: 2048, issuanceMode: 'NEW' });
+  page.form.notBefore = new Date('2020-01-01T00:00:00Z');
+  page.activeTab.value = 'tasks';
+  page.activeTab.value = 'create';
+  expect(page.form).toMatchObject(initial);
+  expect(Math.abs(page.form.notBefore.getTime() - Date.now())).toBeLessThan(10_000);
+  expect(page.form.validityAmount).toBe(2);
+  page.form.rsaKeySize = 2048;
+  await page.refreshOnReturn();
+  expect(page.form).toMatchObject(initial);
+  page.openIssuanceDefaults();
+  expect(page.issuanceDefaultDraft).toMatchObject(initial);
+  expect(page.draftSupportsRenewal.value).toBe(true);
+  page.issuanceDefaultDraft.rootId = rootB;
+  expect(page.issuanceDefaultDraft.profileId).toBe('');
+  expect(page.defaultProfilesForCa.value).toEqual([other]);
+  page.issuanceDefaultDraft.profileId = profileB;
+  expect(page.issuanceDefaultDraft.rsaKeySize).toBe(2048);
+  expect(page.issuanceDefaultDraft.issuanceMode).toBe('NEW');
+  expect(page.draftSupportsRenewal.value).toBe(false);
+  await page.saveIssuanceDefault();
+  expect(saved).toEqual({ rootId: rootB, profileId: profileB, rsaKeySize: 2048, issuanceMode: 'NEW' });
+  expect(page.form).toMatchObject(saved as object);
+
+  profiles = [safe, { ...other, enabled: false }];
+  await page.loadEmailProfiles();
+  expect(page.form.rootId).toBe('');
+  expect(page.form.profileId).toBe('');
+  page.openIssuanceDefaults();
+  expect(page.canSaveIssuanceDefault.value).toBeFalsy();
+  page.form.rootId = rootA;
+  page.form.profileId = profileA;
+  page.form.rsaKeySize = 4096;
+  await page.saveIssuanceDefault(true);
+  expect(saved).toEqual({ issuanceMode: 'NEW' });
+  expect(page.form).toMatchObject({ rootId: '', profileId: '', rsaKeySize: undefined });
+  page.form.rootId = rootA;
+  page.form.profileId = profileA;
+  page.form.rsaKeySize = 4096;
+  expect(page.form).toMatchObject({ rootId: rootA, profileId: profileA, rsaKeySize: 4096, issuanceMode: 'NEW' });
+  page.activeTab.value = 'tasks';
+  page.activeTab.value = 'create';
+  expect(page.form).toMatchObject({ rootId: '', profileId: '', rsaKeySize: undefined });
+
+  profiles = [{ ...safe, templateValidity: '12h' }];
+  await page.loadEmailProfiles();
+  page.form.rootId = rootA;
+  page.form.profileId = profileA;
+  expect(page.validityPreview.value.error).toBe('模板有效期不足 1 日，请核对 CA 模板');
+});
+
 test('employee production keeps a selected original only for the matching CA, profile and key length', async () => {
-  const profile = { rootId: '20', rootName: 'CA', profileId: '21', profileName: 'Mail', enabled: true,
+  const profile = { rootId: '20', rootName: 'CA', profileId: '21', profileName: '安全Internet邮件证书模板', enabled: true,
     maxValidityYears: 2, supportedRsaKeySizes: [2048, 4096] };
   const employee = { id: '1', identityKey: 'verified' };
+  const certificateId = '9007199254740997';
   const calls: unknown[] = [];
+  const detailCalls: unknown[] = [];
   const page = issueHarness({
     listEmployeeEmailCertProfiles: async () => ({ data: [profile] }),
     listEmployeeProductionCandidates: async (id: string, filters: Record<string, unknown>) => {
       calls.push({ id, ...filters });
-      return { data: [{ id: '9007199254740997', serialNumber: '12' }] };
+      return { data: [{ id: certificateId, serialNumber: '12' }] };
+    },
+    getEmployeeProductionCandidateDetail: async (id: string, certId: string, filters: Record<string, unknown>) => {
+      detailCalls.push({ id, certId, ...filters });
+      return { data: { summary: { id: certId, serialNumber: '12' } } };
     }
   });
   await page.loadEmailProfiles();
   page.form.rootId = profile.rootId;
   page.form.profileId = profile.profileId;
+  page.form.issuanceMode = 'RENEW';
   await page.openKeys(employee);
   expect(calls).toEqual([{ id: employee.id, rootId: '20', profileId: '21', rsaKeySize: 2048 }]);
-  page.keyChoice.value = '9007199254740997';
+  await page.loadCandidateCertificate(page.keys.value[0].id);
+  expect(detailCalls).toEqual([{ id: employee.id, certId: certificateId, rootId: '20', profileId: '21', rsaKeySize: 2048 }]);
+  expect(page.keyChoice.value).toBe('AUTO');
+  page.keyChoice.value = certificateId;
   page.saveKeyChoice();
   expect(page.productionChoices.value).toEqual({
     '1': { employeeId: '1', mode: 'SELECTED', certId: '9007199254740997' }
@@ -961,7 +1413,11 @@ test('distribution includes uploaded attachments unless removed', async ({ page 
       Dialog.render=exports.render;
       Vue.createApp({setup(){
         const dialog=Vue.ref();
-        window.openDistribution=(nextType)=>{type=nextType;return dialog.value.open({ids:[1]},'测试任务');};
+        window.openDistribution=(nextType,mode)=>{
+          type=nextType;
+          const selection=mode===true?{ids:[1],freshBatch:true}:mode?{ids:[1],certificateChannel:mode}:{ids:[1]};
+          return dialog.value.open(selection,'测试任务');
+        };
         return ()=>Vue.h(Dialog,{ref:dialog});
       }}).use(ElementPlus).mount('#app');
     })();`
@@ -994,12 +1450,42 @@ test('distribution includes uploaded attachments unless removed', async ({ page 
   await expect(textDialog.locator('input[type=file]')).toHaveCount(0);
   await textDialog.getByRole('button', { name: '取消' }).click();
   await page.evaluate(() => (window as any).openDistribution('BOUND'));
+  await expect(dialog.getByText('分发模板', { exact: true })).toBeVisible();
+  await expect(dialog.getByText('邮件附件', { exact: true })).toBeVisible();
   await expect(dialog.getByText('guide.pdf')).toBeVisible();
+  await expect(dialog.getByText('邮件明确失败后，可按当前启用的分发模板重新发送。')).toBeVisible();
   await expect(dialog.getByRole('combobox')).toHaveCount(0);
   await expect(dialog.locator('input[type=file]')).toHaveCount(0);
   await dialog.getByRole('button', { name: '下一步' }).click();
+  const confirmation = page.locator('.el-message-box');
+  await expect(confirmation.getByText('分发模板', { exact: true })).toBeVisible();
+  await expect(confirmation.getByText('邮件附件', { exact: true })).toBeVisible();
+  await expect(confirmation.getByText('模板附件与 PFX 一起打包为一个 ZIP。')).toBeVisible();
   await page.getByRole('button', { name: '确认发送' }).click();
   await expect.poll(() => page.evaluate(() => (window as any).sent)).toEqual({
     selection: { ids: [1] }, type: 'MIXED', names: []
   });
+  await expect(dialog).toBeHidden();
+  await page.evaluate(() => (window as any).openDistribution('BOUND', true));
+  await expect(dialog.getByText(/本次新建分发批次.*邮件失败则跳过钉钉/)).toBeVisible();
+  await dialog.getByRole('button', { name: '下一步' }).click();
+  await expect(confirmation.getByText(/本次新建分发批次.*邮件失败则跳过钉钉/)).toBeVisible();
+  await page.getByRole('button', { name: '确认发送' }).click();
+  await expect.poll(() => page.evaluate(() => (window as any).sent)).toEqual({
+    selection: { ids: [1], freshBatch: true }, type: 'MIXED', names: []
+  });
+  await expect(dialog).toBeHidden();
+  for (const [channel, label, status] of [['EMAIL', '仅邮件', '保留钉钉状态'], ['DINGTALK', '仅钉钉', '保留邮件状态']]) {
+    await page.evaluate((mode) => (window as any).openDistribution('BOUND', mode), channel);
+    const single = page.getByRole('dialog', { name: '证书分发 · ' + label });
+    await expect(single.getByText(status, { exact: false })).toBeVisible();
+    await expect(single.getByText('guide.pdf')).toHaveCount(channel === 'EMAIL' ? 1 : 0);
+    await single.getByRole('button', { name: '下一步' }).click();
+    await expect(confirmation.getByText(status, { exact: false })).toBeVisible();
+    await page.getByRole('button', { name: '确认发送' }).click();
+    await expect.poll(() => page.evaluate(() => (window as any).sent)).toEqual({
+      selection: { ids: [1], certificateChannel: channel }, type: 'MIXED', names: []
+    });
+    await expect(single).toBeHidden();
+  }
 });

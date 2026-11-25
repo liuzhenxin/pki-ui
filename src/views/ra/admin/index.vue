@@ -403,7 +403,7 @@ const assignableRoles = ref<typeof RA_BUSINESS_ROLE_OPTIONS>([]);
 const isRaAdministrator = computed(() => assignableRoles.value.some((role) => role.roleId === '507'));
 const raBizRoleOptions = computed(() => assignableRoles.value.map(({ roleId, roleName }) => ({ label: roleName, value: roleId })));
 const adminFormRoleOptions = computed(() =>
-  form.value.id == null ? raBizRoleOptions.value.filter((role) => role.value !== '507') : raBizRoleOptions.value
+  raBizRoleOptions.value.filter((role) => role.value !== '507' || form.value.roleIds?.map(String).includes('507'))
 );
 const RA_BIZ_ROLE_IDS = RA_BUSINESS_ROLE_OPTIONS.map((role) => role.roleId);
 const RA_DEFAULT_BIZ_ROLE_IDS = ['503'];
@@ -654,10 +654,17 @@ function filterDeptNode(value: string, data: RaDeptTreeOption) {
 }
 
 function handleDeptTreeWheel(event: WheelEvent) {
-  // Leave horizontal gestures to the browser and vertical scrolling to the virtual list.
   if (event.shiftKey || Math.abs(event.deltaX) > Math.abs(event.deltaY)) {
     event.stopPropagation();
+    return;
   }
+  const viewport = (event.currentTarget as HTMLElement).querySelector<HTMLElement>('.el-tree-virtual-list');
+  if (!viewport || !event.deltaY) return;
+  // 虚拟列表自身按节点高度限制滚动，无法滚到内容底部预留的空间。
+  const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? viewport.clientHeight : 1;
+  viewport.scrollTop += event.deltaY * unit;
+  event.preventDefault();
+  event.stopPropagation();
 }
 
 function handleDeptNodeClick(data: RaDeptTreeOption) {
@@ -1203,9 +1210,16 @@ onUnmounted(() => {
     width: 100%;
 
     :deep(.el-tree-virtual-list) {
+      box-sizing: border-box;
       overflow-x: auto;
       overflow-y: auto !important;
       scrollbar-width: thin;
+    }
+
+    // 虚拟列表的节点绝对定位，需要在内容层留出可滚动的底部空间。
+    :deep(.el-tree-virtual-list > div:first-child) {
+      box-sizing: content-box;
+      padding-bottom: 20px;
     }
 
     :deep(.el-tree-virtual-list::-webkit-scrollbar) {

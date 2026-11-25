@@ -15,9 +15,13 @@
       </el-form-item>
     </el-form>
 
-    <el-row :gutter="10" class="mb8">
+    <div class="flex min-h-42px items-center justify-between mb8">
+      <div class="flex items-center gap-8px">
+        <span class="text-15px font-semibold">待办列表</span>
+        <el-tag type="info" effect="plain" round>{{ total }}</el-tag>
+      </div>
       <right-toolbar v-model:showSearch="showSearch" @queryTable="getList" />
-    </el-row>
+    </div>
 
     <el-table v-loading="loading" :data="taskList" :empty-text="loading ? '正在加载审核任务' : '暂无待办任务'" border>
       <el-table-column label="任务编号" prop="id" align="center" width="160" />

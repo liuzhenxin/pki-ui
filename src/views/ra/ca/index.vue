@@ -102,6 +102,7 @@
             </el-button>
             <el-dropdown
               v-hasPermi="['ra:ca:default', 'ra:ca:status', 'ra:ca:remove']"
+              class="instance-more-action"
               trigger="click"
               @command="(command) => handleCommand(command, scope.row)"
             >
@@ -394,6 +395,10 @@ useRaListRefreshOnReturn(getList);
 </script>
 
 <style scoped>
+.instance-more-action {
+  margin-left: 12px;
+  vertical-align: middle;
+}
 .mb8 {
   margin-bottom: 8px;
 }

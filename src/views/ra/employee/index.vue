@@ -90,7 +90,7 @@
         />
       </aside>
 
-      <div class="employee-column">
+      <div ref="employeeColumn" class="employee-column">
         <el-card shadow="never" class="employee-panel">
           <div v-if="selectedOrg" class="org-selection">
             <span class="org-selection-label">当前部门</span>
@@ -211,15 +211,27 @@
             </el-table-column>
           </el-table>
 
-          <pagination
-            class="employee-pagination"
-            :auto-scroll="false"
-            v-show="total > 0"
-            v-model:page="queryParams.pageNum"
-            v-model:limit="queryParams.pageSize"
-            :total="total"
-            @pagination="loadEmployees"
-          />
+          <div v-if="total > 0" class="pagination-container employee-pagination">
+            <el-pagination
+              :current-page="queryParams.pageNum"
+              :page-size="queryParams.pageSize"
+              :page-sizes="[10, 20, 30, 50]"
+              :total="total"
+              background
+              layout="total, sizes, prev, slot, next, jumper"
+              @update:current-page="changeEmployeePagination($event, queryParams.pageSize)"
+              @update:page-size="changeEmployeePagination(queryParams.pageNum, $event)"
+            >
+              <ul class="employee-pager" aria-label="员工信息页码">
+                <li v-for="item in employeePageItems" :key="item.key">
+                  <span v-if="item.page == null" class="employee-pager-ellipsis">…</span>
+                  <button v-else type="button" :class="{ active: item.page === queryParams.pageNum }"
+                    :aria-label="`第 ${item.page} 页`" :aria-current="item.page === queryParams.pageNum ? 'page' : undefined"
+                    @click="changeEmployeePagination(item.page, queryParams.pageSize)">{{ item.page }}</button>
+                </li>
+              </ul>
+            </el-pagination>
+          </div>
         </el-card>
       </div>
     </div>
@@ -281,8 +293,8 @@
           </div>
           <el-divider content-position="left">名下证书</el-divider>
           <EmployeeCertificateInventory v-bind="certificateInventory" @page-change="changeCertificatePage" @retry="reloadCertificateInventory" @certificate="openCertificate" />
-          <el-divider content-position="left">AD 上传记录</el-divider>
-          <el-descriptions class="employee-detail-descriptions mb12" :column="1" label-width="9rem" border>
+          <el-divider class="employee-ad-divider" content-position="left">AD 上传记录</el-divider>
+          <el-descriptions class="employee-detail-descriptions employee-ad-summary" :column="1" label-width="9rem" border>
             <el-descriptions-item label="最近成功上传证书">-</el-descriptions-item>
             <el-descriptions-item label="最近成功上传时间">-</el-descriptions-item>
           </el-descriptions>
@@ -628,10 +640,41 @@ const localSelected = computed(() => queryParams.source === 'LOCAL');
 const defaultOrgExpanded = [ALL_ORG_ID];
 const orgSearchLimit = 100;
 const employeeLayout = ref<HTMLElement>();
+const employeeColumn = ref<HTMLElement>();
+const employeePagerCount = ref(7);
+const employeePageItems = computed(() => {
+  const last = Math.ceil(total.value / queryParams.pageSize);
+  const current = Math.min(Math.max(1, queryParams.pageNum), last);
+  const pages = new Set([1, 2, last, current]);
+  if (employeePagerCount.value === 7) {
+    pages.add(current - 1);
+    pages.add(current + 1);
+  }
+  const sorted = [...pages].filter(page => page >= 1 && page <= last).sort((a, b) => a - b);
+  return sorted.flatMap((page, index) => {
+    const previous = sorted[index - 1];
+    if (previous != null && page - previous === 2) {
+      return [{ key: String(previous + 1), page: previous + 1 }, { key: String(page), page }];
+    }
+    if (previous != null && page - previous > 2) {
+      return [{ key: `gap-${previous}`, page: null }, { key: String(page), page }];
+    }
+    return [{ key: String(page), page }];
+  });
+});
+let employeeColumnObserver: ResizeObserver | undefined;
 const orgWidth = ref(300);
 const maxOrgWidth = ref(640);
 let orgResizeStart: { x: number; width: number } | undefined;
 let layoutObserver: ResizeObserver | undefined;
+
+function changeEmployeePagination(page: number, pageSize: number) {
+  if ((page - 1) * pageSize >= total.value) page = 1;
+  if (page === queryParams.pageNum && pageSize === queryParams.pageSize) return;
+  queryParams.pageNum = page;
+  queryParams.pageSize = pageSize;
+  void loadEmployees();
+}
 
 function setOrgWidth(width: number) {
   orgWidth.value = Math.max(240, Math.min(maxOrgWidth.value, Math.round(width)));
@@ -1452,6 +1495,12 @@ onMounted(() => {
     });
     layoutObserver.observe(employeeLayout.value);
   }
+  if (employeeColumn.value) {
+    employeeColumnObserver = new ResizeObserver(([entry]) => {
+      employeePagerCount.value = entry.contentRect.width < 820 ? 5 : 7;
+    });
+    employeeColumnObserver.observe(employeeColumn.value);
+  }
   loadSummary();
   loadSyncConfig();
   loadOrgTree();
@@ -1461,6 +1510,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   layoutObserver?.disconnect();
+  employeeColumnObserver?.disconnect();
   pageDisposed = true;
   employeeListRequest?.abort();
   stopSyncPolling();
@@ -1747,13 +1797,57 @@ useRaListRefreshOnReturn(() => {
       width: max-content;
       min-width: 100%;
       flex-wrap: nowrap;
-      justify-content: flex-end;
+      justify-content: flex-start;
     }
+
+    :deep(.el-pagination__sizes .el-select) {
+      width: 105px;
+    }
+  }
+
+  .employee-pager {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .employee-pager button,
+  .employee-pager-ellipsis {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 32px;
+    height: 32px;
+  }
+
+  .employee-pager button {
+    border: 0;
+    border-radius: 2px;
+    color: var(--el-text-color-regular);
+    background: var(--el-fill-color-light);
+    cursor: pointer;
+  }
+
+  .employee-pager button.active {
+    color: var(--el-color-white);
+    background: var(--el-color-primary);
   }
 
   .employee-table {
     width: 100%;
   }
+}
+
+.employee-ad-divider {
+  margin-top: 36px;
+  margin-bottom: 12px;
+}
+
+.employee-ad-summary {
+  margin-bottom: 6px;
 }
 
 .employee-detail-descriptions {
@@ -1777,10 +1871,8 @@ useRaListRefreshOnReturn(() => {
 
   .identity-key {
     display: inline-block;
-    max-width: 360px;
-    word-break: break-all;
-    font-family: Consolas, Monaco, monospace;
-    font-size: 12px;
+    max-width: 100%;
+    overflow-wrap: anywhere;
   }
 }
 

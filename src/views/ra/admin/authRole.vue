@@ -200,7 +200,9 @@ const getList = async () => {
     try {
       const [res] = await Promise.all([getAdminUserAuthRole(userId as string), loadScopeOptions(userId as string)]);
       Object.assign(form.value, res.data.user);
-      roles.value = res.data.roles;
+      roles.value = res.data.roles.filter((role: RoleVO) =>
+        String(role.roleId) !== '507' || role.flag || String(role.status) === '0'
+      );
       await nextTick(() => {
         roles.value.forEach((row) => {
           if (row?.flag) {

@@ -1,4 +1,4 @@
-import type { RaCertFilterOption } from '@/api/ra/cert';
+import type { RaCertDetail, RaCertFilterOption } from '@/api/ra/cert';
 import request from '@/utils/request';
 import { Result } from '@/api/types';
 
@@ -34,6 +34,8 @@ export interface EmployeeDistributionSelection {
   ids?: (number | string)[];
   taskNo?: string;
   resend?: boolean;
+  freshBatch?: boolean;
+  certificateChannel?: EmployeeNoticeChannel;
 }
 
 export interface EmployeeDistributionBatch {
@@ -45,6 +47,7 @@ export interface EmployeeDistributionBatch {
   successCount: number;
   failedCount: number;
   notice?: boolean;
+  taskType?: 'DISTRIBUTION' | 'UPLOAD';
 }
 
 export interface EmployeeDistributionBatchItem {
@@ -60,7 +63,7 @@ export interface EmployeeDistributionBatchItem {
   rootName?: string;
   profileNameSnapshot?: string;
   validityYears?: number;
-  messageType: EmployeeMailType | 'NOTICE';
+  messageType: EmployeeMailType | 'NOTICE' | 'CERTIFICATE_EMAIL' | 'CERTIFICATE_DINGTALK';
   sendStatus: number;
   emailStatus?: string;
   dingtalkStatus?: string;
@@ -127,7 +130,7 @@ export interface EmployeeCertTask {
   createTime?: string;
 }
 
-export type EmployeeCertStatus = 'VALID' | 'EXPIRED' | 'EXPIRING' | 'REVOKED';
+export type EmployeeCertStatus = 'VALID' | 'EXPIRED' | 'EXPIRING' | 'REVOKED' | 'ARCHIVED';
 
 export interface EmployeeCert {
   id: number | string;
@@ -157,6 +160,7 @@ export interface EmployeeCert {
   profileNameSnapshot?: string;
   raCertId?: number | string;
   issueStatus?: string;
+  version?: number | string;
   certStatus?: EmployeeCertStatus | 'NOT_YET_VALID' | 'UNKNOWN';
   remainingDays?: number;
   pfxStatus?: string;
@@ -194,6 +198,7 @@ export interface EmployeeCertIssueAttempt {
 export interface EmployeeCertTaskDetail {
   task: EmployeeCertTask;
   certs: EmployeeCert[];
+  requestedValidity?: { notBefore: string; notAfter: string } | null;
 }
 
 export interface EmployeeCertKey {
@@ -248,6 +253,8 @@ export interface EmployeeEmailCertProfile {
   enabled: boolean;
   algorithmRestriction?: string | null;
   maxValidityYears?: number;
+  templateValidity?: string | null;
+  issuerNotAfter?: string | null;
   supportedRsaKeySizes?: number[];
 }
 
@@ -315,12 +322,44 @@ export interface EmployeeProductionCandidate {
   renewalRequired: boolean;
 }
 
-export const listEmployeeProductionCandidates = (employeeId: number | string, params: {
+interface EmployeeProductionCandidateScope {
   rootId: number | string;
   profileId: number | string;
   rsaKeySize: number;
-}): Promise<Result<EmployeeProductionCandidate[]>> =>
+}
+
+export const getEmployeeProductionCandidateAvailability = (
+  data: EmployeeProductionCandidateScope & { employeeIds: string[]; identityKeys: string[] }
+): Promise<Result<string[]>> =>
+  request({ url: '/ra/v1/employee-certs/employees/production-candidate-availability', method: 'post', data, headers: { repeatSubmit: false } }) as any;
+
+export const listEmployeeProductionCandidates = (
+  employeeId: number | string,
+  params: EmployeeProductionCandidateScope
+): Promise<Result<EmployeeProductionCandidate[]>> =>
   request({ url: `/ra/v1/employee-certs/employees/${employeeId}/production-candidates`, method: 'get', params }) as any;
+
+export const getEmployeeProductionCandidateDetail = (
+  employeeId: number | string,
+  certificateId: number | string,
+  params: EmployeeProductionCandidateScope
+): Promise<Result<RaCertDetail>> =>
+  request({ url: '/ra/v1/employee-certs/employees/' + employeeId + '/production-candidates/' + certificateId, method: 'get', params }) as any;
+
+export type EmployeeCertIssuanceMode = 'NEW' | 'RENEW';
+
+export interface EmployeeCertIssuanceDefault {
+  rootId?: string | null;
+  profileId?: string | null;
+  rsaKeySize?: number | null;
+  issuanceMode: EmployeeCertIssuanceMode;
+}
+
+export const getEmployeeCertIssuanceDefault = (): Promise<Result<EmployeeCertIssuanceDefault>> =>
+  request({ url: '/ra/v1/employee-certs/issuance-default', method: 'get' }) as any;
+
+export const saveEmployeeCertIssuanceDefault = (data: EmployeeCertIssuanceDefault): Promise<Result<EmployeeCertIssuanceDefault>> =>
+  request({ url: '/ra/v1/employee-certs/issuance-default', method: 'put', data }) as any;
 
 export const createEmployeeCertTask = (data: {
   employeeIds: Array<number | string>;
@@ -328,7 +367,10 @@ export const createEmployeeCertTask = (data: {
   userIds?: Array<number | string | null>;
   rootId: number | string;
   profileId: number | string;
-  validityYears: number;
+  validityYears?: number;
+  notBefore?: string;
+  notAfter?: string;
+  issuanceMode?: EmployeeCertIssuanceMode;
   rsaKeySize: number;
   pfxPasswordRule?: EmployeePfxPasswordRule | null;
   productionChoices?: EmployeeProductionChoice[];
@@ -358,17 +400,27 @@ export const saveEmployeeEmailCertProfilePolicy = (data: {
     data
   }) as any;
 
-export const pageEmployeeCertTasks = (query: { pageNum: number; pageSize: number; taskNo?: string; certTypeCode?: string }): Promise<Result<any>> =>
+export const listEmployeeCertTaskProfiles = (): Promise<Result<RaCertFilterOption[]>> =>
+  request<unknown, Result<RaCertFilterOption[]>>({ url: '/ra/v1/employee-certs/tasks/profiles', method: 'get' });
+
+export const pageEmployeeCertTasks = (query: {
+  pageNum: number;
+  pageSize: number;
+  taskNo?: string;
+  certTypeCode?: string;
+  profileId?: string;
+}): Promise<Result<any>> =>
   request({
     url: '/ra/v1/employee-certs/tasks/page',
     method: 'post',
-    data: cleanPage(query)
+    data: cleanPage({ ...query, profileId: query.profileId || undefined })
   }) as any;
 
-export const getEmployeeCertTask = (taskNo: string): Promise<Result<EmployeeCertTaskDetail>> =>
+export const getEmployeeCertTask = (taskNo: string, background = false): Promise<Result<EmployeeCertTaskDetail>> =>
   request({
     url: `/ra/v1/employee-certs/tasks/${taskNo}`,
-    method: 'get'
+    method: 'get',
+    headers: { hideErrorNotify: background }
   }) as any;
 
 export const issueEmployeeCertTask = (taskNo: string, certIds: string[]): Promise<Result<EmployeeCertTaskDetail>> =>
@@ -401,9 +453,7 @@ export const downloadSelectedEmployeeCerts = (ids: (string | number)[], format: 
 export const listEmployeeCertLedgerProfiles = (): Promise<Result<RaCertFilterOption[]>> =>
   request<unknown, Result<RaCertFilterOption[]>>({ url: '/ra/v1/employee-certs/ledger-profiles', method: 'get' });
 
-export const pageEmployeeCerts = (query: {
-  pageNum: number;
-  pageSize: number;
+interface EmployeeCertLedgerFilters {
   taskNo?: string;
   serialNumber?: string;
   domainAccount?: string;
@@ -412,12 +462,24 @@ export const pageEmployeeCerts = (query: {
   profileId?: string;
   distributionStatus?: string;
   certStatus?: EmployeeCertStatus | '';
-}): Promise<Result<any>> =>
+}
+
+export const pageEmployeeCerts = (query: EmployeeCertLedgerFilters & { pageNum: number; pageSize: number }): Promise<Result<any>> =>
   request({
     url: '/ra/v1/employee-certs/page',
     method: 'post',
     data: { ...cleanPage(query), profileId: query.profileId || undefined }
   }) as any;
+
+export const exportEmployeeCertLedger = (filters: EmployeeCertLedgerFilters): Promise<Blob> =>
+  request<unknown, Blob>({
+    url: '/ra/v1/employee-certs/export', method: 'post',
+    data: { ...filters, profileId: filters.profileId || undefined },
+    responseType: 'blob', timeout: 120_000, headers: { sensitive: true, repeatSubmit: false }
+  });
+
+export const getEmployeeLedgerCertificate = (id: number | string): Promise<Result<RaCertDetail>> =>
+  request({ url: `/ra/v1/employee-certs/${encodeURIComponent(id)}/certificate`, method: 'get' }) as any;
 
 export const getEmployeeCert = (id: number | string): Promise<Result<EmployeeCertDetail>> =>
   request({
@@ -433,19 +495,34 @@ export const updateEmployeeCertPassword = (id: number | string, password: string
     data: { password }
   });
 
+export const removeEmployeeCertLedgerEntries = (ids: (number | string)[]): Promise<Result<boolean>> =>
+  request({ url: '/ra/v1/employee-certs/ledger/remove', method: 'post', data: ids }) as any;
+
 export const getEmployeeCertPasswords = (ids: (number | string)[]): Promise<Result<Record<string, string>>> =>
   request<unknown, Result<Record<string, string>>>({
     url: '/ra/v1/employee-certs/passwords', method: 'post', data: ids, headers: { sensitive: true, repeatSubmit: false }
   });
 
-export const getEmployeeDistributionOptions = (selection: EmployeeDistributionSelection, purpose: EmployeeSendPurpose = 'CERTIFICATE'): Promise<Result<EmployeeDistributionOptions>> =>
-  request({ url: '/ra/v1/employee-certs/distribution-options', method: 'post', data: { ...selection, purpose }, headers: { repeatSubmit: false } }) as any;
+function certificateDistributionPurpose(selection: EmployeeDistributionSelection) {
+  if (selection.certificateChannel) return `CERTIFICATE_${selection.certificateChannel}`;
+  return selection.freshBatch ? 'CERTIFICATE_BATCH' : 'CERTIFICATE';
+}
+
+export const getEmployeeDistributionOptions = (selection: EmployeeDistributionSelection, purpose: EmployeeSendPurpose = 'CERTIFICATE'): Promise<Result<EmployeeDistributionOptions>> => {
+  const { freshBatch, certificateChannel, ...target } = selection;
+  return request({
+    url: '/ra/v1/employee-certs/distribution-options', method: 'post',
+    data: { ...target, purpose: purpose === 'CERTIFICATE' ? certificateDistributionPurpose({ freshBatch, certificateChannel }) : purpose },
+    headers: { repeatSubmit: false }
+  }) as any;
+};
 
 export function submitEmployeeDistribution(selection: EmployeeDistributionSelection, messageType: EmployeeMailType, files: File[],
   scheme?: { id: string; confirmation: string }, channels?: EmployeeNoticeChannel[]): Promise<Result<{ batchNo: string; count: number }>> {
   const data = new FormData();
-  const purpose = scheme ? (channels ? 'NOTICE' : 'CERTIFICATE') : undefined;
-  data.append('selection', new Blob([JSON.stringify({ ...selection, purpose, channels, messageType,
+  const { freshBatch, certificateChannel, ...target } = selection;
+  const purpose = scheme ? (channels ? 'NOTICE' : certificateDistributionPurpose({ freshBatch, certificateChannel })) : undefined;
+  data.append('selection', new Blob([JSON.stringify({ ...target, purpose, channels, messageType,
     schemeId: scheme?.id, confirmation: scheme?.confirmation })], { type: 'application/json' }));
   files.forEach((file) => data.append('files', file));
   return request({ url: '/ra/v1/employee-certs/distributions', method: 'post', data, timeout: 120_000,
@@ -455,6 +532,9 @@ export function submitEmployeeDistribution(selection: EmployeeDistributionSelect
 export const listEmployeeDistributionSchemes = (): Promise<Result<{ schemes: EmployeeDistributionScheme[]; profiles: RaCertFilterOption[] }>> =>
   request({ url: '/ra/v1/employee-certs/distribution-schemes', method: 'get' }) as any;
 
+export const deleteEmployeeDistributionScheme = (id: string, revision?: string): Promise<Result<boolean>> =>
+  request({ url: `/ra/v1/employee-certs/distribution-schemes/${encodeURIComponent(id)}`, method: 'delete', params: { revision } }) as any;
+
 export function saveEmployeeDistributionScheme(scheme: EmployeeDistributionScheme, files: File[] = []): Promise<Result<EmployeeDistributionScheme>> {
   const data = new FormData();
   data.append('scheme', new Blob([JSON.stringify(scheme)], { type: 'application/json' }));
@@ -463,8 +543,11 @@ export function saveEmployeeDistributionScheme(scheme: EmployeeDistributionSchem
     headers: { repeatSubmit: false } }) as any;
 }
 
+export type EmployeeDistributionBatchType = 'DISTRIBUTION' | 'UPLOAD';
+
 export const pageEmployeeDistributionBatches = (params: {
   taskNo?: string;
+  batchType?: EmployeeDistributionBatchType;
   pageNum: number;
   pageSize: number;
 }): Promise<Result<{ records: EmployeeDistributionBatch[]; total: number }>> =>

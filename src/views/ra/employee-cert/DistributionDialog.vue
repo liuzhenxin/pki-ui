@@ -1,7 +1,7 @@
 <template>
   <el-dialog
     v-model="visible"
-    :title="noticeMode ? '发送通知' : retryOnly ? '补发钉钉' : messageType === 'TEXT' ? '发送纯文本通知' : '证书分发'"
+    :title="noticeMode ? '发送通知' : singleChannelLabel ? '证书分发 · ' + singleChannelLabel : retryOnly ? '补发钉钉' : messageType === 'TEXT' ? '发送纯文本通知' : '证书分发'"
     width="min(560px, 95vw)"
     append-to-body
     :close-on-click-modal="false"
@@ -19,7 +19,7 @@
       </el-descriptions-item>
       <el-descriptions-item v-if="options?.profileName" label="签发模板">{{ options.profileName }}</el-descriptions-item>
       <el-descriptions-item v-if="options?.count" label="证书数量">{{ options.count }}</el-descriptions-item>
-      <el-descriptions-item v-if="!noticeMode" label="发送渠道">{{ retryOnly ? '仅钉钉' : messageType === 'MIXED' ? '邮件、钉钉' : messageType === 'TEXT' ? '邮件' : '-' }}</el-descriptions-item>
+      <el-descriptions-item v-if="!noticeMode" label="发送渠道">{{ singleChannelLabel || (retryOnly ? '仅钉钉' : messageType === 'MIXED' ? '邮件、钉钉' : messageType === 'TEXT' ? '邮件' : '-') }}</el-descriptions-item>
       <el-descriptions-item v-if="options?.retryDingtalkCount" label="补发钉钉">
         {{ options.retryDingtalkCount }} 条邮件已成功，不再发邮件
       </el-descriptions-item>
@@ -45,18 +45,13 @@
             :label="scheme.name + (options.retryDingtalkCount ? '（原方案）' : scheme.id === options.defaultSchemeId ? '（默认）' : '')" />
         </el-select>
       </el-form-item>
-      <el-form-item v-if="chosenScheme?.groups?.length" label="自动匹配">
-        <ul>
-          <li v-for="(group, index) in chosenScheme.groups" :key="index">
-            {{ group.name }} · {{ group.count }} 条
-            <template v-if="group.retryOnly"> · 仅补发钉钉</template>
-            <template v-else> · 附件：{{ group.attachmentNames.join('、') || '无额外附件' }}</template>
-          </li>
+      <el-form-item v-for="section in boundSummary" :key="section.label" :label="section.label">
+        <ul class="scheme-lines">
+          <li v-for="(line, index) in section.lines" :key="index">{{ line }}</li>
         </ul>
+        <div v-if="section.note" class="el-upload__tip">{{ section.note }}</div>
       </el-form-item>
-      <el-form-item v-if="chosenScheme?.groups?.length">
-        <span class="el-upload__tip">邮件明确失败可按最新模板重发；邮件成功后，只补发当次钉钉文案。</span>
-      </el-form-item>
+      <p v-if="boundDeliveryNote" class="el-upload__tip">{{ boundDeliveryNote }}</p>
       <el-form-item v-if="!noticeMode && messageType && !retryOnly && !chosenScheme?.groups?.length" label="邮件附件">
         <div v-if="messageType === 'TEXT'" class="attachment-picker">
           <el-tooltip content="纯文本方案不能上传附件" placement="top">
@@ -127,12 +122,46 @@ const options = ref<EmployeeDistributionOptions>();
 const schemeId = ref('');
 const noticeMode = ref(false);
 const noticeChannels = ref<EmployeeNoticeChannel[]>([]);
+const certificateChannel = ref<EmployeeNoticeChannel>();
+const singleChannelLabel = computed(() => certificateChannel.value === 'EMAIL' ? '仅邮件'
+  : certificateChannel.value === 'DINGTALK' ? '仅钉钉' : '');
 const chosenScheme = computed(() => options.value?.schemes?.find(scheme => scheme.id === schemeId.value));
 const messageType = computed(() => options.value?.schemes?.length ? chosenScheme.value?.messageType : options.value?.messageType);
 const retryOnly = computed(() => !!options.value?.retryDingtalkCount && options.value.retryDingtalkCount === options.value.count);
 const attachments = ref<UploadUserFile[]>([]);
 let selected: EmployeeDistributionSelection;
 let targetTaskNo: string | undefined;
+
+const boundSummary = computed(() => {
+  const groups = chosenScheme.value?.groups;
+  if (!groups?.length) return [];
+  const emailGroups = certificateChannel.value === 'DINGTALK' ? [] : groups.filter(group => !group.retryOnly);
+  return [
+    {
+      label: '分发模板',
+      lines: groups.map(group => `${group.name} · ${group.count} 条${group.retryOnly ? ' · 按原记录补发钉钉' : ''}`)
+    },
+    {
+      label: '邮件附件',
+      lines: emailGroups.length
+        ? emailGroups.map(group => `${emailGroups.length > 1 ? group.name + ' · ' : ''}${group.attachmentNames.join('、') || '无额外附件'}`)
+        : [certificateChannel.value === 'DINGTALK' ? '本次仅发送钉钉，无邮件附件' : '本次仅补发钉钉，无邮件附件'],
+      note: emailGroups.length ? '模板附件与 PFX 一起打包为一个 ZIP。' : undefined
+    }
+  ];
+});
+
+const boundDeliveryNote = computed(() => {
+  if (!boundSummary.value.length) return '';
+  if (selected.freshBatch) return '本次新建分发批次，已分发的证书也会重新发送。每位员工的邮件受理成功后发送钉钉，邮件失败则跳过钉钉。';
+  if (certificateChannel.value === 'EMAIL') return '按当前模板发送证书邮件，保留钉钉状态。';
+  if (certificateChannel.value === 'DINGTALK') return '按当前模板发送钉钉，保留邮件状态。钉钉发送不受邮件结果限制。';
+  if (retryOnly.value) return '按原分发记录中的钉钉文案补发。';
+  const mailRetry = '邮件明确失败后，可按当前启用的分发模板重新发送。';
+  return options.value?.retryDingtalkCount
+    ? `${mailRetry} 对于邮件已受理、钉钉待补发的记录，沿用原钉钉文案。`
+    : mailRetry;
+});
 
 function removeAttachment(uid: UploadUserFile['uid']) {
   attachments.value = attachments.value.filter((item) => item.uid !== uid);
@@ -151,6 +180,7 @@ async function open(selection: EmployeeDistributionSelection, description: strin
   options.value = undefined;
   schemeId.value = '';
   noticeMode.value = purpose === 'NOTICE';
+  certificateChannel.value = selected.certificateChannel;
   noticeChannels.value = [];
   resetAttachments();
   visible.value = true;
@@ -190,14 +220,21 @@ async function submit() {
   submitting.value = true;
   try {
     const action = channels ? `通过${channels.map(channel => channel === 'EMAIL' ? '邮件' : '钉钉').join('、')}发送通知`
+      : certificateChannel.value === 'EMAIL' ? '仅发送证书邮件'
+      : certificateChannel.value === 'DINGTALK' ? '仅发送钉钉'
       : retryOnly.value ? '按原方案补发钉钉，不重复发邮件'
       : type === 'TEXT' ? '发送纯文本邮件'
-        : `分发证书邮件和钉钉消息${scheme.groups?.length ? '' : `（ZIP 内含证书及 ${files.length} 个附件）`}${options.value.retryDingtalkCount ? '，邮件已成功的只补发钉钉' : ''}`;
+        : `分发证书邮件和钉钉消息${scheme.groups?.length ? '' : `（ZIP 内含证书及 ${files.length} 个附件）`}${!scheme.groups?.length && options.value.retryDingtalkCount ? '，邮件已成功的只补发钉钉' : ''}`;
     const confirmed = await ElMessageBox.confirm(
       h('div', [
-        h('p', `${action} · ${scheme.name} · 共 ${recipients.length} 条。请核对收件人：`),
-        ...(scheme.groups?.length ? [h('ul', scheme.groups.map(group => h('li',
-          `${group.name} · ${group.count} 条 · ${group.retryOnly ? '仅补发钉钉' : group.attachmentNames.join('、') || '无额外附件'}`)))] : []),
+        h('p', `${action}${boundSummary.value.length ? '' : ' · ' + scheme.name} · 共 ${recipients.length} 条。`),
+        ...boundSummary.value.map(({ label, lines, note }) => h('div', [
+          h('strong', label),
+          h('ul', { style: { overflowWrap: 'anywhere', paddingLeft: '20px' } }, lines.map(line => h('li', line))),
+          note ? h('p', note) : null
+        ])),
+        boundDeliveryNote.value ? h('p', boundDeliveryNote.value) : null,
+        h('strong', '请核对收件人'),
         h('ul', { style: { maxHeight: '160px', overflow: 'auto', overflowWrap: 'anywhere', paddingLeft: '20px' } },
           recipients.map(user => h('li', `${user.name || '-'}（${user.domainAccount || '-'}）${user.email ? ' · ' + user.email : ''}`)))
       ]),
@@ -228,6 +265,13 @@ defineExpose({ open });
   list-style: none;
   margin: 0;
   padding: 0;
+}
+
+.scheme-lines {
+  width: 100%;
+  margin: 0;
+  padding-left: 18px;
+  overflow-wrap: anywhere;
 }
 
 .attachment-picker {

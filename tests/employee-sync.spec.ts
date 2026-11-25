@@ -114,6 +114,32 @@ function pageHarness(initial: any = { status: 'RUNNING', taskNo: 'EMP-test' }) {
   };
 }
 
+test('employee pagination keeps the first two and last pages at narrow and wide widths', () => {
+  const h = pageHarness();
+  h.bindings.total.value = 1000;
+  h.bindings.queryParams.pageSize = 10;
+  for (const size of [5, 7]) {
+    h.bindings.employeePagerCount.value = size;
+    for (const page of [1, 2, 20, 99, 100]) {
+      h.bindings.queryParams.pageNum = page;
+      const items = h.bindings.employeePageItems.value;
+      const pages = items.map((item: { page: number | null }) => item.page);
+      expect(pages).toContain(1);
+      expect(pages).toContain(2);
+      expect(pages).toContain(100);
+      expect(pages).toContain(page);
+      expect(pages.filter((item: number | null) => item === null).length).toBeLessThanOrEqual(2);
+    }
+  }
+  h.bindings.queryParams.pageNum = 1;
+  h.bindings.changeEmployeePagination(2, 10);
+  expect(h.bindings.queryParams.pageNum).toBe(2);
+  h.bindings.changeEmployeePagination(100, 50);
+  expect(h.bindings.queryParams.pageNum).toBe(1);
+  expect(h.bindings.queryParams.pageSize).toBe(50);
+  h.unmount();
+});
+
 test('employee information export uses the last applied directory filters', async () => {
   const page = pageHarness();
   Object.assign(page.bindings.queryParams, { keyword: '张三', source: 'API', status: 'A', foreignFlag: false, pageNum: 3 });

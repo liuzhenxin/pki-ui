@@ -54,7 +54,7 @@
 
     <el-table v-loading="loading" :data="rows" border stripe :empty-text="loadFailed ? '证书查询失败，请重试' : '暂无符合条件的内网已签发证书'" class="cert-table">
       <el-table-column label="证书序列号" prop="serialNumber" min-width="180" show-overflow-tooltip>
-        <template #default="{ row }"><el-button link type="primary" @click="handleDetail(row)">{{ row.serialNumber || '查看详情' }}</el-button></template>
+        <template #default="{ row }"><el-button link type="primary" @click="certificateDetail?.open(row)">{{ row.serialNumber || '查看详情' }}</el-button></template>
       </el-table-column>
       <el-table-column label="证书主题" prop="subject" min-width="260" :formatter="formatCertificateSubjectColumn" show-overflow-tooltip />
       <el-table-column label="申请用户" prop="userName" min-width="140" show-overflow-tooltip>
@@ -76,7 +76,7 @@
       </el-table-column>
       <el-table-column label="操作" width="156" align="center" fixed="right">
         <template #default="{ row }">
-          <CertRowAction label="查看详情" icon="View" @click="handleDetail(row)" />
+          <CertRowAction label="查看详情" icon="View" @click="certificateDetail?.open(row)" />
           <CertRowAction v-if="canSyncIntranet" label="同步到证书管理" icon="DocumentAdd" @click="openIntranetCertLedger(row)" />
           <CertRowAction v-if="canRecoverKey(row)" label="密钥恢复" icon="Key" :disabled="recoverOpening" @click="openRecover(row)" />
           <CertRowAction label="下载证书" icon="Download" @command="(format) => handleDownload(format, row)">
@@ -96,74 +96,7 @@
 
     <pagination v-show="total > 0" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" :total="total" :auto-scroll="false" @pagination="getList" />
 
-    <el-dialog v-model="detailOpen" title="证书详情" width="920px" append-to-body class="ra-cert-detail-dialog" @close="markDetailClosing" @closed="reopenQueuedDetail">
-      <el-alert v-if="detailLoadFailed" title="证书详情加载失败，当前显示列表信息" type="warning" :closable="false" />
-      <div v-loading="detailLoading">
-        <el-descriptions :column="2" border class="detail-descriptions">
-          <el-descriptions-item label="证书序列号">{{ detail.serialNumber || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="证书状态">
-            <el-tag :type="statusTagType(detail.status)" effect="light">{{ detail.statusName || statusName(detail.status) }}</el-tag>
-          </el-descriptions-item>
-          <el-descriptions-item label="证书主题" :span="2">{{ formatCertificateSubject(detail.x509?.subjectDn || detail.subject) }}</el-descriptions-item>
-          <el-descriptions-item v-if="detail.x509" label="颁发者 DN" :span="2">{{ detail.x509.issuerDn }}</el-descriptions-item>
-          <el-descriptions-item label="请求主题" :span="2">{{ formatCertificateSubject(detail.requestSubject) }}</el-descriptions-item>
-          <el-descriptions-item label="申请用户 ID">{{ Number(detail.userId) > 0 ? detail.userId : '-' }}</el-descriptions-item>
-          <el-descriptions-item label="用户名">{{ detail.userName || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="用户域账号">{{ detail.domainAccount || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="所属部门">{{ detail.deptName || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="签发 CA">{{ detail.rootName || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="证书模板">{{ detail.profileName || detail.profileId || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="生效时间">{{ parseTime(detail.notBefore) || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="失效时间">{{ parseTime(detail.notAfter) || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="SHA-1指纹" :span="2">{{ detail.sha1 || '-' }}</el-descriptions-item>
-          <el-descriptions-item v-if="detail.status === 'HOLD'" label="冻结时间">{{ parseTime(detail.revocationTime) || '-' }}</el-descriptions-item>
-          <el-descriptions-item v-if="detail.status === 'HOLD'" label="冻结原因">证书挂起</el-descriptions-item>
-          <el-descriptions-item v-if="detail.revoked && detail.status !== 'HOLD'" label="注销时间">{{
-            parseTime(detail.revocationTime) || '-'
-          }}</el-descriptions-item>
-          <el-descriptions-item v-if="detail.revoked && detail.status !== 'HOLD'" label="注销原因">{{
-            revocationReasonName(detail.revocationReason)
-          }}</el-descriptions-item>
-          <el-descriptions-item v-if="kmcKeyStatus" label="KMC密钥标识">{{ kmcKeyStatus.keyId || '-' }}</el-descriptions-item>
-          <el-descriptions-item v-if="kmcKeyStatus" label="KMC密钥状态"
-            >{{ kmcKeyStatus.statusText || '-' }}（{{ kmcKeyStatus.algorithm || 'RSA' }} {{ kmcKeyStatus.keySize || '' }}）</el-descriptions-item
-          >
-        </el-descriptions>
-
-        <el-alert v-if="detail.parseWarning" :title="detail.parseWarning" type="warning" :closable="false" show-icon class="mt12" />
-        <el-descriptions v-if="detail.x509" title="X.509 属性" :column="2" border class="detail-descriptions mt12">
-          <el-descriptions-item label="版本">V{{ detail.x509.version }}</el-descriptions-item>
-          <el-descriptions-item label="公钥算法">{{ detail.x509.publicKeyAlgorithm }}</el-descriptions-item>
-          <el-descriptions-item label="签名算法" :span="2">{{ detail.x509.signatureAlgorithm }}</el-descriptions-item>
-          <el-descriptions-item label="密钥用途" :span="2">{{ detail.x509.keyUsages.join('、') || '未声明' }}</el-descriptions-item>
-          <el-descriptions-item label="增强密钥用途" :span="2">{{ extendedUsageText(detail.x509.extendedKeyUsages) || '未声明' }}</el-descriptions-item>
-          <el-descriptions-item label="主题备用名称" :span="2">{{ detail.x509.subjectAlternativeNames.join('、') || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="SHA-256 指纹" :span="2">{{ detail.x509.sha256 }}</el-descriptions-item>
-        </el-descriptions>
-
-        <div class="pem-header">
-          <div class="pem-actions">
-            <span>PEM 证书</span>
-            <el-radio-group v-model="certificateView" aria-label="证书显示格式" size="small">
-              <el-radio-button value="pem">原始</el-radio-button>
-              <el-radio-button value="readable">查看</el-radio-button>
-            </el-radio-group>
-          </div>
-          <div class="pem-actions">
-            <el-button icon="CopyDocument" :disabled="!detail.cert" @click="copyPem">复制</el-button>
-            <el-button type="primary" icon="Download" :disabled="!detail.cert" @click="downloadPem">下载 PEM</el-button>
-          </div>
-        </div>
-        <el-input v-if="certificateView === 'pem'" :model-value="detail.cert" type="textarea" :rows="11" readonly class="pem-textarea" />
-        <X509Cert v-else-if="detail.cert" :cert-pem="detail.cert" class="pem-readable" />
-        <el-empty v-else-if="!detailLoading" description="暂无证书内容" :image-size="64" />
-
-      </div>
-      <template #footer>
-        <RaIssueNotificationButton v-if="!detailLoading && !detailLoadFailed && detail.id && detail.status === 'VALID'" :cert-id="detail.id" />
-        <el-button type="primary" @click="detailOpen = false">关闭</el-button>
-      </template>
-    </el-dialog>
+    <RaCertDetailDialog ref="certificateDetail" />
 
     <PfxExportDialog
       v-model="uploadedPfxOpen"
@@ -310,23 +243,20 @@
 </template>
 
 <script setup name="RaCert" lang="ts">
-import { formatCertificateSubject, formatCertificateSubjectColumn } from '@/utils/raCertificateSubject';
+import { formatCertificateSubjectColumn } from '@/utils/raCertificateSubject';
 import PfxExportDialog from '../components/PfxExportDialog.vue';
 import CertRowAction from '../components/CertRowAction.vue';
 import { useRaListRefreshOnReturn } from '@/hooks/useRaListRefreshOnReturn';
-import { defineAsyncComponent } from 'vue';
 import { ElMessage, FormInstance, FormRules } from 'element-plus';
 import {
   downloadRaCert,
   downloadRaManagedPfx,
   packageRaCertPfx,
-  getRaCert,
   getRaCertFilterOptions,
   type RaCertFilterOption,
   pageRaCert,
   queryRaKmcKeyStatus,
   recoverRaKey,
-  RaCertDetail,
   RaCertStatus,
   RaCertSummary,
   RaKmcKeyStatus
@@ -339,12 +269,9 @@ import type { SkfSigningCertificate } from '@/utils/raArchiveSkf';
 import SKFClient from '@/api/skf/skf_api';
 import auth from '@/plugins/auth';
 import { certificateDownloadBlob } from '@/utils/raCertificateDownload';
-import { extendedUsageText } from '@/utils/raCertificatePurpose';
 import { intranetCertSyncLocation } from '@/utils/raIntranetCertNavigation';
-import RaIssueNotificationButton from '../issue/RaIssueNotificationButton.vue';
+import RaCertDetailDialog from '../components/RaCertDetailDialog.vue';
 import HistoricalRecoveryDialog from '@/views/ca/archive-cert/HistoricalRecoveryDialog.vue';
-
-const X509Cert = defineAsyncComponent(() => import('@/components/X509Cert/index.vue'));
 
 const rows = ref<RaCertSummary[]>([]);
 const router = useRouter();
@@ -383,31 +310,6 @@ const canSyncIntranet = computed(() => auth.hasPermiAnd(['ra:intranet-cert', 'ra
 let listRequestId = 0;
 const showSearch = ref(true);
 const total = ref(0);
-const detailOpen = ref(false);
-let detailRequestId = 0;
-let detailClosing = false;
-let queuedDetail: RaCertSummary | undefined;
-const detailLoading = ref(false);
-const detailLoadFailed = ref(false);
-function markDetailClosing() {
-  if (detailClosing) return;
-  detailClosing = true;
-  detailRequestId++;
-}
-
-watch(detailOpen, (open) => {
-  if (!open) markDetailClosing();
-}, { flush: 'sync' });
-
-async function reopenQueuedDetail() {
-  await nextTick();
-  detailClosing = false;
-  const row = queuedDetail;
-  queuedDetail = undefined;
-  if (row) void handleDetail(row);
-}
-const detail = ref<Record<string, any>>({});
-const certificateView = ref<'pem' | 'readable'>('pem');
 const queryFormRef = ref<FormInstance>();
 const pkcs12Open = ref(false);
 const uploadedPfxOpen = ref(false);
@@ -415,7 +317,7 @@ const pkcs12Loading = ref(false);
 const selectedCert = ref<RaCertSummary>();
 const pkcs12FormRef = ref<FormInstance>();
 const pkcs12Form = reactive({ password: '', confirmPassword: '' });
-const kmcKeyStatus = ref<RaKmcKeyStatus | null>(null);
+const certificateDetail = ref<InstanceType<typeof RaCertDetailDialog>>();
 const recoverOpen = ref(false);
 const recoverOpening = ref(false);
 const archiveRecoveryOpen = ref(false);
@@ -599,39 +501,6 @@ function canRecoverKey(row: RaCertSummary) {
   return row.keySource === 'KMC' && row.keyRecoveryAvailable !== false;
 }
 
-async function handleDetail(row: RaCertSummary) {
-  if (detailClosing) {
-    queuedDetail = row;
-    return;
-  }
-  const requestId = ++detailRequestId;
-  detail.value = { ...row };
-  certificateView.value = 'pem';
-  kmcKeyStatus.value = null;
-  detailLoadFailed.value = false;
-  detailLoading.value = true;
-  detailOpen.value = true;
-  let data: RaCertDetail;
-  try {
-    data = unwrapData<RaCertDetail>(await getRaCert(row.id));
-    if (requestId !== detailRequestId) return;
-    detail.value = { ...(data?.summary || row), ...data };
-  } catch {
-    if (requestId === detailRequestId) detailLoadFailed.value = true;
-    return;
-  } finally {
-    if (requestId === detailRequestId) detailLoading.value = false;
-  }
-  if (canRecoverKey(data?.summary || row)) {
-    try {
-      const status = unwrapData<RaKmcKeyStatus>(await queryRaKmcKeyStatus(row.id));
-      if (requestId === detailRequestId && detailOpen.value) kmcKeyStatus.value = status;
-    } catch {
-      // The certificate detail is still available if the CA status lookup fails.
-    }
-  }
-}
-
 function openIntranetCertLedger(row: RaCertSummary) {
   const location = intranetCertSyncLocation(router, row.id);
   if (!location) return ElMessage.warning('未找到内网证书管理入口');
@@ -651,38 +520,6 @@ function statusTagType(status?: RaCertStatus) {
 
 function statusName(status?: RaCertStatus) {
   return statusOptions.find((item) => item.value === status)?.label || '未知';
-}
-
-function revocationReasonName(reason?: number) {
-  const names: Record<number, string> = {
-    0: '未指定',
-    1: '密钥泄露',
-    2: 'CA密钥泄露',
-    3: '从属关系变更',
-    4: '证书被替代',
-    5: '停止运营',
-    6: '证书挂起',
-    9: '权限撤回',
-    10: 'AA密钥泄露'
-  };
-  return names[Number(reason)] || `原因代码 ${reason ?? '-'}`;
-}
-
-async function copyPem() {
-  if (!detail.value.cert) return;
-  await navigator.clipboard.writeText(detail.value.cert);
-  ElMessage.success('证书已复制');
-}
-
-function downloadPem() {
-  if (!detail.value.cert) return;
-  const blob = new Blob([detail.value.cert], { type: 'application/x-pem-file;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `${detail.value.serialNumber || 'certificate'}.pem`;
-  link.click();
-  URL.revokeObjectURL(url);
 }
 
 async function handleDownload(format: string, row: RaCertSummary) {
@@ -1064,7 +901,6 @@ useRaListRefreshOnReturn(refreshPage);
     padding: 14px 16px 0;
     border: 1px solid var(--el-border-color-lighter);
     border-radius: 6px;
-    background: var(--el-fill-color-extra-light);
   }
 
   .query-form {
@@ -1144,49 +980,6 @@ useRaListRefreshOnReturn(refreshPage);
       }
     }
   }
-}
-
-:global(.ra-cert-detail-dialog) {
-  max-width: calc(100vw - 32px);
-}
-
-:global(.ra-cert-detail-dialog .detail-descriptions .el-descriptions__label) {
-  width: 112px;
-  color: var(--el-text-color-secondary);
-  font-weight: 500;
-}
-
-:global(.ra-cert-detail-dialog .el-descriptions__content) {
-  overflow-wrap: anywhere;
-}
-
-:global(.ra-cert-detail-dialog .pem-header) {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin: 18px 0 10px;
-  color: var(--el-text-color-primary);
-  font-size: 14px;
-  font-weight: 600;
-}
-
-:global(.ra-cert-detail-dialog .pem-actions) {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-:global(.ra-cert-detail-dialog .pem-readable) {
-  box-sizing: border-box;
-  max-height: 320px;
-  overflow: auto;
-}
-
-:global(.ra-cert-detail-dialog .pem-textarea textarea) {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
-  line-height: 1.55;
 }
 
 .pkcs12-form {
