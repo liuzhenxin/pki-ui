@@ -86,7 +86,9 @@
         </el-table-column>
         <el-table-column label="配置" align="center" prop="conf" min-width="220" :show-overflow-tooltip="true">
           <template #default="scope">
-            <el-button v-if="scope.row.conf" link type="primary" @click="handleViewConf(scope.row)">查看配置</el-button>
+            <el-button v-if="scope.row.conf" v-hasPermi="['ca:publisher:detail']" link type="primary" @click="handleViewConf(scope.row)">
+              查看配置
+            </el-button>
             <span v-else>-</span>
           </template>
         </el-table-column>
@@ -914,11 +916,13 @@ function submitFileForm() {
   uploadRef.value?.submit();
 }
 
-function handleViewConf(row: any) {
+async function handleViewConf(row: any) {
+  const { data } = await getPublisher(row.id);
+  const conf = data?.conf || '';
   try {
-    currentConf.value = JSON.stringify(JSON.parse(row.conf), null, 2);
+    currentConf.value = JSON.stringify(JSON.parse(conf), null, 2);
   } catch {
-    currentConf.value = row.conf || '';
+    currentConf.value = conf;
   }
   confOpen.value = true;
 }
