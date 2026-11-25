@@ -916,6 +916,8 @@ import { buildCaIssueSubjectItems, formatCaIssueSubject } from '@/utils/ca/issue
 import {
   pageCert,
   getCert,
+  downloadCertificate,
+  downloadCertificateChain,
   revokeCert,
   removeCert,
   exportCert,
@@ -938,7 +940,6 @@ import {
 import { listRootCa, getRootCa } from '@/api/ca/root';
 import { listProfile, getProfile } from '@/api/ca/profile';
 import { ASN1HEX, X509 } from 'jsrsasign';
-import request from '@/utils/request';
 import { parseJson } from '@/utils/json';
 import SKFClient from '@/api/skf/skf_api';
 
@@ -2562,8 +2563,9 @@ function handleSelectionChange(selection: any[]) {
   single.value = selection.length !== 1;
   multiple.value = !selection.length;
 }
-function handleView(row: any) {
-  currentCertPem.value = row.cert || row.pem;
+async function handleView(row: any) {
+  const { data } = await getCert(row.id);
+  currentCertPem.value = data?.cert || data?.pem || '';
   showDetail.value = true;
 }
 async function handleDownloadFormat(format: string, row: any) {
@@ -2573,8 +2575,7 @@ async function handleDownloadFormat(format: string, row: any) {
     return;
   }
   try {
-    const detail = row.cert || row.pem ? row : (await getCert(row.id)).data;
-    const pem = detail?.cert || detail?.pem;
+    const { data: pem } = await downloadCertificate(row.id);
     if (!pem) {
       ElMessage.error('证书内容为空');
       return;
@@ -2621,13 +2622,9 @@ function downloadPem(pem: string, filename: string) {
   downloadAs(pem.trim() + '\n', downloadName, 'application/x-pem-file');
 }
 
-async function downloadP7b(certId: number, filename: string) {
+async function downloadP7b(certId: string | number, filename: string) {
   try {
-    const response = (await request({
-      url: `/ca/v1/certs/${certId}/p7b`,
-      method: 'get',
-      responseType: 'blob'
-    })) as any;
+    const response = await downloadCertificateChain(certId, 'p7b');
     const blob = response instanceof Blob ? response : new Blob([response]);
     const link = document.createElement('a');
     link.href = window.URL.createObjectURL(blob);

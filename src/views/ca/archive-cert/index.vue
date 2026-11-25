@@ -75,7 +75,7 @@ import { ComponentInternalInstance, getCurrentInstance, onMounted, reactive, ref
 import { ElMessage } from 'element-plus';
 import { X509 } from 'jsrsasign';
 import X509Cert from '@/components/X509Cert/index.vue';
-import { exportArchiveCert, pageArchiveCert } from '@/api/ca/archiveCert';
+import { downloadArchiveCertificate, exportArchiveCert, getArchiveCert, pageArchiveCert } from '@/api/ca/archiveCert';
 import { historicalRecoveryPermission } from '@/api/ca/historicalRecovery';
 import HistoricalRecoveryDialog from './HistoricalRecoveryDialog.vue';
 
@@ -128,8 +128,9 @@ function handleSelectionChange(selection: any[]) {
   multiple.value = !selection.length;
 }
 
-function handleView(row: any) {
-  currentCertPem.value = row.cert || '';
+async function handleView(row: any) {
+  const { data } = await getArchiveCert(row.id);
+  currentCertPem.value = data?.cert || '';
   showDetail.value = true;
 }
 
@@ -143,8 +144,8 @@ function openRecovery(row: RecoveryRow) {
   showRecovery.value = true;
 }
 
-function handleDownload(row: any) {
-  const pem = row.cert || '';
+async function handleDownload(row: any) {
+  const { data: pem } = await downloadArchiveCertificate(row.id);
   if (!pem) {
     ElMessage.error('证书内容为空');
     return;

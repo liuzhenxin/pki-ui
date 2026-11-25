@@ -16,6 +16,10 @@ export function getArchiveCert(id: string | number): Promise<Result<any>> {
   }) as any;
 }
 
+export function downloadArchiveCertificate(id: string | number): Promise<Result<string>> {
+  return request({ url: `/ca/v1/archive-certs/${id}/download`, method: 'get' }) as any;
+}
+
 export function exportArchiveCert(data: any): Promise<any> {
   return request({
     url: '/ca/v1/archive-certs/export',

@@ -31,6 +31,14 @@ export function getCert(id: string | number): Promise<Result<any>> {
 }
 
 // 保存证书
+export function downloadCertificate(id: string | number): Promise<Result<string>> {
+  return request({ url: `/ca/v1/certs/${id}/download`, method: 'get' }) as any;
+}
+
+export function downloadCertificateChain(id: string | number, format: 'pem' | 'p7b'): Promise<Blob> {
+  return request({ url: `/ca/v1/certs/${id}/${format}`, method: 'get', responseType: 'blob' }) as any;
+}
+
 export function saveCert(data: any): Promise<Result<any>> {
   return request({
     url: '/ca/v1/certs',
