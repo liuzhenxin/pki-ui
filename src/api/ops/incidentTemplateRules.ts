@@ -22,6 +22,7 @@ export interface IncidentTemplateRules {
   }[];
   bindings: IncidentTemplateBinding[];
   notificationsEnabled?: boolean;
+  notificationsRevision?: string | null;
   cpuRoutes?: { channel: string; phase: 'TRIGGERED' | 'RECOVERED'; objectPrefix: string | null; deploymentTemplate: boolean }[];
   editable: boolean;
 }
@@ -49,5 +50,14 @@ export function saveIncidentChannels(source: string, changes: Record<string, Bin
     url: directory + '/' + encodeURIComponent(source),
     method: 'put',
     data: changes
+  });
+}
+
+export function saveIncidentDeliverySettings(enabled: boolean, revision: string | null) {
+  return request<unknown, { enabled: boolean; revision: string }>({
+    baseURL: opsApiBaseURL,
+    url: `${directory}/delivery-settings`,
+    method: 'put',
+    data: { enabled, revision }
   });
 }

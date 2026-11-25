@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { flushPromises, mount } from '@vue/test-utils';
-import ElementPlus from 'element-plus';
+import ElementPlus, { ElMessageBox } from 'element-plus';
 import { beforeEach, expect, it, vi } from 'vitest';
 import IncidentTemplateRulePane from '@/views/ops/alert/IncidentTemplateRulePane.vue';
 
@@ -11,6 +11,7 @@ vi.mock('@/utils/request', () => ({ default: mocks.request }));
 const base = '/v1/alert/incident-template-rules';
 const templates = '/v1/alert/notification-templates';
 const ding = { name: 'shift-bot', channel: 'DINGTALK', templateChannels: ['DINGTALK'] };
+const enterpriseDing = { name: 'ui:enterprise-dingtalk', channel: 'FAW_VW_DINGTALK', templateChannels: ['FAW_VW_DINGTALK'], recipient: 'ra.fixture' };
 const mail = { name: 'corp-mail', channel: 'FAW_VW_EMAIL', templateChannels: ['FAW_VW_EMAIL', 'EMAIL'], recipient: 'ops@example.invalid' };
 
 beforeEach(() => {
@@ -62,6 +63,7 @@ beforeEach(() => {
     }
     if (url.startsWith(templates) && method === 'get') return { title: '告警 {{object}}', body: '示例正文' };
     if (url.endsWith('/preview') && method === 'post') return { title: '告警 示例服务器', body: '模拟详情' };
+    if (url === base + '/delivery-settings' && method === 'put') return { enabled: data.enabled, revision: 'switch-r2' };
     if (url.startsWith(base) && method === 'put') {
       const source = url.slice(base.length + 1);
       return Object.entries(data).map(([channel, edit]) => ({ source, channel, ...(edit as object), revision: 'r1' }));
@@ -227,6 +229,73 @@ it('matches CPU monitor trigger and recovery boundaries with the configured SMTP
       expect(panel.text()).toContain('smtp-demo · 系统告警' + label + ' · 邮件（SMTP） · 收件人：receiver@example.invalid');
     }
   } finally {
+    wrapper.unmount();
+  }
+});
+
+it('binds the page-configured enterprise channel for RA and confirms the global delivery switch', async () => {
+  const original = mocks.request.getMockImplementation()!;
+  mocks.request.mockImplementation(async (request) => {
+    if (request.url === base) {
+      return {
+        editable: true,
+        notificationsEnabled: false,
+        notificationsRevision: 'switch-r1',
+        sources: [{ source: 'RA_STANDARD_REVIEW', application: 'RA', trigger: 'STANDARD_BACKLOG', recovery: 'STANDARD_CLEARED' }],
+        channels: [enterpriseDing],
+        bindings: []
+      };
+    }
+    if (request.url === templates + '/catalog') {
+      return {
+        applications: [
+          {
+            value: 'RA',
+            scenes: [
+              { value: 'STANDARD_BACKLOG', label: '标准版审核积压' },
+              { value: 'STANDARD_CLEARED', label: '标准版审核恢复' }
+            ]
+          }
+        ],
+        channels: [{ value: 'FAW_VW_DINGTALK', label: '企业钉钉' }]
+      };
+    }
+    return original(request);
+  });
+  const confirmation = vi.spyOn(ElMessageBox, 'confirm').mockRejectedValueOnce('cancel').mockResolvedValueOnce('confirm');
+  const wrapper = await openEditor();
+  try {
+    const checkbox = wrapper.get('input[type=checkbox]');
+    expect(checkbox.element.parentElement?.textContent).toContain('企业钉钉');
+    await checkbox.setValue(true);
+    expect(wrapper.text()).toContain('ra.fixture');
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === '保存渠道配置')!
+      .trigger('click');
+    await flushPromises();
+    expect(mocks.request).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: base + '/RA_STANDARD_REVIEW',
+        data: { 'ui:enterprise-dingtalk': { triggerChannel: 'FAW_VW_DINGTALK', recoveryChannel: 'FAW_VW_DINGTALK', enabled: true, revision: null } }
+      })
+    );
+    const toggle = wrapper.findAll('button').find((button) => button.text() === '开启自动投递')!;
+    await toggle.trigger('click');
+    await flushPromises();
+    expect(mocks.request).not.toHaveBeenCalledWith(expect.objectContaining({ url: base + '/delivery-settings' }));
+    await toggle.trigger('click');
+    await flushPromises();
+    expect(mocks.request).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: base + '/delivery-settings',
+        data: { enabled: true, revision: 'switch-r1' }
+      })
+    );
+    expect(wrapper.emitted('deliveryChanged')).toEqual([[true]]);
+    expect(wrapper.text()).toContain('告警自动投递已开启');
+  } finally {
+    confirmation.mockRestore();
     wrapper.unmount();
   }
 });

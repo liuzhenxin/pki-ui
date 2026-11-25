@@ -24,7 +24,15 @@ it('keeps standard channels on their tabs and loads both enterprise channels onl
       case '/v1/alert/rules':
         return [];
       case '/v1/alert/faw-vw-channels/gateway':
-        return { settings: { origin: 'https://mock.invalid', revision: null, credentialsConfigured: false }, editable: false };
+        return {
+          settings: {
+            emailServerUrl: 'https://mock.invalid/mail',
+            dingtalkServerUrl: 'https://mock.invalid/dingtalk',
+            revision: null,
+            credentialsConfigured: false
+          },
+          editable: false
+        };
       default:
         return { settings: null };
     }
@@ -87,7 +95,12 @@ it('keeps standard channels on their tabs and loads both enterprise channels onl
     await tab('enterprise-gateway').trigger('click');
     await flushPromises();
     const gateway = wrapper.get('#pane-enterprise-gateway');
-    expect(gateway.get('input').element.value).toBe('https://mock.invalid');
+    expect(
+      gateway
+        .findAll('input')
+        .slice(0, 2)
+        .map((input) => input.element.value)
+    ).toEqual(['https://mock.invalid/mail', 'https://mock.invalid/dingtalk']);
     expect(gateway.get('input').attributes('readonly')).toBeDefined();
     expect(mocks.request).toHaveBeenCalledWith(requested('/v1/alert/faw-vw-channels/gateway'));
     expect(gateway.text()).toContain('企业钉钉');

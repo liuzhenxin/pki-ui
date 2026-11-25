@@ -3,6 +3,12 @@
     <div v-if="!resource" class="rule-toolbar">
       <el-button type="primary" :disabled="loading" @click="open()">新建规则</el-button>
       <el-button v-if="loadFailed" @click="load">重新加载</el-button>
+      <template v-if="!loadFailed && view?.notificationsEnabled !== undefined">
+        <span>告警自动投递{{ view.notificationsEnabled ? '已开启' : '已暂停' }}</span>
+        <el-button v-if="view.editable" :disabled="loading || changingDelivery" @click="changeDelivery">
+          {{ view.notificationsEnabled ? '暂停自动投递' : '开启自动投递' }}
+        </el-button>
+      </template>
     </div>
     <el-alert v-if="loadFailed" title="告警投递规则加载失败" type="error" :closable="false" />
     <el-table
@@ -13,13 +19,15 @@
       <el-table-column label="告警类型" min-width="145">
         <template #default="{ row }">{{ sourceLabel(row.source) }}</template>
       </el-table-column>
-      <el-table-column label="投递渠道" prop="channel" min-width="130" />
+      <el-table-column label="投递渠道" min-width="130">
+        <template #default="{ row }">{{ bindingChannelName(row.channel) }}</template>
+      </el-table-column>
       <el-table-column label="触发模板" min-width="125">
-        <template #default="{ row }">{{ row.triggerChannel ? channelLabel(row.triggerChannel) : '沿用外部规则' }}</template>
+        <template #default="{ row }">{{ row.triggerChannel ? channelLabel(row.triggerChannel) : emptyTemplateLabel(row.channel) }}</template>
       </el-table-column>
       <el-table-column label="恢复模板" min-width="125">
         <template #default="{ row }">
-          {{ row.source === 'RA_CERT_EXPIRY' ? '—' : row.recoveryChannel ? channelLabel(row.recoveryChannel) : '沿用外部规则' }}
+          {{ row.source === 'RA_CERT_EXPIRY' ? '—' : row.recoveryChannel ? channelLabel(row.recoveryChannel) : emptyTemplateLabel(row.channel) }}
         </template>
       </el-table-column>
       <el-table-column v-if="view?.editable" label="操作" width="90">
@@ -32,7 +40,9 @@
       <p>{{ notificationStatus }}</p>
       <ul>
         <li v-for="row in selectedRows" :key="row.channel.name">
-          {{ row.channel.name }} · {{ recipientText(row) }}<br />触发：{{ sampleRoute(row, 'trigger') }}　恢复：{{ sampleRoute(row, 'recovery') }}
+          {{ channelDisplayName(row.channel) }} · {{ recipientText(row) }}<br />触发：{{ sampleRoute(row, 'trigger') }}　恢复：{{
+            sampleRoute(row, 'recovery')
+          }}
         </li>
       </ul>
       <p v-if="!selectedRows.length">暂无选中的投递渠道</p>
@@ -85,16 +95,23 @@
             <p>{{ source === 'RA_CERT_EXPIRY' ? '收件人使用 RA 上报的证书使用者。' : '收件人沿用所选渠道的配置。' }}</p>
             <el-alert v-if="stale" title="规则已由其他操作更新。重新加载会丢弃本窗口未保存的选择。" type="warning" :closable="false" />
             <el-button v-if="stale" :disabled="busy || loading" @click="reloadRules">重新加载规则</el-button>
-            <el-empty v-if="!rows.length" description="暂无可用投递渠道" :image-size="64" />
+            <el-empty v-if="!rows.length" description="暂无可用投递渠道" :image-size="64">
+              <el-button link type="primary" @click="openChannels">配置通知渠道</el-button>
+            </el-empty>
             <fieldset v-if="rows.length" class="channel-picker" :disabled="busy || stale || !view?.editable">
               <legend>投递渠道（可多选）</legend>
               <label v-for="row in rows" :key="row.channel.name">
-                <input type="checkbox" :checked="row.selected" @change="toggleChannel(row)" />
-                {{ row.channel.name }} · {{ channelLabel(row.channel.channel) }}
+                <input
+                  type="checkbox"
+                  :checked="row.selected"
+                  :disabled="!row.selected && row.channel.name.startsWith('ui:') && row.channel.available === false"
+                  @change="toggleChannel(row)"
+                />
+                {{ channelDisplayName(row.channel) }}{{ row.channel.available === false ? '（不可用）' : '' }}
               </label>
             </fieldset>
             <article v-for="row in selectedRows" :key="row.channel.name" class="channel-rule">
-              <strong>{{ row.channel.name }} · {{ channelLabel(row.channel.channel) }}</strong>
+              <strong>{{ channelDisplayName(row.channel) }}</strong>
               <p v-if="row.error" role="alert">{{ row.error }}</p>
               <p v-if="source !== 'RA_CERT_EXPIRY'">{{ recipientText(row) }}</p>
               <div class="template-controls">
@@ -107,7 +124,7 @@
                       :disabled="busy || stale || !view?.editable"
                       @change="previewResult = undefined"
                     >
-                      <el-option label="沿用外部规则" value="" />
+                      <el-option :label="emptyTemplateLabel(row.channel.name)" value="" />
                       <el-option v-for="kind in row.channel.templateChannels" :key="kind" :label="templateLabel(phase, kind)" :value="kind" />
                     </el-select>
                     <el-button :disabled="busy || !row[phase]" @click="preview(row, phase)">模拟预览</el-button>
@@ -177,10 +194,15 @@
 </template>
 
 <script setup lang="ts">
-import { ElMessage } from 'element-plus';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import { getAlertConditions } from '@/api/ops';
 import type { AlertConditionRule } from '@/api/ops/types';
-import { getIncidentTemplateRules, saveIncidentChannels, type IncidentTemplateRules } from '@/api/ops/incidentTemplateRules';
+import {
+  getIncidentTemplateRules,
+  saveIncidentChannels,
+  saveIncidentDeliverySettings,
+  type IncidentTemplateRules
+} from '@/api/ops/incidentTemplateRules';
 import {
   getNotificationTemplate,
   getNotificationTemplateCatalog,
@@ -200,7 +222,7 @@ type ChannelRow = {
   recovery: string;
   error?: string;
 };
-const emit = defineEmits<{ custom: []; conditions: [] }>();
+const emit = defineEmits<{ custom: []; conditions: []; channels: []; deliveryChanged: [enabled: boolean] }>();
 const phaseLabels: Record<Phase, string> = { trigger: '触发模板', recovery: '恢复模板' };
 const sourceLabels: Record<string, string> = {
   SERVER_CPU: 'CPU 使用率',
@@ -227,6 +249,7 @@ const visible = ref(false);
 const editing = ref(false);
 const loading = ref(false);
 const loadFailed = ref(false);
+const changingDelivery = ref(false);
 const conditionsLoading = ref(false);
 const conditionsFailed = ref(false);
 const busy = ref(false);
@@ -293,6 +316,21 @@ const conditionEmptyText = computed(() =>
 );
 
 const channelLabel = (code: string) => catalog.value?.channels.find((item) => item.value === code)?.label || code;
+function channelDisplayName(channel: ChannelRow['channel']) {
+  const type = channelLabel(channel.channel);
+  if (channel.name.startsWith('ui:dingtalk-')) return channel.recipient ? `${channel.recipient} · ${type}` : channel.name;
+  return channel.name.startsWith('ui:') ? type : `${channel.name} · ${type}`;
+}
+
+function emptyTemplateLabel(alias: string) {
+  return alias.startsWith('ui:') ? '不发送' : '沿用外部规则';
+}
+
+function bindingChannelName(alias: string) {
+  const channel = view.value?.channels.find((item) => item.name === alias);
+  return channel?.name.startsWith('ui:') ? channelDisplayName(channel) : alias;
+}
+
 const bindingFor = (name: string) => view.value?.bindings.find((item) => item.source === source.value && item.channel === name);
 
 function templateLabel(phase: Phase, kind: string) {
@@ -368,6 +406,40 @@ async function load() {
   }
 }
 
+async function changeDelivery() {
+  const current = view.value;
+  if (!current?.editable || current.notificationsEnabled === undefined || changingDelivery.value) return;
+  const enabled = !current.notificationsEnabled;
+  changingDelivery.value = true;
+  try {
+    await ElMessageBox.confirm(
+      enabled ? '开启后，已绑定的告警实例规则会自动投递，已有待发任务也将继续发送。' : '暂停后，告警实例停止创建新投递任务，待发任务将暂停处理。',
+      enabled ? '开启告警自动投递' : '暂停告警自动投递',
+      { type: 'warning', confirmButtonText: enabled ? '确认开启' : '确认暂停' }
+    );
+  } catch {
+    changingDelivery.value = false;
+    return;
+  }
+  try {
+    const saved = await saveIncidentDeliverySettings(enabled, current.notificationsRevision ?? null);
+    current.notificationsEnabled = saved.enabled;
+    current.notificationsRevision = saved.revision;
+    emit('deliveryChanged', saved.enabled);
+    ElMessage.success('告警自动投递设置已保存');
+  } catch {
+    ElMessage.error('保存告警自动投递设置失败，正在重新加载');
+    await load();
+  } finally {
+    changingDelivery.value = false;
+  }
+}
+
+function openChannels() {
+  visible.value = false;
+  emit('channels');
+}
+
 async function reloadRules() {
   if (await load()) resetDrafts();
 }
@@ -412,6 +484,10 @@ async function save() {
   const current = view.value;
   const edits = rows.value.filter(changed);
   if (!current?.editable || busy.value || stale.value || !source.value || !edits.length) return;
+  if (edits.some((row) => row.selected && row.channel.name.startsWith('ui:') && !row.trigger && !row.recovery)) {
+    saveError.value = '请为所选渠道至少选择一个投递模板。';
+    return;
+  }
   busy.value = true;
   saveError.value = '';
   try {

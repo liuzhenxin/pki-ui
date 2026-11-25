@@ -72,6 +72,8 @@
                 @custom="openCustomRule"
                 :initial-resource="ruleResource"
                 @conditions="configure('conditions')"
+                @channels="configure('channels')"
+                @delivery-changed="notificationStatus = $event"
               />
               <el-collapse v-model="ruleSections">
                 <el-collapse-item title="自定义服务事件" name="custom">
