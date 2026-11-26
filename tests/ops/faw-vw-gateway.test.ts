@@ -11,7 +11,9 @@ vi.mock('@/utils/request', () => ({ default: mocks.request }));
 const gatewayUrl = '/v1/alert/faw-vw-channels/gateway';
 const defaults = { origin: 'https://compose.example.test', revision: null, credentialsConfigured: false };
 
-beforeEach(() => mocks.request.mockReset());
+beforeEach(() => {
+  mocks.request.mockReset();
+});
 
 it('uses the Compose default, displays the saved address, and prevents stale saves until refresh', async () => {
   const saved = { origin: 'https://managed.example.test', revision: 'saved-revision', credentialsConfigured: true };
@@ -79,6 +81,26 @@ it('shows the current origin read-only and never saves for a viewer', async () =
     expect(wrapper.find('input[type="password"]').exists()).toBe(false);
     await wrapper.get('form').trigger('submit');
     expect(mocks.request).toHaveBeenCalledTimes(1);
+  } finally {
+    wrapper.unmount();
+  }
+});
+
+it('keeps unsaved DingTalk recipients when switching enterprise channel tabs without writing or sending', async () => {
+  mocks.request.mockImplementation(async ({ url }) =>
+    url === gatewayUrl ? { settings: defaults, editable: true } : { settings: { revision: null, enabled: false, to: '' } }
+  );
+  const wrapper = mount(FawVwGatewayPane, { global: { plugins: [ElementPlus] } });
+  try {
+    await flushPromises();
+    const recipient = wrapper.get('input[placeholder="多个账号或工号用英文逗号分隔"]');
+    await recipient.setValue('mock-user');
+    const tab = (name: string) => wrapper.findAll('[role="tab"]').find((item) => item.text() === name)!;
+    await tab('企业邮件').trigger('click');
+    expect(tab('企业邮件').attributes('aria-selected')).toBe('true');
+    await tab('企业钉钉').trigger('click');
+    expect((recipient.element as HTMLInputElement).value).toBe('mock-user');
+    expect(mocks.request.mock.calls.every(([request]) => request.method === 'get')).toBe(true);
   } finally {
     wrapper.unmount();
   }

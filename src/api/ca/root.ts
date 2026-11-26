@@ -87,6 +87,10 @@ export function getRootCa(id: string | number): Promise<Result<any>> {
   }) as any;
 }
 
+export function downloadRootCa(id: string | number): Promise<Result<{ name: string; cert: string; certchain?: string }>> {
+  return request({ url: `/ca/v1/roots/${id}/download`, method: 'get' }) as any;
+}
+
 // 生成自签名CA根证书
 export function genRootCa(data: any): Promise<Result<any>> {
   return request({

@@ -30,7 +30,7 @@
         </div>
       </section>
       <section class="auth-panel" aria-label="登录">
-        <el-form ref="loginRef" :model="loginForm" :rules="loginRules" :disabled="loading || certificateLoading" class="login-form">
+        <el-form ref="loginRef" :model="loginForm" :rules="loginRules" class="login-form">
           <div class="title-box">
             <div>
               <h2 class="title">欢迎回来</h2>
@@ -45,7 +45,6 @@
               :class="{ active: authMode === 'password' }"
               role="tab"
               :aria-selected="authMode === 'password'"
-              :disabled="loading || certificateLoading"
               @click="authMode = 'password'"
             >
               <svg-icon icon-class="user" />
@@ -57,7 +56,6 @@
               :class="{ active: authMode === 'certificate' }"
               role="tab"
               :aria-selected="authMode === 'certificate'"
-              :disabled="loading || certificateLoading"
               @click="authMode = 'certificate'"
             >
               <svg-icon icon-class="cert" />
@@ -148,6 +146,10 @@
                 <span v-else>{{ captchaLoading ? '加载中…' : '获取验证码' }}</span>
               </button>
             </el-form-item>
+            <el-alert v-if="captchaError" :title="captchaError" type="warning" :closable="false" show-icon />
+            <el-alert v-if="secretKeyError" :title="secretKeyError" type="warning" :closable="false" show-icon>
+              <el-button link type="primary" :loading="secretKeyLoading" @click="getSecretKey">重试获取公钥</el-button>
+            </el-alert>
             <div class="form-options">
               <el-checkbox v-if="loginForm.tenantId !== cspProduct.tenantId" v-model="loginForm.rememberMe">{{
                 proxy.$t('login.rememberPassword')
@@ -177,7 +179,7 @@
             <el-form-item class="login-action">
               <el-button
                 :loading="loading"
-                :disabled="captchaEnabled && (captchaLoading || !loginForm.uuid)"
+                :disabled="loginPreparationPending"
                 size="large"
                 type="primary"
                 class="login-button"
@@ -272,6 +274,7 @@
 <script setup lang="ts">
 import { createCertificateLoginChallenge, getCodeImg, getLoginHints, getSecrets, verifyCertificateLoginSignature } from '@/api/login';
 import SKFClient from '@/api/skf/skf_api';
+import { isAxiosError } from 'axios';
 import { calculateSm2SignatureDigest, normalizeSm2SignatureForApi } from '@/utils/sm2SignatureDigest';
 import { X509 } from 'jsrsasign';
 
@@ -284,9 +287,9 @@ import { authBinding } from '@/api/system/social/auth';
 import { useUserStore } from '@/store/modules/user';
 import { useSettingsStore } from '@/store/modules/settings';
 import { LoginData, TenantVO } from '@/api/types';
+import { to } from 'await-to-js';
 import { HttpStatus } from '@/enums/RespEnum';
 import { useI18n } from 'vue-i18n';
-import { loginVersion } from '@/utils/loginResponse';
 import { v4 as uuidv4 } from 'uuid';
 import { getRadiusStatus } from '@/api/ops';
 import { SVS_INIT_PATH, SVS_TENANT_CODE, getSvsInitialization } from '@/api/svs/init';
@@ -303,7 +306,7 @@ import licenseLoginBackground from '@/assets/images/login/tenant-license.webp';
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
 
 const title = import.meta.env.VITE_APP_TITLE;
-const systemVersion = loginVersion(import.meta.env.VITE_APP_VERSION);
+const systemVersion = import.meta.env.VITE_APP_VERSION || '未知';
 const userStore = useUserStore();
 const settingsStore = useSettingsStore();
 const router = useRouter();
@@ -350,11 +353,11 @@ const loading = ref(false);
 // 验证码开关
 const captchaEnabled = ref(true);
 const captchaLoading = ref(false);
+const captchaError = ref('');
 const CAPTCHA_REQUEST_INTERVAL_MS = 1200;
 let lastCaptchaRequestAt = 0;
 let captchaRequestId = 0;
 let loginHintsRequestId = 0;
-let loginPageDisposed = false;
 // 租户开关
 const tenantEnabled = ref(false);
 // 租户列表
@@ -371,6 +374,9 @@ const loginRef = ref<ElFormInstance>();
 
 // 密钥
 const secretKey = ref('');
+const secretKeyLoading = ref(false);
+const secretKeyError = ref('');
+const loginPreparationPending = computed(() => !secretKey.value || (captchaEnabled.value && (captchaLoading.value || !loginForm.value.uuid)));
 const loginTitle = ref(proxy.$t('login.title'));
 const authMode = ref<'password' | 'certificate'>('password');
 const radiusRequired = ref(false);
@@ -595,52 +601,59 @@ async function svsPostLoginPath(): Promise<string | null> {
   return state.locked ? '/svs/home' : SVS_INIT_PATH;
 }
 
-const handleLogin = async () => {
-  if (loading.value || captchaLoading.value || loginPageDisposed) return;
+const handleLogin = () => {
+  if (loading.value || loginPreparationPending.value) {
+    return;
+  }
   if (tenantWhitelistMissed.value) {
     ElMessage.error('当前系统租户未启用，无法登录，请联系管理员');
     return;
   }
-  loading.value = true;
-  try {
-    const valid = await loginRef.value?.validate().catch(() => false);
-    if (!valid) return;
-    if (captchaEnabled.value && (!loginForm.value.uuid || !codeUrl.value)) {
-      ElMessage.warning('请先获取有效验证码');
-      await getCode(String(loginForm.value.tenantCode || ''), true);
-      return;
-    }
-    loginData.value = { ...loginForm.value, publicKey: secretKey.value };
-    await userStore.login(loginData.value);
-    if (loginPageDisposed) return;
-    captchaRequestId++;
-    clearCaptcha();
-    captchaLoading.value = false;
-    // 勾选了需要记住密码设置在 localStorage 中设置记住用户名和密码
-    if (loginForm.value.rememberMe && loginForm.value.tenantId !== cspProduct.tenantId) {
-      localStorage.setItem('tenantId', String(loginForm.value.tenantId));
-      localStorage.setItem('tenantCode', String(loginForm.value.tenantCode));
-      localStorage.setItem('username', String(loginForm.value.username));
-      localStorage.setItem('password', String(loginForm.value.password));
-      localStorage.setItem('rememberMe', String(loginForm.value.rememberMe));
+  loginRef.value?.validate(async (valid: boolean, fields: any) => {
+    if (valid) {
+      if (loading.value || loginPreparationPending.value) {
+        return;
+      }
+      loading.value = true;
+
+      // 勾选了需要记住密码设置在 localStorage 中设置记住用户名和密码
+      if (loginForm.value.rememberMe && loginForm.value.tenantId !== cspProduct.tenantId) {
+        localStorage.setItem('tenantId', String(loginForm.value.tenantId));
+        localStorage.setItem('tenantCode', String(loginForm.value.tenantCode));
+        localStorage.setItem('username', String(loginForm.value.username));
+        localStorage.setItem('password', String(loginForm.value.password));
+        localStorage.setItem('rememberMe', String(loginForm.value.rememberMe));
+      } else {
+        // 租户用于刷新后恢复系统上下文，不随“记住密码”清理。
+        localStorage.setItem('tenantId', String(loginForm.value.tenantId));
+        localStorage.setItem('tenantCode', String(loginForm.value.tenantCode));
+        localStorage.removeItem('username');
+        localStorage.removeItem('password');
+        localStorage.removeItem('rememberMe');
+      }
+      // 调用action的登录方法
+      //const [err] = await to(userStore.login(loginForm.value));
+      loginData.value = { ...loginForm.value, publicKey: secretKey.value };
+
+      const [err] = await to(userStore.login(loginData.value));
+      if (!err) {
+        const redirectUrl = (await svsPostLoginPath()) || redirect.value || '/';
+        await router.push(redirectUrl);
+        loading.value = false;
+      } else {
+        loading.value = false;
+        const oauthError = (err as any)?.response?.data?.error;
+        if (oauthError === 'P_OAuth2_CaptchaIsNull') {
+          captchaEnabled.value = true;
+        }
+        if (captchaEnabled.value) {
+          await getCode(String(loginForm.value.tenantCode || ''), true);
+        }
+      }
     } else {
-      // 租户用于刷新后恢复系统上下文，不随“记住密码”清理。
-      localStorage.setItem('tenantId', String(loginForm.value.tenantId));
-      localStorage.setItem('tenantCode', String(loginForm.value.tenantCode));
-      localStorage.removeItem('username');
-      localStorage.removeItem('password');
-      localStorage.removeItem('rememberMe');
+      console.log('error submit!', fields);
     }
-    await router.push((await svsPostLoginPath()) || redirect.value || '/');
-  } catch (err: any) {
-    if (loginPageDisposed) return;
-    const msg = String(err?.response?.data?.error_description || err?.response?.data?.msg || err?.message || err?.msg || '登录失败，请重试');
-    ElMessage.error(msg);
-    if (err?.response?.data?.error === 'P_OAuth2_CaptchaIsNull' || /验证码|captcha/i.test(msg)) captchaEnabled.value = true;
-    if (captchaEnabled.value) await getCode(String(loginForm.value.tenantCode || ''), true);
-  } finally {
-    loading.value = false;
-  }
+  });
 };
 
 function parseCertificateOption(item: any): CertificateOption | null {
@@ -768,35 +781,31 @@ async function handleCertificateLogin() {
 /**
  * 获取验证码
  */
-function clearCaptcha() {
-  loginForm.value.code = '';
-  loginForm.value.uuid = '';
-  codeUrl.value = '';
-}
-
 const getCode = async (tenantCode = String(loginForm.value.tenantCode || ''), force = false) => {
   const now = Date.now();
-  if (loginPageDisposed || (!force && (loading.value || captchaLoading.value || now - lastCaptchaRequestAt < CAPTCHA_REQUEST_INTERVAL_MS))) {
+  if (captchaLoading.value || (!force && now - lastCaptchaRequestAt < CAPTCHA_REQUEST_INTERVAL_MS)) {
     return;
   }
 
   captchaLoading.value = true;
+  captchaError.value = '';
   const requestId = ++captchaRequestId;
   lastCaptchaRequestAt = now;
-  clearCaptcha();
+  loginForm.value.code = '';
+  loginForm.value.uuid = '';
+  codeUrl.value = '';
   try {
     const uuid = uuidv4();
-    const res = await getCodeImg(uuid, tenantCode);
-    if (loginPageDisposed || requestId !== captchaRequestId || tenantCode !== String(loginForm.value.tenantCode || '')) {
+    const res = await getCodeImg(uuid, tenantCode, true);
+    if (requestId !== captchaRequestId || tenantCode !== String(loginForm.value.tenantCode || '')) {
       return;
     }
-    const { data } = res;
-    if (typeof data !== 'string' || !data.trim()) throw new Error('验证码图片为空');
     loginForm.value.uuid = uuid;
+    const { data } = res;
     codeUrl.value = data;
   } catch (err) {
-    if (!loginPageDisposed && requestId === captchaRequestId && tenantCode === String(loginForm.value.tenantCode || '')) {
-      ElMessage.error('验证码获取失败，请点击图片重新获取');
+    if (requestId === captchaRequestId && tenantCode === String(loginForm.value.tenantCode || '')) {
+      captchaError.value = isPreparationRateLimited(err) ? '验证码请求过于频繁，请稍后点击刷新验证码。' : '验证码获取失败，请点击刷新验证码。';
     }
   } finally {
     if (requestId === captchaRequestId) {
@@ -813,13 +822,14 @@ const loadLoginHints = async () => {
   const requestId = ++loginHintsRequestId;
   captchaRequestId++;
   captchaLoading.value = false;
+  captchaError.value = '';
   captchaEnabled.value = true;
   loginForm.value.code = '';
   loginForm.value.uuid = '';
   codeUrl.value = '';
   try {
     const res = await getLoginHints(tenantCode);
-    if (loginPageDisposed || requestId !== loginHintsRequestId || tenantCode !== String(loginForm.value.tenantCode || '')) {
+    if (requestId !== loginHintsRequestId) {
       return;
     }
     const hints = res.data;
@@ -829,7 +839,7 @@ const loadLoginHints = async () => {
       await getCode(tenantCode, true);
     }
   } catch (_err) {
-    if (loginPageDisposed || requestId !== loginHintsRequestId || tenantCode !== String(loginForm.value.tenantCode || '')) {
+    if (requestId !== loginHintsRequestId) {
       return;
     }
     captchaEnabled.value = true;
@@ -840,10 +850,25 @@ const loadLoginHints = async () => {
 /**
  * 获取密钥
  */
+function isPreparationRateLimited(error: unknown) {
+  return isAxiosError(error) && (error.code === 'Too_Many_Requests' || error.code === '429' || error.response?.status === 429);
+}
+
 const getSecretKey = async () => {
-  const res = await getSecrets();
-  const { data } = res;
-  secretKey.value = data.publicKey;
+  if (secretKeyLoading.value) return;
+  secretKeyLoading.value = true;
+  secretKeyError.value = '';
+  try {
+    const { data } = await getSecrets();
+    secretKey.value = data?.publicKey || '';
+    if (!secretKey.value) {
+      secretKeyError.value = '登录公钥获取失败，请重试。';
+    }
+  } catch (error) {
+    secretKeyError.value = isPreparationRateLimited(error) ? '登录公钥请求过于频繁，请稍后重试。' : '登录公钥获取失败，请重试。';
+  } finally {
+    secretKeyLoading.value = false;
+  }
 };
 
 const getLoginData = () => {
@@ -954,10 +979,6 @@ const initTenantList = async () => {
 };
 
 const handleTenantChange = (val: string) => {
-  captchaRequestId++;
-  clearCaptcha();
-  captchaLoading.value = false;
-  lastCaptchaRequestAt = 0;
   const tenant = tenantList.value.find((item) => item.tenantId === val);
   if (tenant) {
     if (tenant.tenantId === cspProduct.tenantId) {
@@ -1026,9 +1047,6 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
-  loginPageDisposed = true;
-  captchaRequestId++;
-  clearCaptcha();
   void stopCertUsbMonitoring();
   skfClient?.disconnect();
 });

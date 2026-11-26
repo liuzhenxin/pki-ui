@@ -15,7 +15,7 @@
             <el-input v-model.trim="form.to" :maxlength="254" placeholder="多个地址用英文逗号分隔" />
           </el-form-item>
           <el-form-item label="SMTP 节点">
-            <el-select v-model="form.smtpServer" clearable placeholder="使用网关默认节点">
+            <el-select v-model="form.smtpServer" clearable placeholder="默认长春（CC）">
               <el-option label="长春（CC）" value="CC" />
               <el-option label="成都（CD）" value="CD" />
               <el-option label="佛山（FS）" value="FS" />
@@ -37,15 +37,10 @@
           </el-form-item>
         </template>
         <el-form-item label="正文类型">
-          <el-select v-model="form.messageType">
-            <template v-if="isMail">
-              <el-option label="TEXT（纯文本）" value="TEXT" />
-              <el-option label="MIXED（H5）" value="MIXED" />
-            </template>
-            <template v-else>
-              <el-option label="Markdown" value="markdown" />
-              <el-option label="text（纯文本）" value="text" />
-            </template>
+          <span v-if="isMail">TEXT（纯文本）</span>
+          <el-select v-else v-model="form.messageType">
+            <el-option label="Markdown" value="markdown" />
+            <el-option label="text（纯文本）" value="text" />
           </el-select>
         </el-form-item>
         <el-form-item label="启用通知">
@@ -53,13 +48,16 @@
           <span v-if="!gatewayConfigured" class="gateway-hint">启用前请保存共享凭据</span>
         </el-form-item>
       </div>
-      <el-space v-if="editable" wrap>
+      <div v-if="editable" class="channel-actions">
         <el-button type="primary" native-type="submit" :loading="saving" :disabled="stale">保存配置</el-button>
-        <el-button :disabled="!canTest" :loading="testing === 'test-connection'" @click="testChannel('test-connection')">测试连接</el-button>
-        <el-button v-if="isMail" :disabled="!canTest || !gatewayConfigured" :loading="testing === 'test-send'" @click="testChannel('test-send')"
-          >试发邮件</el-button
-        >
-      </el-space>
+        <div class="test-actions">
+          <span>使用已保存的配置测试</span>
+          <el-button :disabled="!canTest" :loading="testing === 'test-connection'" @click="testChannel('test-connection')">测试连接</el-button>
+          <el-button :disabled="!canTest || !gatewayConfigured" :loading="testing === 'test-send'" @click="testChannel('test-send')">{{
+            isMail ? '试发邮件' : '发送测试消息'
+          }}</el-button>
+        </div>
+      </div>
       <el-alert v-if="testResult" class="test-result" :title="testResult" type="info" :closable="false" show-icon />
     </el-form>
     <el-button v-if="loadFailed || stale" class="reload" :disabled="busy" @click="load">刷新配置</el-button>
@@ -113,7 +111,7 @@ function apply(settings: FawVwChannelSettings | null) {
     app: data.app,
     dingTalkTarget: data.dingTalkTarget,
     smtpServer: data.smtpServer,
-    messageType: data.messageType ?? emptyConfig().messageType
+    messageType: isMail.value ? 'TEXT' : (data.messageType ?? emptyConfig().messageType)
   });
   savedEnabled.value = data.enabled;
   stale.value = false;
@@ -168,7 +166,10 @@ async function testChannel(action: 'test-connection' | 'test-send') {
   testResult.value = '';
   try {
     if (action === 'test-send') {
-      await ElMessageBox.confirm(`试发邮件将发送到 ${form.to}。`, '试发企业邮件', { type: 'warning', confirmButtonText: '发送' });
+      await ElMessageBox.confirm(`试发${isMail.value ? '邮件' : '消息'}将发送到 ${form.to}。`, isMail.value ? '试发企业邮件' : '试发企业钉钉', {
+        type: 'warning',
+        confirmButtonText: '发送'
+      });
     }
     testResult.value = (await testFawVwChannel(props.kind, action, revision)).message;
   } catch (error) {
@@ -188,6 +189,25 @@ onMounted(load);
   gap: 12px;
 }
 
+.channel-actions,
+.test-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.channel-actions {
+  justify-content: space-between;
+  border-top: 1px solid var(--el-border-color-lighter);
+  padding-top: 16px;
+}
+.test-actions span {
+  color: var(--el-text-color-regular);
+  font-size: 13px;
+}
+.test-actions :deep(.el-button) {
+  margin-left: 0;
+}
 .channel-fields {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));

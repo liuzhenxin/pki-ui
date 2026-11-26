@@ -1,7 +1,14 @@
 <template>
   <div class="enterprise-gateway">
     <el-card shadow="never">
-      <template #header><strong>共享网关配置</strong></template>
+      <template #header>
+        <div class="gateway-header">
+          <strong>共享网关配置</strong>
+          <el-tag v-if="loaded" size="small" :type="credentialsConfigured ? 'success' : 'info'"
+            >共享凭据{{ credentialsConfigured ? '已配置' : '未配置' }}</el-tag
+          >
+        </div>
+      </template>
       <el-form v-loading="loading || saving" label-position="top" class="gateway-form" @submit.prevent="save">
         <el-alert v-if="loadFailed" title="无法读取企业网关配置" type="error" :closable="false" show-icon />
         <el-form-item v-else label="允许的网关地址">
@@ -16,8 +23,7 @@
           <el-tag v-if="loaded && revision === null && configuredOrigin" size="small" type="info">Compose 默认值</el-tag>
         </el-form-item>
         <template v-if="loaded">
-          <div class="gateway-help">共享凭据{{ credentialsConfigured ? '已配置' : '未配置' }}</div>
-          <template v-if="editable">
+          <div v-if="editable" class="credential-fields">
             <el-form-item label="Access Key" :required="credentialsRequired">
               <el-input
                 v-model="accessKey"
@@ -38,16 +44,26 @@
                 :placeholder="credentialPlaceholder"
               />
             </el-form-item>
-          </template>
+          </div>
         </template>
         <el-button v-if="loaded && editable" type="primary" native-type="submit" :loading="saving" :disabled="!origin || stale">保存配置</el-button>
+        <el-alert v-if="stale" title="网关配置已更新，请刷新后重新编辑" type="warning" :closable="false" show-icon />
         <el-button v-if="loadFailed || stale" :disabled="loading || saving" @click="load">刷新配置</el-button>
       </el-form>
     </el-card>
-    <template v-if="loaded">
-      <FawVwChannelPane :key="'ding-' + revision" kind="FAW_VW_DINGTALK" :editable="editable && !stale" :gateway-configured="credentialsConfigured" />
-      <FawVwChannelPane :key="'mail-' + revision" kind="FAW_VW_EMAIL" :editable="editable && !stale" :gateway-configured="credentialsConfigured" />
-    </template>
+    <el-tabs v-if="loaded" v-model="activeChannel" type="border-card">
+      <el-tab-pane label="企业钉钉" name="ding">
+        <FawVwChannelPane
+          :key="'ding-' + revision"
+          kind="FAW_VW_DINGTALK"
+          :editable="editable && !stale"
+          :gateway-configured="credentialsConfigured"
+        />
+      </el-tab-pane>
+      <el-tab-pane label="企业邮件" name="mail-channel">
+        <FawVwChannelPane :key="'mail-' + revision" kind="FAW_VW_EMAIL" :editable="editable && !stale" :gateway-configured="credentialsConfigured" />
+      </el-tab-pane>
+    </el-tabs>
   </div>
 </template>
 
@@ -58,6 +74,7 @@ import { getFawVwGateway, saveFawVwGateway } from '@/api/ops';
 import type { FawVwGatewaySettings } from '@/api/ops/types';
 import FawVwChannelPane from './FawVwChannelPane.vue';
 
+const activeChannel = ref('ding');
 const origin = ref('');
 const accessKey = ref('');
 const secretKey = ref('');
@@ -134,9 +151,23 @@ onMounted(load);
 }
 
 .gateway-form {
-  max-width: 640px;
+  max-width: 920px;
 }
 
+.gateway-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.credential-fields {
+  display: grid;
+  gap: 0 20px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+}
+.enterprise-gateway > * {
+  min-width: 0;
+}
 .gateway-help {
   color: var(--el-text-color-secondary);
   width: 100%;

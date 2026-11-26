@@ -53,7 +53,7 @@
           <el-form-item v-if="isState() || form.type === 'RA_CERT_EXPIRY'" label="告警对象标识" required>
             <el-input
               v-model.trim="form.target"
-              :placeholder="form.type === 'RA_CERT_EXPIRY' ? 'RA 上报来源 ID' : form.type === 'COMPONENT' ? '组件标识' : '实例ID/连接ID'"
+              :placeholder="form.type.startsWith('RA_') ? 'RA 上报来源 ID' : form.type === 'COMPONENT' ? '组件标识' : '实例ID/连接ID'"
               :disabled="editing !== undefined"
             />
           </el-form-item>
@@ -71,6 +71,10 @@
           <el-input v-model="expiryDaysText" placeholder="例如 30, 7, 1, 0（0 表示已到期）" />
         </el-form-item>
         <template v-else>
+          <template v-if="form.type === 'RA_STANDARD_REVIEW' || form.type === 'RA_PUBLIC_REVIEW'">
+            <el-form-item label="待审数量（件）"><el-input-number v-model="form.pendingLimit" :min="1" /></el-form-item>
+            <el-form-item label="最长等待（小时）"><el-input-number v-model="form.waitHours" :min="1" :max="87600" /></el-form-item>
+          </template>
           <el-form-item label="触发连续次数" required><el-input-number v-model="form.triggerSamples" :min="1" :max="100" /></el-form-item>
           <el-form-item label="恢复连续次数" required><el-input-number v-model="form.recoverySamples" :min="1" :max="100" /></el-form-item>
           <el-form-item label="采样超时（秒）" required><el-input-number v-model="form.timeoutSeconds" :min="1" :max="86400" /></el-form-item>
@@ -85,6 +89,7 @@
 </template>
 
 <script setup lang="ts">
+import { describeCondition as describe, isStateCondition, isThresholdCondition } from './alertConditionText';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { getAlertConditions, saveAlertConditions } from '@/api/ops';
 import type { AlertConditionRule, AlertConditionType, AlertConditionView } from '@/api/ops/types';
@@ -97,6 +102,8 @@ const labels: Record<AlertConditionType, string> = {
   COMPONENT: '服务或容器',
   KMC_HSM: 'KMC 密码机',
   CA_HSM: 'CA 密码机',
+  RA_STANDARD_REVIEW: 'RA 标准版审核积压',
+  RA_PUBLIC_REVIEW: 'RA 公网证书审核积压',
   RA_CERT_EXPIRY: 'RA 证书有效期'
 };
 
@@ -108,6 +115,8 @@ const presets: Record<AlertConditionType, Omit<AlertConditionRule, 'type' | 'tar
   COMPONENT: { triggerSamples: 2, recoverySamples: 2, timeoutSeconds: 90 },
   KMC_HSM: { triggerSamples: 2, recoverySamples: 2, timeoutSeconds: 90 },
   CA_HSM: { triggerSamples: 2, recoverySamples: 2, timeoutSeconds: 90 },
+  RA_STANDARD_REVIEW: { pendingLimit: 10, waitHours: 24, triggerSamples: 2, recoverySamples: 2, timeoutSeconds: 600 },
+  RA_PUBLIC_REVIEW: { pendingLimit: 10, waitHours: 24, triggerSamples: 2, recoverySamples: 2, timeoutSeconds: 600 },
   RA_CERT_EXPIRY: { expiryDays: [30, 7, 1, 0] }
 };
 
@@ -124,9 +133,9 @@ const expiryDaysText = ref('');
 const scope = ref<'default' | 'target'>('default');
 const form = ref<AlertConditionRule>({ type: 'SERVER_CPU', target: '', ...presets.SERVER_CPU });
 
-const isState = (type = form.value.type) => type === 'COMPONENT' || type === 'KMC_HSM' || type === 'CA_HSM';
+const isThreshold = (type = form.value.type) => isThresholdCondition(type);
+const isState = (type = form.value.type) => isStateCondition(type);
 const isResource = computed(() => !isState() && form.value.type !== 'RA_CERT_EXPIRY');
-const isThreshold = (type = form.value.type) => !isState(type) && type !== 'SERVER_AGENT' && type !== 'RA_CERT_EXPIRY';
 
 const load = async () => {
   loading.value = true;
@@ -140,19 +149,6 @@ const load = async () => {
   } finally {
     loading.value = false;
   }
-};
-
-const describe = (rule: AlertConditionRule, trigger: boolean) => {
-  if (rule.type === 'RA_CERT_EXPIRY') {
-    return trigger ? (rule.expiryDays ?? []).map((days) => (days === 0 ? '已到期' : `到期前 ${days} 天`)).join('、') : 'RA 上报状态变更';
-  }
-  if (isThreshold(rule.type)) {
-    return trigger ? `≥ ${rule.triggerPercent}% 持续 ${rule.triggerSeconds} 秒` : `≤ ${rule.recoveryPercent}% 持续 ${rule.recoverySeconds} 秒`;
-  }
-  if (isState(rule.type)) {
-    return `连续 ${trigger ? rule.triggerSamples : rule.recoverySamples} 次`;
-  }
-  return trigger ? `${rule.timeoutSeconds} 秒内无采样` : '收到有效采样';
 };
 
 const selectType = (type: AlertConditionType) => {

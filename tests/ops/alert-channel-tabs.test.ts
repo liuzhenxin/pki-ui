@@ -12,10 +12,15 @@ vi.mock('@/utils/request', () => ({ default: mocks.request }));
 it('keeps standard channels on their tabs and loads both enterprise channels only in the enterprise gateway', async () => {
   mocks.request.mockImplementation(async ({ url }) => {
     switch (url) {
+      case '/v1/alert/incident-template-rules':
+        return { notificationsEnabled: false, sources: [], channels: [], bindings: [], editable: true };
       case '/v1/alert/incidents':
         return { enabled: true, items: [] };
+      case '/v1/alert/conditions':
+        return { settings: { revision: 0, rules: [] }, servers: [], editable: true };
       case '/v1/alert/channels':
         return [{ id: 1, name: '值班群机器人', enabled: false }];
+      case '/v1/alert/logs':
       case '/v1/alert/rules':
         return [];
       case '/v1/alert/faw-vw-channels/gateway':
@@ -32,14 +37,32 @@ it('keeps standard channels on their tabs and loads both enterprise channels onl
 
   try {
     await flushPromises();
+    expect(wrapper.get('.workspace-header').text()).toContain('自动通知已关闭');
+    expect(wrapper.get('.record-actions').text()).toContain('管理通知规则');
     expect(wrapper.find('#tab-faw-vw').exists()).toBe(false);
-    expect(tab('channels').text()).toBe('钉钉渠道');
+    expect(tab('monitor').text()).toBe('告警监控');
+    expect(tab('records').text()).toBe('告警记录');
+    const historyButton = wrapper.findAll('label').find((label) => label.text() === '告警历史');
+    await historyButton!.get('input').setValue(true);
+    await flushPromises();
+    expect(mocks.request).toHaveBeenCalledWith(
+      expect.objectContaining({ url: '/v1/alert/incidents', params: expect.objectContaining({ recovered: true }) })
+    );
+    await wrapper
+      .get('nav[aria-label="告警工作区"]')
+      .findAll('button')
+      .find((button) => button.text().includes('服务事件日志'))!
+      .trigger('click');
+    await flushPromises();
+    expect(tab('logs').attributes('aria-selected')).toBe('true');
+    await tab('config').trigger('click');
+    expect(tab('channels').text()).toBe('通知渠道');
     expect(mocks.request).not.toHaveBeenCalledWith(requested('/v1/alert/faw-vw-channels/FAW_VW_DINGTALK'));
     expect(mocks.request).not.toHaveBeenCalledWith(requested('/v1/alert/faw-vw-channels/FAW_VW_EMAIL'));
 
     await tab('channels').trigger('click');
     await flushPromises();
-    const dingTalk = wrapper.get('#pane-channels');
+    const dingTalk = wrapper.get('#pane-user-dingtalk');
     expect(dingTalk.findAll('form')).toHaveLength(1);
     expect(dingTalk.text()).not.toContain('企业钉钉');
     expect(dingTalk.text()).toContain('用户钉钉');
@@ -56,6 +79,8 @@ it('keeps standard channels on their tabs and loads both enterprise channels onl
     expect(mail.text()).toContain('SMTP 主机');
     expect(mail.text()).not.toContain('企业邮件');
     expect(mail.text()).not.toContain('企业钉钉');
+    expect(mail.text()).not.toContain('授权 RA 使用此 SMTP 渠道');
+    expect(mail.text()).not.toContain('请先登记 RA 业务邮件服务账号');
     expect(mocks.request).toHaveBeenCalledWith(requested('/v1/alert/mail-channel'));
     expect(mocks.request).not.toHaveBeenCalledWith(requested('/v1/alert/faw-vw-channels/FAW_VW_EMAIL'));
 
@@ -72,11 +97,20 @@ it('keeps standard channels on their tabs and loads both enterprise channels onl
 
     await tab('rules').trigger('click');
     await flushPromises();
-    await wrapper.get('#pane-rules .toolbar button').trigger('click');
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === '新建规则')!
+      .trigger('click');
+    await flushPromises();
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === '自定义服务事件')!
+      .trigger('click');
     await flushPromises();
     expect(mocks.request).toHaveBeenCalledWith(requested('/v1/alert/channels'));
-    const ruleDialog = wrapper.findAll('[role="dialog"]').find((dialog) => dialog.text().includes('新建规则'));
+    const ruleDialog = wrapper.findAll('[role="dialog"]').find((dialog) => dialog.text().includes('新建自定义服务事件'));
     expect(ruleDialog?.text()).toContain('值班群机器人');
+    expect(mocks.request).not.toHaveBeenCalledWith(expect.objectContaining({ url: '/v1/application-notifications/ra/mail' }));
     expect(mocks.request.mock.calls.every(([request]) => request.method === 'get')).toBe(true);
   } finally {
     wrapper.unmount();

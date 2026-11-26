@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 
 export default defineConfig({
   testDir: '.',
-  testMatch: 'maximum-validity.spec.ts',
+  testMatch: ['maximum-validity.spec.ts', 'login-preparation-rate-limit.spec.ts'],
   outputDir: '/private/tmp/ca-profile-validity-browser-results',
   workers: 1,
   use: {

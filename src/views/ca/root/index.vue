@@ -588,6 +588,7 @@ import { listSigner } from '@/api/ca/signer';
 import {
   listRootHierarchy,
   getRootCa,
+  downloadRootCa,
   genRootCa,
   enableRootCa,
   disableRootCa,
@@ -1958,19 +1959,19 @@ function hasManagementActions(row: RootCertificateRow) {
 }
 
 /** 查看详情 */
-function handleView(row: any) {
-  currentCertPem.value = row.pem; // 假设row中有pem字段
+async function handleView(row: any) {
+  const { data } = await getRootCa(row.id);
+  currentCertPem.value = data.cert;
   showDetail.value = true;
 }
 
 /** 下载证书 */
 async function handleDownload(row: any, command: string) {
   try {
-    const res = await getRootCa(row.id);
-    const root = res.data || row;
-    const certPem = normalizePem(root.cert || row.cert || row.pem);
-    const chainPem = normalizePem(root.certchain || row.certchain || certPem);
-    const baseName = sanitizeFilename(root.name || row.name || 'root-ca');
+    const { data: root } = await downloadRootCa(row.id);
+    const certPem = normalizePem(root.cert);
+    const chainPem = normalizePem(root.certchain || certPem);
+    const baseName = sanitizeFilename(root.name || 'root-ca');
 
     switch (command) {
       case 'cert-der':

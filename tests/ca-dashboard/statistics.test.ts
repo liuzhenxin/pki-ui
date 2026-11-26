@@ -4,6 +4,7 @@ import { defineComponent, h, KeepAlive, ref } from 'vue';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Dashboard from '@/views/ca/index.vue';
 import { getCertStatistics, pageCert } from '@/api/ca/cert';
+import { getInitStatus } from '@/api/ca/init';
 
 const user = vi.hoisted(() => ({ permissions: ['ca:cert:page'], tenantId: '4', name: 'operator', userId: '403' }));
 vi.mock('@/store/modules/user', () => ({ useUserStore: () => user }));
@@ -18,7 +19,7 @@ vi.mock('echarts', () => ({
   graphic: { LinearGradient: vi.fn() }
 }));
 
-const slotStub = { template: '<div><slot /><slot name="default-extra" /></div>' };
+const slotStub = { template: '<div><slot name="header" /><slot /></div>' };
 const options = {
   global: {
     stubs: {
@@ -32,9 +33,8 @@ const options = {
       ElRadioGroup: true,
       ElRadioButton: true,
       ElTable: true,
-      ElTableColumn: true,
       ElTimeline: true,
-      ElTimelineItem: true
+      ElTag: true
     },
     directives: { loading: () => {} },
     config: { warnHandler: () => {} }
@@ -53,6 +53,39 @@ beforeEach(() => {
 afterEach(() => wrapper?.unmount());
 
 const cardValues = () => wrapper.findAll('.stat-value').map((card) => card.text());
+
+describe('CA homepage content', () => {
+  it('shows only the version in business system information and omits the recent certificate and audit panels', async () => {
+    vi.stubEnv('VITE_APP_VERSION', 'test-version');
+    try {
+      wrapper = mount(Dashboard, options);
+      await flushPromises();
+      const systemInfo = wrapper.get('.system-info-card');
+      expect(systemInfo.text()).toContain('系统信息');
+      expect(systemInfo.get('.version-item .value').text()).toBe('test-version');
+      for (const label of ['技术支持', '联系电话', '证书模板', '根CA', '签名者', '发布者']) {
+        expect(systemInfo.text()).not.toContain(label);
+      }
+      expect(wrapper.text()).not.toContain('最新签发证书');
+      expect(wrapper.text()).not.toContain('安全审计事件');
+      expect(getInitStatus).not.toHaveBeenCalled();
+      expect(pageCert).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('loads configuration counts for the system administrator workspace', async () => {
+    user.permissions = ['ca:setup'];
+    vi.mocked(getInitStatus).mockResolvedValue({ data: { rootCount: 2, profileCount: 4 } } as any);
+    wrapper = mount(Dashboard, options);
+    await flushPromises();
+    expect(wrapper.get('.admin-metric-grid').text()).toContain('根 CA2');
+    expect(wrapper.get('.admin-metric-grid').text()).toContain('证书模板4');
+    expect(getInitStatus).toHaveBeenCalledTimes(1);
+    expect(pageCert).not.toHaveBeenCalled();
+  });
+});
 
 describe('CA homepage statistics', () => {
   it('uses full server counts including archives independently of the certificate page', async () => {

@@ -46,7 +46,6 @@ type Settings = {
   passwordConfigured: boolean;
 };
 
-const emit = defineEmits<{ saved: [] }>();
 const url = '/v1/alert/mail-channel';
 const baseURL = opsApiBaseURL;
 const form = reactive<Settings>({
@@ -92,7 +91,6 @@ async function save() {
     password.value = '';
     saved.value = JSON.stringify(form);
     result.value = '邮件渠道已保存';
-    emit('saved');
   } catch (error) {
     result.value = error instanceof Error ? error.message : '保存失败，请重试';
   } finally {

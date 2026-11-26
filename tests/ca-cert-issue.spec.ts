@@ -34,7 +34,7 @@ test.describe('证书签发页面 - 编译产物验证', () => {
     expect(compiledSource).toContain('issueCert({');
     expect(compiledSource).toContain('issueDualCert({');
     expect(compiledSource).toContain('const p10Res = await withTimeout');
-    expect(compiledSource).toContain('const subject = issueForm.value.subjectItems');
+    expect(compiledSource).toContain('const subject = formatCaIssueSubject(issueForm.value.subjectItems)');
     expect(compiledSource).toContain('subject');
     expect(compiledSource).toContain('csrBase64: pemToBase64');
   });

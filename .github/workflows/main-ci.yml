@@ -1,0 +1,63 @@
+name: OPS and CA CI
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: ${{ matrix.name }} tests and production build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - product: ops
+            name: OPS
+            vitest-config: tests/ops/vitest.config.ts
+          - product: ca
+            name: CA
+            vitest-config: tests/ca-profile/vitest.config.ts
+    steps:
+      - name: Check out the commit
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: yarn
+
+      - name: Install locked dependencies
+        id: dependencies
+        run: yarn install --frozen-lockfile --non-interactive
+
+      - name: Run Vitest
+        run: yarn vitest run --config "${{ matrix.vitest-config }}"
+
+      - name: Install Chromium
+        if: matrix.product == 'ca'
+        run: yarn playwright install --with-deps chromium
+
+      - name: Run CA profile browser tests
+        if: matrix.product == 'ca'
+        run: yarn playwright test --config tests/ca-profile/playwright.config.ts --output "$RUNNER_TEMP/ca-profile-playwright"
+
+      - name: Build the production frontend
+        id: build
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
+        run: yarn build:${{ matrix.product }}
+
+      - name: Upload the production build
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: pki-ui-${{ matrix.product }}
+          path: dist/
+          if-no-files-found: error

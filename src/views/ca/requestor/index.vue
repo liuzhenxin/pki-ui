@@ -76,7 +76,7 @@
         <el-table-column label="有效期至" align="center" prop="notAfter" width="180" />
         <el-table-column label="协议身份证书" align="center" prop="conf" width="120">
           <template #default="scope">
-            <el-button v-if="scope.row.conf" link type="success" @click="handleViewCert(scope.row)">
+            <el-button v-if="scope.row.conf" v-hasPermi="['ca:requestor:detail']" link type="success" @click="handleViewCert(scope.row)">
               <el-icon :size="20"><Document /></el-icon>
             </el-button>
             <span v-else>-</span>
@@ -569,8 +569,10 @@ function submitFileForm() {
 }
 
 /** 查看证书 */
-function handleViewCert(row: any) {
-  currentCert.value = parseRequestorConf(row.conf).certificatePem || row.conf;
+async function handleViewCert(row: any) {
+  const { data } = await getRequestor(row.id);
+  const conf = data?.conf || '';
+  currentCert.value = parseRequestorConf(conf).certificatePem || conf;
   certOpen.value = true;
 }
 
