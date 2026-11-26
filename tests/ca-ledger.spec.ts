@@ -29,7 +29,7 @@ function harness() {
       if (name === 'vue') return { ...vue, onMounted: () => {}, onActivated: () => {} };
       if (name === '@/api/ra/businessNoticeSettings' || name === '@/utils/businessCertificateNotice') return {};
       if (name === '@/utils/raCertificateSubject') return { formatCertificateSubject: (value: string) => value };
-      if (name === '../components/CertRowAction.vue' || name === '../components/BusinessNoticeSettingsDialog.vue' || name === '../components/BusinessDeliveryLogs.vue') return { default: {} };
+      if (name === '@/components/X509Cert/index.vue' || name === '../components/CertRowAction.vue' || name === '../components/BusinessNoticeSettingsDialog.vue' || name === '../components/BusinessDeliveryLogs.vue') return { default: {} };
       if (name === '@/hooks/useRaListRefreshOnReturn') return { useRaListRefreshOnReturn: () => {} };
       if (name === 'file-saver') return { saveAs: (_blob: Blob, filename: string) => downloaded.push(filename) };
       if (name === 'element-plus') return { ElMessage: { error: (message: string) => messages.push(message) }, ElMessageBox: {} };
@@ -133,6 +133,8 @@ test('CA details display parsed metadata and the selected node chain state', asy
   const h = harness();
   await h.page.openDetail({ id: 2, linked: false, warning: '证书链不完整' });
   expect(h.page.detailOpen.value).toBe(true);
+  expect(h.page.pemPanels.value).toEqual(['pem']);
+  expect(h.page.pemView.value).toBe('raw');
   expect(h.page.detail.value).toMatchObject({ certificate: { id: 2 }, signatureAlgorithm: 'SHA256withRSA', keyUsages: ['证书签名'] });
   expect(h.page.detailChain.value).toEqual({ linked: false, warning: '证书链不完整' });
 });

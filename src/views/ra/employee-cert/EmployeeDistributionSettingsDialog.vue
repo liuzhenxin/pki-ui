@@ -8,7 +8,7 @@
     :close-on-press-escape="!distributionConfigSaving"
     :show-close="!distributionConfigSaving"
     append-to-body
-    @closed="distributionConfig.secretKey = ''"
+    @closed="clearSecrets"
   >
     <div class="distribution-settings-header">
       <el-tabs v-model="distributionConfigTab">
@@ -56,6 +56,48 @@
     </el-form>
     <el-form v-if="distributionConfigTab === 'upload'" label-width="150px" :disabled="distributionConfigSaving">
       <el-form-item label="AD上传功能"><el-switch v-model="adUploadDraft" aria-label="AD上传功能" /></el-form-item>
+      <template v-if="adUploadDraft && adConfig">
+        <el-form-item label="协议">
+          <el-radio-group v-model="adConfig.protocol" @change="changeAdProtocol">
+            <el-radio-button value="ldaps">LDAPS（推荐）</el-radio-button>
+            <el-radio-button value="ldap">LDAP</el-radio-button>
+          </el-radio-group>
+          <el-alert v-if="adConfig.protocol === 'ldap'" class="mt8" type="warning" :closable="false"
+            title="LDAP 会以明文发送绑定密码。" />
+        </el-form-item>
+        <el-form-item label="服务器及端口">
+          <div class="distribution-test-row">
+            <el-input v-model="adConfig.host" placeholder="AD 服务器主机名" />
+            <el-input-number v-model="adConfig.port" :min="1" :max="65535" aria-label="AD 端口" />
+          </div>
+        </el-form-item>
+        <el-form-item label="基础 DN"><el-input v-model="adConfig.baseDn" placeholder="例如 DC=example,DC=com" /></el-form-item>
+        <el-form-item label="绑定账号"><el-input v-model="adConfig.account" autocomplete="off" /></el-form-item>
+        <el-form-item label="绑定密码">
+          <el-input v-model="adConfig.password" type="password" show-password autocomplete="new-password"
+            :placeholder="adConfig.passwordConfigured ? '已配置，留空保留' : '请输入绑定密码'" />
+        </el-form-item>
+        <el-form-item label="写入字段">
+          <el-checkbox-group v-model="adConfig.fields">
+            <el-checkbox value="userCertificate">已发布证书</el-checkbox>
+            <el-checkbox value="userSMIMECertificate">S/MIME 证书</el-checkbox>
+          </el-checkbox-group>
+        </el-form-item>
+        <el-form-item label="写入方式">
+          <el-radio-group v-model="adConfig.mode">
+            <el-radio value="REPLACE">覆盖写入</el-radio>
+            <el-radio value="APPEND">追加写入</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item label="AD 写入测试">
+          <el-input v-model="adTestEmail" placeholder="测试用户邮箱" class="mb8" />
+          <input ref="adFilePicker" type="file" hidden accept=".cer" @change="chooseAdFile" />
+          <el-button @click="adFilePicker?.click()">选择 CER</el-button>
+          <span v-if="adTestFile" class="ml8">{{ adTestFile.name }}</span>
+          <el-button class="ml8" :loading="adTesting" :disabled="!adTestEmail.trim() || !adTestFile || !adConfig.host"
+            @click="runAdTest">写入并回读</el-button>
+        </el-form-item>
+      </template>
     </el-form>
     <template v-if="distributionConfigTab === 'distribution'">
       <el-form v-loading="opsFieldsLoading" :model="visibleDistributionConfig" label-width="150px" :disabled="distributionConfigSaving">
@@ -130,6 +172,10 @@
 import { computed, ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import {
+  getEmployeeAdConfig,
+  saveEmployeeAdConfig,
+  testEmployeeAdConfig,
+  type EmployeeAdConfig,
   getEmployeeCertDistributionSettings,
   getEmployeeCertOpsSettings,
   saveEmployeeCertDistributionSettings,
@@ -149,6 +195,49 @@ const distributionTestDing = ref('');
 const distributionTesting = ref(false);
 const distributionConfigTab = ref('distribution');
 const adUploadDraft = ref(false);
+const adConfig = ref<EmployeeAdConfig>();
+const adConfigSnapshot = ref('');
+const adTestEmail = ref('');
+const adFilePicker = ref<HTMLInputElement>();
+const adTestFile = ref<File>();
+const adTesting = ref(false);
+
+function clearSecrets() {
+  distributionConfig.value.secretKey = '';
+  if (adConfig.value) adConfig.value.password = '';
+  adTestFile.value = undefined;
+  adTestEmail.value = '';
+}
+
+function changeAdProtocol(protocol: string | number | boolean) {
+  if (adConfig.value) adConfig.value.port = protocol === 'ldap' ? 389 : 636;
+}
+
+function chooseAdFile(event: Event) {
+  const input = event.target as HTMLInputElement;
+  adTestFile.value = input.files?.[0];
+  input.value = '';
+}
+
+async function runAdTest() {
+  const config = adConfig.value;
+  const file = adTestFile.value;
+  const email = adTestEmail.value.trim();
+  if (!config || !file || !email || adTesting.value) return;
+  adTesting.value = true;
+  try {
+    await ElMessageBox.confirm(
+      `向 ${email} 执行${config.mode === 'REPLACE' ? '覆盖' : '追加'}写入并核对 AD 回读结果？`,
+      '确认 AD 写入测试', { type: 'warning', confirmButtonText: '确认写入' }
+    );
+    unwrapData(await testEmployeeAdConfig(config, email, file));
+    ElMessage.success('AD 写入和回读校验成功');
+  } catch {
+    // Request errors are shown by the API client.
+  } finally {
+    adTesting.value = false;
+  }
+}
 const noticeAdministrators = ref<EmployeeNoticeAdministrators>({ emails: [], domainAccounts: [] });
 const distributionTestResult = ref('');
 const useOpsDraft = ref(false);
@@ -160,7 +249,7 @@ const emptyOpsDistribution: EmployeeCertDistributionConfig = {};
 const emptyOpsAdministrators: EmployeeNoticeAdministrators = { emails: [], domainAccounts: [] };
 const distributionConfigLoading = ref(false);
 const opsFieldsLoading = computed(() => useOpsDraft.value && opsSettingsLoading.value);
-const distributionConfigBusy = computed(() => distributionConfigSaving.value || distributionTesting.value || opsFieldsLoading.value);
+const distributionConfigBusy = computed(() => distributionConfigSaving.value || distributionTesting.value || opsFieldsLoading.value || adTesting.value);
 const distributionTestReady = computed(() => !distributionConfigBusy.value && (!useOpsDraft.value || !!opsDistributionSettings.value));
 const distributionConfig = ref<EmployeeCertDistributionConfig>({ attachmentMaxSizeMb: 10 });
 const visibleDistributionConfig = computed(() =>
@@ -192,6 +281,11 @@ async function open() {
     distributionTestDing.value = '';
     distributionTestResult.value = '';
     distributionConfigOpen.value = true;
+    adConfig.value = undefined;
+    void getEmployeeAdConfig().then(response => {
+      adConfig.value = unwrapData(response);
+      adConfigSnapshot.value = JSON.stringify(adConfig.value);
+    }).catch(() => undefined);
     await refreshOpsDistributionSettings();
   } catch {
     // The API request reports load errors.
@@ -263,6 +357,10 @@ async function saveDistributionSettings() {
   try {
     const { attachmentMaxSizeMb, emailServerUrl, dingtalkServerUrl, appKey, secretKey, emailAccount, smtpServer, dingtalkApp } =
       distributionConfig.value;
+    if (adConfig.value && JSON.stringify(adConfig.value) !== adConfigSnapshot.value) {
+      adConfig.value = unwrapData(await saveEmployeeAdConfig(adConfig.value));
+      adConfigSnapshot.value = JSON.stringify(adConfig.value);
+    }
     await saveEmployeeCertDistributionSettings({
       useOps,
       adUploadEnabled: adUploadDraft.value,

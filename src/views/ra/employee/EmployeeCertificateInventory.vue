@@ -4,7 +4,9 @@
       <el-button link type="primary" @click="$emit('retry')">重新加载</el-button>
     </el-alert>
     <el-table v-else v-loading="loading" :data="rows" row-key="id" size="small" empty-text="暂无员工证书">
-      <el-table-column label="证书序列号" prop="serialNumber" min-width="175" show-overflow-tooltip />
+      <el-table-column label="证书序列号" prop="serialNumber" min-width="175" show-overflow-tooltip>
+        <template #default="{ row }"><el-button link type="primary" @click="$emit('certificate', row.id)">{{ row.serialNumber }}</el-button></template>
+      </el-table-column>
       <el-table-column label="证书模板" min-width="130" show-overflow-tooltip>
         <template #default="{ row }">{{ row.profileName || '未关联模板' }}</template>
       </el-table-column>
@@ -25,7 +27,7 @@
               <el-button link type="primary" icon="View" aria-label="证书详情" @click="$emit('certificate', row.id)" />
             </el-tooltip>
             <el-tooltip v-if="adUploadEnabled && row.adUploadEligible" content="上传AD">
-              <span><el-button link type="primary" icon="Upload" aria-label="上传 AD" disabled /></span>
+              <el-button link type="primary" icon="Upload" aria-label="上传 AD" @click="$emit('upload-ad', row)" />
             </el-tooltip>
           </div>
         </template>
@@ -58,7 +60,7 @@ defineProps<{
   total: number;
   adUploadEnabled?: boolean;
 }>();
-defineEmits<{ 'page-change': [page: number]; retry: []; certificate: [id: string] }>();
+defineEmits<{ 'page-change': [page: number]; retry: []; certificate: [id: string]; 'upload-ad': [row: EmployeeCertificateRecord] }>();
 
 const STATUS = {
   VALID: { label: '有效', type: 'success' },

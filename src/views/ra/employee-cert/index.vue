@@ -61,14 +61,13 @@
           >
         </el-col>
         <el-col v-if="canDistribute" :span="1.5">
-          <el-button type="primary" plain icon="Download" :disabled="loading || !selectedRows.length" @click="openBatchDownload">
-            批量下载（{{ selectedRows.length }}）
-          </el-button>
+          <EmployeeCertificateDownloadMenu button="primary" batch :label="`批量下载（${selectedRows.length}）`"
+            :disabled="loading || !selectedRows.length" :loading="batchDownloading" @download="downloadSelected" />
         </el-col>
         <el-col v-if="canDistribute && adUploadEnabled" :span="1.5">
-          <el-tooltip :content="adUploadSelectionReady ? 'AD 发布接口尚未接入' : '请选择符合 AD 上传条件的证书'">
+          <el-tooltip :content="adUploadSelectionReady ? '上传所选证书至 AD' : '请选择符合 AD 上传条件的证书'">
             <span>
-              <el-button plain icon="Upload" :disabled="loading || !adUploadSelectionReady" @click="previewAdUpload">
+              <el-button plain icon="Upload" :disabled="loading || !adUploadSelectionReady" :loading="adSubmitting" @click="uploadSelectedToAd">
                 上传AD（{{ selectedRows.length }}）
               </el-button>
             </span>
@@ -158,15 +157,10 @@
                 </el-dropdown-menu>
               </template>
             </CertRowAction>
-            <CertRowAction
-              v-if="row.issueStatus === 'ISSUED' && row.raCertId != null"
+            <EmployeeCertificateDownloadMenu v-if="row.issueStatus === 'ISSUED' && row.raCertId != null"
               v-hasPermi="['ra:employee-cert:distribute']"
-              label="下载证书 ZIP"
-              icon="Download"
-              :loading="downloadingCert === row.id"
-              :disabled="downloadingCert != null"
-              @click="downloadPackage(row)"
-            />
+              :loading="downloadingCert === row.id" :disabled="downloadingCert != null"
+              @download="downloadPackage(row, $event)" />
           </template>
         </el-table-column>
       </el-table>
@@ -222,22 +216,25 @@
           highlight-current-row
           border
           stripe
-          :empty-text="appliedDistributionBatchType === 'UPLOAD' ? '暂无证书上传记录，AD 发布接口尚未接入' : '暂无分发批次'"
+          :empty-text="appliedDistributionBatchType === 'UPLOAD' ? '暂无证书上传记录' : '暂无分发批次'"
         >
-          <el-table-column label="发送时间" width="170"
+          <el-table-column label="发送时间" min-width="170"
             ><template #default="{ row }">{{ formatDate(row.createTime) }}</template></el-table-column
           >
-          <el-table-column label="任务类型" width="108"
+          <el-table-column label="任务类型" min-width="108"
             ><template #default="{ row }">{{ batchTypeLabel(row) }}</template></el-table-column
           >
           <el-table-column label="批次号" prop="batchNo" min-width="250" show-overflow-tooltip />
-          <el-table-column label="记录数" prop="totalCount" width="80" />
-          <el-table-column label="成功" prop="successCount" width="70" />
-          <el-table-column label="失败" prop="failedCount" width="70" />
-          <el-table-column label="处理中" width="90"
+          <el-table-column label="任务结果" min-width="100">
+            <template #default="{ row }"><el-tag :type="batchResult(row).type" effect="plain">{{ batchResult(row).label }}</el-tag></template>
+          </el-table-column>
+          <el-table-column label="记录数" prop="totalCount" min-width="80" />
+          <el-table-column label="成功" prop="successCount" min-width="70" />
+          <el-table-column label="失败" prop="failedCount" min-width="70" />
+          <el-table-column label="处理中" min-width="90"
             ><template #default="{ row }">{{ row.totalCount - row.successCount - row.failedCount }}</template></el-table-column
           >
-          <el-table-column label="操作" width="90" align="center" fixed="right">
+          <el-table-column label="操作" min-width="90" align="center">
             <template #default="{ row }"><CertRowAction label="查看分发明细" icon="View" @click="selectDistributionBatch(row.batchNo)" /></template>
           </el-table-column>
         </el-table>
@@ -286,7 +283,10 @@
                 </el-descriptions-item>
               </template>
               <el-descriptions-item label="任务类型">{{ batchTypeLabel(activeDistributionBatch) }}</el-descriptions-item>
-              <el-descriptions-item label="分发时间">{{ formatDate(activeDistributionBatch.createTime) }}</el-descriptions-item>
+              <el-descriptions-item label="创建时间">{{ formatDate(activeDistributionBatch.createTime) }}</el-descriptions-item>
+              <el-descriptions-item label="任务结果">
+                <el-tag :type="batchResult(activeDistributionBatch).type" effect="plain">{{ batchResult(activeDistributionBatch).label }}</el-tag>
+              </el-descriptions-item>
               <el-descriptions-item :label="activeDistributionBatch.taskType === 'UPLOAD' ? '上传结果' : '分发结果'">
                 共 {{ activeDistributionBatch.totalCount }} 人，成功 {{ activeDistributionBatch.successCount }}，失败
                 {{ activeDistributionBatch.failedCount }}，处理中
@@ -298,11 +298,9 @@
               <el-table-column label="域账号" prop="domainAccount" min-width="110" show-overflow-tooltip />
               <el-table-column label="序列号" prop="serialNumber" min-width="170" show-overflow-tooltip />
               <el-table-column label="邮箱" prop="recipientEmail" min-width="180" show-overflow-tooltip />
-              <el-table-column :label="activeDistributionBatch.taskType === 'UPLOAD' ? '上传结果' : '分发结果'" width="100" align="center" sortable :sort-method="(a, b) => a.sendStatus - b.sendStatus" :sort-orders="['descending', 'ascending', null]">
+              <el-table-column :label="activeDistributionBatch.taskType === 'UPLOAD' ? '上传结果' : '分发结果'" min-width="132" align="center" sortable :sort-method="(a, b) => a.sendStatus - b.sendStatus" :sort-orders="['descending', 'ascending', null]">
                 <template #default="{ row }"
-                  ><el-tag :type="row.sendStatus === 1 ? 'success' : row.sendStatus === 2 ? 'danger' : 'warning'" effect="plain">{{
-                    row.sendStatus === 1 ? '成功' : row.sendStatus === 2 ? '失败' : '处理中'
-                  }}</el-tag></template
+                  ><el-tag :type="row.sendStatus === 1 ? 'success' : row.sendStatus === 2 ? 'danger' : 'warning'" effect="plain">{{ recordResultLabel(row.sendStatus) }}</el-tag></template
                 >
               </el-table-column>
               <el-table-column v-if="activeDistributionBatch.taskType !== 'UPLOAD'" label="邮件状态" width="100" align="center">
@@ -315,9 +313,11 @@
                   <ChannelStatus :status="distributionChannelStatus(row, 'dingtalkStatus')" :blocked="row.messageType === 'TEXT'" />
                 </template>
               </el-table-column>
-              <el-table-column v-if="activeDistributionBatch.taskType === 'UPLOAD'" label="AD 公钥发布" min-width="110">未接入</el-table-column>
+              <el-table-column v-if="activeDistributionBatch.taskType === 'UPLOAD'" label="上传成功时间" min-width="170">
+                <template #default="{ row }">{{ formatDate(row.sendTime) }}</template>
+              </el-table-column>
               <el-table-column label="失败原因" prop="errorMessage" min-width="190" show-overflow-tooltip />
-              <el-table-column label="日志" width="80" align="center"
+              <el-table-column v-if="activeDistributionBatch.taskType !== 'UPLOAD'" label="日志" width="80" align="center"
                 ><template #default="{ row }"><CertRowAction label="查看分发日志" icon="View" @click="openDetail({ id: row.certId })" /></template
               ></el-table-column>
             </el-table>
@@ -331,32 +331,6 @@
 
     <RaCertDetailDialog ref="ledgerCertificateDetail" :load-detail="getEmployeeLedgerCertificate" />
     <DistributionDialog ref="distributionDialog" @submitted="onDistributionSubmitted" />
-    <el-dialog
-      v-model="batchDownloadOpen"
-      title="批量下载证书"
-      width="min(440px, 96vw)"
-      append-to-body
-      :close-on-click-modal="false"
-      :close-on-press-escape="!batchDownloading"
-      :show-close="!batchDownloading"
-    >
-      <el-form label-width="76px">
-        <el-form-item label="下载数量">{{ batchDownloadIds.length }} 张</el-form-item>
-        <el-form-item label="证书格式">
-          <el-select v-model="batchDownloadFormat" :disabled="batchDownloading" style="width: 100%">
-            <el-option label="CER 证书" value="cer" />
-            <el-option label="PEM 证书" value="pem" />
-            <el-option label="CRT 证书" value="crt" />
-            <el-option label="P7B 证书包" value="p7b" />
-            <el-option label="PFX 证书（含私钥）" value="pfx" />
-          </el-select>
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button :disabled="batchDownloading" @click="batchDownloadOpen = false">取消</el-button>
-        <el-button type="primary" icon="Download" :loading="batchDownloading" @click="downloadSelected">下载 ZIP</el-button>
-      </template>
-    </el-dialog>
     <el-drawer v-model="detailOpen" title="员工证书详情" size="min(940px, 100vw)" append-to-body>
       <el-descriptions :column="1" border class="mb12">
         <el-descriptions-item label="序列号">{{ detail.cert?.serialNumber || '-' }}</el-descriptions-item>
@@ -557,10 +531,11 @@ import { computed, ref, reactive, watch, onActivated, onDeactivated, onMounted, 
 import { useRoute, useRouter } from 'vue-router';
 import { employeeCertLedgerPath } from '@/utils/fawvwEmployeeNavigation';
 import FileSaver from 'file-saver';
-import { certificateDownloadBlob } from '@/utils/raCertificateDownload';
+import { certificateDownloadBlob, employeeCertificateDownload } from '@/utils/raCertificateDownload';
 import auth from '@/plugins/auth';
 import { useUserStore } from '@/store/modules/user';
 import type { RaCertFilterOption } from '@/api/ra/cert';
+import EmployeeCertificateDownloadMenu from './EmployeeCertificateDownloadMenu.vue';
 import ChannelStatus from './ChannelStatus.vue';
 import DistributionDialog from './DistributionDialog.vue';
 import LegacyCertificates from './LegacyCertificates.vue';
@@ -584,6 +559,8 @@ import {
   downloadSelectedEmployeeCerts,
   type EmployeeCertDownloadFormat,
   getEmployeeAdUploadEnabled,
+  getEmployeeAdBatch,
+  queueEmployeeAdBatch,
   getEmployeeCert,
   exportEmployeeCertLedger,
   getEmployeeLedgerCertificate,
@@ -739,10 +716,7 @@ const activeDistributionBatch = ref<EmployeeDistributionBatch>();
 const activeDistributionBatchNo = computed(() => activeDistributionBatch.value?.batchNo || requestedDistributionBatchNo.value);
 const distributionTaskDetail = computed(() => (activeDistributionBatch.value?.taskNo ? distributionRecords.value[0] : undefined));
 const downloadingCert = ref<EmployeeCert['id']>();
-const batchDownloadOpen = ref(false);
 const batchDownloading = ref(false);
-const batchDownloadIds = ref<EmployeeCert['id'][]>([]);
-const batchDownloadFormat = ref<EmployeeCertDownloadFormat>('cer');
 let distributionTimer: ReturnType<typeof setTimeout> | undefined;
 let pageActive = false;
 let pageDisposed = false;
@@ -937,9 +911,24 @@ function canDownloadCert(row: EmployeeCert) {
   return row.issueStatus === 'ISSUED' && row.raCertId != null;
 }
 
-function previewAdUpload() {
-  if (!canDistribute.value || loading.value || !adUploadSelectionReady.value) return;
-  ElMessage.info(`已选中 ${selectedRows.value.length} 张符合条件的证书，AD 发布接口尚未接入，本次未上传。`);
+const adSubmitting = ref(false);
+async function uploadSelectedToAd() {
+  if (!canDistribute.value || loading.value || !adUploadSelectionReady.value || adSubmitting.value) return;
+  const ids = selectedRows.value.map(row => row.id);
+  adSubmitting.value = true;
+  try {
+    await ElMessageBox.confirm(`确认将所选 ${ids.length} 张证书上传至 AD？`, '确认 AD 上传', { type: 'warning' });
+    const batch = unwrapData(await queueEmployeeAdBatch(ids));
+    ElMessage.success('已加入 AD 上传队列');
+    distributionTaskNo.value = '';
+    distributionBatchType.value = 'UPLOAD';
+    managementTab.value = 'distribution';
+    await searchDistributionRecords(batch);
+  } catch {
+    // Request errors are shown by the API client.
+  } finally {
+    adSubmitting.value = false;
+  }
 }
 
 function distributeSelected() {
@@ -965,12 +954,13 @@ function distribute(row: EmployeeCert, channel: string) {
   }
 }
 
-async function downloadPackage(row: EmployeeCert) {
+async function downloadPackage(row: EmployeeCert, format: EmployeeCertDownloadFormat) {
   if (downloadingCert.value != null) return;
   downloadingCert.value = row.id;
   try {
-    const blob = await certificateDownloadBlob(await downloadEmployeeCertPackage(row.id), 'application/zip', 'RA_EMPLOYEE_CERT_');
-    FileSaver.saveAs(blob, `employee-cert-${row.id}.zip`);
+    const { blob, filename } = await employeeCertificateDownload(
+      await downloadEmployeeCertPackage(row.id, format), `employee-cert-${row.id}`, format);
+    FileSaver.saveAs(blob, filename);
   } catch (error: any) {
     ElMessage.error(error?.message || '证书压缩包下载失败');
   } finally {
@@ -978,26 +968,14 @@ async function downloadPackage(row: EmployeeCert) {
   }
 }
 
-function openBatchDownload() {
-  const ids = selectedRows.value.filter(canDownloadCert).map((row) => row.id);
+async function downloadSelected(format: EmployeeCertDownloadFormat) {
+  const ids = selectedRows.value.filter(canDownloadCert).map(row => row.id);
   if (!ids.length || batchDownloading.value) return;
-  batchDownloadIds.value = ids;
-  batchDownloadFormat.value = 'cer';
-  batchDownloadOpen.value = true;
-}
-
-async function downloadSelected() {
-  if (batchDownloading.value || !batchDownloadIds.value.length) return;
   batchDownloading.value = true;
   try {
-    const format = batchDownloadFormat.value;
-    const blob = await certificateDownloadBlob(
-      await downloadSelectedEmployeeCerts(batchDownloadIds.value, format),
-      'application/zip',
-      'RA_EMPLOYEE_CERT_'
-    );
-    FileSaver.saveAs(blob, `employee-certs-${format}.zip`);
-    batchDownloadOpen.value = false;
+    const { blob, filename } = await employeeCertificateDownload(
+      await downloadSelectedEmployeeCerts(ids, format), `employee-certs-${format}`, format);
+    FileSaver.saveAs(blob, filename);
   } catch (error: any) {
     const body = error?.response?.data;
     const result =
@@ -1023,6 +1001,24 @@ function distributionChannelStatus(row: EmployeeDistributionBatchItem, channel: 
   return status;
 }
 
+function batchResult(batch: EmployeeDistributionBatch) {
+  if (batch.totalCount === batch.successCount) return { label: '成功', type: 'success' } as const;
+  if (batch.totalCount === batch.successCount + batch.failedCount) return { label: '失败', type: 'danger' } as const;
+  if (batch.runningCount || batch.successCount || batch.failedCount) return { label: '运行中', type: 'warning' } as const;
+  return { label: '待运行', type: 'info' } as const;
+}
+
+function recordResultLabel(status: number) {
+  return ({ 0: '待运行', 1: '成功', 2: '失败', 3: '运行中' } as Record<number, string>)[status] || '-';
+}
+
+async function loadBatchRecords(batchNo: string, upload: boolean): Promise<EmployeeDistributionBatchItem[]> {
+  if (!upload) return unwrapData(await getEmployeeDistributionBatch(batchNo));
+  return unwrapData(await getEmployeeAdBatch(batchNo)).map(row => ({
+    ...row, messageType: 'UPLOAD', employeeName: row.employeeName || '', domainAccount: row.domainAccount || ''
+  }));
+}
+
 function batchTypeLabel(batch: EmployeeDistributionBatch) {
   return batch.taskType === 'UPLOAD' ? '证书上传' : batch.notice ? '业务通知' : '证书分发';
 }
@@ -1033,6 +1029,8 @@ function summarizeDistributionBatch(batchNo: string, records: EmployeeDistributi
   return {
     batchNo,
     notice: records[0].messageType === 'NOTICE',
+    taskType: records[0].messageType === 'UPLOAD' ? 'UPLOAD' : 'DISTRIBUTION',
+    runningCount: records.filter(row => row.sendStatus === 3).length,
     taskNo: taskCount === 1 ? records[0].taskNo : undefined,
     taskCount,
     createTime: records[0].createTime,
@@ -1050,25 +1048,36 @@ async function loadDistributionRecords(retry = false) {
   if (!retry) distributionReadFailures.value = 0;
   distributionRecordsLoading.value = true;
   try {
-    const [response, requestedDetails] = await Promise.all([
+    const requestedUpload = batchType === 'UPLOAD'
+      || distributionBatches.value.some(row => row.batchNo === requestedBatchNo && row.taskType === 'UPLOAD');
+    const [response, requestedRecords] = await Promise.all([
       pageEmployeeDistributionBatches({ ...distributionPage, taskNo: taskNo || undefined, batchType: batchType || undefined }),
-      requestedBatchNo ? getEmployeeDistributionBatch(requestedBatchNo) : undefined
+      requestedBatchNo ? loadBatchRecords(requestedBatchNo, requestedUpload) : undefined
     ]);
     if (request !== distributionRecordsRequest || pageDisposed) return;
-    const page = unwrapData<{ records: EmployeeDistributionBatch[]; total: number }>(response);
+    const page = unwrapData(response);
     const batches = page?.records || [];
     distributionBatches.value = batches;
     distributionTotal.value = Number(page?.total || 0);
-    const batch = requestedBatchNo ? undefined : batches.find((row) => row.batchNo === activeDistributionBatchNo.value) || batches[0];
-    const details = batch ? await getEmployeeDistributionBatch(batch.batchNo) : requestedDetails;
+    const batch = requestedBatchNo
+      ? batches.find(row => row.batchNo === requestedBatchNo)
+      : batches.find(row => row.batchNo === activeDistributionBatchNo.value) || batches[0];
+    const selectedNo = requestedBatchNo || batch?.batchNo;
+    const isUpload = batchType === 'UPLOAD' || batch?.taskType === 'UPLOAD';
+    let records = requestedRecords && (requestedUpload === isUpload || !batch) ? requestedRecords
+      : selectedNo ? await loadBatchRecords(selectedNo, isUpload) : [];
+    if (selectedNo && !records.length && !batch && !batchType && !taskNo && adUploadEnabled.value) {
+      records = await loadBatchRecords(selectedNo, true);
+    }
     if (request !== distributionRecordsRequest || pageDisposed) return;
-    const loaded = details ? unwrapData<EmployeeDistributionBatchItem[]>(details) || [] : [];
-    const records = batchType === 'UPLOAD' || (batchType === 'DISTRIBUTION' && loaded[0]?.messageType === 'NOTICE') ? [] : loaded;
-    distributionRecords.value = taskNo ? records.filter((row) => row.taskNo?.toLowerCase() === taskNo.toLowerCase()) : records;
-    activeDistributionBatch.value = requestedBatchNo ? summarizeDistributionBatch(requestedBatchNo, distributionRecords.value) : batch;
+    if (batchType === 'DISTRIBUTION' && records[0]?.messageType === 'NOTICE') records = [];
+    distributionRecords.value = taskNo ? records.filter(row => row.taskNo?.toLowerCase() === taskNo.toLowerCase()) : records;
+    activeDistributionBatch.value = requestedBatchNo
+      ? distributionRecords.value.length ? batch || summarizeDistributionBatch(requestedBatchNo, distributionRecords.value) : undefined
+      : batch;
     distributionReadFailures.value = 0;
     const activeBatch = activeDistributionBatch.value;
-    if (managementTab.value === 'distribution' && activeBatch && activeBatch.totalCount > activeBatch.successCount + activeBatch.failedCount) {
+    if (managementTab.value === 'distribution' && [activeBatch, ...batches].some(row => row && row.totalCount > row.successCount + row.failedCount)) {
       watchDistribution();
     }
   } catch {

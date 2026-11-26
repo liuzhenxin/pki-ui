@@ -69,6 +69,7 @@
             </el-button>
             <template #dropdown>
               <el-dropdown-menu>
+                <el-dropdown-item :icon="Setting" command="layout">布局设置</el-dropdown-item>
                 <el-dropdown-item :icon="SwitchButton" command="logout">退出登录</el-dropdown-item>
               </el-dropdown-menu>
             </template>
@@ -157,6 +158,11 @@
         </main>
     </ManagementFrame>
 
+    <el-drawer v-model="portalLayoutOpen" title="布局设置" size="min(360px, 92vw)" append-to-body>
+      <el-form label-position="left">
+        <el-form-item label="显示侧栏"><el-switch v-model="portalSidebarVisible" :disabled="compactLedger" aria-label="显示侧栏" /></el-form-item>
+      </el-form>
+    </el-drawer>
     <el-drawer v-model="portalMobileMenuOpen" title="证书统一管理" direction="ltr" size="min(260px, 80vw)" append-to-body>
       <el-menu :default-active="portalSection" aria-label="移动端菜单" @select="changePortalSectionFromMobile">
         <el-menu-item index="records"><el-icon><Document /></el-icon>录入信息</el-menu-item>
@@ -301,7 +307,7 @@
 
 <script setup name="RaPublicCertSelf" lang="ts">
 import { ElMessage, ElMessageBox, FormInstance, FormRules, type UploadUserFile } from 'element-plus';
-import { ArrowDown, Document, List, Menu, OfficeBuilding, SwitchButton, User } from '@element-plus/icons-vue';
+import { ArrowDown, Document, List, Menu, OfficeBuilding, Setting, SwitchButton, User } from '@element-plus/icons-vue';
 import { useMediaQuery } from '@vueuse/core';
 import ManagementFrame from '@/layout/components/ManagementFrame.vue';
 import { PublicCert, PublicCertAttachment, PublicCertDetail, PublicCertQuery, PublicCertType, SelfAccess } from '@/api/ra/publicCert';
@@ -721,7 +727,9 @@ function startIdleTimer() {
   scheduleIdleTimeout();
 }
 
+const portalLayoutOpen = ref(false);
 function handleAccountCommand(command: string) {
+  if (command === 'layout') portalLayoutOpen.value = true;
   if (command === 'logout') void handleLogout();
 }
 

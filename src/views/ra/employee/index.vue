@@ -236,6 +236,7 @@
       </div>
     </div>
 
+    <RaCertDetailDialog ref="employeeCertDetail" :load-detail="getRaCert" />
     <LocalDirectoryDialogs
       ref="localDialogs"
       :departments="localDepartments"
@@ -292,18 +293,34 @@
             <el-button v-if="!isLocalAccount(detail) && !detail.localRecoveryRequired && detail.localEnabled === false" v-hasPermi="['ra:employee:manage']" type="success" plain @click="changeEmployeeEnabled(true)">恢复员工</el-button>
           </div>
           <el-divider content-position="left">名下证书</el-divider>
-          <EmployeeCertificateInventory v-bind="certificateInventory" :ad-upload-enabled="adUploadEnabled" @page-change="changeCertificatePage" @retry="reloadCertificateInventory" @certificate="openCertificate" />
+          <EmployeeCertificateInventory v-bind="certificateInventory" :ad-upload-enabled="adUploadEnabled && canUploadAd" @upload-ad="uploadEmployeeCertificateToAd" @page-change="changeCertificatePage" @retry="reloadCertificateInventory" @certificate="openCertificate" />
           <template v-if="adUploadEnabled">
             <el-divider class="employee-ad-divider" content-position="left">AD 上传记录</el-divider>
             <el-descriptions class="employee-detail-descriptions employee-ad-summary" :column="1" label-width="9rem" border>
-              <el-descriptions-item label="最近成功上传 AD 的证书">-</el-descriptions-item>
-              <el-descriptions-item label="最近成功上传 AD 的时间">-</el-descriptions-item>
+              <el-descriptions-item label="最近成功上传 AD 的证书">
+                <el-button v-if="latestAdSuccess" link type="primary" @click="openCertificate(latestAdSuccess.certId)">{{ latestAdSuccess.serialNumber }}</el-button>
+                <span v-else>-</span>
+              </el-descriptions-item>
+              <el-descriptions-item label="最近成功上传 AD 的时间">{{ employeeDetailTime(latestAdSuccess?.sendTime) }}</el-descriptions-item>
             </el-descriptions>
-            <el-table :data="[]" size="small" empty-text="AD 发布未接入，暂无上传记录">
-              <el-table-column label="证书序列号" min-width="160" />
-              <el-table-column label="上传时间" min-width="145" />
-              <el-table-column label="操作人" min-width="88" />
-              <el-table-column label="结果" min-width="88" />
+            <el-alert v-if="adHistoryFailed" type="error" title="无法读取 AD 上传记录" :closable="false">
+              <el-button link type="primary" @click="loadAdHistory()">重新读取</el-button>
+            </el-alert>
+            <el-table class="employee-ad-history" :data="adHistory" size="small" empty-text="暂无上传记录">
+              <el-table-column label="证书序列号" min-width="160">
+                <template #default="{ row }"><el-button link type="primary" @click="openCertificate(row.certId)">{{ row.serialNumber }}</el-button></template>
+              </el-table-column>
+              <el-table-column label="上传时间" min-width="145">
+                <template #default="{ row }">{{ employeeDetailTime(row.sendTime) }}</template>
+              </el-table-column>
+              <el-table-column label="操作人" prop="operator" min-width="88" />
+              <el-table-column label="结果" min-width="88">
+                <template #default="{ row }">
+                  <el-tag :type="row.sendStatus === 1 ? 'success' : row.sendStatus === 2 ? 'danger' : 'info'" :title="row.errorMessage">
+                    {{ adHistoryStatus(row.sendStatus) }}
+                  </el-tag>
+                </template>
+              </el-table-column>
             </el-table>
           </template>
         </el-tab-pane>
@@ -579,11 +596,12 @@
 import { formatCertificateSubject } from '@/utils/raCertificateSubject';
 import { useRaListRefreshOnReturn } from '@/hooks/useRaListRefreshOnReturn';
 import { computed, onActivated, onDeactivated, onMounted, onUnmounted, reactive, ref, shallowRef, watch } from 'vue';
-import { getEmployeeAdUploadEnabled } from '@/api/ra/employeeCert';
+import { getEmployeeAdUploadEnabled, getEmployeeAdHistory, queueEmployeeAdCertificate, type EmployeeAdPublication } from '@/api/ra/employeeCert';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { useRoute, useRouter } from 'vue-router';
 import FileSaver from 'file-saver';
-import { downloadRaCert } from '@/api/ra/cert';
+import { downloadRaCert, getRaCert } from '@/api/ra/cert';
+import RaCertDetailDialog from '../components/RaCertDetailDialog.vue';
 import { certificateDownloadBlob } from '@/utils/raCertificateDownload';
 import { listDeptSelectTree, removeDept } from '@/api/ra/dept';
 import { getUser, type RaApplicantUserInfo } from '@/api/ra/user';
@@ -763,6 +781,60 @@ const createForm = reactive<EmployeeInput>({ employeeNo: '', domainAccount: '', 
 let detailRequestId = 0;
 const configOpen = ref(false);
 const adUploadEnabled = ref(false);
+const employeeCertDetail = ref<InstanceType<typeof RaCertDetailDialog>>();
+const adHistory = ref<EmployeeAdPublication[]>([]);
+const adHistoryFailed = ref(false);
+const adHistoryBusy = ref(false);
+const canUploadAd = computed(() => auth.hasPermi('ra:employee-cert:distribute'));
+const latestAdSuccess = computed(() =>
+  adHistory.value.filter(row => row.sendStatus === 1).sort((a, b) => (b.sendTime || '').localeCompare(a.sendTime || ''))[0]);
+let adHistoryRequest = 0;
+let adHistoryTimer: ReturnType<typeof setTimeout> | undefined;
+
+function adHistoryStatus(status: number) {
+  return ({ 0: '待运行', 1: '成功', 2: '失败', 3: '运行中' } as Record<number, string>)[status] || '-';
+}
+
+async function loadAdHistory() {
+  clearTimeout(adHistoryTimer);
+  const request = ++adHistoryRequest;
+  const id = detail.value.id;
+  if (!id || !detailOpen.value || !adUploadEnabled.value) return;
+  adHistoryFailed.value = false;
+  try {
+    const response = await getEmployeeAdHistory(id);
+    if (request !== adHistoryRequest || !detailOpen.value) return;
+    adHistory.value = unwrap(response) || [];
+    if (adHistory.value.some(row => row.sendStatus === 0 || row.sendStatus === 3)) {
+      adHistoryTimer = setTimeout(loadAdHistory, 2500);
+    }
+  } catch {
+    if (request === adHistoryRequest) adHistoryFailed.value = true;
+  }
+}
+
+watch(() => [detailOpen.value, detail.value.id, adUploadEnabled.value] as const, () => {
+  adHistory.value = [];
+  void loadAdHistory();
+});
+onUnmounted(() => { ++adHistoryRequest; clearTimeout(adHistoryTimer); });
+
+async function uploadEmployeeCertificateToAd(row: EmployeeCertificateRecord) {
+  const employeeId = detail.value.id;
+  if (!employeeId || adHistoryBusy.value || !canUploadAd.value) return;
+  adHistoryBusy.value = true;
+  try {
+    await ElMessageBox.confirm(`确认上传证书 ${row.serialNumber} 至 AD？`, '确认 AD 上传', { type: 'warning' });
+    await queueEmployeeAdCertificate(employeeId, row.id);
+    ElMessage.success('已加入 AD 上传队列');
+    if (employeeId === detail.value.id) void loadAdHistory();
+  } catch {
+    // Request errors are shown by the API client.
+  } finally {
+    adHistoryBusy.value = false;
+  }
+}
+
 let employeePageActive = false;
 function loadAdUploadSetting() {
   getEmployeeAdUploadEnabled().then(response => { adUploadEnabled.value = unwrap(response) === true; }).catch(() => { adUploadEnabled.value = false; });
@@ -1128,6 +1200,10 @@ function certificateSourceLabel(source?: string) {
 }
 
 async function openCertificate(id: string | number) {
+  if (auth.hasPermi('ra:cert') && employeeCertDetail.value) {
+    await employeeCertDetail.value.open({ id });
+    return;
+  }
   const userId = detail.value.raUserId;
   const employeeId = userId == null ? detail.value.id : undefined;
   if (userId == null && employeeId == null) return;
@@ -1809,7 +1885,7 @@ useRaListRefreshOnReturn(() => {
       width: max-content;
       min-width: 100%;
       flex-wrap: nowrap;
-      justify-content: flex-start;
+      justify-content: safe flex-end;
     }
 
     :deep(.el-pagination__sizes .el-select) {
@@ -1855,11 +1931,11 @@ useRaListRefreshOnReturn(() => {
 
 .employee-ad-divider {
   margin-top: 36px;
-  margin-bottom: 12px;
+  margin-bottom: 20px;
 }
 
 .employee-ad-summary {
-  margin-bottom: 6px;
+  margin-bottom: 16px;
 }
 
 .employee-detail-descriptions {
@@ -1908,4 +1984,5 @@ useRaListRefreshOnReturn(() => {
     }
   }
 }
+
 </style>

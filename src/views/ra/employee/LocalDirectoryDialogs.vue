@@ -36,7 +36,7 @@
         </template>
         <el-col :xs="24" :sm="12">
           <el-form-item label="所属部门" required>
-            <el-tree-select v-model="account.deptId" :data="departments" :props="deptProps" node-key="id" check-strictly
+            <el-tree-select v-model="account.deptId" :data="accountDepartments" :props="deptProps" node-key="id" check-strictly
               placeholder="请选择所属部门" style="width: 100%" />
           </el-form-item>
         </el-col>
@@ -74,7 +74,7 @@
 import { computed, reactive, ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { getDept, modifyDept, saveDept } from '@/api/ra/dept';
-import type { RaDeptForm, RaDeptTreeOption } from '@/api/ra/dept/types';
+import { raDepartmentIsWritable, type RaDeptForm, type RaDeptTreeOption } from '@/api/ra/dept/types';
 import { addUser, deleteLocalUser, getUser, resetUserPwd, updateUser } from '@/api/ra/user';
 import type { UserForm } from '@/api/system/user/types';
 import type { FawvwEmployee } from '@/api/ra/employee';
@@ -91,7 +91,13 @@ const account = reactive<UserForm>({ username: '', password: '', status: 0, role
 const domainAccount = ref('');
 const domainAccountLocked = ref(false);
 const employeeAttributes = reactive({ employeeNo: '', gender: '', jobName: '' });
-const deptProps = { value: 'id', label: 'name', children: 'children' };
+const deptProps = { value: 'id', label: 'name', children: 'children', disabled: 'disabled' };
+function accountDepartmentOptions(nodes: RaDeptTreeOption[]): (RaDeptTreeOption & { disabled: boolean })[] {
+  return nodes.map(node => ({
+    ...node, id: String(node.id), disabled: node.writable !== true, children: accountDepartmentOptions(node.children || [])
+  }));
+}
+const accountDepartments = computed(() => accountDepartmentOptions(props.departments));
 const canEditAccount = computed(() => restoringLocalOrigin.value ? props.allowLocalRecovery === true : auth.hasPermi('ra:user'));
 
 async function openDepartment(deptId: string, edit = false) {
@@ -128,7 +134,7 @@ async function openAccount(deptId?: string, userId?: string | number, employee?:
   if ((userId != null || restoreLocalOrigin) && !user?.id) return;
   restoringLocalOrigin.value = restoreLocalOrigin;
   Object.assign(account, {
-    id: user?.id, deptId: restoreLocalOrigin ? undefined : user?.deptId == null ? deptId : String(user.deptId), username: user?.username || '',
+    id: user?.id, deptId: restoreLocalOrigin ? undefined : user?.deptId == null ? raDepartmentIsWritable(props.departments, deptId) ? deptId : undefined : String(user.deptId), username: user?.username || '',
     password: '', mail: user?.mail || '', mobile: user?.mobile || '', status: Number(user?.status ?? 0),
     userCategory: user?.userCategory || 'individual'
   });
@@ -141,8 +147,12 @@ async function openAccount(deptId?: string, userId?: string | number, employee?:
 async function saveAccount() {
   if (saving.value || !canEditAccount.value) return;
   const username = account.username.trim();
-  if (!account.deptId || username.length < 2 || (account.id == null && account.password.length < 6)) {
-    ElMessage.warning(restoringLocalOrigin.value ? '请选择原部门' : '请选择部门，填写用户名和初始密码');
+  if (account.deptId == null || (account.id == null && !raDepartmentIsWritable(props.departments, account.deptId))) {
+    ElMessage.warning(restoringLocalOrigin.value ? '请选择原部门' : '请选择可写入的本地部门');
+    return;
+  }
+  if (username.length < 2 || (account.id == null && account.password.length < 6)) {
+    ElMessage.warning(username.length < 2 ? '用户名至少需要 2 个字符' : '初始密码至少需要 6 个字符');
     return;
   }
   if (domainAccountLocked.value && account.userCategory === 'individual' && !domainAccount.value.trim()) {

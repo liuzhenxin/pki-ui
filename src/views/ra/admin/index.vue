@@ -73,6 +73,7 @@
           <el-col :span="1.5">
             <el-button type="warning" plain v-if="isRaAdministrator" icon="Download" @click="handleExport" v-hasPermi="['ra:admin']">导出</el-button>
           </el-col>
+          <el-col v-if="isRaAdministrator" :span="1.5"><ReviewReportingSettings v-hasPermi="['ra:admin']" /></el-col>
           <right-toolbar v-model:showSearch="showSearch" @queryTable="getList" :columns="columns"></right-toolbar>
         </el-row>
 
@@ -374,6 +375,7 @@ import {
   getAssignableRaRoles,
   RA_BUSINESS_ROLE_OPTIONS
 } from '@/api/ra/adminUser';
+import ReviewReportingSettings from './ReviewReportingSettings.vue';
 import { getToken } from '@/utils/auth';
 import { UserForm, UserQuery, UserVO } from '@/api/system/user/types';
 import { ElMessage, ElMessageBox, FormInstance, FormRules } from 'element-plus';

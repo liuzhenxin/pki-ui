@@ -151,16 +151,17 @@
           </template>
         </el-table-column>
       </el-table>
-      <div v-if="total > 0" class="mt12">共 {{ total }} 组</div>
-      <pagination
-        v-show="total > 0"
-        v-model:page="queryParams.pageNum"
-        v-model:limit="queryParams.pageSize"
-        :total="total"
-        :auto-scroll="false"
-        layout="sizes, prev, pager, next, jumper"
-        @pagination="loadList"
-      />
+      <div v-if="total > 0" class="ca-pagination">
+        <span class="ca-group-count">共 {{ total }} 组</span>
+        <pagination
+          v-model:page="queryParams.pageNum"
+          v-model:limit="queryParams.pageSize"
+          :total="total"
+          :auto-scroll="false"
+          layout="sizes, prev, pager, next, jumper"
+          @pagination="loadList"
+        />
+      </div>
     </el-card>
 
     <el-drawer v-model="chainOpen" title="证书链" size="min(900px, 95vw)" append-to-body>
@@ -254,9 +255,14 @@
           <el-descriptions-item label="路径长度约束">{{ detail.parseWarning ? '-' : (detail.pathLength ?? '未限制') }}</el-descriptions-item>
           <el-descriptions-item label="SHA-256 指纹">{{ detail.certificate.fingerprint }}</el-descriptions-item>
         </el-descriptions>
-        <el-collapse v-if="detail.certificate.certificatePem" class="mt12">
+        <el-collapse v-if="detail.certificate.certificatePem" v-model="pemPanels" class="mt12">
           <el-collapse-item name="pem" title="PEM 证书正文">
-            <el-input :model-value="detail.certificate.certificatePem" type="textarea" :rows="8" readonly />
+            <el-radio-group v-model="pemView" size="small" class="mb8" aria-label="PEM 证书呈现方式">
+              <el-radio-button value="raw">原始</el-radio-button>
+              <el-radio-button value="readable">查看</el-radio-button>
+            </el-radio-group>
+            <el-input v-if="pemView === 'raw'" :model-value="detail.certificate.certificatePem" type="textarea" :rows="8" readonly />
+            <X509Cert v-else :cert-pem="detail.certificate.certificatePem" />
           </el-collapse-item>
         </el-collapse>
       </template>
@@ -287,6 +293,7 @@
 </template>
 
 <script setup name="FawvwCaCert" lang="ts">
+import X509Cert from '@/components/X509Cert/index.vue';
 import { formatCertificateSubject } from '@/utils/raCertificateSubject';
 import CertRowAction from '../components/CertRowAction.vue';
 import { notifyBusinessCertificates, setBusinessCertificateReminder } from '@/api/ra/businessNoticeSettings';
@@ -309,6 +316,8 @@ import {
 } from '@/api/ra/fawvwCaCert';
 import { getFawvwCaRoots, getFawvwCaChain, removeFawvwCaCertificate, downloadFawvwCaCertificate, type FawvwCaChainEntry } from '@/api/ra/fawvwCaCert';
 
+const pemPanels = ref(['pem']);
+const pemView = ref<'raw' | 'readable'>('raw');
 const rootOptions = ref<{ id: string | number; displayName: string; fingerprint: string }[]>([]);
 type ChainNode = FawvwCaCertificate & { linked: boolean; warning: string; children: ChainNode[] };
 const chainRows = ref<ChainNode[]>([]);
@@ -531,6 +540,8 @@ async function handleImport() {
 }
 
 async function openDetail(row: ChainNode) {
+  pemPanels.value = ['pem'];
+  pemView.value = 'raw';
   detail.value = unwrap<FawvwCaCertificateDetail>(await getFawvwCaCertificateDetail(row.id));
   detailChain.value = { linked: row.linked, warning: row.warning };
   detailOpen.value = true;
@@ -574,6 +585,10 @@ useRaListRefreshOnReturn(async () => {
 </script>
 
 <style scoped lang="scss">
+.ca-pagination { display: flex; align-items: center; justify-content: flex-end; gap: 12px; flex-wrap: wrap; }
+.ca-pagination :deep(.pagination-container) { flex: 0 1 auto; }
+.ca-group-count { color: var(--el-text-color-regular); font-size: var(--el-font-size-base); white-space: nowrap; }
+
 .fawvw-ca-cert-page {
   .query-card {
     margin-bottom: 12px;

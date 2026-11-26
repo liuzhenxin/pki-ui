@@ -46,6 +46,15 @@ test('distribution settings keep local drafts separate from OPS and let AD be se
     };
     const api = {
       getEmployeeCertDistributionSettings: async () => ({ data: structuredClone(stored) }),
+      getEmployeeAdConfig: async () => ({ data: {
+        protocol: 'ldaps', host: 'directory.example.test', port: 636, baseDn: 'DC=example,DC=test',
+        account: 'publisher@example.test', fields: ['userCertificate', 'userSMIMECertificate'],
+        mode: 'REPLACE', passwordConfigured: true
+      } }),
+      testEmployeeAdConfig: async (config, email, file) => {
+        window.adTest = { protocol: config.protocol, fields: [...config.fields], mode: config.mode, email, file: file.name };
+        return { data: true };
+      },
       getEmployeeCertOpsSettings: async () => ({
         data: {
           distribution: {
@@ -147,6 +156,15 @@ test('distribution settings keep local drafts separate from OPS and let AD be se
   await open.click();
   await useOps.click();
   await upload.click();
+  await expect(dialog.getByText('LDAPS（推荐）')).toBeVisible();
+  await expect(dialog.getByRole('checkbox', { name: 'S/MIME 证书' })).toBeChecked();
+  await dialog.getByPlaceholder('测试用户邮箱').fill('test@example.test');
+  await dialog.locator('input[type=file]').setInputFiles({ name: 'test.cer', mimeType: 'application/pkix-cert', buffer: Buffer.from([1]) });
+  await dialog.getByRole('button', { name: '写入并回读' }).click();
+  await page.getByRole('button', { name: '确认写入', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => (window as any).adTest)).toMatchObject({
+    protocol: 'ldaps', fields: ['userCertificate', 'userSMIMECertificate'], mode: 'REPLACE', email: 'test@example.test', file: 'test.cer'
+  });
   await dialog
     .locator('.el-switch')
     .filter({ has: page.getByRole('switch', { name: 'AD上传功能' }) })

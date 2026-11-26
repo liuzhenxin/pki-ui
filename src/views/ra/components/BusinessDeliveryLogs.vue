@@ -14,8 +14,11 @@
         ><el-tag :type="row.status === 1 ? 'success' : row.status === 2 ? 'danger' : 'info'">{{ publicNoticeStatus(row.status) }}</el-tag></template
       >
     </el-table-column>
-    <el-table-column label="时间" width="170">
+    <el-table-column label="记录时间" width="170">
       <template #default="{ row }">{{ row.time?.replace('T', ' ').slice(0, 19) || '-' }}</template>
+    </el-table-column>
+    <el-table-column v-if="certificateId" label="分发时间" width="170">
+      <template #default="{ row }">{{ row.sendTime?.replace('T', ' ').slice(0, 19) || '-' }}</template>
     </el-table-column>
     <el-table-column label="网关追踪 ID" prop="gatewayTraceId" min-width="135" show-overflow-tooltip />
     <el-table-column label="说明" prop="message" min-width="145" show-overflow-tooltip />
@@ -34,6 +37,7 @@
       <el-descriptions-item label="正文"
         ><div class="notice-content">{{ detail.content || '-' }}</div></el-descriptions-item
       >
+      <el-descriptions-item label="分发时间">{{ detail.sendTime?.replace('T', ' ').slice(0, 19) || '-' }}</el-descriptions-item>
       <el-descriptions-item label="发送结果">{{ publicNoticeStatus(detail.status) }} {{ detail.message }}</el-descriptions-item>
     </el-descriptions>
   </el-dialog>

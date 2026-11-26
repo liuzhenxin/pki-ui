@@ -515,8 +515,14 @@ for (const width of [1280, 834, 390]) {
         await expect(drawer).toBeHidden();
         await page.getByRole('button', { name: '账户菜单' }).click();
         await expect(page.getByRole('menuitem', { name: '退出登录' })).toBeVisible();
+        await expect(page.getByRole('menuitem', { name: '个人中心' })).toHaveCount(0);
         await expect(page.getByRole('menuitem', { name: '登录设置' })).toHaveCount(0);
+        await page.getByRole('menuitem', { name: '布局设置' }).click();
+        const layout = page.getByRole('dialog', { name: '布局设置' });
+        await expect(layout.getByRole('switch', { name: '显示侧栏' })).toBeAttached();
+        if (width <= 960) await expect(layout.getByRole('switch', { name: '显示侧栏' })).toBeDisabled();
         await page.keyboard.press('Escape');
+        await expect(layout).toBeHidden();
         await selectSection('待办详情');
         if (width > 960) await expect(page.getByRole('menuitem', { name: '待办详情' })).toHaveClass(/is-active/);
         await expect.poll(() => page.evaluate(() => (window as any).lastPortalQuery?.approvalStatus)).toBe('TODO');

@@ -7,13 +7,13 @@
       <el-button type="primary" :disabled="!archive || busy" :loading="checking" @click="runPreview">预检</el-button>
       <el-button type="success" :disabled="!archive || !preview?.eligible || busy" :loading="importing" @click="confirmImport">确认导入</el-button>
     </el-space>
-    <div class="legacy-help">
+    <el-alert class="legacy-help" title="上传说明" type="info" :closable="false" show-icon>
       <div>上传无需解压密码的 ZIP，包内只放 .pfx 文件。单批最多 50 份，ZIP 不超过 20 MB。</div>
-      <div>支持两种文件名格式</div>
+      <div>序列号使用十六进制，须与证书内一致，最后一段填写 PFX 密码。</div>
+      <div>支持的文件名格式</div>
       <div><code>证书序列号_域账号_PFX密码.pfx</code></div>
       <div><code>域账号_证书序列号_PFX密码.pfx</code></div>
-      <div>序列号使用十六进制，须与证书内一致。最后一段填写 PFX 密码。</div>
-    </div>
+    </el-alert>
 
     <el-alert v-if="lastResult" class="legacy-result" type="success" :closable="false" show-icon>
       <template #title

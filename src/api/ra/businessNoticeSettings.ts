@@ -43,6 +43,7 @@ export interface BusinessDeliveryLog {
   content?: string;
   status: number;
   time?: string;
+  sendTime?: string;
   message?: string;
   gatewayTraceId?: string;
 }

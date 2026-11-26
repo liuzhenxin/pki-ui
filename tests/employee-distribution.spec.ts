@@ -558,16 +558,30 @@ test('production task preserves distribution only for roles authorized to send w
   }
 });
 
-test('AD preview requires an entirely eligible selection and does not submit a distribution', () => {
-  const h = harness({ distributeEmployeeCert: () => { throw new Error('AD preview must not send'); } });
+test('AD batch queues only eligible certificates after confirmation and displays its actual result', async () => {
+  const requests: number[][] = [];
+  const confirmations: string[] = [];
+  const h = harness({
+    distributeEmployeeCert: () => { throw new Error('AD upload must not send a distribution'); },
+    queueEmployeeAdBatch: async (ids: number[]) => {
+      requests.push(ids);
+      return { data: submittedBatchNo };
+    },
+    pageEmployeeDistributionBatches: async () => ({ data: {
+      total: 1, records: [{ batchNo: submittedBatchNo, taskType: 'UPLOAD', totalCount: 1, successCount: 0, failedCount: 0, runningCount: 1 }]
+    } }),
+    getEmployeeAdBatch: async () => ({ data: [{ certId: 10, sendStatus: 3, createTime: '2026-11-26T12:00:00' }] })
+  }, undefined, {}, async message => { confirmations.push(message); });
   h.page.selectedRows.value = [{ id: 1, adUploadEligible: true }, { id: 2, adUploadEligible: false }];
   expect(h.page.adUploadSelectionReady.value).toBe(false);
-  h.page.previewAdUpload();
-  expect(h.messages).toHaveLength(0);
+  await h.page.uploadSelectedToAd();
+  expect(requests).toEqual([]);
   h.page.selectedRows.value = [{ id: 1, adUploadEligible: true }];
-  expect(h.page.adUploadSelectionReady.value).toBe(true);
-  h.page.previewAdUpload();
-  expect(h.messages).toEqual([expect.objectContaining({ type: 'info', text: expect.stringContaining('本次未上传') })]);
+  await h.page.uploadSelectedToAd();
+  expect(confirmations).toEqual(['确认将所选 1 张证书上传至 AD？']);
+  expect(requests).toEqual([[1]]);
+  expect(h.page.activeDistributionBatch.value.taskType).toBe('UPLOAD');
+  expect(h.page.batchResult(h.page.activeDistributionBatch.value).label).toBe('运行中');
   h.stop();
 });
 
@@ -821,10 +835,10 @@ test('certificate pages compile and remove arbitrary package uploads and passwor
   expect(compileTemplate({ source: descriptor.template!.content, filename: 'issue.vue', id: 'distribution-task' }).errors).toEqual([]);
   const taskActions = taskSource.match(/<el-table-column label="操作"[^>]*>([\s\S]*?)<\/el-table-column>/)?.[1];
   expect(taskActions).toContain('<CertRowAction label="详情" icon="View" @click="openTask(row)" />');
-  expect(taskActions).toContain('label="下载证书"');
+  expect(taskActions).toContain('<EmployeeCertificateDownloadMenu');
   expect(taskActions).toContain(`v-hasPermi="['ra:employee-cert:distribute']"`);
   expect(taskActions).toContain(':disabled="row.successCount <= 0 || Boolean(downloadingTask)"');
-  expect(taskActions).toContain('@click="downloadTaskPackage(row)"');
+  expect(taskActions).toContain('@download="downloadTaskPackage(row, $event)"');
   expect(taskSource).toContain('@click="issueSelectedCerts"');
   expect(taskSource).toContain(": '重签'");
   expect(taskSource).not.toContain(':disabled="!distributableTaskCerts.length"');

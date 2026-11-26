@@ -206,11 +206,11 @@
           <el-table v-loading="taskLoading" :data="tasks" border stripe empty-text="暂无制作任务">
             <el-table-column label="任务号" prop="taskNo" min-width="210" show-overflow-tooltip />
             <el-table-column label="签发模板" prop="profileNameSnapshot" min-width="190" show-overflow-tooltip />
-            <el-table-column label="证书类型" prop="certTypeName" width="130" />
-            <el-table-column label="完成/总人数" width="120" align="center">
+            <el-table-column label="证书类型" prop="certTypeName" min-width="130" />
+            <el-table-column label="完成/总人数" min-width="120" align="center">
               <template #default="{ row }">{{ row.successCount }}/{{ row.totalCount }}</template>
             </el-table-column>
-            <el-table-column label="任务状态" width="120" align="center">
+            <el-table-column label="任务状态" min-width="120" align="center">
               <template #default="{ row }">
                 <el-tag v-if="taskIssueStatus(row.taskStatus)" :type="issueStatusType(taskIssueStatus(row.taskStatus))" effect="plain">
                   {{ issueStatusLabel(taskIssueStatus(row.taskStatus)) }}
@@ -218,20 +218,15 @@
                 <span v-else>-</span>
               </template>
             </el-table-column>
-            <el-table-column label="创建时间" width="166" align="center">
+            <el-table-column label="创建时间" min-width="166" align="center">
               <template #default="{ row }">{{ formatDate(row.createTime) }}</template>
             </el-table-column>
-            <el-table-column label="操作" width="106" align="center" fixed="right">
+            <el-table-column label="操作" min-width="106" align="center">
               <template #default="{ row }">
                 <CertRowAction label="详情" icon="View" @click="openTask(row)" />
-                <CertRowAction
-                  v-hasPermi="['ra:employee-cert:distribute']"
-                  label="下载证书"
-                  icon="Download"
-                  :loading="downloadingTask === row.taskNo"
-                  :disabled="row.successCount <= 0 || Boolean(downloadingTask)"
-                  @click="downloadTaskPackage(row)"
-                />
+                <EmployeeCertificateDownloadMenu v-hasPermi="['ra:employee-cert:distribute']"
+                  :loading="downloadingTask === row.taskNo" :disabled="row.successCount <= 0 || Boolean(downloadingTask)"
+                  @download="downloadTaskPackage(row, $event)" />
               </template>
             </el-table-column>
           </el-table>
@@ -334,14 +329,9 @@
           icon="Promotion"
           @click="distributeTask(taskDetail.task)"
         >批量分发</el-button>
-        <el-button
-          v-hasPermi="['ra:employee-cert:distribute']"
-          type="primary"
-          icon="Download"
-          :loading="downloadingTask === taskDetail.task.taskNo"
-          :disabled="Boolean(downloadingTask)"
-          @click="downloadTaskPackage(taskDetail.task)"
-        >下载证书</el-button>
+        <EmployeeCertificateDownloadMenu v-hasPermi="['ra:employee-cert:distribute']" button="primary"
+          :loading="downloadingTask === taskDetail.task.taskNo" :disabled="Boolean(downloadingTask)"
+          @download="downloadTaskPackage(taskDetail.task, $event)" />
       </template>
     </el-drawer>
 
@@ -522,6 +512,8 @@ import RaCertDetailDialog from '../components/RaCertDetailDialog.vue';
 import { useRaListRefreshOnReturn } from '@/hooks/useRaListRefreshOnReturn';
 import FileSaver from 'file-saver';
 import auth from '@/plugins/auth';
+import EmployeeCertificateDownloadMenu from './EmployeeCertificateDownloadMenu.vue';
+import type { EmployeeCertDownloadFormat } from '@/api/ra/employeeCert';
 import ChannelStatus from './ChannelStatus.vue';
 import DistributionDialog from './DistributionDialog.vue';
 import { onDeactivated, onUnmounted } from 'vue';
@@ -531,7 +523,7 @@ import type { RaCertFilterOption } from '@/api/ra/cert';
 import { getFawvwEmployee } from '@/api/ra/employee';
 import { isFawvwEmployeeSourceActive } from '@/utils/fawvwEmployeeStatus';
 import { templatePurpose } from '@/utils/raCertificatePurpose';
-import { certificateDownloadBlob } from '@/utils/raCertificateDownload';
+import { employeeCertificateDownload } from '@/utils/raCertificateDownload';
 import { defaultIssueDuration, issueValidityUnits, resolveIssueValidity, type IssueValidityUnit } from '@/utils/raIssueValidity';
 import {
   type AccountResolveResult,
@@ -1214,16 +1206,15 @@ function watchTaskProgress(taskNo: string) {
   }, manual ? 1000 : 3000);
 }
 
-async function downloadTaskPackage(row: EmployeeCertTask) {
+async function downloadTaskPackage(row: EmployeeCertTask, format: EmployeeCertDownloadFormat) {
   if (downloadingTask.value) return;
   downloadingTask.value = row.taskNo;
   let response: Blob | undefined;
   try {
-    response = await downloadEmployeeCertTaskPackage(row.taskNo);
-    const blob = await certificateDownloadBlob(response, 'application/zip');
-    const prefix = new Uint8Array(await blob.slice(0, 4).arrayBuffer());
-    if (prefix.join(',') !== '80,75,3,4') throw new Error('服务器未返回有效的 ZIP 文件');
-    FileSaver.saveAs(blob, `employee-certs-${row.taskNo.replace(/[^A-Za-z0-9_-]/g, '_')}.zip`);
+    response = await downloadEmployeeCertTaskPackage(row.taskNo, format);
+    const baseName = `employee-certs-${row.taskNo.replace(/[^A-Za-z0-9_-]/g, '_')}`;
+    const { blob, filename } = await employeeCertificateDownload(response, baseName, format);
+    FileSaver.saveAs(blob, filename);
   } catch (error: any) {
     const body = error?.response?.data ?? response;
     let message = error?.message || '证书压缩包下载失败';

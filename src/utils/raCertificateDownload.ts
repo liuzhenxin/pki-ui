@@ -18,6 +18,14 @@ export async function certificateDownloadBlob(response: unknown, mimeType: strin
   return blob;
 }
 
+export async function employeeCertificateDownload(response: unknown, baseName: string, format: string) {
+  const blob = await certificateDownloadBlob(response, 'application/octet-stream', 'RA_EMPLOYEE_CERT_');
+  const prefix = new Uint8Array(await blob.slice(0, 4).arrayBuffer());
+  const zipped = prefix[0] === 80 && prefix[1] === 75 && prefix[2] === 3 && prefix[3] === 4;
+  if (!zipped && format === 'all') throw new Error('服务器未返回有效的 ZIP 文件');
+  return { blob, filename: `${baseName}.${zipped ? 'zip' : format}` };
+}
+
 export type IssuedCertificateFormat = 'pem' | 'cer' | 'der' | 'crt' | 'p7b';
 
 const certificateBlocks = (pem: string) => [...pem.matchAll(/-----BEGIN CERTIFICATE-----\s*([A-Za-z0-9+/=\s]+?)\s*-----END CERTIFICATE-----/g)]

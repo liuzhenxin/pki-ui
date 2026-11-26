@@ -49,6 +49,7 @@ export interface EmployeeDistributionBatch {
   successCount: number;
   failedCount: number;
   notice?: boolean;
+  runningCount?: number;
   taskType?: 'DISTRIBUTION' | 'UPLOAD';
 }
 
@@ -65,12 +66,13 @@ export interface EmployeeDistributionBatchItem {
   rootName?: string;
   profileNameSnapshot?: string;
   validityYears?: number;
-  messageType: EmployeeMailType | 'NOTICE' | 'CERTIFICATE_EMAIL' | 'CERTIFICATE_DINGTALK';
+  messageType: EmployeeMailType | 'NOTICE' | 'CERTIFICATE_EMAIL' | 'CERTIFICATE_DINGTALK' | 'UPLOAD';
   sendStatus: number;
   emailStatus?: string;
   dingtalkStatus?: string;
   errorMessage?: string;
   createTime: string;
+  sendTime?: string;
 }
 
 export interface EmployeeDistributionOptions {
@@ -448,20 +450,20 @@ export const issueEmployeeCertTask = (taskNo: string, certIds: string[]): Promis
     timeout: 120_000
   }) as any;
 
-export const downloadEmployeeCertTaskPackage = (taskNo: string): Promise<Blob> =>
+export const downloadEmployeeCertTaskPackage = (taskNo: string, format: EmployeeCertDownloadFormat = 'all'): Promise<Blob> =>
   request({
     url: `/ra/v1/employee-certs/tasks/${encodeURIComponent(taskNo)}/download`,
-    method: 'get',
+    method: 'get', params: { format },
     responseType: 'blob',
     timeout: 120_000,
     headers: { hideErrorNotify: true }
   }) as any;
 
-export const downloadEmployeeCertPackage = (id: string | number): Promise<Blob> =>
-  request({ url: `/ra/v1/employee-certs/${encodeURIComponent(String(id))}/download`, method: 'get',
+export const downloadEmployeeCertPackage = (id: string | number, format: EmployeeCertDownloadFormat = 'all'): Promise<Blob> =>
+  request({ url: `/ra/v1/employee-certs/${encodeURIComponent(String(id))}/download`, method: 'get', params: { format },
     responseType: 'blob', timeout: 120_000, headers: { hideErrorNotify: true } }) as any;
 
-export type EmployeeCertDownloadFormat = 'cer' | 'pem' | 'crt' | 'p7b' | 'pfx';
+export type EmployeeCertDownloadFormat = 'all' | 'cer' | 'pem' | 'crt' | 'p7b' | 'pfx';
 
 export const downloadSelectedEmployeeCerts = (ids: (string | number)[], format: EmployeeCertDownloadFormat): Promise<Blob> =>
   request({ url: '/ra/v1/employee-certs/download-selected', method: 'post', data: { ids, format },
@@ -642,3 +644,56 @@ export const downloadEmployeeCertAccountTemplate = () =>
     method: 'get',
     responseType: 'blob'
   });
+
+export interface EmployeeAdConfig {
+  protocol: 'ldap' | 'ldaps';
+  host: string;
+  port: number;
+  baseDn: string;
+  account: string;
+  password?: string;
+  passwordConfigured: boolean;
+  fields: string[];
+  mode: 'REPLACE' | 'APPEND';
+}
+
+export interface EmployeeAdPublication {
+  id: number | string;
+  certId: number | string;
+  serialNumber: string;
+  createTime: string;
+  sendTime?: string;
+  sendStatus: number;
+  errorMessage?: string;
+  operator?: number | string;
+  employeeName?: string;
+  domainAccount?: string;
+}
+
+const employeeAdPath = '/ra/v1/employee-certs/ad';
+
+export const getEmployeeAdConfig = (): Promise<Result<EmployeeAdConfig>> =>
+  request({ url: employeeAdPath + '/config', method: 'get' });
+
+export const saveEmployeeAdConfig = (data: EmployeeAdConfig): Promise<Result<EmployeeAdConfig>> =>
+  request({ url: employeeAdPath + '/config', method: 'put', data, headers: { sensitive: true } });
+
+export function testEmployeeAdConfig(config: EmployeeAdConfig, email: string, file: File): Promise<Result<boolean>> {
+  const data = new FormData();
+  data.append('config', new Blob([JSON.stringify(config)], { type: 'application/json' }));
+  data.append('email', email);
+  data.append('file', file);
+  return request({ url: employeeAdPath + '/test', method: 'post', data, timeout: 35_000, headers: { sensitive: true } });
+}
+
+export const queueEmployeeAdBatch = (ids: (number | string)[]): Promise<Result<string>> =>
+  request({ url: employeeAdPath + '/batches', method: 'post', data: ids });
+
+export const queueEmployeeAdCertificate = (employeeId: number | string, certId: number | string): Promise<Result<string>> =>
+  request({ url: employeeAdPath + '/employees/' + encodeURIComponent(employeeId) + '/certificates/' + encodeURIComponent(certId), method: 'post' });
+
+export const getEmployeeAdHistory = (employeeId: number | string): Promise<Result<EmployeeAdPublication[]>> =>
+  request({ url: employeeAdPath + '/employees/' + encodeURIComponent(employeeId) + '/history', method: 'get', headers: { hideErrorNotify: true } });
+
+export const getEmployeeAdBatch = (batchNo: string): Promise<Result<EmployeeAdPublication[]>> =>
+  request({ url: employeeAdPath + '/batches/' + encodeURIComponent(batchNo), method: 'get', headers: { hideErrorNotify: true } });

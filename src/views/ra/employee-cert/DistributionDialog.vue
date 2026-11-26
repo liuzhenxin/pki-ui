@@ -139,7 +139,7 @@ const boundSummary = computed(() => {
   return [
     {
       label: '分发模板',
-      lines: groups.map(group => `${group.name} · ${group.count} 条${group.retryOnly ? ' · 按原记录补发钉钉' : ''}`)
+      lines: groups.map(group => `${group.name} · 发送人数 ${group.count}${group.retryOnly ? ' · 按原记录补发钉钉' : ''}`)
     },
     {
       label: '邮件附件',
