@@ -52,7 +52,7 @@ test('employee certificate filters and search buttons align at desktop and narro
   const header = page.locator('.management-header');
   const tabs = header.getByRole('tablist');
   const templates = header.getByRole('button', { name: '分发模板' });
-  const config = header.getByRole('button', { name: '分发配置' });
+  const config = header.getByRole('button', { name: '分发设置' });
   await expect(templates).toHaveText('');
   await expect(config).toHaveText('');
   const form = page.locator('.query-form');
@@ -176,18 +176,31 @@ test('mail and DingTalk test sends check connectivity before confirming one reci
   let confirmSend!: () => void;
   let cancelSend!: () => void;
   let failProbe = true;
-  const { page } = harness({ testEmployeeCertDistributionConfig: async (request: { send: boolean }) => {
-    requests.push(request);
-    if (!request.send && failProbe) throw new Error('unreachable');
-    return { data: request.send ? 'ok' : '网关已响应（HTTP 405）' };
-  } }, undefined, {}, (message) => new Promise<void>((resolve, reject) => {
+  const filename = 'src/views/ra/employee-cert/EmployeeDistributionSettingsDialog.vue';
+  const source = readFileSync(new URL(`../${filename}`, import.meta.url), 'utf8');
+  const { descriptor } = parse(source, { filename });
+  const script = compileScript(descriptor, { id: 'distribution-settings' });
+  const code = ts.transpileModule(script.content, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+  const module = { exports: {} as any };
+  const api = {
+    testEmployeeCertDistributionConfig: async (request: { send: boolean }) => {
+      requests.push(request);
+      if (!request.send && failProbe) throw new Error('unreachable');
+      return { data: request.send ? 'ok' : '网关已响应（HTTP 405）' };
+    }
+  };
+  const confirm = (message: string) => new Promise<void>((resolve, reject) => {
     confirmations.push(message);
     confirmSend = resolve;
     cancelSend = reject;
-  }));
-
+  });
+  new Function('require', 'module', 'exports', code)(
+    (name: string) => name === 'vue' ? vue : name === 'element-plus' ? { ElMessageBox: { confirm } } : api,
+    module, module.exports
+  );
+  const page = module.exports.default.setup({}, { emit: () => {}, expose: () => {} });
   page.distributionConfigOpen.value = true;
-  Object.assign(page.distributionConfig, { emailAccount: 'manual@example.test', smtpServer: 'CD', dingtalkApp: 'manual-app' });
+  Object.assign(page.distributionConfig.value, { emailAccount: 'manual@example.test', smtpServer: 'CD', dingtalkApp: 'manual-app' });
   page.distributionTestEmail.value = 'one@example.test';
   await page.testDistributionConfig('EMAIL');
   expect(confirmations).toHaveLength(0);
@@ -784,14 +797,18 @@ test('certificate pages compile and remove arbitrary package uploads and passwor
   const source = readFileSync(new URL('../src/views/ra/employee-cert/index.vue', import.meta.url), 'utf8');
   expect(source).not.toContain('uploadEmployeeCertDistributionPackage');
   expect(source).not.toContain('row.certPassword,');
-  expect(source).toContain('distributionConfig.smtpServer');
-  expect(source).not.toContain('v-model="distributionConfig.guideHtml"');
+  const settings = readFileSync(
+    new URL('../src/views/ra/employee-cert/EmployeeDistributionSettingsDialog.vue', import.meta.url),
+    'utf8'
+  );
+  expect(settings).toContain('v-model="visibleDistributionConfig.smtpServer"');
+  expect(settings).not.toContain('v-model="distributionConfig.guideHtml"');
   expect(source).toContain('label="存量导入"');
   expect(source).toContain('label="证书台账"');
   expect(source).toContain('label="发送记录"');
   const header = source.slice(source.indexOf('class="management-header"'), source.indexOf('<LegacyCertificates'));
   expect(header).toContain('label="分发模板" icon="Message"');
-  expect(header).toContain('label="分发配置" icon="Setting"');
+  expect(header).toContain('label="分发设置" icon="Setting"');
   expect(source).not.toContain('按任务分发');
   expect(source).not.toContain('发送通知');
   expect(source).toContain('label="邮件模板"');

@@ -20,12 +20,14 @@
       </el-table-column>
       <el-table-column label="操作" width="130" align="center">
         <template #default="{ row }">
-          <el-tooltip content="证书详情">
-            <el-button link type="primary" icon="View" aria-label="证书详情" @click="$emit('certificate', row.id)" />
-          </el-tooltip>
-          <el-tooltip v-if="adUploadEnabled && row.adUploadEligible" content="上传AD">
-            <span><el-button link type="primary" icon="Upload" aria-label="上传 AD" disabled /></span>
-          </el-tooltip>
+          <div class="certificate-actions">
+            <el-tooltip content="证书详情">
+              <el-button link type="primary" icon="View" aria-label="证书详情" @click="$emit('certificate', row.id)" />
+            </el-tooltip>
+            <el-tooltip v-if="adUploadEnabled && row.adUploadEligible" content="上传AD">
+              <span><el-button link type="primary" icon="Upload" aria-label="上传 AD" disabled /></span>
+            </el-tooltip>
+          </div>
         </template>
       </el-table-column>
     </el-table>
@@ -47,7 +49,15 @@
 <script setup lang="ts">
 import type { EmployeeCertificateRecord } from '@/api/ra/employee';
 
-defineProps<{ rows: EmployeeCertificateRecord[]; loading: boolean; failed: boolean; page: number; pageSize: number; total: number; adUploadEnabled?: boolean }>();
+defineProps<{
+  rows: EmployeeCertificateRecord[];
+  loading: boolean;
+  failed: boolean;
+  page: number;
+  pageSize: number;
+  total: number;
+  adUploadEnabled?: boolean;
+}>();
 defineEmits<{ 'page-change': [page: number]; retry: []; certificate: [id: string] }>();
 
 const STATUS = {
@@ -65,6 +75,13 @@ function time(value?: string) {
 </script>
 
 <style scoped>
+.certificate-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
 .certificate-pagination {
   justify-content: flex-end;
   margin-top: 12px;

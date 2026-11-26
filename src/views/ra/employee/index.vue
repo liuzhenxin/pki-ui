@@ -294,17 +294,17 @@
           <el-divider content-position="left">名下证书</el-divider>
           <EmployeeCertificateInventory v-bind="certificateInventory" :ad-upload-enabled="adUploadEnabled" @page-change="changeCertificatePage" @retry="reloadCertificateInventory" @certificate="openCertificate" />
           <template v-if="adUploadEnabled">
-          <el-divider class="employee-ad-divider" content-position="left">AD 上传记录</el-divider>
-          <el-descriptions class="employee-detail-descriptions employee-ad-summary" :column="1" label-width="9rem" border>
-            <el-descriptions-item label="最近成功上传证书">-</el-descriptions-item>
-            <el-descriptions-item label="最近成功上传时间">-</el-descriptions-item>
-          </el-descriptions>
-          <el-table :data="[]" size="small" empty-text="AD 发布未接入，暂无上传记录">
-            <el-table-column label="证书序列号" min-width="160" />
-            <el-table-column label="上传时间" min-width="145" />
-            <el-table-column label="操作人" min-width="88" />
-            <el-table-column label="结果" min-width="88" />
-          </el-table>
+            <el-divider class="employee-ad-divider" content-position="left">AD 上传记录</el-divider>
+            <el-descriptions class="employee-detail-descriptions employee-ad-summary" :column="1" label-width="9rem" border>
+              <el-descriptions-item label="最近成功上传 AD 的证书">-</el-descriptions-item>
+              <el-descriptions-item label="最近成功上传 AD 的时间">-</el-descriptions-item>
+            </el-descriptions>
+            <el-table :data="[]" size="small" empty-text="AD 发布未接入，暂无上传记录">
+              <el-table-column label="证书序列号" min-width="160" />
+              <el-table-column label="上传时间" min-width="145" />
+              <el-table-column label="操作人" min-width="88" />
+              <el-table-column label="结果" min-width="88" />
+            </el-table>
           </template>
         </el-tab-pane>
         <el-tab-pane label="申请与证书" name="activity">

@@ -3,9 +3,6 @@ import request from '@/utils/request';
 import { Result } from '@/api/types';
 
 export const getEmployeeAdUploadEnabled = () => request({ url: '/ra/v1/employee-certs/ad-upload-enabled', method: 'get' }) as any;
-export const saveEmployeeAdUploadEnabled = (enabled: boolean) => request({ url: '/ra/v1/employee-certs/ad-upload-enabled', method: 'put', data: { enabled } }) as any;
-export const getNoticeAdministrators = () => request({ url: '/ra/v1/employee-certs/notice-administrators', method: 'get' }) as any;
-export const saveNoticeAdministrators = (data: { emails: string[]; domainAccounts: string[] }) => request({ url: '/ra/v1/employee-certs/notice-administrators', method: 'put', data }) as any;
 
 export interface EmployeeCertEmployee {
   id: number | string;
@@ -245,6 +242,21 @@ export interface EmployeeCertDistributionConfig {
   secretKeyConfigured?: boolean;
   smtpServer?: string;
   guideHtml?: string;
+}
+
+export interface EmployeeNoticeAdministrators {
+  emails: string[];
+  domainAccounts: string[];
+}
+
+export interface EmployeeCertOpsSettings {
+  distribution: EmployeeCertDistributionConfig;
+  administrators: EmployeeNoticeAdministrators;
+}
+
+export interface EmployeeCertDistributionSettings extends EmployeeCertOpsSettings {
+  useOps: boolean;
+  adUploadEnabled: boolean;
 }
 
 export interface EmployeeEmailCertProfile {
@@ -598,24 +610,28 @@ export const saveEmployeeCertTemplate = (data: EmployeeCertTemplate): Promise<Re
     data
   }) as any;
 
-export const getEmployeeCertDistributionConfig = (): Promise<Result<EmployeeCertDistributionConfig>> =>
-  request({
-    url: '/ra/v1/employee-certs/distribution-config',
-    method: 'get'
-  }) as any;
+export const getEmployeeCertDistributionSettings = (): Promise<Result<EmployeeCertDistributionSettings>> =>
+  request({ url: '/ra/v1/employee-certs/distribution-settings', method: 'get' }) as any;
 
-export const saveEmployeeCertDistributionConfig = (data: EmployeeCertDistributionConfig): Promise<Result<EmployeeCertDistributionConfig>> =>
+export const getEmployeeCertOpsSettings = (): Promise<Result<EmployeeCertOpsSettings>> =>
+  request({ url: '/ra/v1/employee-certs/distribution-settings/ops', method: 'get' }) as any;
+
+export const saveEmployeeCertDistributionSettings = (
+  data: Omit<EmployeeCertDistributionSettings, 'administrators'> & { administrators?: EmployeeNoticeAdministrators }
+): Promise<Result<void>> =>
   request({
-    url: '/ra/v1/employee-certs/distribution-config',
+    url: '/ra/v1/employee-certs/distribution-settings',
     method: 'put',
-    data
+    data,
+    headers: { sensitive: true, repeatSubmit: false }
   }) as any;
 
 export const testEmployeeCertDistributionConfig = (data: {
   channel: 'EMAIL' | 'DINGTALK';
   send: boolean;
   recipient?: string;
-  config: EmployeeCertDistributionConfig;
+  useOps: boolean;
+  config?: EmployeeCertDistributionConfig;
 }): Promise<Result<string>> =>
   request({ url: '/ra/v1/employee-certs/distribution-config/test', method: 'post', data, timeout: 40_000,
     headers: { sensitive: true, repeatSubmit: false } }) as any;
