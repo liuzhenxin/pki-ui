@@ -1,5 +1,6 @@
 <template>
   <div class="app-container intranet-cert-page">
+    <BusinessNoticeSettingsDialog ref="businessNoticeSettings" module="intranet" />
     <el-card v-show="showSearch" shadow="never" class="query-card">
       <el-form :model="queryParams" label-width="100px" class="query-form">
         <el-form-item label="序列号">
@@ -79,6 +80,7 @@
         </el-col>
         <el-col :span="1.5">
           <el-button v-if="auth.hasPermi('ra:intranet-cert:template')" plain icon="Message" @click="openTemplates">提醒模板</el-button>
+          <el-button v-if="auth.hasPermi('ra:intranet-cert:template')" plain icon="Bell" @click="businessNoticeSettings?.open()">通知设置</el-button>
         </el-col>
         <right-toolbar v-model:showSearch="showSearch" @queryTable="loadList" />
       </el-row>
@@ -336,6 +338,7 @@
 <script setup name="RaIntranetCert" lang="ts">
 import { formatCertificateSubject } from '@/utils/raCertificateSubject';
 import CertRowAction from '../components/CertRowAction.vue';
+import BusinessNoticeSettingsDialog from '../components/BusinessNoticeSettingsDialog.vue';
 import { useRaListRefreshOnReturn } from '@/hooks/useRaListRefreshOnReturn';
 import FileSaver from 'file-saver';
 import auth from '@/plugins/auth';
@@ -364,6 +367,7 @@ import { FawvwEmployee, pageFawvwEmployees } from '@/api/ra/employee';
 const route = useRoute();
 const router = useRouter();
 
+const businessNoticeSettings = ref<InstanceType<typeof BusinessNoticeSettingsDialog>>();
 const rows = ref<IntranetCert[]>([]);
 const loading = ref(false);
 const showSearch = ref(true);

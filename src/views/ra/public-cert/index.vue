@@ -1,5 +1,6 @@
 <template>
   <div class="app-container public-cert-page">
+    <BusinessNoticeSettingsDialog ref="businessNoticeSettings" module="public" />
     <el-tabs v-model="managementTab" @tab-change="handleTabChange">
       <el-tab-pane label="证书台账" name="records" />
       <el-tab-pane v-if="auth.hasPermi('ra:public-cert:audit')" label="审核中心" name="audit" />
@@ -66,6 +67,7 @@
           <el-button v-hasPermi="['ra:public-cert:grant']" plain icon="UserFilled" @click="openGrants">录入授权</el-button>
         </el-col>
         <el-col v-if="managementTab === 'records'" :span="1.5"><el-button v-hasPermi="['ra:public-cert:type']" icon="Message" @click="openNoticeConfig">通知模板</el-button></el-col>
+        <el-col v-if="managementTab === 'records'" :span="1.5"><el-button v-hasPermi="['ra:public-cert:type']" icon="Bell" @click="businessNoticeSettings?.open()">通知设置</el-button></el-col>
         <right-toolbar v-model:showSearch="showSearch" @queryTable="loadList" />
       </el-row>
 
@@ -499,6 +501,7 @@
 
 <script setup name="RaPublicCert" lang="ts">
 import CertRowAction from '../components/CertRowAction.vue';
+import BusinessNoticeSettingsDialog from '../components/BusinessNoticeSettingsDialog.vue';
 import { useRaListRefreshOnReturn } from '@/hooks/useRaListRefreshOnReturn';
 import FileSaver from 'file-saver';
 import auth from '@/plugins/auth';
@@ -534,6 +537,7 @@ import { FawvwEmployee, pageFawvwEmployees } from '@/api/ra/employee';
 
 type PickerTarget = 'owner' | 'grant';
 
+const businessNoticeSettings = ref<InstanceType<typeof BusinessNoticeSettingsDialog>>();
 const rows = ref<PublicCert[]>([]);
 const managementTab = ref<'records' | 'audit' | 'handled'>('records');
 const selectedRows = ref<PublicCert[]>([]);

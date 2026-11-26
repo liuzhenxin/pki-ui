@@ -65,11 +65,11 @@
             批量下载（{{ selectedRows.length }}）
           </el-button>
         </el-col>
-        <el-col v-if="canDistribute" :span="1.5">
+        <el-col v-if="canDistribute && adUploadEnabled" :span="1.5">
           <el-tooltip :content="adUploadSelectionReady ? 'AD 发布接口尚未接入' : '请选择符合 AD 上传条件的证书'">
             <span>
               <el-button plain icon="Upload" :disabled="loading || !adUploadSelectionReady" @click="previewAdUpload">
-                一键上传 AD（{{ selectedRows.length }}）
+                上传AD（{{ selectedRows.length }}）
               </el-button>
             </span>
           </el-tooltip>
@@ -190,7 +190,7 @@
           <el-form-item label="任务类型">
             <el-select v-model="distributionBatchType" clearable placeholder="全部" style="width: 150px">
               <el-option label="证书分发" value="DISTRIBUTION" />
-              <el-option label="证书上传" value="UPLOAD" />
+              <el-option v-if="adUploadEnabled" label="证书上传" value="UPLOAD" />
             </el-select>
           </el-form-item>
           <el-form-item>
@@ -545,6 +545,25 @@
     </el-dialog>
 
     <el-dialog v-model="distributionConfigOpen" title="员工证书分发配置" width="720px" append-to-body>
+      <el-tabs v-model="distributionConfigTab">
+        <el-tab-pane label="证书分发" name="distribution" />
+        <el-tab-pane label="证书上传" name="upload" />
+        <el-tab-pane label="管理员通知" name="administrators" />
+      </el-tabs>
+      <el-form v-if="distributionConfigTab === 'administrators'" label-width="150px">
+        <el-form-item label="管理员邮箱"><el-select v-model="noticeAdministrators.emails" multiple filterable allow-create default-first-option style="width: 100%" placeholder="输入邮箱后按回车" /></el-form-item>
+        <el-form-item label="管理员域账号"><el-select v-model="noticeAdministrators.domainAccounts" multiple filterable allow-create default-first-option style="width: 100%" placeholder="输入域账号后按回车" /></el-form-item>
+      </el-form>
+      <el-form v-if="distributionConfigTab === 'upload'" label-width="150px">
+        <el-form-item label="AD上传功能"><el-switch v-model="adUploadDraft" /></el-form-item>
+        <el-form-item><span>AD 发布接口尚未接入。</span></el-form-item>
+      </el-form>
+      <template v-if="distributionConfigTab === 'distribution'">
+      <el-form label-width="150px">
+        <el-form-item label="同一配置">
+          <el-tooltip content="OPS 安全配置读取尚未接入" placement="top"><span><el-switch :model-value="false" disabled /></span></el-tooltip>
+        </el-form-item>
+      </el-form>
       <el-alert class="mb12" type="warning" :closable="false" show-icon title="Secret Key 仅允许写入，不会回显；留空保存将保留已有 Secret。" />
       <el-form :model="distributionConfig" label-width="150px">
         <el-form-item label="邮件服务地址">
@@ -566,13 +585,13 @@
           />
         </el-form-item>
         <el-form-item label="发件邮箱">
-          <el-input :model-value="distributionConfig.emailAccount" disabled />
+          <el-input v-model="distributionConfig.emailAccount" />
         </el-form-item>
         <el-form-item label="邮件服务器标识">
-          <el-input :model-value="distributionConfig.smtpServer" disabled />
+          <el-input v-model="distributionConfig.smtpServer" />
         </el-form-item>
         <el-form-item label="钉钉应用标识">
-          <el-input :model-value="distributionConfig.dingtalkApp" disabled />
+          <el-input v-model="distributionConfig.dingtalkApp" />
         </el-form-item>
         <el-form-item label="附件最大大小">
           <el-input-number v-model="distributionConfig.attachmentMaxSizeMb" :min="1" :max="100" />
@@ -598,9 +617,10 @@
           <span>{{ distributionTestResult }}</span>
         </el-form-item>
       </el-form>
+      </template>
       <template #footer>
         <el-button @click="distributionConfigOpen = false">取消</el-button>
-        <el-button type="primary" :loading="distributionConfigSaving" :disabled="distributionTesting" @click="saveDistributionConfig">保存配置</el-button>
+        <el-button type="primary" :loading="distributionConfigSaving" :disabled="distributionTesting" @click="saveActiveDistributionConfig">保存配置</el-button>
       </template>
     </el-dialog>
   </div>
@@ -619,6 +639,7 @@ import auth from '@/plugins/auth';
 import { useUserStore } from '@/store/modules/user';
 import type { RaCertFilterOption } from '@/api/ra/cert';
 import ChannelStatus from './ChannelStatus.vue';
+import { getEmployeeAdUploadEnabled, saveEmployeeAdUploadEnabled, getNoticeAdministrators, saveNoticeAdministrators } from '@/api/ra/employeeCert';
 import DistributionDialog from './DistributionDialog.vue';
 import LegacyCertificates from './LegacyCertificates.vue';
 import {
@@ -775,6 +796,10 @@ const distributionConfigSaving = ref(false);
 const distributionTestEmail = ref('');
 const distributionTestDing = ref('');
 const distributionTesting = ref(false);
+const distributionConfigTab = ref('distribution');
+const adUploadEnabled = ref(false);
+const adUploadDraft = ref(false);
+const noticeAdministrators = reactive<{ emails: string[]; domainAccounts: string[] }>({ emails: [], domainAccounts: [] });
 const distributionTestResult = ref('');
 const notificationSender = { emailAccount: 'cybersec@faw-vw.com', smtpServer: 'CC', dingtalkApp: 'fawvw' };
 const distributionConfig = reactive<EmployeeCertDistributionConfig>({
@@ -1368,6 +1393,10 @@ async function removeScheme(scheme: EmployeeDistributionScheme) {
 }
 
 async function openDistributionConfig() {
+  adUploadDraft.value = unwrapData<boolean>(await getEmployeeAdUploadEnabled()) === true;
+  Object.assign(noticeAdministrators, unwrapData<{ emails: string[]; domainAccounts: string[] }>(await getNoticeAdministrators()));
+  adUploadEnabled.value = adUploadDraft.value;
+  distributionConfigTab.value = 'distribution';
   const config = unwrapData<EmployeeCertDistributionConfig>(await getEmployeeCertDistributionConfig());
   Object.assign(distributionConfig, {
     emailServerUrl: '',
@@ -1377,8 +1406,8 @@ async function openDistributionConfig() {
     dingtalkApp: '',
     attachmentMaxSizeMb: 10,
     secretKeyConfigured: false,
-    ...config,
     ...notificationSender,
+    ...config,
     secretKey: ''
   });
   distributionTestEmail.value = '';
@@ -1387,12 +1416,36 @@ async function openDistributionConfig() {
   distributionConfigOpen.value = true;
 }
 
+async function saveActiveDistributionConfig() {
+  if (distributionConfigTab.value === 'upload') return saveAdUploadSetting();
+  if (distributionConfigTab.value !== 'administrators') return saveDistributionConfig();
+  distributionConfigSaving.value = true;
+  try {
+    Object.assign(noticeAdministrators, unwrapData(await saveNoticeAdministrators(noticeAdministrators)));
+    ElMessage.success('管理员通知配置已保存');
+    distributionConfigOpen.value = false;
+  } finally {
+    distributionConfigSaving.value = false;
+  }
+}
+
+async function saveAdUploadSetting() {
+  distributionConfigSaving.value = true;
+  try {
+    adUploadEnabled.value = unwrapData<boolean>(await saveEmployeeAdUploadEnabled(adUploadDraft.value)) === true;
+    ElMessage.success('AD上传配置已保存');
+    distributionConfigOpen.value = false;
+  } finally {
+    distributionConfigSaving.value = false;
+  }
+}
+
 async function testDistributionConfig(channel: 'EMAIL' | 'DINGTALK') {
   if (distributionTesting.value) return;
   const label = channel === 'EMAIL' ? '邮件' : '钉钉';
   const recipient = (channel === 'EMAIL' ? distributionTestEmail.value : distributionTestDing.value).trim();
   if (!recipient) return;
-  const config = { ...distributionConfig, ...notificationSender };
+  const config = { ...distributionConfig };
   distributionTesting.value = true;
   distributionTestResult.value = `${label}：正在检测网关连通性…`;
   let networkReachable = false;
@@ -1434,7 +1487,9 @@ async function saveDistributionConfig() {
         dingtalkServerUrl: distributionConfig.dingtalkServerUrl,
         appKey: distributionConfig.appKey,
         secretKey: distributionConfig.secretKey,
-        ...notificationSender,
+        emailAccount: distributionConfig.emailAccount,
+        smtpServer: distributionConfig.smtpServer,
+        dingtalkApp: distributionConfig.dingtalkApp,
         attachmentMaxSizeMb: distributionConfig.attachmentMaxSizeMb,
       })
     );
@@ -1468,6 +1523,7 @@ function formatDate(value?: string) {
 }
 
 onMounted(() => {
+  getEmployeeAdUploadEnabled().then(response => { adUploadEnabled.value = unwrapData<boolean>(response) === true; }).catch(() => { adUploadEnabled.value = false; });
   pageActive = true;
   if (!applyManagementRoute()) void loadList();
   void loadLedgerProfiles();
@@ -1488,6 +1544,7 @@ watch([passwordPreferenceKey, canDistribute], ([key, allowed]) => {
 onActivated(() => {
   if (pageActive) return;
   pageActive = true;
+  getEmployeeAdUploadEnabled().then(response => { adUploadEnabled.value = unwrapData<boolean>(response) === true; }).catch(() => { adUploadEnabled.value = false; });
   if (!applyManagementRoute()) return refreshCurrentTab();
 });
 onDeactivated(() => {

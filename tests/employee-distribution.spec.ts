@@ -187,6 +187,7 @@ test('mail and DingTalk test sends check connectivity before confirming one reci
   }));
 
   page.distributionConfigOpen.value = true;
+  Object.assign(page.distributionConfig, { emailAccount: 'manual@example.test', smtpServer: 'CD', dingtalkApp: 'manual-app' });
   page.distributionTestEmail.value = 'one@example.test';
   await page.testDistributionConfig('EMAIL');
   expect(confirmations).toHaveLength(0);
@@ -216,7 +217,7 @@ test('mail and DingTalk test sends check connectivity before confirming one reci
   expect(requests).toHaveLength(4);
   expect(requests[3]).toMatchObject({
     channel: 'DINGTALK', send: true, recipient: 'ding.original',
-    config: { emailAccount: 'cybersec@faw-vw.com', smtpServer: 'CC', dingtalkApp: 'fawvw' }
+    config: { emailAccount: 'manual@example.test', smtpServer: 'CD', dingtalkApp: 'manual-app' }
   });
 });
 

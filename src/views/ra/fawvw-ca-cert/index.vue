@@ -1,5 +1,6 @@
 <template>
   <div class="app-container fawvw-ca-cert-page">
+    <BusinessNoticeSettingsDialog ref="businessNoticeSettings" module="root" />
     <el-card v-show="showSearch" shadow="never" class="query-card">
       <el-form :model="queryParams" label-width="100px" class="query-form">
         <el-form-item label="所属根证书">
@@ -66,6 +67,7 @@
         </el-col>
         <el-col :span="1.5">
           <el-button v-hasPermi="['ra:fawvw-ca-cert:edit']" plain icon="Bell" @click="openExpiryTemplate">到期预警模板</el-button>
+          <el-button v-hasPermi="['ra:fawvw-ca-cert:edit']" plain icon="Bell" @click="businessNoticeSettings?.open()">通知设置</el-button>
         </el-col>
         <right-toolbar v-model:showSearch="showSearch" @queryTable="loadList" />
       </el-row>
@@ -281,6 +283,7 @@
 <script setup name="FawvwCaCert" lang="ts">
 import { formatCertificateSubject } from '@/utils/raCertificateSubject';
 import CertRowAction from '../components/CertRowAction.vue';
+import BusinessNoticeSettingsDialog from '../components/BusinessNoticeSettingsDialog.vue';
 import { useRaListRefreshOnReturn } from '@/hooks/useRaListRefreshOnReturn';
 import { ElMessage, ElMessageBox, type TableInstance } from 'element-plus';
 import { ref, reactive, onMounted, onActivated, nextTick } from 'vue';
@@ -305,6 +308,7 @@ type ChainNode = FawvwCaCertificate & { linked: boolean; warning: string; childr
 const chainRows = ref<ChainNode[]>([]);
 const chainOpen = ref(false);
 const treeTable = ref<TableInstance>();
+const businessNoticeSettings = ref<InstanceType<typeof BusinessNoticeSettingsDialog>>();
 const expiryTemplateOpen = ref(false);
 const expiryTemplateSaving = ref(false);
 const expiryTemplate = reactive<FawvwCaExpiryTemplate>({ days: 30, message: '' });

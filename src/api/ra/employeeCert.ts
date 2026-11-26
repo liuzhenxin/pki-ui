@@ -2,6 +2,11 @@ import type { RaCertDetail, RaCertFilterOption } from '@/api/ra/cert';
 import request from '@/utils/request';
 import { Result } from '@/api/types';
 
+export const getEmployeeAdUploadEnabled = () => request({ url: '/ra/v1/employee-certs/ad-upload-enabled', method: 'get' }) as any;
+export const saveEmployeeAdUploadEnabled = (enabled: boolean) => request({ url: '/ra/v1/employee-certs/ad-upload-enabled', method: 'put', data: { enabled } }) as any;
+export const getNoticeAdministrators = () => request({ url: '/ra/v1/employee-certs/notice-administrators', method: 'get' }) as any;
+export const saveNoticeAdministrators = (data: { emails: string[]; domainAccounts: string[] }) => request({ url: '/ra/v1/employee-certs/notice-administrators', method: 'put', data }) as any;
+
 export interface EmployeeCertEmployee {
   id: number | string;
   identityKey: string;

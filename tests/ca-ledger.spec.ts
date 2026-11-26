@@ -27,6 +27,8 @@ function harness() {
   new Function('require', 'module', 'exports', code)(
     (name: string) => {
       if (name === 'vue') return { ...vue, onMounted: () => {}, onActivated: () => {} };
+      if (name === '@/utils/raCertificateSubject') return { formatCertificateSubject: (value: string) => value };
+      if (name === '../components/CertRowAction.vue' || name === '../components/BusinessNoticeSettingsDialog.vue') return { default: {} };
       if (name === '@/hooks/useRaListRefreshOnReturn') return { useRaListRefreshOnReturn: () => {} };
       if (name === 'file-saver') return { saveAs: (_blob: Blob, filename: string) => downloaded.push(filename) };
       if (name === 'element-plus') return { ElMessage: { error: (message: string) => messages.push(message) }, ElMessageBox: {} };

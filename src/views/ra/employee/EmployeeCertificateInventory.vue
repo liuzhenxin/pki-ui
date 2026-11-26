@@ -23,7 +23,7 @@
           <el-tooltip content="证书详情">
             <el-button link type="primary" icon="View" aria-label="证书详情" @click="$emit('certificate', row.id)" />
           </el-tooltip>
-          <el-tooltip v-if="row.adUploadEligible" content="上传AD">
+          <el-tooltip v-if="adUploadEnabled && row.adUploadEligible" content="上传AD">
             <span><el-button link type="primary" icon="Upload" aria-label="上传 AD" disabled /></span>
           </el-tooltip>
         </template>
@@ -47,7 +47,7 @@
 <script setup lang="ts">
 import type { EmployeeCertificateRecord } from '@/api/ra/employee';
 
-defineProps<{ rows: EmployeeCertificateRecord[]; loading: boolean; failed: boolean; page: number; pageSize: number; total: number }>();
+defineProps<{ rows: EmployeeCertificateRecord[]; loading: boolean; failed: boolean; page: number; pageSize: number; total: number; adUploadEnabled?: boolean }>();
 defineEmits<{ 'page-change': [page: number]; retry: []; certificate: [id: string] }>();
 
 const STATUS = {

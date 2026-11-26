@@ -292,7 +292,8 @@
             <el-button v-if="!isLocalAccount(detail) && !detail.localRecoveryRequired && detail.localEnabled === false" v-hasPermi="['ra:employee:manage']" type="success" plain @click="changeEmployeeEnabled(true)">恢复员工</el-button>
           </div>
           <el-divider content-position="left">名下证书</el-divider>
-          <EmployeeCertificateInventory v-bind="certificateInventory" @page-change="changeCertificatePage" @retry="reloadCertificateInventory" @certificate="openCertificate" />
+          <EmployeeCertificateInventory v-bind="certificateInventory" :ad-upload-enabled="adUploadEnabled" @page-change="changeCertificatePage" @retry="reloadCertificateInventory" @certificate="openCertificate" />
+          <template v-if="adUploadEnabled">
           <el-divider class="employee-ad-divider" content-position="left">AD 上传记录</el-divider>
           <el-descriptions class="employee-detail-descriptions employee-ad-summary" :column="1" label-width="9rem" border>
             <el-descriptions-item label="最近成功上传证书">-</el-descriptions-item>
@@ -304,6 +305,7 @@
             <el-table-column label="操作人" min-width="88" />
             <el-table-column label="结果" min-width="88" />
           </el-table>
+          </template>
         </el-tab-pane>
         <el-tab-pane label="申请与证书" name="activity">
           <div class="mb8">
@@ -576,7 +578,8 @@
 <script setup name="RaEmployee" lang="ts">
 import { formatCertificateSubject } from '@/utils/raCertificateSubject';
 import { useRaListRefreshOnReturn } from '@/hooks/useRaListRefreshOnReturn';
-import { computed, onMounted, onUnmounted, reactive, ref, shallowRef, watch } from 'vue';
+import { computed, onActivated, onDeactivated, onMounted, onUnmounted, reactive, ref, shallowRef, watch } from 'vue';
+import { getEmployeeAdUploadEnabled } from '@/api/ra/employeeCert';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { useRoute, useRouter } from 'vue-router';
 import FileSaver from 'file-saver';
@@ -759,6 +762,11 @@ const importPicker = ref<HTMLInputElement>();
 const createForm = reactive<EmployeeInput>({ employeeNo: '', domainAccount: '', birthday: '', cnName: '', email: '', departmentId: '', gender: '', jobName: '' });
 let detailRequestId = 0;
 const configOpen = ref(false);
+const adUploadEnabled = ref(false);
+let employeePageActive = false;
+function loadAdUploadSetting() {
+  getEmployeeAdUploadEnabled().then(response => { adUploadEnabled.value = unwrap(response) === true; }).catch(() => { adUploadEnabled.value = false; });
+}
 const logsOpen = ref(false);
 const invalidOpen = ref(false);
 const invalidLoading = ref(false);
@@ -1489,6 +1497,8 @@ const loadInvalidRecords = () => {
 };
 
 onMounted(() => {
+  employeePageActive = true;
+  loadAdUploadSetting();
   if (employeeLayout.value) {
     layoutObserver = new ResizeObserver(([entry]) => {
       maxOrgWidth.value = Math.max(240, Math.min(640, Math.floor(entry.contentRect.width - 436)));
@@ -1507,6 +1517,8 @@ onMounted(() => {
   loadEmployees();
   void resumeSync().catch(() => {});
 });
+onDeactivated(() => { employeePageActive = false; });
+onActivated(() => { if (!employeePageActive) { employeePageActive = true; loadAdUploadSetting(); } });
 
 onUnmounted(() => {
   layoutObserver?.disconnect();

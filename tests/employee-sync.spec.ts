@@ -65,11 +65,12 @@ function pageHarness(initial: any = { status: 'RUNNING', taskNo: 'EMP-test' }) {
   const message = Object.fromEntries(['success', 'warning', 'error', 'info'].map((type) => [type, (text: string) => messages.push({ type, text })]));
   const module = { exports: {} as any };
   const requireMock = (name: string) => {
-    if (name === 'vue') return { ...vue, onMounted: () => {}, onUnmounted: (callback: () => void) => (unmount = callback) };
+    if (name === 'vue') return { ...vue, onMounted: () => {}, onActivated: () => {}, onDeactivated: () => {}, onUnmounted: (callback: () => void) => (unmount = callback) };
     if (name === 'vue-router') return { useRouter: () => ({}), useRoute: () => ({ path: '', query: {} }) };
     if (name === '@/hooks/useRaListRefreshOnReturn') return { useRaListRefreshOnReturn: () => {} };
     if (name === 'element-plus') return { ElMessage: message };
     if (name === '@/api/ra/employee') return api;
+    if (name === '@/api/ra/employeeCert') return { getEmployeeAdUploadEnabled: async () => ({ data: true }) };
     if (name === 'file-saver') return { default: { saveAs: (_blob: Blob, filename: string) => downloadedFiles.push(filename) } };
     if (name === '@/utils/raCertificateDownload') return { certificateDownloadBlob: async (blob: Blob) => blob };
     if (name === '@/plugins/auth') return { default: { hasPermi: () => false } };
