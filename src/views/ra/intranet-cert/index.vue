@@ -79,7 +79,6 @@
           <el-button v-if="auth.hasPermi('ra:intranet-cert:remind')" plain icon="RefreshRight" @click="refreshOwnerStatus">刷新离职状态</el-button>
         </el-col>
         <el-col :span="1.5">
-          <el-button v-if="auth.hasPermi('ra:intranet-cert:template')" plain icon="Message" @click="openTemplates">提醒模板</el-button>
           <el-button v-if="auth.hasPermi('ra:intranet-cert:template')" plain icon="Bell" @click="businessNoticeSettings?.open()">通知设置</el-button>
         </el-col>
         <right-toolbar v-model:showSearch="showSearch" @queryTable="loadList" />
@@ -103,7 +102,9 @@
         <el-table-column label="提醒" width="82" align="center">
           <template #default="{ row }">
             <el-switch
-              v-model="row.reminderEnabled"
+              :model-value="row.reminderEnabled"
+              :disabled="businessCertificateNoticeBlocked(row.notAfter)"
+              :loading="reminderSaving.has(row.id)"
               v-if="auth.hasPermi('ra:intranet-cert:remind')"
               inline-prompt
               active-text="开"
@@ -123,7 +124,7 @@
             <el-tag v-else type="info" effect="plain">正常</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" fixed="right" width="156" align="center">
+        <el-table-column label="操作" fixed="right" width="180" align="center">
           <template #default="{ row }">
             <CertRowAction label="查看详情" icon="View" @click="openDetail(row)" />
             <CertRowAction v-if="row.sourceType === 'ISSUED' && row.sourceCertId" label="下载证书" icon="Download"
@@ -136,6 +137,8 @@
                 </el-dropdown-menu>
               </template>
             </CertRowAction>
+            <CertRowAction v-if="auth.hasPermi('ra:intranet-cert:remind')" label="发送通知" icon="Message"
+              :disabled="sendingNotice || businessCertificateNoticeBlocked(row.notAfter)" @click="sendNotice(row)" />
             <CertRowAction v-if="auth.hasPermi('ra:intranet-cert:edit')" label="修改" icon="Edit" @click="openEdit(row)" />
             <CertRowAction v-if="auth.hasPermi('ra:intranet-cert:remove')" label="作废" type="danger" icon="Delete" @click="handleRemove(row)" />
           </template>
@@ -210,22 +213,6 @@
         <el-form-item label="使用场景">
           <el-input v-model="form.usageScenario" type="textarea" :rows="2" placeholder="请输入使用场景" />
         </el-form-item>
-        <el-row :gutter="12">
-          <el-col :span="12">
-            <el-form-item label="证书管理员">
-              <el-input v-model="form.managerName" clearable placeholder="管理员姓名" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="管理员邮箱">
-              <el-input v-model="form.managerEmail" clearable placeholder="管理员邮箱" />
-            </el-form-item>
-          </el-col>
-        </el-row>
-        <el-form-item label="过期提醒">
-          <el-switch v-model="form.reminderEnabled" />
-          <el-input v-model="form.reminderDays" clearable placeholder="90,60,30,7" class="reminder-days" />
-        </el-form-item>
         <el-form-item label="备注">
           <el-input v-model="form.remark" type="textarea" :rows="2" placeholder="备注" />
         </el-form-item>
@@ -247,10 +234,7 @@
         <el-descriptions-item label="域账号">{{ detail.applicantAccount || '-' }}</el-descriptions-item>
         <el-descriptions-item label="邮箱">{{ detail.applicantEmail || '-' }}</el-descriptions-item>
         <el-descriptions-item label="申请科室">{{ detail.applicantDeptPath || detail.applicantDeptName || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="证书管理员">{{ detail.managerName || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="管理员邮箱">{{ detail.managerEmail || '-' }}</el-descriptions-item>
         <el-descriptions-item label="有效期">{{ parseDateTime(detail.notBefore) }} 至 {{ parseDateTime(detail.notAfter) }}</el-descriptions-item>
-        <el-descriptions-item label="提醒天数">{{ detail.reminderEnabled ? detail.reminderDays : '关闭' }}</el-descriptions-item>
         <el-descriptions-item label="负责人变更">{{ detail.ownerChangeRequired ? '需要处理' : '正常' }}</el-descriptions-item>
         <el-descriptions-item label="备注">{{ detail.remark || '-' }}</el-descriptions-item>
       </el-descriptions>
@@ -291,53 +275,14 @@
       <pagination v-show="employeeTotal > 0" v-model:page="employeeQuery.pageNum" v-model:limit="employeeQuery.pageSize" :total="employeeTotal" @pagination="loadEmployees" />
     </el-dialog>
 
-    <el-dialog v-model="templateOpen" title="提醒模板" width="900px" append-to-body>
-      <el-table v-loading="templateLoading" :data="templates" border stripe>
-        <el-table-column label="编码" prop="templateCode" width="180" />
-        <el-table-column label="渠道" prop="channel" width="100" />
-        <el-table-column label="标题" prop="title" min-width="180" />
-        <el-table-column label="启用" width="80" align="center">
-          <template #default="{ row }">
-            <el-switch v-model="row.enabled" @change="() => saveTemplate(row)" />
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="90" align="center">
-          <template #default="{ row }">
-            <CertRowAction label="编辑提醒模板" icon="Edit" @click="editTemplate(row)" />
-          </template>
-        </el-table-column>
-      </el-table>
-    </el-dialog>
-
-    <el-dialog v-model="templateEditOpen" title="编辑提醒模板" width="720px" append-to-body>
-      <el-form :model="templateForm" label-width="90px">
-        <el-form-item label="编码">
-          <el-input v-model="templateForm.templateCode" disabled />
-        </el-form-item>
-        <el-form-item label="渠道">
-          <el-input v-model="templateForm.channel" disabled />
-        </el-form-item>
-        <el-form-item label="标题">
-          <el-input v-model="templateForm.title" />
-        </el-form-item>
-        <el-form-item label="内容">
-          <el-input v-model="templateForm.content" type="textarea" :rows="8" />
-        </el-form-item>
-        <el-form-item label="变量">
-          <el-tag v-for="item in templateVariables" :key="item" class="variable-tag" effect="plain">{{ item }}</el-tag>
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="templateEditOpen = false">取消</el-button>
-        <el-button type="primary" @click="saveTemplate(templateForm)">保存</el-button>
-      </template>
-    </el-dialog>
   </div>
 </template>
 
 <script setup name="RaIntranetCert" lang="ts">
 import { formatCertificateSubject } from '@/utils/raCertificateSubject';
 import CertRowAction from '../components/CertRowAction.vue';
+import { notifyBusinessCertificates, setBusinessCertificateReminder } from '@/api/ra/businessNoticeSettings';
+import { businessCertificateExpired, businessCertificateNoticeBlocked, confirmExpiredCertificateNotice } from '@/utils/businessCertificateNotice';
 import BusinessNoticeSettingsDialog from '../components/BusinessNoticeSettingsDialog.vue';
 import { useRaListRefreshOnReturn } from '@/hooks/useRaListRefreshOnReturn';
 import FileSaver from 'file-saver';
@@ -352,15 +297,11 @@ import {
   IntranetCert,
   IntranetCertPrefill,
   IntranetCertQuery,
-  IntranetReminderTemplate,
-  listIntranetCertTemplates,
   pageIntranetCerts,
   prefillIntranetCert,
   refreshIntranetOwnerStatus,
   removeIntranetCert,
-  saveIntranetCert,
-  saveIntranetCertTemplate,
-  updateIntranetCertReminder
+  saveIntranetCert
 } from '@/api/ra/intranetCert';
 import { FawvwEmployee, pageFawvwEmployees } from '@/api/ra/employee';
 
@@ -412,10 +353,6 @@ const emptyForm = (): Partial<IntranetCert> => ({
   applicantStatus: 'UNKNOWN',
   systemName: '',
   usageScenario: '',
-  managerName: '',
-  managerEmail: '',
-  reminderEnabled: true,
-  reminderDays: '90,60,30,7',
   remark: ''
 });
 
@@ -440,18 +377,8 @@ const employeeQuery = reactive({
   status: 'A'
 });
 
-const templateOpen = ref(false);
-const templateEditOpen = ref(false);
-const templateLoading = ref(false);
-const templates = ref<IntranetReminderTemplate[]>([]);
-const templateForm = reactive<IntranetReminderTemplate>({
-  templateCode: '',
-  channel: '',
-  title: '',
-  content: '',
-  enabled: true
-});
-const templateVariables = ['${applicantName}', '${domainAccount}', '${systemName}', '${serialNumber}', '${notAfter}', '${daysLeft}', '${managerName}'];
+const reminderSaving = reactive(new Set<NonNullable<IntranetCert['id']>>());
+const sendingNotice = ref(false);
 
 function unwrap<T>(res: any): T {
   const body = res?.data ?? res;
@@ -538,8 +465,13 @@ async function submitForm() {
   if (!(await formRef.value?.validate().catch(() => false))) return;
   saving.value = true;
   try {
-    await saveIntranetCert(form);
-    ElMessage.success('内网证书台账已保存');
+    const creating = form.id == null;
+    const saved = unwrap<IntranetCert>(await saveIntranetCert(form));
+    if (creating && !saved.reminderEnabled && businessCertificateExpired(saved.notAfter)) {
+      await ElMessageBox.alert('证书已过期，自动通知已关闭。如需提醒，可在台账中手动开启。', '证书已过期', { type: 'warning' }).catch(() => undefined);
+    } else {
+      ElMessage.success('内网证书台账已保存');
+    }
     formOpen.value = false;
     loadList();
   } finally {
@@ -555,11 +487,30 @@ async function handleRemove(row: IntranetCert) {
 }
 
 async function toggleReminder(row: IntranetCert, value: boolean) {
+  const id = row.id;
+  if (id == null || reminderSaving.has(id) || businessCertificateNoticeBlocked(row.notAfter)) return;
+  reminderSaving.add(id);
   try {
-    await updateIntranetCertReminder(row.id!, { reminderEnabled: value, reminderDays: row.reminderDays || '90,60,30,7' });
+    const expired = value && businessCertificateExpired(row.notAfter);
+    const send = expired ? await confirmExpiredCertificateNotice() : undefined;
+    if (expired && send === undefined) return;
+    await setBusinessCertificateReminder('intranet', id, value, send);
+    row.reminderEnabled = value;
     ElMessage.success(value ? '已开启提醒' : '已关闭提醒');
-  } catch {
-    row.reminderEnabled = !value;
+  } finally {
+    reminderSaving.delete(id);
+  }
+}
+
+async function sendNotice(row: IntranetCert) {
+  if (row.id == null || sendingNotice.value || businessCertificateNoticeBlocked(row.notAfter)) return;
+  if (!(await ElMessageBox.confirm('确认按通知设置发送这张证书的有效期提醒？', '通知确认', { type: 'warning' }).then(() => true, () => false))) return;
+  sendingNotice.value = true;
+  try {
+    const count = unwrap<number>(await notifyBusinessCertificates('intranet', [row.id]));
+    ElMessage.info(count ? '通知已入队' : '没有可发送的通知，请检查通知渠道和收件范围');
+  } finally {
+    sendingNotice.value = false;
   }
 }
 
@@ -608,31 +559,6 @@ async function refreshOwnerStatus() {
   const count = unwrap<number>(await refreshIntranetOwnerStatus());
   ElMessage.success(`刷新完成，需处理负责人 ${count || 0} 条`);
   loadList();
-}
-
-async function openTemplates() {
-  templateOpen.value = true;
-  templateLoading.value = true;
-  try {
-    templates.value = unwrap<IntranetReminderTemplate[]>(await listIntranetCertTemplates()) || [];
-  } finally {
-    templateLoading.value = false;
-  }
-}
-
-function editTemplate(row: IntranetReminderTemplate) {
-  Object.assign(templateForm, row);
-  templateEditOpen.value = true;
-}
-
-async function saveTemplate(row: IntranetReminderTemplate) {
-  const saved = unwrap<IntranetReminderTemplate>(await saveIntranetCertTemplate(row));
-  const index = templates.value.findIndex((item) => item.templateCode === saved.templateCode);
-  if (index >= 0) {
-    templates.value[index] = saved;
-  }
-  ElMessage.success('模板已保存');
-  templateEditOpen.value = false;
 }
 
 async function loadPrefillFromRoute(path: string, source: unknown, serial: unknown) {

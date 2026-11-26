@@ -66,7 +66,6 @@
           <el-button v-hasPermi="['ra:fawvw-ca-cert:import']" type="primary" plain icon="Upload" @click="importOpen = true">导入根证书</el-button>
         </el-col>
         <el-col :span="1.5">
-          <el-button v-hasPermi="['ra:fawvw-ca-cert:edit']" plain icon="Bell" @click="openExpiryTemplate">到期预警模板</el-button>
           <el-button v-hasPermi="['ra:fawvw-ca-cert:edit']" plain icon="Bell" @click="businessNoticeSettings?.open()">通知设置</el-button>
         </el-col>
         <right-toolbar v-model:showSearch="showSearch" @queryTable="loadList" />
@@ -121,10 +120,13 @@
             }}</el-tag></template
           ></el-table-column
         >
-        <el-table-column label="操作" fixed="right" width="188" align="center">
+        <el-table-column label="操作" fixed="right" width="218" align="center">
           <template #default="{ row }">
             <CertRowAction label="查看详情" icon="View" @click="openDetail(row)" />
             <CertRowAction v-hasPermi="['ra:fawvw-ca-cert:edit']" label="维护" icon="Edit" @click="openEdit(row)" />
+            <CertRowAction v-hasPermi="['ra:fawvw-ca-cert:edit']" label="发送通知" icon="Message"
+              :disabled="sendingNotice || row.managementStatus !== 'ACTIVE' || row.sourceActive === false || businessCertificateNoticeBlocked(row.notAfter)"
+              @click="sendNotice(row)" />
             <CertRowAction label="查看证书链" icon="Connection" @click="openChain(row)" />
             <CertRowAction label="下载证书" icon="Download" @command="(format) => downloadCertificate(row, format as 'cer' | 'p7b')">
               <template #dropdown>
@@ -266,23 +268,14 @@
         ><el-button @click="editOpen = false">取消</el-button><el-button type="primary" :loading="saving" @click="saveEdit">保存</el-button></template
       >
     </el-drawer>
-    <el-dialog v-model="expiryTemplateOpen" title="根及中间证书台账预警模板" width="min(550px, 96vw)" append-to-body>
-      <el-form label-width="100px">
-        <el-form-item label="提前天数"><el-input-number v-model="expiryTemplate.days" :min="1" :max="365" :precision="0" /></el-form-item>
-        <el-form-item label="台账提示"><el-input v-model="expiryTemplate.message" type="textarea" :rows="3" maxlength="500" show-word-limit /></el-form-item>
-        <el-form-item label="可用变量"><code>${certificateName} &nbsp; ${notAfter} &nbsp; ${days}</code></el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="expiryTemplateOpen = false">取消</el-button>
-        <el-button type="primary" :loading="expiryTemplateSaving" @click="saveExpiryTemplate">保存模板</el-button>
-      </template>
-    </el-dialog>
   </div>
 </template>
 
 <script setup name="FawvwCaCert" lang="ts">
 import { formatCertificateSubject } from '@/utils/raCertificateSubject';
 import CertRowAction from '../components/CertRowAction.vue';
+import { notifyBusinessCertificates } from '@/api/ra/businessNoticeSettings';
+import { businessCertificateNoticeBlocked } from '@/utils/businessCertificateNotice';
 import BusinessNoticeSettingsDialog from '../components/BusinessNoticeSettingsDialog.vue';
 import { useRaListRefreshOnReturn } from '@/hooks/useRaListRefreshOnReturn';
 import { ElMessage, ElMessageBox, type TableInstance } from 'element-plus';
@@ -292,12 +285,9 @@ import {
   FawvwCaCertificate,
   FawvwCaCertQuery,
   type FawvwCaCertificateDetail,
-  type FawvwCaExpiryTemplate,
-  getFawvwCaExpiryTemplate,
   getFawvwCaCertificateDetail,
   importFawvwCaCertificate,
   pageFawvwCaCertificateTree,
-  saveFawvwCaExpiryTemplate,
   syncFawvwCaCertificates,
   updateFawvwCaCertificate
 } from '@/api/ra/fawvwCaCert';
@@ -309,25 +299,17 @@ const chainRows = ref<ChainNode[]>([]);
 const chainOpen = ref(false);
 const treeTable = ref<TableInstance>();
 const businessNoticeSettings = ref<InstanceType<typeof BusinessNoticeSettingsDialog>>();
-const expiryTemplateOpen = ref(false);
-const expiryTemplateSaving = ref(false);
-const expiryTemplate = reactive<FawvwCaExpiryTemplate>({ days: 30, message: '' });
+const sendingNotice = ref(false);
 
-async function openExpiryTemplate() {
-  Object.assign(expiryTemplate, unwrap<FawvwCaExpiryTemplate>(await getFawvwCaExpiryTemplate()));
-  expiryTemplateOpen.value = true;
-}
-
-async function saveExpiryTemplate() {
-  if (expiryTemplateSaving.value || !expiryTemplate.days || !expiryTemplate.message.trim()) return;
-  expiryTemplateSaving.value = true;
+async function sendNotice(row: FawvwCaCertificate) {
+  if (row.id == null || sendingNotice.value || businessCertificateNoticeBlocked(row.notAfter)) return;
+  if (!(await ElMessageBox.confirm('确认按通知设置发送这张证书的有效期提醒？', '通知确认', { type: 'warning' }).then(() => true, () => false))) return;
+  sendingNotice.value = true;
   try {
-    await saveFawvwCaExpiryTemplate(expiryTemplate);
-    expiryTemplateOpen.value = false;
-    ElMessage.success('预警模板已保存');
-    await loadList();
+    const count = unwrap<number>(await notifyBusinessCertificates('root', [row.id]));
+    ElMessage.info(count ? '通知已入队' : '没有可发送的通知，请检查通知渠道和收件范围');
   } finally {
-    expiryTemplateSaving.value = false;
+    sendingNotice.value = false;
   }
 }
 

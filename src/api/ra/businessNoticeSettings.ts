@@ -25,3 +25,9 @@ export const getBusinessNoticeSettings = (module: NoticeModule) =>
   request({ url: `/ra/v1/business-notice-settings/${module}`, method: 'get' }) as any;
 export const saveBusinessNoticeSettings = (module: NoticeModule, data: BusinessNoticeConfig) =>
   request({ url: `/ra/v1/business-notice-settings/${module}`, method: 'put', data }) as any;
+
+export const notifyBusinessCertificates = (module: NoticeModule, ids: (string | number)[]) =>
+  request({ url: `/ra/v1/business-notice-settings/${module}/notify`, method: 'post', data: ids }) as any;
+
+export const setBusinessCertificateReminder = (module: 'intranet' | 'public', id: string | number, enabled: boolean, sendExpired?: boolean) =>
+  request({ url: `/ra/v1/business-notice-settings/${module}/${id}/reminder`, method: 'put', data: { enabled, sendExpired } }) as any;

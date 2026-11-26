@@ -1,4 +1,5 @@
 import request from '@/utils/request';
+import { publicCertFormData } from '@/utils/publicCertForm';
 import { Result } from '@/api/types';
 
 export interface PublicCertQuery {
@@ -213,6 +214,9 @@ export const savePublicCert = (data: PublicCert): Promise<Result<PublicCertDetai
     method: 'post',
     data
   }) as any;
+
+export const createPublicCertLedger = (data: PublicCert, files: File[]): Promise<Result<PublicCertDetail>> =>
+  request({ url: '/ra/v1/public-certs/ledger', method: 'post', data: publicCertFormData(data, files), timeout: 120_000 }) as any;
 
 export const approvePublicCert = (id: number | string, comment?: string): Promise<Result<PublicCert>> =>
   request({

@@ -1,5 +1,12 @@
 import type { PublicCert, PublicCertDetail, PublicCertEmployee, PublicCertUsage } from '@/api/ra/publicCert';
 
+export function publicCertFormData(certificate: PublicCert, files: File[]) {
+  const form = new FormData();
+  form.append('certificate', new Blob([JSON.stringify(certificate)], { type: 'application/json' }));
+  files.forEach((file) => form.append('files', file));
+  return form;
+}
+
 export const publicCertDomainRequired = (code?: string) => !['IOS', 'ANDROID', 'HARMONY'].includes((code || '').toUpperCase());
 
 export function certificateExpiryText(value?: string, now = Date.now()): string {
@@ -16,7 +23,7 @@ export function effectivePortalIdleMinutes(limit?: number): number {
   return typeof limit === 'number' && Number.isInteger(limit) && limit >= 5 && limit <= 1440 ? limit : 30;
 }
 
-export const publicNoticeStatus = (status?: number | null) => status == null ? '未通知' : (({ 0: '待发送', 1: '接口已受理', 2: '失败', 3: '发送中', 4: '结果未知' } as Record<number, string>)[status] || '结果未知');
+export const publicNoticeStatus = (status?: number | null) => status == null ? '未通知' : (({ 0: '待发送', 1: '接口已受理', 2: '失败', 3: '发送中', 4: '结果未知', 5: '已跳过' } as Record<number, string>)[status] || '结果未知');
 
 export function publicCertUsageError(rows?: PublicCertUsage[]): string | undefined {
   if (!rows?.length || rows.length > 100) return '使用信息须填写1至100行';

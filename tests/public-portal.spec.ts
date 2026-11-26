@@ -74,9 +74,9 @@ test('employee save failures remain visible and keep the form open for retry', a
   const form = { domainName: 'keep.invalid' }, formOpen = { value: true }, saving = { value: false };
   const submit = new Function('form', 'formOpen', 'saving', 'ElMessage', `${code};
     const formRef={value:{validate:async()=>true}}, pendingAttachments={value:[]}, portalToken={value:'same-token'},portalReady={value:true};
-    const beforeUpload=()=>true, savePublicCertPortal=async()=>{throw new Error('该记录已更新，请重新打开后再修改');}; return submitForm;`
+    const beforeUpload=()=>true, saveAndSubmitPublicCertPortal=async()=>{throw new Error('该记录已更新，请重新打开后再修改');}; return submitForm;`
   )(form, formOpen, saving, { error: (message: string) => messages.push(message) });
-  await submit(false);
+  await submit();
   expect(messages).toContain('该记录已更新，请重新打开后再修改');
   expect(formOpen.value).toBe(true);
   expect(form.domainName).toBe('keep.invalid');
@@ -86,6 +86,36 @@ test('employee save failures remain visible and keep the form open for retry', a
     expect(page).toContain(':close-on-press-escape="!saving"');
     expect(page).toContain(':disabled="saving" @click="formOpen = false"');
   }
+});
+
+test('administrator creation confirms the direct ledger write and shows the expired reminder warning', async () => {
+  const source = read('src/views/ra/public-cert/index.vue');
+  const code = transpile(source.slice(source.indexOf('async function submitForm('), source.indexOf('async function handleRemove(')));
+  const form = { domainName: 'expired.example.test' };
+  const formOpen = { value: true };
+  const saving = { value: false };
+  const writes: unknown[] = [];
+  const messages: string[] = [];
+  let confirmed = false;
+  const submit = new Function('form', 'formOpen', 'saving', 'writes', 'messages', 'confirm', `${code};
+    const formRef={value:{validate:async()=>true}}, pendingAttachments={value:[]};
+    const unwrap=x=>x, businessCertificateExpired=()=>true, loadList=()=>{};
+    const ElMessageBox={confirm,alert:async message=>messages.push(message)};
+    const createPublicCertLedger=async (data,files)=>{
+      writes.push({data:{...data},files});
+      return {cert:{id:1,version:0,notAfter:'2025-01-01 00:00:00'}};
+    }; return submitForm;`
+  )(form, formOpen, saving, writes, messages, async () => {
+    if (!confirmed) throw new Error('cancel');
+  });
+  await submit();
+  expect(writes).toHaveLength(0);
+  expect(formOpen.value).toBe(true);
+  confirmed = true;
+  await submit();
+  expect(writes).toEqual([{ data: { domainName: 'expired.example.test' }, files: [] }]);
+  expect(messages[0]).toContain('自动通知已关闭');
+  expect(formOpen.value).toBe(false);
 });
 
 test('switching the ledger and audit tabs ignores older query responses', async () => {
@@ -160,6 +190,9 @@ function component(path: string, scoped = false) {
       name==='@vueuse/core'?{useMediaQuery:query=>Vue.ref(matchMedia(query).matches)}:
       name==='@/hooks/useRaListRefreshOnReturn'?{useRaListRefreshOnReturn(){}}:
       name==='@/utils/publicCertForm'?window.portalUtils:name==='@/api/ra/publicCertPortal'?window.portalApi:
+      name==='@/utils/businessCertificateNotice'?{businessCertificateNoticeBlocked:()=>false,businessCertificateExpired:()=>false}:
+      name==='@/api/ra/businessNoticeSettings'?window.adminApi:
+      name.endsWith('/BusinessNoticeSettingsDialog.vue')?{__esModule:true,default:window.BusinessNoticeSettingsDialog}:
       name==='@/api/ra/publicCert'||name==='@/api/ra/employee'?window.adminApi:
       name==='@/plugins/auth'?{__esModule:true,default:{hasPermi:()=>true}}:
       name==='file-saver'?{__esModule:true,default:{saveAs(){}}}:
@@ -258,10 +291,11 @@ for (const width of [1440, 390]) {
         },
         getPublicPortalSessionPolicy:async()=>({data:{idleMinutes:30}}),
         getPublicCertPortalConfig:async()=>({data:{requireIam:true,iamEnabled:false}}),
-        getPublicNoticeConfig:async()=>({data:{automatic:false,email:true,dingtalk:true,days:'30,7,1,0',time:'09:00',portalUrl:'https://example.invalid/ra-public-cert',subject:'Certificate notice',emailContent:'Reminder',dingContent:'Reminder'}})
+        getBusinessNoticeSettings:async()=>({data:{departure:false,approval:false,administrators:true,owner:true,departureIntervalDays:30,templates:[],automatic:false,email:true,dingtalk:true,days:'30,7,1,0',time:'09:00',portalUrl:'https://example.invalid/ra-public-cert',subject:'Certificate notice',emailContent:'Reminder',dingContent:'Reminder'}})
       },{get:(target,key)=>target[key]||(()=>Promise.resolve({data:[]}))});
       window.EmployeeChoice=${component('src/views/ra/public-cert/EmployeeSelect.vue')};window.UsageChoice=${component('src/views/ra/public-cert/UsageTable.vue')};
       window.CertRowAction=${component(rowActionPath)};
+      window.BusinessNoticeSettingsDialog=${component('src/views/ra/components/BusinessNoticeSettingsDialog.vue')};
       const app=Vue.createApp(${component(path, true)}); app.component('Pagination',{template:'<div />'});app.component('RightToolbar',{template:'<div />'});
       for(const [name,icon] of Object.entries(ElementPlusIconsVue))app.component(name,icon);
       app.directive('hasPermi',{});app.use(ElementPlus);app.mount('#app');` });
@@ -282,6 +316,7 @@ for (const width of [1440, 390]) {
     await expectOwnerLabelAligned();
     await expect(page.getByRole('button', { name: '通过选中' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: '新增草稿' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: '新增', exact: true })).toBeVisible();
     await expect(page.getByText('approved.invalid', { exact: true })).toBeVisible();
     await expect(page.getByText(/pending\.invalid|draft\.invalid|rejected\.invalid/)).toHaveCount(0);
     await page.getByRole('tab', { name: '审核中心' }).click();
@@ -291,7 +326,7 @@ for (const width of [1440, 390]) {
     await expect(page.getByRole('button', { name: '新增草稿' })).toHaveCount(0);
     await expect(page.getByText('pending.invalid', { exact: true })).toBeVisible();
     await expect(page.getByText(/approved\.invalid|draft\.invalid|rejected\.invalid/)).toHaveCount(0);
-    for (const name of ['证书类型', '录入授权', '通知模板']) {
+    for (const name of ['证书类型', '录入授权', '通知设置']) {
       await expect(page.getByRole('button', { name, exact: true })).toHaveCount(0);
     }
     await page.getByRole('tab', { name: '已办记录' }).click();
@@ -300,14 +335,14 @@ for (const width of [1440, 390]) {
       await expect(page.getByText(`${status}.invalid`, { exact: true })).toBeVisible();
     }
     await expect(page.getByText('pending.invalid', { exact: true })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: '新增草稿' })).toBeVisible();
+    await expect(page.getByRole('button', { name: '新增', exact: true })).toHaveCount(0);
     await expect(page.getByRole('button', { name: '通过选中' })).toHaveCount(0);
     await page.getByRole('tab', { name: '证书台账' }).click();
-    await page.getByRole('button', { name: '通知模板', exact: true }).click();
-    await expect(page.getByRole('dialog', { name: '证书通知模板' })).toBeVisible();
+    await page.getByRole('button', { name: '通知设置', exact: true }).click();
+    await expect(page.getByRole('dialog', { name: '证书通知设置' })).toBeVisible();
     await expect(page.getByText('提前提醒天数', { exact: true })).toBeVisible();
     await page.screenshot({ path: info.outputPath('admin-notices.png'), fullPage: true, animations: 'disabled' });
-    await page.getByRole('dialog', { name: '证书通知模板' }).getByRole('button', { name: '取消', exact: true }).click();
+    await page.getByRole('dialog', { name: '证书通知设置' }).getByRole('button', { name: '取消', exact: true }).click();
     await page.getByRole('button', { name: '录入授权', exact: true }).click();
     const grants = page.getByRole('dialog', { name: '证书录入授权' });
     const policy = grants.getByRole('region', { name: '自助登录策略' });
@@ -480,7 +515,8 @@ for (const width of [1280, 834, 390]) {
         await expect(drawer.locator('.portal-recorder')).toHaveText('录入人：Test-employee1');
         await expect(drawer.getByText(/请先将证书打包为 ZIP 或 RAR 压缩包/)).toBeVisible();
         await drawer.getByLabel('颁发机构', { exact: true }).fill('   ');
-        await drawer.getByRole('button', { name: '保存草稿' }).click();
+        await expect(drawer.getByRole('button', { name: '保存草稿' })).toHaveCount(0);
+        await drawer.getByRole('button', { name: '保存并提交' }).click();
         await expect(drawer.getByText('请输入颁发机构', { exact: true })).toBeVisible();
         await expect(drawer.getByText('请输入供应商', { exact: true })).toBeVisible();
         await expect(drawer.getByText('请补充证书压缩包。', { exact: false })).toHaveCount(0);

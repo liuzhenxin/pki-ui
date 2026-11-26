@@ -1,5 +1,6 @@
+import { publicCertFormData } from '@/utils/publicCertForm';
 import axios from 'axios';
-import { PublicCert, PublicCertAttachment, PublicCertDetail, PublicCertEmployee, PublicCertQuery, PublicCertType, SelfAccess } from '@/api/ra/publicCert';
+import type { PublicCert, PublicCertAttachment, PublicCertDetail, PublicCertEmployee, PublicCertQuery, PublicCertType, SelfAccess } from '@/api/ra/publicCert';
 
 const portalClient = axios.create({
   // Employee portal calls bypass the gateway's RA-token filter. Nginx forwards
@@ -98,8 +99,8 @@ export const searchPublicCertPortalEmployees = async (token: string, keyword: st
 export const getPublicCertPortal = async (token: string, id: number | string): Promise<PublicCertDetail> =>
   portalRequest(portalClient.get(`/v1/public-certs/portal/${id}`, { headers: portalHeaders(token) }));
 
-export const savePublicCertPortal = async (token: string, data: PublicCert): Promise<PublicCertDetail> =>
-  portalRequest(portalClient.post('/v1/public-certs/portal', data, { headers: portalHeaders(token) }));
+export const saveAndSubmitPublicCertPortal = async (token: string, data: PublicCert, files: File[]): Promise<PublicCertDetail> =>
+  portalRequest(portalClient.post('/v1/public-certs/portal', publicCertFormData(data, files), { headers: portalHeaders(token), timeout: 120_000 }));
 
 export const submitPublicCertPortal = async (token: string, id: number | string): Promise<PublicCert> =>
   portalRequest(portalClient.post(`/v1/public-certs/portal/${id}/submit`, null, { headers: portalHeaders(token) }));

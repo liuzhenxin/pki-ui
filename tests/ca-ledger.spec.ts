@@ -27,6 +27,7 @@ function harness() {
   new Function('require', 'module', 'exports', code)(
     (name: string) => {
       if (name === 'vue') return { ...vue, onMounted: () => {}, onActivated: () => {} };
+      if (name === '@/api/ra/businessNoticeSettings' || name === '@/utils/businessCertificateNotice') return {};
       if (name === '@/utils/raCertificateSubject') return { formatCertificateSubject: (value: string) => value };
       if (name === '../components/CertRowAction.vue' || name === '../components/BusinessNoticeSettingsDialog.vue') return { default: {} };
       if (name === '@/hooks/useRaListRefreshOnReturn') return { useRaListRefreshOnReturn: () => {} };

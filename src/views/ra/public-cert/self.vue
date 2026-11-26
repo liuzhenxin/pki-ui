@@ -281,8 +281,7 @@
           <span class="portal-recorder">录入人：{{ formRecorder }}</span>
           <div class="portal-editor-actions">
             <el-button :disabled="saving" @click="formOpen = false">取消</el-button>
-            <el-button type="primary" :loading="saving" @click="submitForm(false)">{{ form.approvalStatus === 'REJECTED' ? '保存修改' : '保存草稿' }}</el-button>
-            <el-button type="success" :loading="saving" @click="submitForm(true)">保存并提交</el-button>
+            <el-button type="success" :loading="saving" @click="submitForm">保存并提交</el-button>
           </div>
         </div>
       </template>
@@ -364,7 +363,7 @@ import {
   logoutPublicCertPortal,
   pagePublicCertPortal,
   PortalLoginResult,
-  savePublicCertPortal,
+  saveAndSubmitPublicCertPortal,
   searchPublicCertPortalEmployees,
   startPublicCertPortalIam,
   submitPublicCertPortal,
@@ -430,7 +429,6 @@ const emptyForm = (): PublicCert => ({
   notAfter: '',
   businessOwnerName: access.value.employeeName || '',
   businessOwnerAccount: access.value.domainAccount || '',
-  reminderEnabled: true,
   usages: [{ systemName: '', usageDomain: '', usageScene: '' }]
 });
 
@@ -552,33 +550,19 @@ async function openDetail(row: PublicCert) {
   }
 }
 
-async function submitForm(thenSubmit: boolean) {
+async function submitForm() {
   if (!(await formRef.value?.validate().catch(() => false))) return;
   if (saving.value || pendingAttachments.value.some((file) => !file.raw || !beforeUpload(file.raw))) return;
   saving.value = true;
   const token = portalToken.value;
   try {
-    const saved = await savePublicCertPortal(token, form);
+    await saveAndSubmitPublicCertPortal(token, form, pendingAttachments.value.map((file) => file.raw!));
     if (token !== portalToken.value || !portalReady.value) return;
-    form.id = saved.cert.id;
-    form.version = saved.cert.version;
-    for (const file of [...pendingAttachments.value]) {
-      const uploaded = await uploadPublicCertPortalAttachment(token, saved.cert.id!, file.raw!);
-      if (token !== portalToken.value || !portalReady.value) return;
-      formAttachments.value.push(uploaded);
-      pendingAttachments.value = pendingAttachments.value.filter((item) => item.uid !== file.uid);
-    }
-    if (thenSubmit) {
-      await submitPublicCertPortal(token, saved.cert.id!);
-      if (token !== portalToken.value || !portalReady.value) return;
-      ElMessage.success('已提交审核');
-    } else {
-      ElMessage.success(saved.cert.approvalStatus === 'REJECTED' ? '已保存修改' : '已保存草稿');
-    }
+    ElMessage.success('已提交审核');
     formOpen.value = false;
     loadList();
   } catch (error: any) {
-    if (token === portalToken.value && portalReady.value) ElMessage.error(error?.message || '保存失败，已保留当前录入内容，请重试');
+    if (token === portalToken.value && portalReady.value) ElMessage.error(error?.message || '提交失败，已保留当前录入内容，请重试');
   } finally {
     saving.value = false;
   }

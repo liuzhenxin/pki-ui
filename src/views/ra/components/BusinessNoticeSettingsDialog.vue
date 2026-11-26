@@ -1,18 +1,19 @@
 <template>
   <el-dialog v-model="visible" title="证书通知设置" width="min(850px, 96vw)" append-to-body>
-    <el-alert type="info" :closable="false" title="此处保存新的通知设置；现有提醒仍使用原配置，待新通知功能接入后生效。" />
     <el-tabs v-model="tab">
       <el-tab-pane label="证书预警" name="settings">
         <el-form :model="form" label-width="140px">
           <el-form-item label="通知开关">
-            <el-checkbox v-model="form.automatic">自动到期提醒</el-checkbox>
-            <el-checkbox v-if="module !== 'root'" v-model="form.departure">离职提醒</el-checkbox>
-            <el-checkbox v-if="module === 'public'" v-model="form.approval">审批提醒</el-checkbox>
+            <div class="notice-switches">
+              <el-switch v-model="form.automatic" active-text="自动到期提醒" aria-label="自动到期提醒" />
+              <el-switch v-if="module !== 'root'" v-model="form.departure" active-text="离职提醒" aria-label="离职提醒" />
+              <el-switch v-if="module === 'public'" v-model="form.approval" active-text="审批提醒" aria-label="审批提醒" />
+            </div>
           </el-form-item>
           <el-form-item label="通知渠道"
             ><el-checkbox v-model="form.email">邮件</el-checkbox><el-checkbox v-model="form.dingtalk">钉钉</el-checkbox></el-form-item
           >
-          <el-form-item label="到期通知人员">
+          <el-form-item label="通知人员">
             <el-checkbox v-model="form.administrators">证书管理员</el-checkbox>
             <el-checkbox v-if="module !== 'root'" v-model="form.owner">{{ module === 'public' ? '证书维护人' : '证书使用人' }}</el-checkbox>
           </el-form-item>
@@ -152,3 +153,11 @@ async function save() {
 }
 defineExpose({ open });
 </script>
+
+<style scoped>
+.notice-switches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 16px;
+}
+</style>
