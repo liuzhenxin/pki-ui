@@ -32,6 +32,7 @@ export interface FawvwCaCertificate {
   certificatePem?: string;
   notBefore: string;
   notAfter: string;
+  reminderEnabled?: boolean;
   validityStatus: FawvwCaValidityStatus;
   validityStatusName: string;
   expiryWarning?: string;

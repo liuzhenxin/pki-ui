@@ -29,5 +29,23 @@ export const saveBusinessNoticeSettings = (module: NoticeModule, data: BusinessN
 export const notifyBusinessCertificates = (module: NoticeModule, ids: (string | number)[]) =>
   request({ url: `/ra/v1/business-notice-settings/${module}/notify`, method: 'post', data: ids }) as any;
 
-export const setBusinessCertificateReminder = (module: 'intranet' | 'public', id: string | number, enabled: boolean, sendExpired?: boolean) =>
+export const setBusinessCertificateReminder = (module: NoticeModule, id: string | number, enabled: boolean, sendExpired?: boolean) =>
   request({ url: `/ra/v1/business-notice-settings/${module}/${id}/reminder`, method: 'put', data: { enabled, sendExpired } }) as any;
+
+export interface BusinessDeliveryLog {
+  id: number | string;
+  certificateId: number | string;
+  channel: string;
+  category: string;
+  trigger: string;
+  title: string;
+  recipient?: string;
+  content?: string;
+  status: number;
+  time?: string;
+  message?: string;
+  gatewayTraceId?: string;
+}
+
+export const listBusinessDeliveryLogs = (module: NoticeModule, certificateId?: string | number, beforeId?: string | number) =>
+  request({ url: `/ra/v1/business-notice-settings/${module}/logs`, method: 'get', params: { certificateId, beforeId } }) as any;

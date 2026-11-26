@@ -13,6 +13,9 @@ export interface PublicCertQuery {
   approvalStatus?: string;
   certStatus?: string;
   ownerChangeRequired?: boolean | null;
+  employeeStatus?: string;
+  reminderEnabled?: boolean | null;
+  history?: boolean;
   notAfterStart?: string;
   notAfterEnd?: string;
 }
@@ -80,6 +83,7 @@ export interface PublicCert {
   approvalComment?: string;
   remark?: string;
   usages?: PublicCertUsage[];
+  employeeStatus?: string;
 }
 
 export interface PublicCertAttachment {
@@ -113,6 +117,7 @@ export interface PublicCertType {
   typeName: string;
   sort: number;
   enabled: boolean;
+  domainRequired?: boolean;
 }
 
 export interface PublicCertPermission {
@@ -218,6 +223,9 @@ export const savePublicCert = (data: PublicCert): Promise<Result<PublicCertDetai
 export const createPublicCertLedger = (data: PublicCert, files: File[]): Promise<Result<PublicCertDetail>> =>
   request({ url: '/ra/v1/public-certs/ledger', method: 'post', data: publicCertFormData(data, files), timeout: 120_000 }) as any;
 
+export const updatePublicCertLedger = (data: PublicCert, files: File[]): Promise<Result<PublicCertDetail>> =>
+  request({ url: '/ra/v1/public-certs/ledger', method: 'put', data: publicCertFormData(data, files), timeout: 120_000 }) as any;
+
 export const approvePublicCert = (id: number | string, comment?: string): Promise<Result<PublicCert>> =>
   request({
     url: `/ra/v1/public-certs/${id}/approve`,
@@ -309,3 +317,8 @@ export const uploadPublicCertAttachment = (id: number | string, file: File): Pro
     timeout: 120_000
   }) as any;
 };
+
+export const refreshPublicCertPersonnel = () => request({ url: '/ra/v1/public-certs/refresh-owners', method: 'post' }) as any;
+
+export const downloadPublicCertAttachment = (id: number | string, attachmentId: number | string): Promise<Blob> =>
+  request({ url: `/ra/v1/public-certs/${id}/attachments/${attachmentId}`, method: 'get', responseType: 'blob' }) as any;

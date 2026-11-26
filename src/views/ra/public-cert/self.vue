@@ -106,16 +106,17 @@
                 <el-form-item label="域名" prop="domainName">
                   <el-input v-model="queryParams.domainName" clearable placeholder="请输入域名" />
                 </el-form-item>
-                <el-form-item label="审核状态" prop="approvalStatus">
+                <el-form-item v-if="portalSection === 'todo'" label="审核结果">
                   <el-select v-model="queryParams.approvalStatus" clearable placeholder="全部">
-                    <template v-if="portalSection === 'records'">
-                      <el-option label="草稿" value="DRAFT" />
-                      <el-option label="已通过" value="APPROVED" />
-                    </template>
-                    <template v-else>
-                      <el-option label="待审核" value="PENDING" />
-                      <el-option label="已驳回" value="REJECTED" />
-                    </template>
+                    <el-option label="审核中" value="PENDING" />
+                    <el-option label="已驳回" value="REJECTED" />
+                  </el-select>
+                </el-form-item>
+                <el-form-item v-else label="证书状态">
+                  <el-select v-model="queryParams.certStatus" clearable placeholder="全部">
+                    <el-option label="正常" value="NORMAL" />
+                    <el-option label="30天内过期" value="EXPIRING" />
+                    <el-option label="已过期" value="EXPIRED" />
                   </el-select>
                 </el-form-item>
                 <div class="portal-query-actions">
@@ -124,36 +125,16 @@
                 </div>
               </el-form>
               <el-table v-loading="loading" :data="rows" class="portal-record-table" :empty-text="portalSection === 'todo' ? '暂无待办记录' : '暂无证书记录'">
-                <el-table-column label="域名 / 审核结果" :min-width="compactLedger ? 168 : 215">
-                  <template #default="{ row }">
-                    <div class="portal-review-cell">
-                      <div class="portal-review-title">
-                        <span class="portal-review-domain" :title="row.domainName">{{ row.domainName || '-' }}</span>
-                        <el-tag :type="approvalType(row.approvalStatus)" effect="light" size="small">{{ approvalLabel(row) }}</el-tag>
-                      </div>
-                      <button v-if="row.approvalStatus === 'REJECTED'" type="button" class="portal-review-preview is-rejected"
-                        aria-label="查看驳回原因" :title="approvalOpinion(row)" @click="openDetail(row)">
-                        驳回原因：{{ approvalOpinion(row) }}
-                      </button>
-                      <span v-else-if="approvalOpinion(row)" class="portal-review-preview is-approved" :title="approvalOpinion(row)">
-                        审核意见：{{ approvalOpinion(row) }}
-                      </span>
-                      <div v-if="compactLedger" class="portal-review-meta">
-                        <span>{{ row.certTypeName || '-' }}</span>
-                        <time>{{ row.notAfter?.slice(0, 10) || '-' }}</time>
-                        <el-tag :type="certStatusType(row.certStatus)" effect="light" size="small">{{ certificateExpiryText(row.notAfter) }}</el-tag>
-                      </div>
-                    </div>
-                  </template>
+                <el-table-column label="域名" prop="domainName" min-width="155" show-overflow-tooltip />
+                <el-table-column label="审核结果" width="105">
+                  <template #default="{ row }"><el-tag :type="approvalType(row.approvalStatus)" effect="light">{{ row.approvalStatus === 'PENDING' ? '审核中' : approvalLabel(row) }}</el-tag></template>
                 </el-table-column>
-                <el-table-column v-if="!compactLedger" label="证书类型" prop="certTypeName" width="110" />
-                <el-table-column v-if="!compactLedger" label="到期时间" prop="notAfter" width="166" align="center">
-                  <template #default="{ row }"><time class="portal-expiry-time">{{ formatDateTime(row.notAfter) }}</time></template>
+                <el-table-column label="证书类型" prop="certTypeName" width="105" />
+                <el-table-column label="证书状态" width="116">
+                  <template #default="{ row }"><el-tag :type="businessCertificateValidity(row.notAfter, 365).type" effect="light">{{ businessCertificateValidity(row.notAfter, 365).text }}</el-tag></template>
                 </el-table-column>
-                <el-table-column v-if="!compactLedger" label="证书状态" width="146" align="center">
-                  <template #default="{ row }">
-                    <el-tag :type="certStatusType(row.certStatus)" effect="light">{{ certificateExpiryText(row.notAfter) }}</el-tag>
-                  </template>
+                <el-table-column label="到期时间" width="165">
+                  <template #default="{ row }">{{ formatDateTime(row.notAfter) }}</template>
                 </el-table-column>
                 <el-table-column label="操作" :width="compactLedger ? 94 : 120" align="center" fixed="right">
                   <template #default="{ row }">
@@ -163,9 +144,6 @@
                       </el-tooltip>
                       <el-tooltip v-if="row.approvalStatus !== 'PENDING'" content="修改" placement="top">
                         <el-button link type="primary" icon="Edit" aria-label="修改" @click="openEdit(row)" />
-                      </el-tooltip>
-                      <el-tooltip v-if="['DRAFT', 'REJECTED'].includes(row.approvalStatus || '')" content="提交审核" placement="top">
-                        <el-button link type="success" icon="Promotion" aria-label="提交审核" @click="handleSubmit(row)" />
                       </el-tooltip>
                     </div>
                   </template>
@@ -225,6 +203,11 @@
             </el-form-item>
           </el-col>
           <el-col :xs="24" :sm="12">
+            <el-form-item label="生效时间" prop="notBefore">
+              <el-date-picker v-model="form.notBefore" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" placeholder="请选择生效时间" style="width: 100%" />
+            </el-form-item>
+          </el-col>
+          <el-col :xs="24" :sm="12">
             <el-form-item label="有效期止" prop="notAfter">
               <el-date-picker
                 v-model="form.notAfter"
@@ -238,28 +221,8 @@
         </el-row>
         <el-divider content-position="left">证书维护人</el-divider>
         <el-row :gutter="12">
-          <el-col :xs="24" :sm="12">
-            <el-form-item label="证书维护人" prop="businessOwnerEmployeeId">
-              <EmployeeSelect :employee-id="form.businessOwnerEmployeeId" :employee-name="form.businessOwnerName" :lookup="lookupEmployees" @select="(employee) => selectCertificateMaintainer(form, employee)" />
-            </el-form-item>
-          </el-col>
-          <el-col :xs="24" :sm="12">
-            <el-form-item label="维护人邮箱">
-              <el-input v-model="form.businessOwnerEmail" readonly />
-            </el-form-item>
-          </el-col>
-        </el-row>
-        <el-row :gutter="12">
-          <el-col :xs="24" :sm="12">
-            <el-form-item label="科室">
-              <el-input v-model="form.departmentName" readonly />
-            </el-form-item>
-          </el-col>
-          <el-col :xs="24" :sm="12">
-            <el-form-item label="维护人账号">
-              <el-input v-model="form.businessOwnerAccount" readonly />
-            </el-form-item>
-          </el-col>
+          <el-col :xs="24" :sm="12"><el-form-item label="证书维护人"><el-input v-model="form.businessOwnerName" readonly /></el-form-item></el-col>
+          <el-col :xs="24" :sm="12"><el-form-item label="科室"><el-input v-model="form.departmentName" readonly /></el-form-item></el-col>
         </el-row>
         <el-divider content-position="left">使用详情</el-divider>
         <el-form-item prop="usages" label-width="0"><UsageTable v-model="form.usages" :lookup="lookupEmployees" /></el-form-item>
@@ -267,21 +230,17 @@
         <el-form-item label="压缩包">
           <el-upload v-model:file-list="pendingAttachments" :auto-upload="false" accept=".zip,.rar" multiple
             :on-change="(file) => { if (file.raw && !beforeUpload(file.raw)) pendingAttachments = pendingAttachments.filter((item) => item.uid !== file.uid); }">
-            <el-button icon="Upload">选择附件</el-button>
+            <el-button icon="Upload">上传证书</el-button>
             <template #tip><div class="el-upload__tip">{{ attachmentTip }}</div></template>
           </el-upload>
         </el-form-item>
         <el-form-item v-if="formAttachments.length" label="已有附件">{{ formAttachments.map((item) => item.originalName).join('；') }}</el-form-item>
-        <el-form-item label="录入说明">
-          <el-input v-model="form.remark" type="textarea" :rows="2" />
-        </el-form-item>
       </el-form>
       <template #footer>
         <div class="portal-editor-footer">
-          <span class="portal-recorder">录入人：{{ formRecorder }}</span>
           <div class="portal-editor-actions">
             <el-button :disabled="saving" @click="formOpen = false">取消</el-button>
-            <el-button type="success" :loading="saving" @click="submitForm">保存并提交</el-button>
+            <el-button type="success" :loading="saving" @click="submitForm">提交</el-button>
           </div>
         </div>
       </template>
@@ -302,7 +261,7 @@
         <el-descriptions-item label="颁发机构">{{ detail.cert?.issuer || '-' }}</el-descriptions-item>
         <el-descriptions-item label="供应商">{{ detail.cert?.vendor || '-' }}</el-descriptions-item>
         <el-descriptions-item label="有效期止">{{ detail.cert?.notAfter || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="证书状态">{{ certificateExpiryText(detail.cert?.notAfter) }}</el-descriptions-item>
+        <el-descriptions-item label="证书状态">{{ businessCertificateValidity(detail.cert?.notAfter, 365).text }}</el-descriptions-item>
       </el-descriptions>
       <el-divider content-position="left">证书维护人</el-divider>
       <el-descriptions :column="1" :label-width="108" border class="portal-detail-fields">
@@ -319,22 +278,17 @@
         <el-table-column label="使用场景" prop="usageScene" min-width="160" />
       </el-table>
       <el-divider content-position="left">附件</el-divider>
-      <el-upload v-if="['DRAFT', 'REJECTED'].includes(detail.cert?.approvalStatus || '')" accept=".zip,.rar" :show-file-list="false" :before-upload="beforeUpload" :http-request="uploadAttachment">
-        <el-button icon="Upload">上传压缩包</el-button>
-        <template #tip><div class="el-upload__tip">{{ attachmentTip }}</div></template>
-      </el-upload>
+
       <el-table :data="detail.attachments || []" border size="small" class="mt12">
-        <el-table-column label="文件名" prop="originalName" min-width="220" />
+        <el-table-column label="文件名" prop="originalName" min-width="220">
+          <template #default="{ row }"><el-button link type="primary" @click="downloadAttachment(row)">{{ row.originalName }}</el-button></template>
+        </el-table-column>
         <el-table-column label="大小" width="100">
           <template #default="{ row }">{{ fileSize(row.fileSize) }}</template>
         </el-table-column>
       </el-table>
-      <el-descriptions :column="1" :label-width="108" border class="portal-detail-fields mt12">
-        <el-descriptions-item label="录入说明"><span class="portal-detail-multiline">{{ detail.cert?.remark || '-' }}</span></el-descriptions-item>
-      </el-descriptions>
       <template #footer>
         <div class="portal-editor-footer">
-          <span class="portal-recorder">录入人：{{ detail.recorderDisplay || detail.cert?.submitterName || '-' }}</span>
           <template v-if="lastModification">
             <span class="portal-recorder">修改人：{{ lastModification.operatorName || '-' }}</span>
             <span class="portal-recorder">修改时间：{{ formatDateTime(lastModification.createTime) }}</span>
@@ -346,14 +300,14 @@
 </template>
 
 <script setup name="RaPublicCertSelf" lang="ts">
-import { ElMessage, ElMessageBox, FormInstance, FormRules, UploadRequestOptions, type UploadUserFile } from 'element-plus';
+import { ElMessage, ElMessageBox, FormInstance, FormRules, type UploadUserFile } from 'element-plus';
 import { ArrowDown, Document, List, Menu, OfficeBuilding, SwitchButton, User } from '@element-plus/icons-vue';
 import { useMediaQuery } from '@vueuse/core';
 import ManagementFrame from '@/layout/components/ManagementFrame.vue';
 import { PublicCert, PublicCertAttachment, PublicCertDetail, PublicCertQuery, PublicCertType, SelfAccess } from '@/api/ra/publicCert';
-import EmployeeSelect from './EmployeeSelect.vue';
 import UsageTable from './UsageTable.vue';
-import { publicCertDomainRequired, publicCertUsageError, publicCertEditValues, selectCertificateMaintainer, certificateExpiryText, effectivePortalIdleMinutes } from '@/utils/publicCertForm';
+import { businessCertificateValidity } from '@/utils/businessCertificateNotice';
+import { publicCertDomainRequired, publicCertUsageError, publicCertEditValues, selectCertificateMaintainer, effectivePortalIdleMinutes } from '@/utils/publicCertForm';
 import {
   completePublicCertPortalIam,
   getPublicCertPortal,
@@ -366,8 +320,7 @@ import {
   saveAndSubmitPublicCertPortal,
   searchPublicCertPortalEmployees,
   startPublicCertPortalIam,
-  submitPublicCertPortal,
-  uploadPublicCertPortalAttachment
+  downloadPublicCertPortalAttachment
 } from '@/api/ra/publicCertPortal';
 
 const portalStorageKey = 'fawvw-public-cert-portal-token';
@@ -399,16 +352,9 @@ const detailOpen = ref(false);
 const saving = ref(false);
 const pendingAttachments = ref<UploadUserFile[]>([]);
 const formAttachments = ref<PublicCertAttachment[]>([]);
-const originalRecorder = ref<string>();
-const formRecorder = computed(() => {
-  if (originalRecorder.value !== undefined) return originalRecorder.value;
-  const name = access.value.employeeName?.trim();
-  const account = access.value.domainAccount?.trim();
-  return name && account && name.toLowerCase() !== account.toLowerCase() ? `${name}-${account}` : name || account || '-';
-});
 const formRef = ref<FormInstance>();
 const types = ref<PublicCertType[]>([]);
-const domainRequired = computed(() => publicCertDomainRequired(types.value.find((item) => String(item.id) === String(form.certTypeId))?.typeCode));
+const domainRequired = computed(() => (types.value.find((item) => String(item.id) === String(form.certTypeId))?.domainRequired ?? publicCertDomainRequired(types.value.find((item) => String(item.id) === String(form.certTypeId))?.typeCode)));
 const detail = ref<Partial<PublicCertDetail>>({ usages: [], attachments: [], auditLogs: [] });
 const lastModification = computed(() => detail.value.auditLogs?.find((log) => log.action === 'UPDATE'));
 
@@ -426,6 +372,7 @@ const emptyForm = (): PublicCert => ({
   serialNumber: '',
   issuer: '',
   vendor: '',
+  notBefore: '',
   notAfter: '',
   businessOwnerName: access.value.employeeName || '',
   businessOwnerAccount: access.value.domainAccount || '',
@@ -433,12 +380,13 @@ const emptyForm = (): PublicCert => ({
 });
 
 const form = reactive<PublicCert>(emptyForm());
-const attachmentTip = '附件选填。如需上传，请先将证书打包为 ZIP 或 RAR 压缩包。上传时校验文件后缀和大小，单个文件不能为空且不得超过 20 MB。';
+const attachmentTip = '请将证书打包为 ZIP 或 RAR 压缩包上传，文件大小不得超过 20 MB。';
 const rules: FormRules = {
+  notBefore: [{ required: true, message: '请选择生效时间', trigger: 'change' }],
   certTypeId: [{ required: true, message: '请选择证书类型', trigger: 'change' }],
   domainName: [{ validator: (_rule, value, done) => {
-    const code = types.value.find((item) => String(item.id) === String(form.certTypeId))?.typeCode;
-    done(publicCertDomainRequired(code) && !value?.trim() ? new Error('该证书类型必须填写域名') : undefined);
+    const type = types.value.find((item) => String(item.id) === String(form.certTypeId));
+    done((type?.domainRequired ?? publicCertDomainRequired(type?.typeCode)) && !value?.trim() ? new Error('该证书类型必须填写域名') : undefined);
   }, trigger: 'blur' }],
   issuer: [{ required: true, whitespace: true, message: '请输入颁发机构', trigger: 'blur' }],
   vendor: [{ required: true, whitespace: true, message: '请输入供应商', trigger: 'blur' }],
@@ -494,6 +442,7 @@ function handleQuery() {
 
 function resetQuery() {
   queryParams.domainName = '';
+  queryParams.certStatus = '';
   queryParams.approvalStatus = '';
   handleQuery();
 }
@@ -501,7 +450,6 @@ function resetQuery() {
 function resetForm() {
   Object.keys(form).forEach((key) => Reflect.deleteProperty(form, key));
   Object.assign(form, emptyForm());
-  originalRecorder.value = undefined;
   pendingAttachments.value = [];
   formAttachments.value = [];
   formRef.value?.clearValidate();
@@ -530,7 +478,11 @@ async function openEdit(row: PublicCert) {
     if (token !== portalToken.value || !portalReady.value) return;
     resetForm();
     Object.assign(form, publicCertEditValues(data));
-    originalRecorder.value = data.recorderDisplay || data.cert.submitterName || '-';
+    const account = access.value.domainAccount || '';
+    const employees = await lookupEmployees(account);
+    if (token !== portalToken.value || !portalReady.value) return;
+    const current = employees.find((employee) => employee.domainAccount.toLowerCase() === account.toLowerCase());
+    if (current) selectCertificateMaintainer(form, current);
     formAttachments.value = data.attachments || [];
     formOpen.value = true;
   } catch (error: any) {
@@ -560,7 +512,7 @@ async function submitForm() {
     if (token !== portalToken.value || !portalReady.value) return;
     ElMessage.success('已提交审核');
     formOpen.value = false;
-    loadList();
+    changePortalSection('todo');
   } catch (error: any) {
     if (token === portalToken.value && portalReady.value) ElMessage.error(error?.message || '提交失败，已保留当前录入内容，请重试');
   } finally {
@@ -568,23 +520,10 @@ async function submitForm() {
   }
 }
 
-async function handleSubmit(row: PublicCert) {
-  const token = portalToken.value;
-  if (!(await ElMessageBox.confirm('确认提交这条证书录入信息审核？', '提交确认', { type: 'warning' }).then(() => true).catch(() => false))) return;
-  if (token !== portalToken.value || !portalReady.value) return;
-  try {
-    await submitPublicCertPortal(token, row.id!);
-    if (token !== portalToken.value || !portalReady.value) return;
-    ElMessage.success('已提交审核');
-    loadList();
-  } catch (error: any) {
-    if (token === portalToken.value && portalReady.value) ElMessage.error(error?.message || '提交失败，请重试');
-  }
-}
-
 function changePortalSection(value: string) {
   portalSection.value = value === 'todo' ? 'todo' : 'records';
   queryParams.approvalStatus = '';
+  queryParams.certStatus = '';
   rows.value = [];
   total.value = 0;
   handleQuery();
@@ -617,24 +556,18 @@ function beforeUpload(file: File) {
   return true;
 }
 
-async function uploadAttachment(option: UploadRequestOptions) {
+async function downloadAttachment(attachment: PublicCertAttachment) {
+  const id = detail.value.cert?.id;
+  if (id == null) return;
   const token = portalToken.value;
-  const cert = detail.value.cert!;
-  try {
-    await uploadPublicCertPortalAttachment(token, cert.id!, option.file as File);
-    if (token !== portalToken.value || !portalReady.value) return;
-    ElMessage.success('附件已上传');
-    if (detailOpen.value && detail.value.cert?.id === cert.id) await openDetail(cert);
-  } catch (error: any) {
-    if (token === portalToken.value && portalReady.value) ElMessage.error(error?.message || '附件上传失败，请重试');
-    throw error;
-  }
-}
-
-function certStatusType(status?: string) {
-  if (status === 'EXPIRED') return 'danger';
-  if (status === 'EXPIRING') return 'warning';
-  return 'success';
+  const blob = await downloadPublicCertPortalAttachment(token, id, attachment.id);
+  if (token !== portalToken.value || !portalReady.value) return;
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = attachment.originalName;
+  link.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 function approvalType(status?: string) {

@@ -110,3 +110,10 @@ export const uploadPublicCertPortalAttachment = async (token: string, id: number
   form.append('file', file);
   return portalRequest(portalClient.post(`/v1/public-certs/portal/${id}/attachments`, form, { headers: portalHeaders(token), timeout: 120_000 }));
 };
+
+export async function downloadPublicCertPortalAttachment(token: string, id: number | string, attachmentId: number | string) {
+  const response = await portalClient.get(`/v1/public-certs/portal/${id}/attachments/${attachmentId}`, {
+    headers: portalHeaders(token), responseType: 'blob'
+  });
+  return response.data as Blob;
+}

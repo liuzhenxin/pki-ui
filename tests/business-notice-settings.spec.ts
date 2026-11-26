@@ -32,11 +32,15 @@ test('business notification settings keep module values and templates isolated',
   const component = mod.exports.default.setup({ module: 'root' }, { expose: (value: any) => { exposed = value; } });
   await exposed.open();
   component.form.days = '3650,30,7,0';
-  component.addTemplate();
+  component.addTemplate('EXPIRY', 'EMAIL');
+  component.addTemplate('EXPIRY', 'EMAIL');
+  component.addTemplate('EXPIRY', 'DINGTALK');
+  component.form.templates[1].content = '钉钉通知';
   component.form.templates[0].content = '证书状态';
   await component.save();
   expect(stored.root.days).toBe('3650,30,7,0');
-  expect(stored.root.templates).toHaveLength(1);
+  expect(stored.root.templates.map((entry: { channel: string }) => entry.channel)).toEqual(['EMAIL', 'DINGTALK']);
+  expect(descriptor.template!.content).toContain('hasTemplate(category.value, channel.value)');
   expect(stored.intranet.days).toBe('30,7,0');
   expect(stored.intranet.templates).toEqual([]);
 });

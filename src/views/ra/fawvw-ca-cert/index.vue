@@ -50,6 +50,11 @@
             unlink-panels
           />
         </el-form-item>
+        <el-form-item label="提醒状态">
+          <el-select v-model="queryParams.reminderEnabled" clearable :value-on-clear="null">
+            <el-option label="开启" :value="true" /><el-option label="关闭" :value="false" />
+          </el-select>
+        </el-form-item>
         <el-form-item class="query-actions">
           <el-button type="primary" icon="Search" @click="handleQuery">搜索</el-button>
           <el-button icon="Refresh" @click="resetQuery">重置</el-button>
@@ -69,6 +74,7 @@
           <el-button v-hasPermi="['ra:fawvw-ca-cert:edit']" plain icon="Bell" @click="businessNoticeSettings?.open()">通知设置</el-button>
         </el-col>
         <right-toolbar v-model:showSearch="showSearch" @queryTable="loadList" />
+        <el-col :span="1.5"><el-button plain icon="Document" @click="deliveryLogsOpen = true">通知记录</el-button></el-col>
       </el-row>
 
       <el-alert
@@ -120,8 +126,13 @@
             }}</el-tag></template
           ></el-table-column
         >
-        <el-table-column label="操作" fixed="right" width="218" align="center">
+        <el-table-column label="操作" fixed="right" width="254" align="center">
           <template #default="{ row }">
+            <span v-hasPermi="['ra:fawvw-ca-cert:edit']" :title="businessCertificateNoticeBlocked(row.notAfter) ? '证书过期已超过一个月，不可发送通知' : '到期提醒'">
+              <el-switch size="small" :model-value="row.reminderEnabled" :loading="reminderSaving.has(row.id)"
+                :disabled="row.managementStatus !== 'ACTIVE' || row.sourceActive === false || businessCertificateNoticeBlocked(row.notAfter)"
+                @change="(value) => toggleReminder(row, !!value)" />
+            </span>
             <CertRowAction label="查看详情" icon="View" @click="openDetail(row)" />
             <CertRowAction v-hasPermi="['ra:fawvw-ca-cert:edit']" label="维护" icon="Edit" @click="openEdit(row)" />
             <CertRowAction v-hasPermi="['ra:fawvw-ca-cert:edit']" label="发送通知" icon="Message"
@@ -169,6 +180,10 @@
         >
       </el-table>
     </el-drawer>
+
+    <el-dialog v-model="deliveryLogsOpen" title="通知记录" width="min(1120px, 96vw)" append-to-body>
+      <BusinessDeliveryLogs v-if="deliveryLogsOpen" module="root" />
+    </el-dialog>
 
     <el-dialog v-model="importOpen" title="导入根证书及中间证书链" width="min(650px, 96vw)" append-to-body @closed="resetImport">
       <el-alert
@@ -274,8 +289,9 @@
 <script setup name="FawvwCaCert" lang="ts">
 import { formatCertificateSubject } from '@/utils/raCertificateSubject';
 import CertRowAction from '../components/CertRowAction.vue';
-import { notifyBusinessCertificates } from '@/api/ra/businessNoticeSettings';
-import { businessCertificateNoticeBlocked } from '@/utils/businessCertificateNotice';
+import { notifyBusinessCertificates, setBusinessCertificateReminder } from '@/api/ra/businessNoticeSettings';
+import { businessCertificateExpired, businessCertificateNoticeBlocked, confirmExpiredCertificateNotice, confirmManualBusinessNotice } from '@/utils/businessCertificateNotice';
+import BusinessDeliveryLogs from '../components/BusinessDeliveryLogs.vue';
 import BusinessNoticeSettingsDialog from '../components/BusinessNoticeSettingsDialog.vue';
 import { useRaListRefreshOnReturn } from '@/hooks/useRaListRefreshOnReturn';
 import { ElMessage, ElMessageBox, type TableInstance } from 'element-plus';
@@ -300,10 +316,25 @@ const chainOpen = ref(false);
 const treeTable = ref<TableInstance>();
 const businessNoticeSettings = ref<InstanceType<typeof BusinessNoticeSettingsDialog>>();
 const sendingNotice = ref(false);
+const deliveryLogsOpen = ref(false);
+const reminderSaving = reactive(new Set<NonNullable<FawvwCaCertificate['id']>>());
+
+async function toggleReminder(row: FawvwCaCertificate, enabled: boolean) {
+  const id = row.id;
+  if (id == null || reminderSaving.has(id) || businessCertificateNoticeBlocked(row.notAfter)) return;
+  reminderSaving.add(id);
+  try {
+    const expired = enabled && businessCertificateExpired(row.notAfter);
+    const send = expired ? await confirmExpiredCertificateNotice() : undefined;
+    if (expired && send === undefined) return;
+    await setBusinessCertificateReminder('root', id, enabled, send);
+    row.reminderEnabled = enabled;
+  } finally { reminderSaving.delete(id); }
+}
 
 async function sendNotice(row: FawvwCaCertificate) {
   if (row.id == null || sendingNotice.value || businessCertificateNoticeBlocked(row.notAfter)) return;
-  if (!(await ElMessageBox.confirm('确认按通知设置发送这张证书的有效期提醒？', '通知确认', { type: 'warning' }).then(() => true, () => false))) return;
+  if (!(await confirmManualBusinessNotice('root', row.notAfter))) return;
   sendingNotice.value = true;
   try {
     const count = unwrap<number>(await notifyBusinessCertificates('root', [row.id]));
@@ -416,6 +447,7 @@ const queryParams = reactive<FawvwCaCertQuery>({
   keyword: '',
   certificateType: '',
   validityStatus: '',
+  reminderEnabled: null,
   managementStatus: ''
 });
 const expiryRange = ref<[string, string] | null>(null);
@@ -451,6 +483,7 @@ function resetQuery() {
     keyword: '',
     certificateType: '',
     validityStatus: '',
+  reminderEnabled: null,
     managementStatus: '',
     issuer: '',
     sourceType: '',
@@ -559,6 +592,10 @@ useRaListRefreshOnReturn(async () => {
     :deep(.el-date-editor) {
       width: 100%;
       min-width: 0;
+    }
+
+    .query-actions {
+      grid-column: 1 / -1;
     }
 
     .query-actions :deep(.el-form-item__content) {

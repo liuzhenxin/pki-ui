@@ -69,7 +69,7 @@ test('expired responses identify their original session and cannot log out a new
 
 test('employee save failures remain visible and keep the form open for retry', async () => {
   const source = read('src/views/ra/public-cert/self.vue');
-  const code = transpile(source.slice(source.indexOf('async function submitForm('), source.indexOf('async function handleSubmit(')));
+  const code = transpile(source.slice(source.indexOf('async function submitForm('), source.indexOf('function changePortalSection(')));
   const messages: string[] = [];
   const form = { domainName: 'keep.invalid' }, formOpen = { value: true }, saving = { value: false };
   const submit = new Function('form', 'formOpen', 'saving', 'ElMessage', `${code};
@@ -190,8 +190,10 @@ function component(path: string, scoped = false) {
       name==='@vueuse/core'?{useMediaQuery:query=>Vue.ref(matchMedia(query).matches)}:
       name==='@/hooks/useRaListRefreshOnReturn'?{useRaListRefreshOnReturn(){}}:
       name==='@/utils/publicCertForm'?window.portalUtils:name==='@/api/ra/publicCertPortal'?window.portalApi:
-      name==='@/utils/businessCertificateNotice'?{businessCertificateNoticeBlocked:()=>false,businessCertificateExpired:()=>false}:
+      name==='@/utils/businessCertificateNotice'?{businessCertificateNoticeBlocked:()=>false,businessCertificateExpired:()=>false,
+        businessCertificateValidity:()=>({text:'有效',type:'success'})}:
       name==='@/api/ra/businessNoticeSettings'?window.adminApi:
+      name.endsWith('/BusinessDeliveryLogs.vue')?{__esModule:true,default:{template:'<div />'}}:
       name.endsWith('/BusinessNoticeSettingsDialog.vue')?{__esModule:true,default:window.BusinessNoticeSettingsDialog}:
       name==='@/api/ra/publicCert'||name==='@/api/ra/employee'?window.adminApi:
       name==='@/plugins/auth'?{__esModule:true,default:{hasPermi:()=>true}}:
@@ -273,7 +275,7 @@ for (const width of [1440, 390]) {
       window.adminApi=new Proxy({
         pagePublicCerts:async query=>{
           window.adminQuery=query;
-          const records=certs.filter(cert=>query.approvalStatus==='HANDLED' ? cert.approvalStatus!=='PENDING' : cert.approvalStatus===query.approvalStatus);
+          const records=certs.filter(cert=>query.approvalStatus==='HANDLED' ? ['APPROVED','REJECTED'].includes(cert.approvalStatus) : cert.approvalStatus===query.approvalStatus);
           return {data:{records,total:records.length}};
         },
         getPublicNoticeStates:async()=>({data:[{id:1,emailStatus:1,dingtalkStatus:2}]}),
@@ -331,7 +333,7 @@ for (const width of [1440, 390]) {
     }
     await page.getByRole('tab', { name: '已办记录' }).click();
     await expect.poll(() => page.evaluate(() => (window as any).adminQuery?.approvalStatus)).toBe('HANDLED');
-    for (const status of ['approved', 'draft', 'rejected']) {
+    for (const status of ['approved', 'rejected']) {
       await expect(page.getByText(`${status}.invalid`, { exact: true })).toBeVisible();
     }
     await expect(page.getByText('pending.invalid', { exact: true })).toHaveCount(0);
@@ -441,7 +443,7 @@ for (const width of [1280, 834, 390]) {
           if (width <= 960) await page.getByRole('button', { name: '切换菜单' }).click();
           await page.getByRole('menuitem', { name }).click();
         };
-        const reviewTags = page.locator('.portal-review-cell .el-tag');
+        const reviewTags = page.getByRole('row').locator('.el-tag');
         await expect(reviewTags.filter({ hasText: '草稿' })).toBeVisible();
         await expect(reviewTags.filter({ hasText: '已通过' })).toHaveClass(/el-tag--success/);
         await expect(reviewTags.filter({ hasText: /已驳回|待审核/ })).toHaveCount(0);
@@ -456,41 +458,30 @@ for (const width of [1280, 834, 390]) {
         await expect.poll(() => page.evaluate(() => (window as any).lastPortalQuery?.domainName)).toBe('approved.invalid');
         await ledger.getByRole('button', { name: '重置' }).click();
         await expect(ledger.getByPlaceholder('请输入域名')).toHaveValue('');
-        await expect(ledger.getByRole('columnheader', { name: '域名 / 审核结果' })).toBeInViewport();
-        if (width <= 960) {
-          await expect(ledger.getByRole('columnheader', { name: '证书类型' })).toHaveCount(0);
-          await expect(ledger.getByRole('row').filter({ hasText: 'approved.invalid' }).locator('.portal-review-meta')).toContainText('2030-01-01');
-          const actions = ledger.getByRole('row').filter({ hasText: 'draft.invalid' }).locator('.portal-row-actions button');
-          await expect(actions).toHaveCount(3);
-          expect(await actions.evaluateAll((buttons) => new Set(buttons.map((button) => button.getBoundingClientRect().top)).size)).toBe(1);
-        } else {
-          await expect(ledger.getByRole('columnheader', { name: '证书类型' })).toBeInViewport();
-          const navigation = page.locator('.portal-sidebar');
-          await expect(navigation).toHaveCSS('background-color', 'rgb(255, 255, 255)');
-          await expect(navigation.getByRole('menuitem', { name: '录入信息' })).toHaveCSS('color', 'rgb(43, 100, 126)');
-        }
+        await expect(ledger.getByRole('columnheader', { name: '域名', exact: true })).toBeVisible();
+        await expect(ledger.getByRole('columnheader', { name: '审核结果', exact: true })).toBeVisible();
+        await expect(ledger.getByRole('columnheader', { name: '证书类型' })).toBeVisible();
+        await expect(ledger.getByRole('row').filter({ hasText: 'approved.invalid' }).locator('.portal-row-actions button')).toHaveCount(2);
         await expect(page.getByRole('button', { name: '账户菜单' })).toContainText('employee1');
         await page.screenshot({ path: info.outputPath('records-workspace.png'), fullPage: true, animations: 'disabled' });
         await selectSection('待办详情');
         await expect(reviewTags.filter({ hasText: '已驳回' })).toHaveClass(/el-tag--danger/);
-        await expect(reviewTags.filter({ hasText: '待审核' })).toHaveClass(/el-tag--warning/);
+        await expect(reviewTags.filter({ hasText: '审核中' })).toHaveClass(/el-tag--warning/);
         await expect(reviewTags.filter({ hasText: /草稿|已通过/ })).toHaveCount(0);
         await expect(page.locator('.portal-count')).toHaveText('共 2 条');
         await expect(page.getByText('不应展示的旧驳回原因')).toHaveCount(0);
-        const rejection = page.getByRole('button', { name: '查看驳回原因' });
-        await expect(rejection).toBeInViewport();
-        await expect(rejection).toContainText('请补充证书压缩包');
-        await rejection.click();
+        await expect(page.getByRole('button', { name: '查看驳回原因' })).toHaveCount(0);
+        await page.getByRole('row').filter({ hasText: 'rejected.invalid' }).getByRole('button', { name: '详情' }).click();
         const detailDrawer = page.getByRole('dialog', { name: '证书详情' });
         await expect(detailDrawer.locator('.portal-recorder')).toHaveText([
-          '录入人：Original-user2', '修改人：maintainer1', '修改时间：2026-11-16 13:00:00'
+          '修改人：maintainer1', '修改时间：2026-11-16 13:00:00'
         ]);
         await expect(detailDrawer.getByRole('alert')).toHaveClass(/el-alert--error/);
         await expect(detailDrawer.getByRole('alert')).toContainText('域名需要和附件中的证书一致');
         for (const [label, value] of [
           ['证书类型', 'Domain'], ['证书序列号', 'FAW-123'], ['颁发机构', 'Test CA'], ['供应商', 'Test Vendor'],
           ['有效期止', '2030-01-01 00:00:00'], ['证书维护人', 'Test Maintainer'], ['维护人邮箱', 'maintainer@example.invalid'],
-          ['科室', 'Test Department'], ['维护人账号', 'employee1'], ['录入说明', 'First line Second line']
+          ['科室', 'Test Department'], ['维护人账号', 'employee1']
         ]) {
           await expect(detailDrawer.getByRole('row').filter({ hasText: label })).toContainText(value);
         }
@@ -503,20 +494,20 @@ for (const width of [1280, 834, 390]) {
         await expect(detailDrawer).toBeHidden();
         await page.getByRole('row').filter({ hasText: 'rejected.invalid' }).getByRole('button', { name: '修改' }).click();
         const editDrawer = page.getByRole('dialog', { name: '修改证书录入' });
-        await expect(editDrawer.locator('.portal-recorder')).toHaveText('录入人：Original-user2');
+        await expect(editDrawer.locator('.portal-recorder')).toHaveCount(0);
         await expect(editDrawer.getByRole('alert')).toContainText('请补充证书压缩包');
-        await expect(editDrawer.getByRole('button', { name: '保存并提交' })).toBeVisible();
+        await expect(editDrawer.getByRole('button', { name: '提交', exact: true })).toBeVisible();
         await editDrawer.getByRole('button', { name: '取消' }).click();
         await expect(editDrawer).toBeHidden();
         await selectSection('录入信息');
         await page.getByRole('button', { name: '新增录入' }).click();
         const drawer = page.getByRole('dialog', { name: '新增证书录入' });
         await expect(drawer).toBeVisible();
-        await expect(drawer.locator('.portal-recorder')).toHaveText('录入人：Test-employee1');
-        await expect(drawer.getByText(/请先将证书打包为 ZIP 或 RAR 压缩包/)).toBeVisible();
+        await expect(drawer.locator('.portal-recorder')).toHaveCount(0);
+        await expect(drawer.getByText(/请将证书打包为 ZIP 或 RAR 压缩包上传/)).toBeVisible();
         await drawer.getByLabel('颁发机构', { exact: true }).fill('   ');
         await expect(drawer.getByRole('button', { name: '保存草稿' })).toHaveCount(0);
-        await drawer.getByRole('button', { name: '保存并提交' }).click();
+        await drawer.getByRole('button', { name: '提交', exact: true }).click();
         await expect(drawer.getByText('请输入颁发机构', { exact: true })).toBeVisible();
         await expect(drawer.getByText('请输入供应商', { exact: true })).toBeVisible();
         await expect(drawer.getByText('请补充证书压缩包。', { exact: false })).toHaveCount(0);
@@ -532,7 +523,7 @@ for (const width of [1280, 834, 390]) {
         await expect(page.getByLabel('当前位置')).toContainText('待办详情');
         await expect(page.getByRole('button', { name: '新增录入' })).toHaveCount(0);
         await expect(page.getByRole('columnheader', { name: '使用系统', exact: true })).toHaveCount(0);
-        await expect(page.getByText(/剩余 \d+ 天/).first()).toBeVisible();
+        await expect(page.getByText('有效', { exact: true }).first()).toBeVisible();
       } else {
         await expect(page.locator('.portal-login-brand-logo')).toHaveText('RA');
         await expect(page.locator('.portal-login-copy')).toContainText('证书统一管理');

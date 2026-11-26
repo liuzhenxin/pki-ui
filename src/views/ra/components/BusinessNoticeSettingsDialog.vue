@@ -27,7 +27,12 @@
       <el-tab-pane label="模板配置" name="templates">
         <el-collapse>
           <el-collapse-item title="可用模板变量" name="variables">
-            <div>通用：${recipientName}、${recipientRole}、${expiryText}、${approvalResult}、${approvalColor}、${approvalComment}</div>
+            <div>收件人：{{ '${' + module + '.recipientName}' }}、{{ '${' + module + '.recipientRole}' }}</div>
+            <div>有效期：{{ '${' + module + '.expiryText}' }}、{{ '${' + module + '.days}' }}</div>
+            <div v-if="module !== 'root'">离职员工：{{ '${' + module + '.ownerName}' }}</div>
+            <div v-if="module === 'public'">
+              审批：${public.submitterName}、${public.approvalResult}、${public.approvalColor}、${public.approvalComment}
+            </div>
             <div>
               证书信息：<span v-for="key in certificateVariables" :key="key">{{ '${' + module + '.' + key + '}' }}　</span>
             </div>
@@ -39,32 +44,32 @@
             </div>
           </el-collapse-item>
         </el-collapse>
-        <el-button :disabled="form.templates.length >= categories.length * 2" @click="addTemplate">添加模板</el-button>
-        <el-empty v-if="!form.templates.length" description="暂无通知模板" />
-        <el-collapse v-else>
-          <el-collapse-item v-for="(item, index) in form.templates" :key="index" :name="index">
-            <template #title>{{ categoryLabel(item.category) }} · {{ item.channel === 'EMAIL' ? '邮件' : '钉钉' }}</template>
-            <el-form label-width="100px">
-              <el-form-item label="分类"
-                ><el-select v-model="item.category"
-                  ><el-option v-for="option in categories" :key="option.value" :label="option.label" :value="option.value" /></el-select
-              ></el-form-item>
-              <el-form-item label="渠道"
-                ><el-select v-model="item.channel" @change="item.messageType = 'TEXT'"
-                  ><el-option label="邮件" value="EMAIL" /><el-option label="钉钉" value="DINGTALK" /></el-select
-              ></el-form-item>
-              <el-form-item label="消息类型"
-                ><el-select v-model="item.messageType"
-                  ><el-option label="纯文本" value="TEXT" /><el-option v-if="item.channel === 'EMAIL'" label="MIXED" value="MIXED" /><el-option
-                    v-else
-                    label="Markdown"
-                    value="MARKDOWN" /></el-select
-              ></el-form-item>
+        <el-collapse>
+          <el-collapse-item v-for="category in categories" :key="category.value" :name="category.value" :title="category.label">
+            <el-button
+              v-for="channel in channels"
+              :key="channel.value"
+              :disabled="hasTemplate(category.value, channel.value)"
+              @click="addTemplate(category.value, channel.value)"
+              >添加{{ channel.label }}模板</el-button
+            >
+            <el-empty v-if="!templatesFor(category.value).length" description="暂无模板" :image-size="52" />
+            <el-form v-for="item in templatesFor(category.value)" :key="item.channel" label-width="110px">
+              <el-form-item label="通知渠道">{{ item.channel === 'EMAIL' ? '邮件' : '钉钉' }}</el-form-item>
+              <el-form-item label="消息类型">
+                <el-select v-model="item.messageType">
+                  <el-option :label="item.channel === 'EMAIL' ? 'TEXT' : 'text'" value="TEXT" />
+                  <el-option v-if="item.channel === 'EMAIL'" label="MIXED" value="MIXED" />
+                  <el-option v-else label="markdown" value="MARKDOWN" />
+                </el-select>
+              </el-form-item>
               <el-form-item label="标题"><el-input v-model="item.title" maxlength="200" /></el-form-item>
               <el-form-item label="内容"
                 ><el-input v-model="item.content" type="textarea" :rows="6" maxlength="20000" show-word-limit
               /></el-form-item>
-              <el-form-item><el-button type="danger" plain @click="form.templates.splice(index, 1)">删除模板</el-button></el-form-item>
+              <el-form-item
+                ><el-button type="danger" plain @click="form.templates.splice(form.templates.indexOf(item), 1)">删除模板</el-button></el-form-item
+              >
             </el-form>
           </el-collapse-item>
         </el-collapse>
@@ -79,7 +84,13 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue';
 import { ElMessage } from 'element-plus';
-import { getBusinessNoticeSettings, saveBusinessNoticeSettings, type BusinessNoticeConfig, type NoticeModule } from '@/api/ra/businessNoticeSettings';
+import {
+  getBusinessNoticeSettings,
+  saveBusinessNoticeSettings,
+  type BusinessNoticeConfig,
+  type NoticeModule,
+  type BusinessNoticeTemplate
+} from '@/api/ra/businessNoticeSettings';
 
 const props = defineProps<{ module: NoticeModule }>();
 const visible = ref(false);
@@ -108,29 +119,69 @@ const categories = computed(() => [
       ]
     : [])
 ]);
-const certificateVariables = [
-  'certificateName',
-  'subject',
-  'issuer',
-  'serialNumber',
-  'notBefore',
-  'notAfter',
-  'certTypeName',
-  'domainName',
-  'vendor',
-  'applicantAccount',
-  'applicantName',
-  'departmentName',
-  'systemName',
-  'usageScenario',
-  'maintainerAccount',
-  'maintainerName'
-];
-function categoryLabel(value: string) {
-  return categories.value.find((item) => item.value === value)?.label || value;
+const certificateVariables = computed(() =>
+  [
+    'certificateName',
+    'subject',
+    'issuer',
+    'serialNumber',
+    'notBefore',
+    'notAfter',
+    'certTypeName',
+    'domainName',
+    'vendor',
+    'applicantAccount',
+    'applicantName',
+    'departmentName',
+    'systemName',
+    'usageScenario',
+    'maintainerAccount',
+    'maintainerName'
+  ].filter((key) => moduleCertificateFields[props.module].includes(key))
+);
+const moduleCertificateFields = {
+  root: ['certificateName', 'subject', 'issuer', 'serialNumber', 'notBefore', 'notAfter'],
+  intranet: [
+    'certificateName',
+    'subject',
+    'issuer',
+    'serialNumber',
+    'notBefore',
+    'notAfter',
+    'applicantAccount',
+    'applicantName',
+    'departmentName',
+    'systemName',
+    'usageScenario'
+  ],
+  public: [
+    'certTypeName',
+    'domainName',
+    'issuer',
+    'serialNumber',
+    'vendor',
+    'notBefore',
+    'notAfter',
+    'maintainerAccount',
+    'maintainerName',
+    'departmentName',
+    'systemName',
+    'usageScenario'
+  ]
+};
+const channels = [
+  { value: 'EMAIL', label: '邮件' },
+  { value: 'DINGTALK', label: '钉钉' }
+] as const;
+function templatesFor(category: string) {
+  return form.templates.filter((item) => item.category.toUpperCase() === category);
 }
-function addTemplate() {
-  form.templates.push({ category: 'EXPIRY', channel: 'EMAIL', messageType: 'TEXT', title: '', content: '' });
+function hasTemplate(category: string, channel: BusinessNoticeTemplate['channel']) {
+  return templatesFor(category).some((item) => item.channel === channel);
+}
+function addTemplate(category = 'EXPIRY', channel: BusinessNoticeTemplate['channel'] = 'EMAIL') {
+  if (hasTemplate(category, channel)) return;
+  form.templates.push({ category, channel, messageType: 'TEXT', title: '', content: '' });
 }
 function unwrap<T>(response: any): T {
   const body = response?.data ?? response;

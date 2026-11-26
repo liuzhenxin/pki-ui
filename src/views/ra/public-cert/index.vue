@@ -22,7 +22,6 @@
         </el-form-item>
         <el-form-item v-if="managementTab === 'handled'" label="审核状态">
           <el-select v-model="queryParams.approvalStatus" clearable placeholder="全部">
-            <el-option label="草稿" value="DRAFT" />
             <el-option label="已通过" value="APPROVED" />
             <el-option label="已驳回" value="REJECTED" />
           </el-select>
@@ -32,6 +31,14 @@
             <el-option label="正常" value="NORMAL" />
             <el-option label="30天内过期" value="EXPIRING" />
             <el-option label="已过期" value="EXPIRED" />
+          </el-select>
+        </el-form-item>
+        <el-form-item v-if="managementTab === 'records'" label="人员状态">
+          <el-select v-model="queryParams.employeeStatus" clearable><el-option label="在职" value="ACTIVE" /><el-option label="离职" value="LEFT" /></el-select>
+        </el-form-item>
+        <el-form-item v-if="managementTab === 'records'" label="提醒状态">
+          <el-select v-model="queryParams.reminderEnabled" clearable :value-on-clear="null">
+            <el-option label="开启" :value="true" /><el-option label="关闭" :value="false" />
           </el-select>
         </el-form-item>
         <el-form-item label="到期时间">
@@ -58,8 +65,17 @@
           <el-button v-hasPermi="['ra:public-cert:add']" type="primary" plain icon="Plus" @click="openCreate">新增</el-button>
         </el-col>
         <el-col :span="1.5">
+          <el-dropdown v-if="managementTab === 'records'" trigger="click" :disabled="!selectedRows.length" @command="batchLedgerAction">
+            <el-button plain :disabled="!selectedRows.length">操作</el-button>
+            <template #dropdown><el-dropdown-menu>
+              <el-dropdown-item v-hasPermi="['ra:public-cert:edit']" command="enable">开启提醒</el-dropdown-item>
+              <el-dropdown-item v-hasPermi="['ra:public-cert:edit']" command="disable">关闭提醒</el-dropdown-item>
+              <el-dropdown-item v-hasPermi="['ra:public-cert:remove']" command="delete">批量删除</el-dropdown-item>
+            </el-dropdown-menu></template>
+          </el-dropdown>
           <el-button v-hasPermi="['ra:public-cert:export']" type="success" plain icon="Download" @click="handleExport">导出</el-button>
         </el-col>
+        <el-col v-if="managementTab === 'records'" :span="1.5"><el-button v-hasPermi="['ra:public-cert:edit']" plain icon="RefreshRight" @click="refreshPersonnel">刷新状态</el-button></el-col>
         <el-col v-if="managementTab === 'records'" :span="1.5">
           <el-button v-hasPermi="['ra:public-cert:type']" plain icon="Collection" @click="openTypes">证书类型</el-button>
         </el-col>
@@ -68,16 +84,16 @@
         </el-col>
         <el-col v-if="managementTab === 'records'" :span="1.5"><el-button v-hasPermi="['ra:public-cert:type']" icon="Bell" @click="businessNoticeSettings?.open()">通知设置</el-button></el-col>
         <right-toolbar v-model:showSearch="showSearch" @queryTable="loadList" />
+        <el-col v-if="managementTab === 'records'" :span="1.5"><el-button plain icon="Document" @click="deliveryLogsOpen = true">通知记录</el-button></el-col>
       </el-row>
 
       <el-table v-loading="loading" :data="rows" border stripe
         :empty-text="managementTab === 'audit' ? '暂无待审核证书' : managementTab === 'handled' ? '暂无办理记录' : '暂无已通过证书'"
         @selection-change="selectedRows = $event">
-        <el-table-column v-if="managementTab === 'audit'" type="selection" width="48" :selectable="(row) => row.approvalStatus === 'PENDING'" />
+        <el-table-column v-if="managementTab !== 'handled'" type="selection" width="48" :selectable="(row) => managementTab === 'records' || row.approvalStatus === 'PENDING'" />
         <el-table-column label="域名" prop="domainName" min-width="190" fixed show-overflow-tooltip />
         <el-table-column label="证书类型" prop="certTypeName" width="110" />
         <el-table-column label="序列号" prop="serialNumber" min-width="150" show-overflow-tooltip />
-        <el-table-column label="使用系统" prop="systemName" min-width="150" show-overflow-tooltip />
         <el-table-column label="证书维护人" prop="businessOwnerName" width="120" show-overflow-tooltip />
         <el-table-column label="科室" prop="departmentName" min-width="140" show-overflow-tooltip />
         <el-table-column label="到期时间" prop="notAfter" width="166" align="center">
@@ -85,7 +101,7 @@
         </el-table-column>
         <el-table-column label="证书状态" width="146" align="center">
           <template #default="{ row }">
-            <el-tag :type="certStatusType(row.certStatus)" effect="light">{{ certificateExpiryText(row.notAfter) }}</el-tag>
+            <el-tag :type="businessCertificateValidity(row.notAfter, 365).type" effect="light">{{ businessCertificateValidity(row.notAfter, 365).text }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="审核状态" width="100" align="center">
@@ -93,27 +109,20 @@
             <el-tag :type="approvalType(row.approvalStatus)" effect="plain">{{ row.approvalStatusName || '-' }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="负责人变更" width="106" align="center">
-          <template #default="{ row }">
-            <el-tag v-if="row.ownerChangeRequired" type="danger" effect="plain">需处理</el-tag>
-            <el-tag v-else type="info" effect="plain">正常</el-tag>
-          </template>
+        <el-table-column label="人员状态" width="100" align="center">
+          <template #default="{ row }"><el-tag :type="row.employeeStatus === 'ACTIVE' ? 'success' : 'danger'">{{ row.employeeStatus === 'ACTIVE' ? '在职' : '离职' }}</el-tag></template>
         </el-table-column>
-        <el-table-column v-if="managementTab === 'records'" label="通知状态" width="210">
-          <template #default="{ row }"><div>邮件：{{ publicNoticeStatus(noticeStates[String(row.id)]?.emailStatus) }}</div><div>钉钉：{{ publicNoticeStatus(noticeStates[String(row.id)]?.dingtalkStatus) }}</div></template>
-        </el-table-column>
-        <el-table-column v-if="managementTab === 'records'" label="过期提醒" width="100" align="center">
+        <el-table-column label="操作" fixed="right" width="210" align="center">
           <template #default="{ row }">
-            <el-switch :model-value="!!row.reminderEnabled" :loading="reminderSaving.has(row.id)" :disabled="!auth.hasPermi('ra:public-cert:edit') || businessCertificateNoticeBlocked(row.notAfter)" @change="(value) => setReminder(row, !!value)" />
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" fixed="right" width="156" align="center">
-          <template #default="{ row }">
+            <span v-if="managementTab === 'records'" :title="businessCertificateNoticeBlocked(row.notAfter) ? '证书过期已超过一个月，不可发送通知' : '到期提醒'">
+              <el-switch size="small" :model-value="!!row.reminderEnabled" :loading="reminderSaving.has(row.id)"
+                :disabled="!auth.hasPermi('ra:public-cert:edit') || businessCertificateNoticeBlocked(row.notAfter)" @change="(value) => setReminder(row, !!value)" />
+            </span>
             <CertRowAction label="查看详情" icon="View" @click="openDetail(row)" />
             <template v-if="managementTab !== 'audit'">
-              <CertRowAction v-if="row.approvalStatus !== 'PENDING'" v-hasPermi="['ra:public-cert:edit']" label="修改" icon="Edit" @click="openEdit(row)" />
-              <CertRowAction v-if="managementTab === 'records' && row.approvalStatus === 'APPROVED'" v-hasPermi="['ra:public-cert:edit', 'ra:public-cert:audit']" label="发送通知" icon="Message" :disabled="sendingNotice || businessCertificateNoticeBlocked(row.notAfter)" @click="sendNotice(row)" />
-              <CertRowAction v-hasPermi="['ra:public-cert:remove']" label="归档" icon="Delete" type="danger" @click="handleRemove(row)" />
+              <CertRowAction v-if="row.approvalStatus !== 'PENDING' && row.ledgerStatus !== 'SUPERSEDED'" v-hasPermi="['ra:public-cert:edit']" label="修改" icon="Edit" @click="openEdit(row)" />
+              <CertRowAction v-if="managementTab === 'records' && row.approvalStatus === 'APPROVED'" v-hasPermi="['ra:public-cert:edit', 'ra:public-cert:audit']" :label="businessCertificateNoticeBlocked(row.notAfter) ? '证书过期已超过一个月，不可发送通知' : '发送通知'" icon="Message" :disabled="sendingNotice || businessCertificateNoticeBlocked(row.notAfter)" @click="sendNotice(row)" />
+              <CertRowAction v-hasPermi="['ra:public-cert:remove']" label="删除" icon="Delete" type="danger" @click="handleRemove(row)" />
             </template>
           </template>
         </el-table-column>
@@ -121,6 +130,10 @@
 
       <pagination v-show="total > 0" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" :total="total" :auto-scroll="false" @pagination="loadList" />
     </el-card>
+
+    <el-dialog v-model="deliveryLogsOpen" title="通知记录" width="min(1120px, 96vw)" append-to-body>
+      <BusinessDeliveryLogs v-if="deliveryLogsOpen" module="public" @certificate="(id) => { deliveryLogsOpen = false; openDetail({ id }); }" />
+    </el-dialog>
 
     <el-drawer v-model="formOpen" :title="form.id ? '修改录入证书' : '新增录入证书'" size="min(1040px, 100vw)" :close-on-click-modal="!saving" :close-on-press-escape="!saving" :show-close="!saving" append-to-body>
       <el-form ref="formRef" :model="form" :rules="rules" :disabled="saving" label-width="116px">
@@ -160,7 +173,7 @@
         </el-row>
         <el-row :gutter="12">
           <el-col :span="12">
-            <el-form-item label="生效时间">
+            <el-form-item label="生效时间" prop="notBefore">
               <el-date-picker v-model="form.notBefore" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" style="width: 100%" />
             </el-form-item>
           </el-col>
@@ -200,8 +213,8 @@
         <el-form-item label="压缩包">
           <el-upload v-model:file-list="pendingAttachments" :auto-upload="false" accept=".zip,.rar" multiple
             :on-change="(file) => { if (file.raw && !beforeUpload(file.raw)) pendingAttachments = pendingAttachments.filter((item) => item.uid !== file.uid); }">
-            <el-button icon="Upload">选择附件</el-button>
-            <template #tip><div class="el-upload__tip">选填，每个 ZIP/RAR 文件不超过 20 MB。</div></template>
+            <el-button icon="Upload">上传证书</el-button>
+            <template #tip><div class="el-upload__tip">请将证书打包为 ZIP 或 RAR 压缩包上传，文件大小不得超过 20 MB。</div></template>
           </el-upload>
         </el-form-item>
         <el-form-item v-if="formAttachments.length" label="已有附件"><span>{{ formAttachments.map((item) => item.originalName).join('；') }}</span></el-form-item>
@@ -211,7 +224,7 @@
       </el-form>
       <template #footer>
         <el-button :disabled="saving" @click="formOpen = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="submitForm">保存</el-button>
+        <el-button type="primary" :loading="saving" @click="submitForm">提交</el-button>
       </template>
     </el-drawer>
 
@@ -219,11 +232,17 @@
       <el-descriptions :column="1" border>
         <el-descriptions-item label="域名"><span style="white-space: pre-line">{{ detail.cert?.domainName || '-' }}</span></el-descriptions-item>
         <el-descriptions-item label="证书类型">{{ detail.cert?.certTypeName || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="序列号">{{ detail.cert?.serialNumber || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="颁发机构">{{ detail.cert?.issuer || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="供应商">{{ detail.cert?.vendor || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="维护人账号">{{ detail.cert?.businessOwnerAccount || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="维护人邮箱">{{ detail.cert?.businessOwnerEmail || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="备注">{{ detail.cert?.remark || '-' }}</el-descriptions-item>
         <el-descriptions-item label="有效期"
           >{{ formatDateTime(detail.cert?.notBefore) }} 至 {{ formatDateTime(detail.cert?.notAfter) }}</el-descriptions-item
         >
         <el-descriptions-item label="审核状态">{{ detail.cert?.approvalStatusName || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="证书状态">{{ certificateExpiryText(detail.cert?.notAfter) }}</el-descriptions-item>
+        <el-descriptions-item label="证书状态">{{ businessCertificateValidity(detail.cert?.notAfter, 365).text }}</el-descriptions-item>
         <el-descriptions-item label="证书维护人">{{ detail.cert?.businessOwnerName || '-' }}</el-descriptions-item>
         <el-descriptions-item label="科室">{{ detail.cert?.departmentName || '-' }}</el-descriptions-item>
       </el-descriptions>
@@ -235,33 +254,22 @@
         <el-table-column label="场景" prop="usageScene" min-width="160" />
       </el-table>
       <el-divider content-position="left">附件</el-divider>
-      <el-upload v-if="['DRAFT', 'REJECTED'].includes(detail.cert?.approvalStatus || '')" v-hasPermi="['ra:public-cert:attachment']" :show-file-list="false" :before-upload="beforeUpload" :http-request="uploadAttachment">
-        <el-button icon="Upload">上传压缩包</el-button>
-      </el-upload>
       <el-table :data="detail.attachments || []" border size="small" class="mt12">
-        <el-table-column label="文件名" prop="originalName" min-width="220" />
+        <el-table-column label="文件名" prop="originalName" min-width="220">
+          <template #default="{ row }"><el-button link type="primary" @click="downloadAttachment(row)">{{ row.originalName }}</el-button></template>
+        </el-table-column>
         <el-table-column label="大小" width="100">
           <template #default="{ row }">{{ fileSize(row.fileSize) }}</template>
         </el-table-column>
       </el-table>
       <el-divider content-position="left">审核记录</el-divider>
       <el-timeline>
-        <el-timeline-item v-for="log in detail.auditLogs || []" :key="String(log.id)" :timestamp="formatDateTime(log.createTime)">
-          {{ log.operatorName || '-' }} {{ actionName(log.action) }}：{{ log.comment || '-' }}
+        <el-timeline-item v-for="entry in detailTimeline" :key="entry.key" :timestamp="formatDateTime(entry.time)" :type="entry.color">
+          {{ entry.text }}
         </el-timeline-item>
       </el-timeline>
       <el-divider content-position="left">通知记录</el-divider>
-      <el-table :data="noticeLogs" border size="small" empty-text="暂无通知记录">
-        <el-table-column label="渠道" width="90">
-          <template #default="{ row }">{{ row.channel === 'email' ? '邮件' : row.channel === 'dingtalk' ? '钉钉' : '过期提醒' }}</template>
-        </el-table-column>
-        <el-table-column label="状态" width="110"><template #default="{ row }">{{ publicNoticeStatus(row.status) }}</template></el-table-column>
-        <el-table-column label="日志编号" prop="id" min-width="130" show-overflow-tooltip />
-        <el-table-column label="网关追踪 ID" min-width="150" show-overflow-tooltip>
-          <template #default="{ row }">{{ row.gatewayTraceId || '-' }}</template>
-        </el-table-column>
-        <el-table-column label="回执或错误" prop="message" min-width="230" show-overflow-tooltip />
-      </el-table>
+      <BusinessDeliveryLogs v-if="detailOpen && detail.cert?.id != null" module="public" :certificate-id="detail.cert.id" @loaded="detailDeliveryLogs = $event" />
     </el-drawer>
 
     <el-dialog v-model="employeeOpen" title="选择员工" width="min(940px, 96vw)" append-to-body
@@ -295,7 +303,7 @@
       />
     </el-dialog>
 
-    <el-dialog v-model="typeOpen" title="证书类型维护" width="760px" append-to-body>
+    <el-dialog v-model="typeOpen" title="证书类型维护" width="min(940px, 96vw)" append-to-body>
       <el-form :model="typeDraft" inline class="mb12">
         <el-form-item label="编码">
           <el-input v-model="typeDraft.typeCode" clearable placeholder="如 SERVER_CERT" style="width: 180px" />
@@ -323,8 +331,11 @@
         </el-table-column>
         <el-table-column label="排序" width="120">
           <template #default="{ row }">
-            <el-input-number v-model="row.sort" :min="1" :max="999" size="small" controls-position="right" />
+            <el-input-number v-model="row.sort" :min="1" :max="999" size="small" controls-position="right" style="width: 100%" />
           </template>
+        </el-table-column>
+        <el-table-column label="域名必填" width="110">
+          <template #default="{ row }"><el-switch v-model="row.domainRequired" @change="() => saveType(row)" /></template>
         </el-table-column>
         <el-table-column label="启用" width="90">
           <template #default="{ row }">
@@ -483,21 +494,25 @@
 
 <script setup name="RaPublicCert" lang="ts">
 import CertRowAction from '../components/CertRowAction.vue';
-import { notifyBusinessCertificates, setBusinessCertificateReminder } from '@/api/ra/businessNoticeSettings';
-import { businessCertificateExpired, businessCertificateNoticeBlocked, confirmExpiredCertificateNotice } from '@/utils/businessCertificateNotice';
+import { type BusinessDeliveryLog, notifyBusinessCertificates, setBusinessCertificateReminder } from '@/api/ra/businessNoticeSettings';
+import { businessCertificateValidity, confirmManualBusinessNotice, businessCertificateExpired, businessCertificateNoticeBlocked, confirmExpiredCertificateNotice } from '@/utils/businessCertificateNotice';
+import BusinessDeliveryLogs from '../components/BusinessDeliveryLogs.vue';
 import BusinessNoticeSettingsDialog from '../components/BusinessNoticeSettingsDialog.vue';
 import { useRaListRefreshOnReturn } from '@/hooks/useRaListRefreshOnReturn';
 import FileSaver from 'file-saver';
 import auth from '@/plugins/auth';
 import { isFawvwEmployeeSourceActive } from '@/utils/fawvwEmployeeStatus';
-import { ElMessage, ElMessageBox, FormInstance, FormRules, UploadRequestOptions, type UploadUserFile } from 'element-plus';
+import { ElMessage, ElMessageBox, FormInstance, FormRules, type UploadUserFile } from 'element-plus';
 import UsageTable from './UsageTable.vue';
-import { publicCertDomainRequired, publicCertUsageError, publicCertEditValues, selectCertificateMaintainer, certificateExpiryText, publicNoticeStatus } from '@/utils/publicCertForm';
-import { auditPublicCerts, createPublicCertLedger, getPublicNoticeStates, getPublicNoticeLogs, getPublicPortalSessionPolicy, savePublicPortalSessionPolicy, type PublicNoticeState, type PublicNoticeLog } from '@/api/ra/publicCert';
+import { publicCertDomainRequired, publicCertUsageError, publicCertEditValues, selectCertificateMaintainer, publicNoticeStatus } from '@/utils/publicCertForm';
 import {
+  auditPublicCerts,
+  createPublicCertLedger,
+  downloadPublicCertAttachment,
   exportPublicCerts,
   getPublicCert,
   getPublicCertPortalConfig,
+  getPublicPortalSessionPolicy,
   grantPublicCertPermission,
   listPublicCertTypes,
   pagePublicCertPermissions,
@@ -510,23 +525,34 @@ import {
   PublicCertPortalConfig,
   PublicCertQuery,
   PublicCertType,
+  refreshPublicCertPersonnel,
   removePublicCert,
   revokePublicCertPermission,
-  savePublicCert,
   savePublicCertPortalConfig,
   savePublicCertType,
-  uploadPublicCertAttachment
+  savePublicPortalSessionPolicy,
+  updatePublicCertLedger,
 } from '@/api/ra/publicCert';
 import { FawvwEmployee, pageFawvwEmployees } from '@/api/ra/employee';
 
 type PickerTarget = 'owner' | 'grant';
 
+const detailDeliveryLogs = ref<BusinessDeliveryLog[]>([]);
+const detailTimeline = computed(() => [
+  ...(detail.value.auditLogs || []).map((log) => ({
+    key: `audit-${log.id}`, time: log.createTime, color: 'info' as const,
+    text: `${log.operatorName || '-'} ${actionName(log.action)}：${log.comment || '-'}`
+  })),
+  ...detailDeliveryLogs.value.map((log) => ({
+    key: `notice-${log.id}`, time: log.time, color: log.status === 1 ? 'success' as const : log.status === 2 ? 'danger' as const : 'info' as const,
+    text: `${log.trigger} · ${log.channel === 'email' ? '邮件' : log.channel === 'dingtalk' ? '钉钉' : '提醒'} · ${log.title} · ${publicNoticeStatus(log.status)}`
+  }))
+].sort((left, right) => (right.time || '').localeCompare(left.time || '')));
+const deliveryLogsOpen = ref(false);
 const businessNoticeSettings = ref<InstanceType<typeof BusinessNoticeSettingsDialog>>();
 const rows = ref<PublicCert[]>([]);
 const managementTab = ref<'records' | 'audit' | 'handled'>('records');
 const selectedRows = ref<PublicCert[]>([]);
-const noticeStates = ref<Record<string, PublicNoticeState>>({});
-const noticeLogs = ref<PublicNoticeLog[]>([]);
 const sendingNotice = ref(false);
 const reminderSaving = reactive(new Set<PublicCert['id']>());
 const sessionIdleMinutes = ref(30);
@@ -557,6 +583,8 @@ const queryParams = reactive<PublicCertQuery>({
   approvalStatus: '',
   certStatus: '',
   ownerChangeRequired: null,
+  employeeStatus: '',
+  reminderEnabled: null,
   notAfterStart: '',
   notAfterEnd: ''
 });
@@ -583,10 +611,11 @@ const form = reactive<PublicCert>(emptyForm());
 const pendingAttachments = ref<UploadUserFile[]>([]);
 const formAttachments = ref<PublicCertAttachment[]>([]);
 const rules: FormRules = {
+  notBefore: [{ required: true, message: '请选择生效时间', trigger: 'change' }],
   certTypeId: [{ required: true, message: '请选择证书类型', trigger: 'change' }],
   domainName: [{ validator: (_rule, value, done) => {
-    const code = types.value.find((item) => String(item.id) === String(form.certTypeId))?.typeCode;
-    done(publicCertDomainRequired(code) && !value?.trim() ? new Error('该证书类型必须填写域名') : undefined);
+    const type = types.value.find((item) => String(item.id) === String(form.certTypeId));
+    done((type?.domainRequired ?? publicCertDomainRequired(type?.typeCode)) && !value?.trim() ? new Error('该证书类型必须填写域名') : undefined);
   }, trigger: 'blur' }],
   businessOwnerEmployeeId: [{ required: true, message: '请选择证书维护人', trigger: 'change' }],
   usages: [{ validator: (_rule, value, done) => { const error = publicCertUsageError(value); done(error ? new Error(error) : undefined); }, trigger: 'change' }],
@@ -595,7 +624,7 @@ const rules: FormRules = {
 
 const detail = ref<Partial<PublicCertDetail>>({ usages: [], attachments: [], auditLogs: [] });
 const types = ref<PublicCertType[]>([]);
-const domainRequired = computed(() => publicCertDomainRequired(types.value.find((item) => String(item.id) === String(form.certTypeId))?.typeCode));
+const domainRequired = computed(() => (types.value.find((item) => String(item.id) === String(form.certTypeId))?.domainRequired ?? publicCertDomainRequired(types.value.find((item) => String(item.id) === String(form.certTypeId))?.typeCode)));
 const typeDraft = reactive<PublicCertType>({
   typeCode: '',
   typeName: '',
@@ -640,7 +669,7 @@ function unwrap<T>(res: any): T {
 function queryPayload(): PublicCertQuery {
   const approvalStatus = managementTab.value === 'records' ? 'APPROVED'
     : managementTab.value === 'audit' ? 'PENDING' : queryParams.approvalStatus || 'HANDLED';
-  return { ...queryParams, approvalStatus,
+  return { ...queryParams, approvalStatus, history: managementTab.value === 'handled',
     notAfterStart: notAfterRange.value?.[0] || '', notAfterEnd: notAfterRange.value?.[1] || '' };
 }
 
@@ -663,11 +692,6 @@ async function loadList(): Promise<void> {
     rows.value = page.records || page.rows || [];
     selectedRows.value = [];
     total.value = nextTotal;
-    noticeStates.value = {};
-    if (managementTab.value !== 'records' || !rows.value.length) return;
-    const states = unwrap<PublicNoticeState[]>(await getPublicNoticeStates(rows.value.map((row) => row.id!)));
-    if (version !== listVersion) return;
-    noticeStates.value = Object.fromEntries(states.map((state) => [String(state.id), state]));
   } finally {
     if (version === listVersion) loading.value = false;
   }
@@ -702,6 +726,8 @@ function resetQuery() {
     approvalStatus: '',
     certStatus: '',
     ownerChangeRequired: null,
+  employeeStatus: '',
+  reminderEnabled: null,
     notAfterStart: '',
     notAfterEnd: ''
   });
@@ -734,17 +760,11 @@ async function openEdit(row: PublicCert) {
   formOpen.value = true;
 }
 
-async function openDetail(row: PublicCert) {
+async function openDetail(row: Pick<PublicCert, 'id'>) {
   const data = unwrap<PublicCertDetail>(await getPublicCert(row.id!));
+  detailDeliveryLogs.value = [];
   detail.value = data;
-  noticeLogs.value = [];
   detailOpen.value = true;
-  try {
-    const logs = unwrap<PublicNoticeLog[]>(await getPublicNoticeLogs(row.id!));
-    if (detail.value.cert?.id === data.cert.id) noticeLogs.value = logs;
-  } catch {
-    // Attachment review must remain available even when the notification log fails to load.
-  }
 }
 
 async function submitForm() {
@@ -759,22 +779,14 @@ async function submitForm() {
       }).then(() => true, () => false);
       if (!confirmed) return;
     }
+    const attachments = pendingAttachments.value.map((file) => file.raw!);
     const saved = unwrap<PublicCertDetail>(creating
-      ? await createPublicCertLedger(form, pendingAttachments.value.map((file) => file.raw!))
-      : await savePublicCert(form));
-    form.id = saved.cert.id;
-    form.version = saved.cert.version;
-    if (!creating) {
-      for (const file of [...pendingAttachments.value]) {
-        const uploaded = unwrap<PublicCertAttachment>(await uploadPublicCertAttachment(saved.cert.id!, file.raw!));
-        formAttachments.value.push(uploaded);
-        pendingAttachments.value = pendingAttachments.value.filter((item) => item.uid !== file.uid);
-      }
-    }
+      ? await createPublicCertLedger(form, attachments)
+      : await updatePublicCertLedger(form, attachments));
     if (creating && businessCertificateExpired(saved.cert.notAfter)) {
       await ElMessageBox.alert('证书已过期，自动通知已关闭。如需提醒，可在台账中手动开启。', '证书已过期', { type: 'warning' }).catch(() => undefined);
     } else {
-      ElMessage.success(creating ? '已写入证书台账' : '证书信息已保存');
+      ElMessage.success(creating ? '已写入证书台账' : saved.cert.approvalStatus === 'PENDING' ? '已提交审核' : '证书信息已更新');
     }
     formOpen.value = false;
     loadList();
@@ -784,10 +796,38 @@ async function submitForm() {
 }
 
 async function handleRemove(row: PublicCert) {
-  await ElMessageBox.confirm(`确认归档录入证书 ${row.domainName || row.serialNumber || row.certTypeName}？`, '提示', { type: 'warning' });
+  await ElMessageBox.confirm(`确认删除录入证书 ${row.domainName || row.serialNumber || row.certTypeName}？`, '提示', { type: 'warning' });
   await removePublicCert(row.id!);
-  ElMessage.success('已归档');
+  ElMessage.success('已删除');
   loadList();
+}
+
+async function refreshPersonnel() {
+  await refreshPublicCertPersonnel();
+  await loadList();
+  ElMessage.success('人员状态已刷新');
+}
+
+async function batchLedgerAction(command: 'enable' | 'disable' | 'delete') {
+  const selected = [...selectedRows.value];
+  if (!selected.length) return;
+  const label = { enable: '开启提醒', disable: '关闭提醒', delete: '删除' }[command];
+  if (!(await ElMessageBox.confirm(`确认${label}所选 ${selected.length} 条证书？`, '确认操作', { type: 'warning' }).then(() => true, () => false))) return;
+  let completed = 0;
+  for (const row of selected) {
+    try {
+      if (command === 'delete') await removePublicCert(row.id!);
+      else if (command === 'disable' || !businessCertificateNoticeBlocked(row.notAfter)) {
+        const expired = command === 'enable' && businessCertificateExpired(row.notAfter);
+        const send = expired ? await confirmExpiredCertificateNotice() : undefined;
+        if (expired && send === undefined) continue;
+        await setBusinessCertificateReminder('public', row.id!, command === 'enable', send);
+      } else continue;
+      completed++;
+    } catch { /* The request layer reports failures for individual certificates. */ }
+  }
+  ElMessage.info(`已完成 ${completed} 条，其余 ${selected.length - completed} 条未变更`);
+  await loadList();
 }
 
 async function handleExport() {
@@ -917,10 +957,7 @@ async function sendNotice(row: PublicCert) {
   if (sendingNotice.value || row.id == null || businessCertificateNoticeBlocked(row.notAfter)) return;
   sendingNotice.value = true;
   try {
-    const confirmed = await ElMessageBox.confirm(
-      `确认按通知设置发送 ${row.domainName || row.serialNumber || row.certTypeName} 的有效期提醒？`,
-      '通知确认', { type: 'warning', confirmButtonText: '确认发送', cancelButtonText: '取消', closeOnClickModal: false, autofocus: false }
-    ).then(() => true).catch(() => false);
+    const confirmed = await confirmManualBusinessNotice('public', row.notAfter);
     if (!confirmed) return;
     const count = unwrap<number>(await notifyBusinessCertificates('public', [row.id]));
     ElMessage.info(count ? '通知已入队，发送结果请查看通知状态' : '没有新通知入队，请检查渠道和收件范围');
@@ -1059,16 +1096,11 @@ function beforeUpload(file: File) {
   return true;
 }
 
-async function uploadAttachment(option: UploadRequestOptions) {
-  await uploadPublicCertAttachment(detail.value.cert!.id!, option.file as File);
-  ElMessage.success('附件已上传');
-  await openDetail(detail.value.cert as PublicCert);
-}
-
-function certStatusType(status?: string) {
-  if (status === 'EXPIRED') return 'danger';
-  if (status === 'EXPIRING') return 'warning';
-  return 'success';
+async function downloadAttachment(attachment: PublicCertAttachment) {
+  if (detail.value.cert?.id == null) return;
+  const response: any = await downloadPublicCertAttachment(detail.value.cert.id, attachment.id);
+  const blob = response instanceof Blob ? response : response?.data;
+  if (blob instanceof Blob) FileSaver.saveAs(blob, attachment.originalName);
 }
 
 function approvalType(status?: string) {
@@ -1136,6 +1168,10 @@ useRaListRefreshOnReturn(loadList);
     :deep(.el-date-editor) {
       width: 100%;
       min-width: 0;
+    }
+
+    .query-actions {
+      grid-column: 1 / -1;
     }
 
     .query-actions :deep(.el-form-item__content) {

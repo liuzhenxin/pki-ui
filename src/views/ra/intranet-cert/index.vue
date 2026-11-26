@@ -10,7 +10,7 @@
           <el-input v-model="queryParams.systemName" clearable placeholder="系统名称" @keyup.enter="handleQuery" />
         </el-form-item>
         <el-form-item label="申请人">
-          <el-input v-model="queryParams.applicantKeyword" clearable placeholder="姓名/域账号" @keyup.enter="handleQuery" />
+          <el-input v-model="queryParams.applicantKeyword" clearable placeholder="姓名、域账号或科室" @keyup.enter="handleQuery" />
         </el-form-item>
         <el-form-item label="科室">
           <el-input v-model="queryParams.deptName" clearable placeholder="申请科室" @keyup.enter="handleQuery" />
@@ -23,31 +23,21 @@
         </el-form-item>
         <el-form-item label="证书状态">
           <el-select v-model="queryParams.certStatus" clearable placeholder="全部">
-            <el-option label="有效" value="VALID" />
-            <el-option label="未生效" value="NOT_YET_VALID" />
+            <el-option label="正常" value="NORMAL" />
+            <el-option label="30天内过期" value="EXPIRING" />
             <el-option label="已过期" value="EXPIRED" />
-            <el-option label="已吊销" value="REVOKED" />
-            <el-option label="已冻结" value="HOLD" />
-            <el-option label="未知" value="UNKNOWN" />
           </el-select>
         </el-form-item>
         <el-form-item label="人员状态">
           <el-select v-model="queryParams.applicantStatus" clearable placeholder="全部">
             <el-option label="在职" value="ACTIVE" />
             <el-option label="离职" value="LEFT" />
-            <el-option label="未知" value="UNKNOWN" />
           </el-select>
         </el-form-item>
         <el-form-item label="提醒状态">
           <el-select v-model="queryParams.reminderEnabled" clearable :value-on-clear="null" placeholder="全部">
             <el-option label="开启" :value="true" />
             <el-option label="关闭" :value="false" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="负责人变更">
-          <el-select v-model="queryParams.ownerChangeRequired" clearable :value-on-clear="null" placeholder="全部">
-            <el-option label="需处理" :value="true" />
-            <el-option label="正常" :value="false" />
           </el-select>
         </el-form-item>
         <el-form-item label="到期日期">
@@ -73,19 +63,32 @@
           <el-button v-if="auth.hasPermi('ra:intranet-cert:add')" type="primary" plain icon="Plus" @click="openCreate">新增</el-button>
         </el-col>
         <el-col :span="1.5">
+          <el-dropdown trigger="click" :disabled="!selectedRows.length" @command="batchLedgerAction">
+            <el-button plain :disabled="!selectedRows.length">操作</el-button>
+            <template #dropdown><el-dropdown-menu>
+              <el-dropdown-item v-if="auth.hasPermi('ra:intranet-cert:remind')" command="enable">开启提醒</el-dropdown-item>
+              <el-dropdown-item v-if="auth.hasPermi('ra:intranet-cert:remind')" command="disable">关闭提醒</el-dropdown-item>
+              <el-dropdown-item v-if="auth.hasPermi('ra:intranet-cert:remove')" command="delete">批量删除</el-dropdown-item>
+            </el-dropdown-menu></template>
+          </el-dropdown>
           <el-button v-if="auth.hasPermi('ra:intranet-cert:export')" type="success" plain icon="Download" @click="handleExport">导出</el-button>
         </el-col>
         <el-col :span="1.5">
-          <el-button v-if="auth.hasPermi('ra:intranet-cert:remind')" plain icon="RefreshRight" @click="refreshOwnerStatus">刷新离职状态</el-button>
+          <el-button v-if="auth.hasPermi('ra:intranet-cert:remind')" plain icon="RefreshRight" @click="refreshOwnerStatus">刷新状态</el-button>
         </el-col>
         <el-col :span="1.5">
           <el-button v-if="auth.hasPermi('ra:intranet-cert:template')" plain icon="Bell" @click="businessNoticeSettings?.open()">通知设置</el-button>
         </el-col>
         <right-toolbar v-model:showSearch="showSearch" @queryTable="loadList" />
+        <el-col :span="1.5"><el-button plain icon="Document" @click="deliveryLogsOpen = true">通知记录</el-button></el-col>
       </el-row>
 
-      <el-table v-loading="loading" :data="rows" border stripe class="cert-table" empty-text="暂无内网证书台账">
-        <el-table-column label="序列号" prop="serialNumber" min-width="170" fixed show-overflow-tooltip />
+      <el-table v-loading="loading" :data="rows" @selection-change="selectedRows = $event" border stripe class="cert-table" empty-text="暂无内网证书台账">
+        <el-table-column type="selection" width="48" />
+        <el-table-column label="序列号" prop="serialNumber" min-width="170" fixed show-overflow-tooltip>
+          <template #default="{ row }"><el-button link type="primary" @click="openCertificateSerial(row)">{{ row.serialNumber }}</el-button></template>
+        </el-table-column>
+        <el-table-column label="证书模板" prop="profileName" min-width="135" show-overflow-tooltip />
         <el-table-column label="系统名称" prop="systemName" min-width="150" show-overflow-tooltip />
         <el-table-column label="申请人" prop="applicantName" min-width="110" show-overflow-tooltip />
         <el-table-column label="域账号" prop="applicantAccount" min-width="120" show-overflow-tooltip />
@@ -96,21 +99,7 @@
         </el-table-column>
         <el-table-column label="证书状态" width="100" align="center">
           <template #default="{ row }">
-            <el-tag :type="certStatusTag(row.certStatus)" effect="light">{{ row.certStatusName || '-' }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="提醒" width="82" align="center">
-          <template #default="{ row }">
-            <el-switch
-              :model-value="row.reminderEnabled"
-              :disabled="businessCertificateNoticeBlocked(row.notAfter)"
-              :loading="reminderSaving.has(row.id)"
-              v-if="auth.hasPermi('ra:intranet-cert:remind')"
-              inline-prompt
-              active-text="开"
-              inactive-text="关"
-              @change="(value: boolean) => toggleReminder(row, value)"
-            />
+            <el-tag :type="businessCertificateValidity(row.notAfter, 30).type" effect="light">{{ businessCertificateValidity(row.notAfter, 30).text }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="人员状态" width="98" align="center">
@@ -118,14 +107,12 @@
             <el-tag :type="row.applicantStatus === 'LEFT' ? 'danger' : 'success'" effect="plain">{{ row.applicantStatusName || '-' }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="负责人变更" width="112" align="center">
+        <el-table-column label="操作" fixed="right" width="228" align="center">
           <template #default="{ row }">
-            <el-tag v-if="row.ownerChangeRequired" type="danger" effect="plain">需处理</el-tag>
-            <el-tag v-else type="info" effect="plain">正常</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" fixed="right" width="180" align="center">
-          <template #default="{ row }">
+            <span :title="businessCertificateNoticeBlocked(row.notAfter) ? '证书过期已超过一个月，不可发送通知' : '到期提醒'">
+              <el-switch v-if="auth.hasPermi('ra:intranet-cert:remind')" size="small" :model-value="row.reminderEnabled"
+                :loading="reminderSaving.has(row.id)" :disabled="businessCertificateNoticeBlocked(row.notAfter)" @change="(value) => toggleReminder(row, !!value)" />
+            </span>
             <CertRowAction label="查看详情" icon="View" @click="openDetail(row)" />
             <CertRowAction v-if="row.sourceType === 'ISSUED' && row.sourceCertId" label="下载证书" icon="Download"
               @command="(format) => downloadCertificate(row, format as 'cer' | 'pem' | 'p7b')">
@@ -137,16 +124,21 @@
                 </el-dropdown-menu>
               </template>
             </CertRowAction>
-            <CertRowAction v-if="auth.hasPermi('ra:intranet-cert:remind')" label="发送通知" icon="Message"
-              :disabled="sendingNotice || businessCertificateNoticeBlocked(row.notAfter)" @click="sendNotice(row)" />
             <CertRowAction v-if="auth.hasPermi('ra:intranet-cert:edit')" label="修改" icon="Edit" @click="openEdit(row)" />
-            <CertRowAction v-if="auth.hasPermi('ra:intranet-cert:remove')" label="作废" type="danger" icon="Delete" @click="handleRemove(row)" />
+            <CertRowAction v-if="auth.hasPermi('ra:intranet-cert:remind')" :label="businessCertificateNoticeBlocked(row.notAfter) ? '证书过期已超过一个月，不可发送通知' : '发送通知'" icon="Message"
+              :disabled="sendingNotice || businessCertificateNoticeBlocked(row.notAfter)" @click="sendNotice(row)" />
+            <CertRowAction v-if="auth.hasPermi('ra:intranet-cert:remove')" label="删除" type="danger" icon="Delete" @click="handleRemove(row)" />
           </template>
         </el-table-column>
       </el-table>
 
       <pagination v-show="total > 0" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" :total="total" :auto-scroll="false" @pagination="loadList" />
     </el-card>
+
+    <el-dialog v-model="deliveryLogsOpen" title="通知记录" width="min(1120px, 96vw)" append-to-body>
+      <BusinessDeliveryLogs v-if="deliveryLogsOpen" module="intranet" @certificate="(id) => { deliveryLogsOpen = false; openDetail({ id }); }" />
+    </el-dialog>
+    <RaCertDetailDialog ref="certificateDetail" />
 
     <el-drawer v-model="formOpen" :title="form.id ? '修改内网证书台账' : form.sourceCertId ? '同步到内网证书管理' : '新增内网证书台账'" size="680px" append-to-body>
       <el-form ref="formRef" :model="form" :rules="rules" label-width="112px">
@@ -204,9 +196,6 @@
             </el-form-item>
           </el-col>
         </el-row>
-        <el-form-item label="申请科室">
-          <el-input v-model="form.applicantDeptName" readonly />
-        </el-form-item>
         <el-form-item label="系统名称" prop="systemName">
           <el-input v-model="form.systemName" clearable placeholder="请输入系统名称" />
         </el-form-item>
@@ -225,6 +214,7 @@
 
     <el-drawer v-model="detailOpen" title="内网证书详情" size="620px" append-to-body>
       <el-descriptions :column="1" border>
+        <el-descriptions-item label="证书模板">{{ detail.profileName || '-' }}</el-descriptions-item>
         <el-descriptions-item label="序列号">{{ detail.serialNumber || '-' }}</el-descriptions-item>
         <el-descriptions-item label="证书主题">{{ formatCertificateSubject(detail.subject) }}</el-descriptions-item>
         <el-descriptions-item label="颁发者">{{ detail.issuer || '-' }}</el-descriptions-item>
@@ -235,9 +225,10 @@
         <el-descriptions-item label="邮箱">{{ detail.applicantEmail || '-' }}</el-descriptions-item>
         <el-descriptions-item label="申请科室">{{ detail.applicantDeptPath || detail.applicantDeptName || '-' }}</el-descriptions-item>
         <el-descriptions-item label="有效期">{{ parseDateTime(detail.notBefore) }} 至 {{ parseDateTime(detail.notAfter) }}</el-descriptions-item>
-        <el-descriptions-item label="负责人变更">{{ detail.ownerChangeRequired ? '需要处理' : '正常' }}</el-descriptions-item>
         <el-descriptions-item label="备注">{{ detail.remark || '-' }}</el-descriptions-item>
       </el-descriptions>
+      <el-divider content-position="left">通知记录</el-divider>
+      <BusinessDeliveryLogs v-if="detailOpen && detail.id != null" module="intranet" :certificate-id="detail.id" />
     </el-drawer>
 
     <el-dialog v-model="employeeOpen" title="选择申请人" width="980px" append-to-body>
@@ -282,7 +273,10 @@
 import { formatCertificateSubject } from '@/utils/raCertificateSubject';
 import CertRowAction from '../components/CertRowAction.vue';
 import { notifyBusinessCertificates, setBusinessCertificateReminder } from '@/api/ra/businessNoticeSettings';
-import { businessCertificateExpired, businessCertificateNoticeBlocked, confirmExpiredCertificateNotice } from '@/utils/businessCertificateNotice';
+import { businessCertificateValidity, confirmManualBusinessNotice, businessCertificateExpired, businessCertificateNoticeBlocked, confirmExpiredCertificateNotice } from '@/utils/businessCertificateNotice';
+import BusinessDeliveryLogs from '../components/BusinessDeliveryLogs.vue';
+import RaCertDetailDialog from '../components/RaCertDetailDialog.vue';
+import { pageRaCert, type RaCertSummary } from '@/api/ra/cert';
 import BusinessNoticeSettingsDialog from '../components/BusinessNoticeSettingsDialog.vue';
 import { useRaListRefreshOnReturn } from '@/hooks/useRaListRefreshOnReturn';
 import FileSaver from 'file-saver';
@@ -308,6 +302,9 @@ import { FawvwEmployee, pageFawvwEmployees } from '@/api/ra/employee';
 const route = useRoute();
 const router = useRouter();
 
+const deliveryLogsOpen = ref(false);
+const selectedRows = ref<IntranetCert[]>([]);
+const certificateDetail = ref<InstanceType<typeof RaCertDetailDialog>>();
 const businessNoticeSettings = ref<InstanceType<typeof BusinessNoticeSettingsDialog>>();
 const rows = ref<IntranetCert[]>([]);
 const loading = ref(false);
@@ -446,7 +443,45 @@ async function openEdit(row: IntranetCert) {
   formOpen.value = true;
 }
 
-async function openDetail(row: IntranetCert) {
+async function openCertificateSerial(row: IntranetCert) {
+  if (row.sourceCertId != null) {
+    await certificateDetail.value?.open({ id: row.sourceCertId } as RaCertSummary);
+    return;
+  }
+  try {
+    const page = unwrap<{ records?: RaCertSummary[] }>(await pageRaCert({ pageNum: 1, pageSize: 100, serialNumber: row.serialNumber }));
+    const matches = (page.records || []).filter((item) => item.serialNumber.toLowerCase() === row.serialNumber.toLowerCase()
+      && (!row.rootId || String(item.rootId) === String(row.rootId)));
+    if (matches.length === 1) await certificateDetail.value?.open(matches[0]);
+    else await openDetail(row);
+  } catch {
+    await openDetail(row);
+  }
+}
+
+async function batchLedgerAction(command: 'enable' | 'disable' | 'delete') {
+  const selected = [...selectedRows.value];
+  if (!selected.length) return;
+  const label = { enable: '开启提醒', disable: '关闭提醒', delete: '删除' }[command];
+  if (!(await ElMessageBox.confirm(`确认${label}所选 ${selected.length} 条证书？`, '确认操作', { type: 'warning' }).then(() => true, () => false))) return;
+  let completed = 0;
+  for (const row of selected) {
+    try {
+      if (command === 'delete') await removeIntranetCert(row.id!);
+      else if (command === 'disable' || !businessCertificateNoticeBlocked(row.notAfter)) {
+        const expired = command === 'enable' && businessCertificateExpired(row.notAfter);
+        const send = expired ? await confirmExpiredCertificateNotice() : undefined;
+        if (expired && send === undefined) continue;
+        await setBusinessCertificateReminder('intranet', row.id!, command === 'enable', send);
+      } else continue;
+      completed++;
+    } catch { /* The request layer reports failures for individual certificates. */ }
+  }
+  ElMessage.info(`已完成 ${completed} 条，其余 ${selected.length - completed} 条未变更`);
+  await loadList();
+}
+
+async function openDetail(row: Pick<IntranetCert, 'id'>) {
   detail.value = unwrap<IntranetCert>(await getIntranetCert(row.id!));
   detailOpen.value = true;
 }
@@ -480,9 +515,9 @@ async function submitForm() {
 }
 
 async function handleRemove(row: IntranetCert) {
-  await ElMessageBox.confirm(`确认作废证书台账 ${row.serialNumber}？`, '提示', { type: 'warning' });
+  await ElMessageBox.confirm(`确认删除证书台账 ${row.serialNumber}？`, '提示', { type: 'warning' });
   await removeIntranetCert(row.id!);
-  ElMessage.success('台账已作废');
+  ElMessage.success('台账已删除');
   loadList();
 }
 
@@ -504,7 +539,7 @@ async function toggleReminder(row: IntranetCert, value: boolean) {
 
 async function sendNotice(row: IntranetCert) {
   if (row.id == null || sendingNotice.value || businessCertificateNoticeBlocked(row.notAfter)) return;
-  if (!(await ElMessageBox.confirm('确认按通知设置发送这张证书的有效期提醒？', '通知确认', { type: 'warning' }).then(() => true, () => false))) return;
+  if (!(await confirmManualBusinessNotice('intranet', row.notAfter))) return;
   sendingNotice.value = true;
   try {
     const count = unwrap<number>(await notifyBusinessCertificates('intranet', [row.id]));
@@ -638,6 +673,10 @@ useRaListRefreshOnReturn(loadList);
     :deep(.el-date-editor) {
       width: 100%;
       min-width: 0;
+    }
+
+    .query-actions {
+      grid-column: 1 / -1;
     }
 
     .query-actions :deep(.el-form-item__content) {
