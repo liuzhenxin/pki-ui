@@ -346,7 +346,7 @@ for (const width of [1440, 390]) {
   });
 }
 
-for (const width of [1280, 390]) {
+for (const width of [1280, 834, 390]) {
   for (const authenticated of [false, true]) {
     test(`portal ${authenticated ? 'workspace' : 'login'} at ${width}px`, async ({ page }, info) => {
       await page.setViewportSize({ width, height: 850 });
@@ -403,7 +403,7 @@ for (const width of [1280, 390]) {
       await expect(page.getByRole('heading', { name: '证书统一管理', exact: true })).toBeVisible();
       if (authenticated) {
         const selectSection = async (name: string) => {
-          if (width <= 760) await page.getByRole('button', { name: '切换菜单' }).click();
+          if (width <= 960) await page.getByRole('button', { name: '切换菜单' }).click();
           await page.getByRole('menuitem', { name }).click();
         };
         const reviewTags = page.locator('.portal-review-cell .el-tag');
@@ -413,9 +413,16 @@ for (const width of [1280, 390]) {
         await expect(page.locator('.portal-count')).toHaveText('共 2 条');
         const ledger = page.getByRole('region', { name: '录入信息' });
         await expect(ledger.getByRole('heading', { name: '录入记录' })).toBeVisible();
-        await expect(ledger.getByRole('button', { name: '搜索' })).toBeInViewport();
+        await expect(ledger).toHaveCSS('border-radius', '10px');
+        const search = ledger.getByRole('button', { name: '搜索' });
+        await expect(search).toBeInViewport();
+        await ledger.getByPlaceholder('请输入域名').fill('approved.invalid');
+        await search.click();
+        await expect.poll(() => page.evaluate(() => (window as any).lastPortalQuery?.domainName)).toBe('approved.invalid');
+        await ledger.getByRole('button', { name: '重置' }).click();
+        await expect(ledger.getByPlaceholder('请输入域名')).toHaveValue('');
         await expect(ledger.getByRole('columnheader', { name: '域名 / 审核结果' })).toBeInViewport();
-        if (width <= 760) {
+        if (width <= 960) {
           await expect(ledger.getByRole('columnheader', { name: '证书类型' })).toHaveCount(0);
           await expect(ledger.getByRole('row').filter({ hasText: 'approved.invalid' }).locator('.portal-review-meta')).toContainText('2030-01-01');
           const actions = ledger.getByRole('row').filter({ hasText: 'draft.invalid' }).locator('.portal-row-actions button');
@@ -423,6 +430,9 @@ for (const width of [1280, 390]) {
           expect(await actions.evaluateAll((buttons) => new Set(buttons.map((button) => button.getBoundingClientRect().top)).size)).toBe(1);
         } else {
           await expect(ledger.getByRole('columnheader', { name: '证书类型' })).toBeInViewport();
+          const navigation = page.locator('.portal-sidebar');
+          await expect(navigation).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+          await expect(navigation.getByRole('menuitem', { name: '录入信息' })).toHaveCSS('color', 'rgb(43, 100, 126)');
         }
         await expect(page.getByRole('button', { name: '账户菜单' })).toContainText('employee1');
         await page.screenshot({ path: info.outputPath('records-workspace.png'), fullPage: true, animations: 'disabled' });
@@ -481,7 +491,7 @@ for (const width of [1280, 390]) {
         await expect(page.getByRole('menuitem', { name: '登录设置' })).toHaveCount(0);
         await page.keyboard.press('Escape');
         await selectSection('待办详情');
-        if (width > 760) await expect(page.getByRole('menuitem', { name: '待办详情' })).toHaveClass(/is-active/);
+        if (width > 960) await expect(page.getByRole('menuitem', { name: '待办详情' })).toHaveClass(/is-active/);
         await expect.poll(() => page.evaluate(() => (window as any).lastPortalQuery?.approvalStatus)).toBe('TODO');
         await expect(page.getByLabel('当前位置')).toContainText('待办详情');
         await expect(page.getByRole('button', { name: '新增录入' })).toHaveCount(0);
