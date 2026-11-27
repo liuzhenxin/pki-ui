@@ -1,3 +1,4 @@
+import type { AxiosResponse } from 'axios';
 import type { RaCertDetail, RaCertFilterOption } from '@/api/ra/cert';
 import request from '@/utils/request';
 import { Result } from '@/api/types';
@@ -450,24 +451,24 @@ export const issueEmployeeCertTask = (taskNo: string, certIds: string[]): Promis
     timeout: 120_000
   }) as any;
 
-export const downloadEmployeeCertTaskPackage = (taskNo: string, format: EmployeeCertDownloadFormat = 'all'): Promise<Blob> =>
+export const downloadEmployeeCertTaskPackage = (taskNo: string, format: EmployeeCertDownloadFormat = 'all'): Promise<AxiosResponse<Blob>> =>
   request({
     url: `/ra/v1/employee-certs/tasks/${encodeURIComponent(taskNo)}/download`,
     method: 'get', params: { format },
-    responseType: 'blob',
+    responseType: 'blob', returnBinaryResponse: true,
     timeout: 120_000,
     headers: { hideErrorNotify: true }
   }) as any;
 
-export const downloadEmployeeCertPackage = (id: string | number, format: EmployeeCertDownloadFormat = 'all'): Promise<Blob> =>
+export const downloadEmployeeCertPackage = (id: string | number, format: EmployeeCertDownloadFormat = 'all'): Promise<AxiosResponse<Blob>> =>
   request({ url: `/ra/v1/employee-certs/${encodeURIComponent(String(id))}/download`, method: 'get', params: { format },
-    responseType: 'blob', timeout: 120_000, headers: { hideErrorNotify: true } }) as any;
+    responseType: 'blob', returnBinaryResponse: true, timeout: 120_000, headers: { hideErrorNotify: true } }) as any;
 
 export type EmployeeCertDownloadFormat = 'all' | 'cer' | 'pem' | 'crt' | 'p7b' | 'pfx';
 
-export const downloadSelectedEmployeeCerts = (ids: (string | number)[], format: EmployeeCertDownloadFormat): Promise<Blob> =>
+export const downloadSelectedEmployeeCerts = (ids: (string | number)[], format: EmployeeCertDownloadFormat): Promise<AxiosResponse<Blob>> =>
   request({ url: '/ra/v1/employee-certs/download-selected', method: 'post', data: { ids, format },
-    responseType: 'blob', timeout: 120_000, headers: { hideErrorNotify: true } }) as any;
+    responseType: 'blob', returnBinaryResponse: true, timeout: 120_000, headers: { hideErrorNotify: true } }) as any;
 
 export const listEmployeeCertLedgerProfiles = (): Promise<Result<RaCertFilterOption[]>> =>
   request<unknown, Result<RaCertFilterOption[]>>({ url: '/ra/v1/employee-certs/ledger-profiles', method: 'get' });

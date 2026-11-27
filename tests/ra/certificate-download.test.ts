@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import forge from 'node-forge';
-import { certificateDownloadBlob, issuedCertificateBlob, recoveredPkcs12 } from '../../src/utils/raCertificateDownload';
+import { certificateDownloadBlob, employeeCertificateDownload, issuedCertificateBlob, recoveredPkcs12 } from '../../src/utils/raCertificateDownload';
 
 describe('certificate download validation', () => {
   it.each(['application/json', 'application/octet-stream', ''])('rejects Forbidden JSON with MIME %s', async (type) => {
@@ -21,6 +21,16 @@ describe('certificate download validation', () => {
     const buffer = new Uint8Array([0x30, 0x82, 0x01, 0x02, 0xff]).buffer;
     const blob = await certificateDownloadBlob({ data: buffer }, 'application/pkix-cert');
     expect(new Uint8Array(await blob.arrayBuffer())).toEqual(new Uint8Array(buffer));
+  });
+  it.each(['cer', 'pem', 'crt', 'p7b', 'pfx'])('uses the server filename for single %s downloads', async (format) => {
+    const blob = new Blob([Uint8Array.of(0x30, 0x82, 0x01, 0x02)]);
+    const name = format === 'pfx' ? 'domain_AB_+test!%.pfx' : `domain_AB.${format}`;
+    const response = { data: blob, headers: { 'content-disposition': `attachment; filename*=UTF-8''${encodeURIComponent(name)}` } };
+    expect(await employeeCertificateDownload(response, 'employee-certs', format)).toEqual({ blob, filename: name });
+  });
+  it('keeps a ZIP filename when downloading multiple files in one format', async () => {
+    const blob = new Blob([Uint8Array.of(80, 75, 3, 4)]);
+    expect(await employeeCertificateDownload({ data: blob }, 'employee-certs', 'pfx')).toEqual({ blob, filename: 'employee-certs.zip' });
   });
   it('uses the KMC recovery bytes as a P12 without asking for a private key', async () => {
     const result = recoveredPkcs12({ fileBase64: 'AQID' }, 'AB');

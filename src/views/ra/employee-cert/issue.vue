@@ -1219,14 +1219,14 @@ function watchTaskProgress(taskNo: string) {
 async function downloadTaskPackage(row: EmployeeCertTask, format: EmployeeCertDownloadFormat) {
   if (downloadingTask.value) return;
   downloadingTask.value = row.taskNo;
-  let response: Blob | undefined;
+  let response: Awaited<ReturnType<typeof downloadEmployeeCertTaskPackage>> | undefined;
   try {
     response = await downloadEmployeeCertTaskPackage(row.taskNo, format);
     const baseName = `employee-certs-${row.taskNo.replace(/[^A-Za-z0-9_-]/g, '_')}`;
     const { blob, filename } = await employeeCertificateDownload(response, baseName, format);
     FileSaver.saveAs(blob, filename);
   } catch (error: any) {
-    const body = error?.response?.data ?? response;
+    const body = error?.response?.data ?? response?.data;
     let message = error?.message || '证书压缩包下载失败';
     if (body instanceof Blob && body.size < 64 * 1024) {
       try {

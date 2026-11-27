@@ -1,4 +1,5 @@
 import request from '@/utils/request';
+import { isRaActionUnavailable } from './unavailableAction';
 import { publicCertFormData } from '@/utils/publicCertForm';
 import { Result } from '@/api/types';
 
@@ -285,15 +286,17 @@ export const pagePublicCertPermissions = (query: {
     }
   }) as any;
 
-export const grantPublicCertPermission = (data: PublicCertPermission): Promise<Result<PublicCertPermission>> =>
+export const grantPublicCertPermission = (data: PublicCertPermission, quiet = false): Promise<Result<PublicCertPermission>> =>
   request({
     url: '/ra/v1/public-certs/permissions',
     method: 'post',
+    headers: quiet ? { hideErrorNotify: true, sensitive: true } : undefined,
     data
   }) as any;
 
-export const revokePublicCertPermission = (id: number | string): Promise<Result<void>> =>
-  request({ url: `/ra/v1/public-certs/permissions/${id}`, method: 'delete' }) as any;
+export const revokePublicCertPermission = (id: number | string, quiet = false): Promise<Result<void>> =>
+  request({ url: `/ra/v1/public-certs/permissions/${encodeURIComponent(id)}`, method: 'delete',
+    headers: quiet ? { hideErrorNotify: true, sensitive: true } : undefined }) as any;
 
 export const getPublicCertPortalConfig = (): Promise<Result<PublicCertPortalConfig>> =>
   request({
@@ -325,8 +328,26 @@ export const downloadPublicCertAttachment = (id: number | string, attachmentId: 
   request({ url: `/ra/v1/public-certs/${id}/attachments/${attachmentId}`, method: 'get', responseType: 'blob' }) as any;
 
 
-export const grantPublicCertPermissions = (data: Partial<PublicCertPermission>[]) =>
-  request({ url: '/ra/v1/public-certs/permissions/batch', method: 'post', data });
+export async function grantPublicCertPermissions(commands: PublicCertPermission[]): Promise<void> {
+  try {
+    await request({ url: '/ra/v1/public-certs/permissions/batch', method: 'post', data: commands,
+      headers: { hideErrorNotify: true, sensitive: true } });
+  } catch (error) {
+    if (!isRaActionUnavailable(error)) throw error;
+    for (const command of commands) await grantPublicCertPermission(command, true);
+  }
+}
 
-export const revokePublicCertPermissions = (data: (string | number)[]) =>
-  request({ url: '/ra/v1/public-certs/permissions/batch-revoke', method: 'post', data });
+export async function revokePublicCertPermissions(ids: (string | number)[]): Promise<void> {
+  if (ids.length === 1) {
+    await revokePublicCertPermission(ids[0], true);
+    return;
+  }
+  try {
+    await request({ url: '/ra/v1/public-certs/permissions/batch-revoke', method: 'post', data: ids,
+      headers: { hideErrorNotify: true, sensitive: true } });
+  } catch (error) {
+    if (!isRaActionUnavailable(error)) throw error;
+    for (const id of ids) await revokePublicCertPermission(id, true);
+  }
+}

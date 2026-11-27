@@ -310,7 +310,7 @@ for (const width of [1440, 390]) {
       window.EmployeeChoice=${component('src/views/ra/public-cert/EmployeeSelect.vue')};window.UsageChoice=${component('src/views/ra/public-cert/UsageTable.vue')};
       window.CertRowAction=${component(rowActionPath)};
       window.BusinessNoticeSettingsDialog=${component('src/views/ra/components/BusinessNoticeSettingsDialog.vue')};
-      const app=Vue.createApp(${component(path, true)}); app.component('Pagination',{template:'<div />'});app.component('RightToolbar',{template:'<div />'});
+      const app=Vue.createApp(${component(path, true)}); app.component('Pagination',{template:'<div />'});app.component('RightToolbar',{template:'<div><slot name="prepend"/><button aria-label="隐藏搜索"></button></div>'});
       for(const [name,icon] of Object.entries(ElementPlusIconsVue))app.component(name,icon);
       app.directive('hasPermi',{});app.use(ElementPlus);app.mount('#app');` });
     const expectOwnerLabelAligned = async () => {
@@ -328,6 +328,15 @@ for (const width of [1440, 390]) {
       }, width <= 560)).toBe(true);
     };
     await expectOwnerLabelAligned();
+    const notices = page.getByRole('button', { name: '通知记录' });
+    await expect(notices).toBeVisible();
+    await expect(notices).toHaveText('');
+    await expect(page.locator('button[aria-label="通知记录"] + button[aria-label="隐藏搜索"]')).toHaveCount(1);
+    await notices.click();
+    const noticeDialog = page.getByRole('dialog', { name: '通知记录' });
+    await expect(noticeDialog).toBeVisible();
+    await noticeDialog.locator('.el-dialog__headerbtn').click();
+    await expect(noticeDialog).toBeHidden();
     await expect(page.getByRole('button', { name: '通过选中' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: '新增草稿' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: '新增', exact: true })).toBeVisible();
@@ -340,7 +349,7 @@ for (const width of [1440, 390]) {
     await expect(page.getByRole('button', { name: '新增草稿' })).toHaveCount(0);
     await expect(page.getByText('pending.invalid', { exact: true })).toBeVisible();
     await expect(page.getByText(/approved\.invalid|draft\.invalid|rejected\.invalid/)).toHaveCount(0);
-    for (const name of ['证书类型', '录入授权', '通知设置']) {
+    for (const name of ['证书类型', '录入授权', '通知设置', '通知记录']) {
       await expect(page.getByRole('button', { name, exact: true })).toHaveCount(0);
     }
     await page.getByRole('tab', { name: '已办记录' }).click();

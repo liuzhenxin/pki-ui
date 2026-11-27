@@ -56,9 +56,9 @@
         <el-col :span="1.5">
           <el-button v-if="auth.hasPermi('ra:intranet-cert:add')" type="primary" plain icon="Plus" @click="openCreate">新增</el-button>
         </el-col>
-        <el-col :span="1.5">
+        <el-col :span="1.5" class="ledger-toolbar-actions">
           <el-dropdown trigger="click" :disabled="!selectedRows.length" @command="batchLedgerAction">
-            <el-button class="mr8" plain icon="Operation" :disabled="!selectedRows.length">操作</el-button>
+            <el-button plain icon="Operation" :disabled="!selectedRows.length">操作</el-button>
             <template #dropdown><el-dropdown-menu>
               <el-dropdown-item v-if="auth.hasPermi('ra:intranet-cert:remind')" command="enable">开启提醒</el-dropdown-item>
               <el-dropdown-item v-if="auth.hasPermi('ra:intranet-cert:remind')" command="disable">关闭提醒</el-dropdown-item>
@@ -712,6 +712,12 @@ useRaListRefreshOnReturn(loadList);
 
   .toolbar-row {
     align-items: center;
+  }
+
+  .ledger-toolbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
   }
 
   .cert-table {

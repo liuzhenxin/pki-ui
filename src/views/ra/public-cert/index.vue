@@ -86,8 +86,13 @@
           <el-button v-hasPermi="['ra:public-cert:grant']" plain icon="UserFilled" @click="openGrants">录入授权</el-button>
         </el-col>
         <el-col v-if="managementTab === 'records'" :span="1.5"><el-button v-hasPermi="['ra:public-cert:type']" icon="Bell" @click="businessNoticeSettings?.open()">通知设置</el-button></el-col>
-        <right-toolbar v-model:showSearch="showSearch" @queryTable="loadList" />
-        <el-col v-if="managementTab === 'records'" :span="1.5"><el-button plain icon="Document" @click="deliveryLogsOpen = true">通知记录</el-button></el-col>
+        <right-toolbar v-model:showSearch="showSearch" @queryTable="loadList">
+          <template #prepend>
+            <el-tooltip v-if="managementTab === 'records'" content="通知记录">
+              <el-button circle icon="Document" aria-label="通知记录" @click="deliveryLogsOpen = true" />
+            </el-tooltip>
+          </template>
+        </right-toolbar>
       </el-row>
 
       <el-table v-loading="loading" :data="rows" border stripe
@@ -919,17 +924,19 @@ async function selectEmployee(row: FawvwEmployee) {
 
 async function grantSelectedEmployees(selection: FawvwEmployee[]) {
   if (!selection.length || employeeSelecting.value || pickerTarget.value !== 'grant') return;
+  const commands = selection.map(employeeGrant);
   employeeSelecting.value = true;
   try {
-    const commands = selection.map(employeeGrant);
-    if (commands.length === 1) await grantPublicCertPermission(commands[0]);
+    if (commands.length === 1) await grantPublicCertPermission(commands[0], true);
     else await grantPublicCertPermissions(commands);
     employeeOpen.value = false;
     ElMessage.success('授权已保存');
-    await loadGrants();
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '授权失败，请核对已生效的授权');
   } finally {
     employeeSelecting.value = false;
   }
+  await loadGrants();
 }
 
 async function removeSelectedGrants() {
@@ -942,12 +949,14 @@ async function removeSelectedGrants() {
       .then(() => true, () => false);
     if (!confirmed) return;
     await revokePublicCertPermissions(ids);
-    pickedGrants.value = [];
     ElMessage.success('录入授权已移除');
-    await loadGrants();
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '移除授权失败，请核对剩余授权');
   } finally {
     grantUpdating.value = false;
   }
+  pickedGrants.value = [];
+  await loadGrants();
 }
 
 function openTypes() {

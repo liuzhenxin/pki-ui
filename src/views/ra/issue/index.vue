@@ -609,7 +609,7 @@ import { parseJson } from '@/utils/json';
 import { resolveTemplateUsages } from '@/utils/raCertUsage';
 import { buildIssueSubjectItems, formatIssueSubject, readIssueCsrSubject } from '@/utils/raIssueSubject';
 import { defaultIssueDuration, issueValidityUnits, resolveIssueValidity, type IssueValidityUnit } from '@/utils/raIssueValidity';
-import { rsaKmcKeyRequest, rsaKmcKeySizes } from '@/utils/raKmcKeyRequest';
+import { isKmcKeyGeneration, kmcIssuedCertificate, rsaKmcKeyRequest, rsaKmcKeySizes } from '@/utils/raKmcKeyRequest';
 import SKFClient from '@/api/skf/skf_api';
 import auth from '@/plugins/auth';
 import { intranetCertSyncLocation } from '@/utils/raIntranetCertNavigation';
@@ -761,7 +761,7 @@ const isRsaKmcEncryption = computed(() => {
   if (String(conf.certUsage || '').toUpperCase() === 'ENCRYPTION' && String(conf.keySource || '').toUpperCase() === 'KMC') {
     return true;
   }
-  return isEncryptionProfileConf(current.value.profileConf, current.value.profileName);
+  return isKmcEncryptionProfile(current.value.profileConf, current.value.profileName);
 });
 const queryFormRef = ref<FormInstance>();
 const issueFormRef = ref<FormInstance>();
@@ -1412,9 +1412,11 @@ function submitIssue() {
         application: issueForm.issueType === 'usb_key' ? issueForm.appName : undefined,
         container: issueForm.issueType === 'usb_key' ? issueForm.containerName : undefined
       });
+      const data = res.data;
+      const kmc = kmcIssuedCertificate(data, isRsaKmcEncryption.value);
       if (issueForm.issueType === 'usb_key' && res.data?.cert) {
         const skf = await getSkfClient();
-        if (isRsaKmcEncryption.value) {
+        if (kmc && !data?.encCertId) {
           if (!res.data.encryptionPrivateKey) {
             throw new Error('CA未返回可写入 USBKey 的 RSA 加密私钥材料');
           }
@@ -1503,9 +1505,7 @@ function submitIssue() {
       issueStep.value = '证书签发成功，正在刷新待签发列表...';
       issueResultType.value = current.value.businessType;
       renewalRaDownloadStatus.value = 'idle';
-      const data = res.data;
-      const kmcId = data?.encCertId ?? (isRsaKmcEncryption.value ? data?.certId : undefined);
-      kmcResult.value = kmcId ? { id: kmcId, serial: data?.encSerialNumber || data?.serialNumber || 'ra-cert' } : undefined;
+      kmcResult.value = kmc;
       issueResult.value = data || {};
       const doneLabel = isCertReissue.value ? '补办' : isCertUpdate.value ? '更新' : '签发';
       proxy?.$modal.msgSuccess(`${doneLabel}成功，证书序列号：${res.data?.serialNumber || '-'}`);
@@ -1847,7 +1847,7 @@ function resolveKeySize() {
   return resolveKeyAlgorithm() === 'RSA' ? Number(match?.[1] || 2048) : 256;
 }
 
-function isEncryptionProfileConf(profileConf?: string, profileName?: string) {
+function isKmcEncryptionProfile(profileConf?: string, profileName?: string) {
   const name = String(profileName || '');
   const upperName = name.toUpperCase();
   if (name.includes('加密') || upperName.includes('ENCRYPTION') || upperName.includes('TLS_ENC') || upperName.includes('TLS-ENC')) {
@@ -1859,6 +1859,7 @@ function isEncryptionProfileConf(profileConf?: string, profileName?: string) {
   } catch {
     conf = {};
   }
+  if (isKmcKeyGeneration(conf.keypairGeneration)) return true;
   const category = String(conf.profileCategory || conf.certLevel || conf.metadata?.category || '').toUpperCase();
   if (category === 'DUAL_ENC' || category === 'TLS_ENC' || category.includes('ENCRYPTION')) {
     return true;

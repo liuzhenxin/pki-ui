@@ -296,7 +296,7 @@
           <EmployeeCertificateInventory v-bind="certificateInventory" :ad-upload-enabled="adUploadEnabled && canUploadAd" @upload-ad="uploadEmployeeCertificateToAd" @page-change="changeCertificatePage" @retry="reloadCertificateInventory" @certificate="openCertificate" />
           <template v-if="adUploadEnabled">
             <el-divider class="employee-ad-divider" content-position="left">AD 上传记录</el-divider>
-            <el-descriptions class="employee-detail-descriptions employee-ad-summary" :column="1" label-width="9rem" border>
+            <el-descriptions class="employee-detail-descriptions employee-ad-summary" :column="1" label-width="12em" border>
               <el-descriptions-item label="最近成功上传 AD 的证书">
                 <el-button v-if="latestAdSuccess" class="ad-serial" link type="primary" @click="openCertificate(latestAdSuccess.certId)">{{ latestAdSuccess.serialNumber }}</el-button>
                 <span v-else>-</span>
@@ -737,6 +737,7 @@ const total = ref(0);
 const logsTotal = ref(0);
 const orgKeyword = ref('');
 const detailOpen = ref(false);
+const detail = ref<EmployeeListRow>({});
 const detailTab = ref('profile');
 const activityLoading = ref(false);
 const activity = ref<EmployeeActivity>({ applies: [], employeeCertificates: [] });
@@ -856,7 +857,6 @@ let numberChangesRequest = 0;
 const invalidTotal = ref(0);
 const invalidTaskNo = ref('');
 const orgTree = computed(() => directoryDepartments(localDepartments.value, 1));
-const detail = ref<EmployeeListRow>({});
 const fetchedApplicant = ref<RaApplicantUserInfo>();
 const linkedApplicant = computed(() => detail.value.applicant || fetchedApplicant.value);
 const applicantDisabled = computed(() => linkedApplicant.value?.status != null && Number(linkedApplicant.value.status) !== 0);
@@ -1937,9 +1937,7 @@ useRaListRefreshOnReturn(() => {
 .employee-detail-descriptions.employee-ad-summary {
   margin-bottom: 16px;
   :deep(.el-descriptions__label) {
-    width: 9rem;
-    white-space: normal;
-    overflow-wrap: anywhere;
+    white-space: nowrap;
   }
   .ad-serial {
     max-width: 100%;

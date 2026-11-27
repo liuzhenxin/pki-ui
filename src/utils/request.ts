@@ -240,7 +240,7 @@ service.interceptors.response.use(
 
     // 二进制数据则直接返回
     if (res.request.responseType === 'blob' || res.request.responseType === 'arraybuffer') {
-      return res.data;
+      return res.config.returnBinaryResponse ? res : res.data;
     }
     // KDS 信封使用 9000 表示成功，不能按平台 code===200 拦截。
     if (String(res.config?.url || '').includes('/platform/kds/')) {

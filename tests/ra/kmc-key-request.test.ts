@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { rsaKmcKeyRequest, rsaKmcKeySizes } from '../../src/utils/raKmcKeyRequest';
+import { isKmcKeyGeneration, kmcIssuedCertificate, rsaKmcKeyRequest, rsaKmcKeySizes } from '../../src/utils/raKmcKeyRequest';
 
 describe('RA RSA KMC key selection', () => {
   const mixed = JSON.stringify({ keyAlgorithms: ['RSA-2048', 'RSA-4096'] });
@@ -29,5 +29,22 @@ describe('RA RSA KMC key selection', () => {
   it('keeps legacy profiles without key constraints usable', () => {
     expect(rsaKmcKeySizes(undefined)).toEqual([2048, 4096]);
     expect(rsaKmcKeySizes('{"keyAlgorithms":[{"description":"RSA"}]}')).toEqual([2048, 4096]);
+  });
+});
+
+describe('KMC-issued certificate downloads', () => {
+  it.each(['InheritCA', 'KMC', { inheritCA: true }])('recognizes the template generation strategy %j', (strategy) => {
+    expect(isKmcKeyGeneration(strategy)).toBe(true);
+  });
+
+  it('uses the returned encryption certificate ID for a dual UKey result', () => {
+    expect(kmcIssuedCertificate({ certId: 5, encCertId: 6, encSerialNumber: 'ABC', encStorageType: 'USB_KEY' }, false))
+      .toEqual({ id: 6, serial: 'ABC' });
+  });
+
+  it('uses CA result metadata even when the browser did not classify the single UKey template', () => {
+    expect(kmcIssuedCertificate({ certId: 5, serialNumber: 'ABC', storageType: 'USB_KEY', encStorageType: 'USB_KEY' }, false))
+      .toEqual({ id: 5, serial: 'ABC' });
+    expect(kmcIssuedCertificate({ certId: 5, serialNumber: 'ABC', storageType: 'USB_KEY' }, false)).toBeUndefined();
   });
 });

@@ -499,7 +499,7 @@ function resetQuery() {
 }
 
 function isKmcCertificate(row: RaCertSummary) {
-  return row.keySource?.toUpperCase() === 'KMC';
+  return row.keyRecoveryAvailable === true || String(row.keySource || '').trim().toUpperCase() === 'KMC';
 }
 
 function canRecoverKey(row: RaCertSummary) {

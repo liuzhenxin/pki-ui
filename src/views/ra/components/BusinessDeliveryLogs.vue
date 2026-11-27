@@ -1,17 +1,11 @@
 <template>
-  <el-radio-group v-if="timeline" v-model="display" size="small" class="mb8" aria-label="网关记录显示方式">
-    <el-radio-button value="timeline">时间轴</el-radio-button>
-    <el-radio-button value="table">表格</el-radio-button>
-  </el-radio-group>
-  <section v-if="timeline && display === 'timeline'" v-loading="loading" aria-label="网关通知时间轴">
+  <section v-if="timeline" v-loading="loading" aria-label="网关通知时间轴">
     <el-empty v-if="!rows.length && !loading" description="暂无通知记录" :image-size="52" />
     <el-timeline v-else>
       <el-timeline-item v-for="row in rows" :key="row.id" :timestamp="displayTime(row.sendTime || row.time)" :type="resultColor(row.status)">
-        <span>{{ row.trigger }} · {{ channelName(row.channel) }}</span>
-        <el-tag class="ml10" :type="resultColor(row.status)" effect="light">{{ publicNoticeStatus(row.status) }}</el-tag>
-        <div>{{ row.title || labels[row.category] }}</div>
-        <div v-if="row.message">{{ row.message }}</div>
-        <el-button link type="primary" @click="detail = row">查看通知内容</el-button>
+        {{ row.trigger }} · {{ channelName(row.channel) }} · {{ labels[row.category] || row.category }} · {{ row.status === 1 ? '成功（接口已受理）' : publicNoticeStatus(row.status) }}
+        <span v-if="row.message"> · {{ row.message }}</span>
+        <el-button link type="primary" class="ml10" @click="detail = row">查看通知内容</el-button>
       </el-timeline-item>
     </el-timeline>
   </section>
@@ -67,7 +61,6 @@ import CertRowAction from './CertRowAction.vue';
 
 const props = defineProps<{ module: NoticeModule; certificateId?: string | number; timeline?: boolean }>();
 const emit = defineEmits<{ certificate: [id: string | number]; loaded: [logs: BusinessDeliveryLog[]] }>();
-const display = ref('timeline');
 function displayTime(value?: string) {
   return value?.replace('T', ' ').slice(0, 19) || '-';
 }

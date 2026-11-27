@@ -23,7 +23,19 @@ export async function employeeCertificateDownload(response: unknown, baseName: s
   const prefix = new Uint8Array(await blob.slice(0, 4).arrayBuffer());
   const zipped = prefix[0] === 80 && prefix[1] === 75 && prefix[2] === 3 && prefix[3] === 4;
   if (!zipped && format === 'all') throw new Error('服务器未返回有效的 ZIP 文件');
-  return { blob, filename: `${baseName}.${zipped ? 'zip' : format}` };
+  const disposition = (response as { headers?: Record<string, string> } | null)?.headers?.['content-disposition'] ?? '';
+  const encoded = /(?:^|;)\s*filename\*=UTF-8''([^;]+)/i.exec(disposition)?.[1];
+  let filename = /(?:^|;)\s*filename="([^"]+)"/i.exec(disposition)?.[1];
+  if (encoded) {
+    try {
+      filename = decodeURIComponent(encoded.trim());
+    } catch {
+      // A malformed filename header falls back to the plain filename.
+    }
+  }
+  const extension = zipped ? 'zip' : format;
+  const usableName = filename && filename.toLowerCase().endsWith('.' + extension) && !/[\x00-\x1f\x7f/\\]/.test(filename);
+  return { blob, filename: !zipped && usableName ? filename : `${baseName}.${extension}` };
 }
 
 export function recoveredPkcs12(result: { fileBase64?: string; fileName?: string }, serial: string) {

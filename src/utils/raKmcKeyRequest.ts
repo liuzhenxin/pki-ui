@@ -1,3 +1,17 @@
+import type { RaCertIssueResult } from '@/api/ra/certIssue';
+
+export function isKmcKeyGeneration(generation: unknown) {
+  if (typeof generation === 'string') return ['INHERITCA', 'KMC'].includes(generation.trim().toUpperCase());
+  return typeof generation === 'object' && generation != null && 'inheritCA' in generation && generation.inheritCA === true;
+}
+
+export function kmcIssuedCertificate(result: Partial<RaCertIssueResult> | undefined, singleKmcProfile: boolean) {
+  if (result?.encCertId != null) return { id: result.encCertId, serial: result.encSerialNumber || 'enc-cert' };
+  if (result?.certId != null && (result.encStorageType || singleKmcProfile)) {
+    return { id: result.certId, serial: result.serialNumber || 'ra-cert' };
+  }
+}
+
 /** RSA KMC requests carry an explicit size; wrapping CSR keys have their own size. */
 export function rsaKmcKeySizes(profileConf?: string): number[] {
   let profile: any;

@@ -1,6 +1,8 @@
 import request from '@/utils/request';
 import type { RaCertDetail } from '@/api/ra/cert';
 import type { Result } from '@/api/types';
+import { getEmployeeLedgerCertificate } from './employeeCert';
+import { isRaActionUnavailable } from './unavailableAction';
 
 const endpoint = '/ra/v1/employee-certs/legacy';
 
@@ -62,5 +64,12 @@ export function pageLegacyEmployeeCerts(pageNum: number, status: string, pageSiz
   return request({ url: endpoint, method: 'get', params: { pageNum, status, pageSize } });
 }
 
-export const getLegacyEmployeeCertificate = (id: string | number): Promise<Result<RaCertDetail>> =>
-  request({ url: `${endpoint}/${encodeURIComponent(id)}/certificate`, method: 'get' });
+export async function getLegacyEmployeeCertificate(id: string | number): Promise<Result<RaCertDetail>> {
+  try {
+    return await request({ url: `${endpoint}/${encodeURIComponent(id)}/certificate`, method: 'get',
+      headers: { hideErrorNotify: true, sensitive: true } });
+  } catch (error) {
+    if (!isRaActionUnavailable(error)) throw error;
+    return getEmployeeLedgerCertificate(id);
+  }
+}

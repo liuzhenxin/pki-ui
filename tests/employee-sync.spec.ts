@@ -27,6 +27,8 @@ test('employee details order profile fields and keep AD history below certificat
   expect(profile).toContain('优先按工号匹配');
   expect(profile).toContain('label-width="9rem"');
   expect(qualification).toContain('label-width="9rem"');
+  expect(qualification).toMatch(/employee-ad-summary"[^>]+label-width="12em"/);
+  expect(source).toMatch(/employee-ad-summary\s*\{[\s\S]*?:deep\(\.el-descriptions__label\)\s*\{\s*white-space: nowrap;/);
   expect(qualification).toMatch(/名下证书[\s\S]*?<EmployeeCertificateInventory[\s\S]*?AD 上传记录[\s\S]*?<el-table/);
 });
 
@@ -42,7 +44,7 @@ function pageHarness(initial: any = { status: 'RUNNING', taskNo: 'EMP-test' }) {
   let result = initial;
   let submissions = 0;
   let timer: (() => Promise<void>) | undefined;
-  let unmount: (() => void) | undefined;
+  const unmountCallbacks: Array<() => void> = [];
   const exportQueries: unknown[] = [];
   const downloadedFiles: string[] = [];
   const api = new Proxy(
@@ -65,7 +67,7 @@ function pageHarness(initial: any = { status: 'RUNNING', taskNo: 'EMP-test' }) {
   const message = Object.fromEntries(['success', 'warning', 'error', 'info'].map((type) => [type, (text: string) => messages.push({ type, text })]));
   const module = { exports: {} as any };
   const requireMock = (name: string) => {
-    if (name === 'vue') return { ...vue, onMounted: () => {}, onActivated: () => {}, onDeactivated: () => {}, onUnmounted: (callback: () => void) => (unmount = callback) };
+    if (name === 'vue') return { ...vue, onMounted: () => {}, onActivated: () => {}, onDeactivated: () => {}, onUnmounted: (callback: () => void) => unmountCallbacks.push(callback) };
     if (name === 'vue-router') return { useRouter: () => ({}), useRoute: () => ({ path: '', query: {} }) };
     if (name === '@/hooks/useRaListRefreshOnReturn') return { useRaListRefreshOnReturn: () => {} };
     if (name === 'element-plus') return { ElMessage: message };
@@ -82,6 +84,7 @@ function pageHarness(initial: any = { status: 'RUNNING', taskNo: 'EMP-test' }) {
       name === '@/utils/raCertificateSubject' ||
       name === './LocalDirectoryDialogs.vue' ||
       name === './EmployeeCertificateInventory.vue' ||
+      name === '../components/RaCertDetailDialog.vue' ||
       name === '@/utils/fawvwEmployeeStatus'
     ) {
       return {};
@@ -110,7 +113,7 @@ function pageHarness(initial: any = { status: 'RUNNING', taskNo: 'EMP-test' }) {
       expect(timer).toBeDefined();
       await timer!();
     },
-    unmount: () => unmount!(),
+    unmount: () => unmountCallbacks.forEach(callback => callback()),
     pendingPoll: () => timer
   };
 }
