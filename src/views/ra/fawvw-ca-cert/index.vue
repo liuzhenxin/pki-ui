@@ -50,11 +50,6 @@
             unlink-panels
           />
         </el-form-item>
-        <el-form-item label="提醒状态">
-          <el-select v-model="queryParams.reminderEnabled" clearable :value-on-clear="null">
-            <el-option label="开启" :value="true" /><el-option label="关闭" :value="false" />
-          </el-select>
-        </el-form-item>
         <el-form-item class="query-actions">
           <el-button type="primary" icon="Search" @click="handleQuery">搜索</el-button>
           <el-button icon="Refresh" @click="resetQuery">重置</el-button>
@@ -73,8 +68,13 @@
         <el-col :span="1.5">
           <el-button v-hasPermi="['ra:fawvw-ca-cert:edit']" plain icon="Bell" @click="businessNoticeSettings?.open()">通知设置</el-button>
         </el-col>
-        <right-toolbar v-model:showSearch="showSearch" @queryTable="loadList" />
-        <el-col :span="1.5"><el-button plain icon="Document" @click="deliveryLogsOpen = true">通知记录</el-button></el-col>
+        <right-toolbar v-model:showSearch="showSearch" @queryTable="loadList">
+          <template #prepend>
+            <el-tooltip content="通知记录">
+              <el-button circle icon="Document" aria-label="通知记录" @click="deliveryLogsOpen = true" />
+            </el-tooltip>
+          </template>
+        </right-toolbar>
       </el-row>
 
       <el-alert
@@ -159,6 +159,7 @@
           :total="total"
           :auto-scroll="false"
           layout="sizes, prev, pager, next, jumper"
+          float="none"
           @pagination="loadList"
         />
       </div>
@@ -456,7 +457,6 @@ const queryParams = reactive<FawvwCaCertQuery>({
   keyword: '',
   certificateType: '',
   validityStatus: '',
-  reminderEnabled: null,
   managementStatus: ''
 });
 const expiryRange = ref<[string, string] | null>(null);
@@ -492,7 +492,6 @@ function resetQuery() {
     keyword: '',
     certificateType: '',
     validityStatus: '',
-  reminderEnabled: null,
     managementStatus: '',
     issuer: '',
     sourceType: '',
@@ -586,7 +585,8 @@ useRaListRefreshOnReturn(async () => {
 
 <style scoped lang="scss">
 .ca-pagination { display: flex; align-items: center; justify-content: flex-end; gap: 12px; flex-wrap: wrap; }
-.ca-pagination :deep(.pagination-container) { flex: 0 1 auto; }
+.ca-pagination :deep(.pagination-container) { flex: 0 1 auto; margin: 0; padding: 0; }
+.ca-pagination :deep(.el-pagination) { flex-wrap: wrap; }
 .ca-group-count { color: var(--el-text-color-regular); font-size: var(--el-font-size-base); white-space: nowrap; }
 
 .fawvw-ca-cert-page {
@@ -610,7 +610,7 @@ useRaListRefreshOnReturn(async () => {
     }
 
     .query-actions {
-      grid-column: 1 / -1;
+      grid-column: -2 / -1;
     }
 
     .query-actions :deep(.el-form-item__content) {

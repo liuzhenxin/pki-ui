@@ -1,19 +1,35 @@
 <template>
-  <el-table v-loading="loading" :data="rows" size="small" row-key="id" empty-text="暂无通知记录">
+  <el-radio-group v-if="timeline" v-model="display" size="small" class="mb8" aria-label="网关记录显示方式">
+    <el-radio-button value="timeline">时间轴</el-radio-button>
+    <el-radio-button value="table">表格</el-radio-button>
+  </el-radio-group>
+  <section v-if="timeline && display === 'timeline'" v-loading="loading" aria-label="网关通知时间轴">
+    <el-empty v-if="!rows.length && !loading" description="暂无通知记录" :image-size="52" />
+    <el-timeline v-else>
+      <el-timeline-item v-for="row in rows" :key="row.id" :timestamp="displayTime(row.sendTime || row.time)" :type="resultColor(row.status)">
+        <span>{{ row.trigger }} · {{ channelName(row.channel) }}</span>
+        <el-tag class="ml10" :type="resultColor(row.status)" effect="light">{{ publicNoticeStatus(row.status) }}</el-tag>
+        <div>{{ row.title || labels[row.category] }}</div>
+        <div v-if="row.message">{{ row.message }}</div>
+        <el-button link type="primary" @click="detail = row">查看通知内容</el-button>
+      </el-timeline-item>
+    </el-timeline>
+  </section>
+  <el-table v-else v-loading="loading" :data="rows" size="small" row-key="id" empty-text="暂无通知记录">
     <el-table-column label="渠道" width="88">
-      <template #default="{ row }">{{ { email: '邮件', dingtalk: '钉钉', suppressed: '过期提醒' }[row.channel] || row.channel }}</template>
+      <template #default="{ row }">{{ channelName(row.channel) }}</template>
     </el-table-column>
     <el-table-column label="通知类型" width="134">
       <template #default="{ row }">{{ labels[row.category] || row.category }}</template>
     </el-table-column>
     <el-table-column label="触发方式" prop="trigger" width="90" />
-    <el-table-column label="标题" prop="title" min-width="140" show-overflow-tooltip />
-    <el-table-column label="收件人" prop="recipient" min-width="100" show-overflow-tooltip />
     <el-table-column label="状态" width="110">
       <template #default="{ row }"
-        ><el-tag :type="row.status === 1 ? 'success' : row.status === 2 ? 'danger' : 'info'">{{ publicNoticeStatus(row.status) }}</el-tag></template
+        ><el-tag :type="resultColor(row.status)">{{ publicNoticeStatus(row.status) }}</el-tag></template
       >
     </el-table-column>
+    <el-table-column label="标题" prop="title" min-width="140" show-overflow-tooltip />
+    <el-table-column label="收件人" prop="recipient" min-width="100" show-overflow-tooltip />
     <el-table-column label="记录时间" width="170">
       <template #default="{ row }">{{ row.time?.replace('T', ' ').slice(0, 19) || '-' }}</template>
     </el-table-column>
@@ -49,8 +65,18 @@ import { listBusinessDeliveryLogs, type BusinessDeliveryLog, type NoticeModule }
 import { publicNoticeStatus } from '@/utils/publicCertForm';
 import CertRowAction from './CertRowAction.vue';
 
-const props = defineProps<{ module: NoticeModule; certificateId?: string | number }>();
+const props = defineProps<{ module: NoticeModule; certificateId?: string | number; timeline?: boolean }>();
 const emit = defineEmits<{ certificate: [id: string | number]; loaded: [logs: BusinessDeliveryLog[]] }>();
+const display = ref('timeline');
+function displayTime(value?: string) {
+  return value?.replace('T', ' ').slice(0, 19) || '-';
+}
+function resultColor(status: number) {
+  return status === 1 ? 'success' : status === 2 ? 'danger' : 'info';
+}
+function channelName(channel: string) {
+  return ({ email: '邮件', dingtalk: '钉钉', suppressed: '过期提醒' } as Record<string, string>)[channel] || channel;
+}
 const rows = ref<BusinessDeliveryLog[]>([]);
 const detail = ref<BusinessDeliveryLog>();
 const loading = ref(false);

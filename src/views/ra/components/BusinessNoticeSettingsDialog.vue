@@ -27,21 +27,13 @@
       <el-tab-pane label="模板配置" name="templates">
         <el-collapse>
           <el-collapse-item title="可用模板变量" name="variables">
-            <div>收件人：{{ '${' + module + '.recipientName}' }}、{{ '${' + module + '.recipientRole}' }}</div>
-            <div>有效期：{{ '${' + module + '.expiryText}' }}、{{ '${' + module + '.days}' }}</div>
-            <div v-if="module !== 'root'">离职员工：{{ '${' + module + '.ownerName}' }}</div>
-            <div v-if="module === 'public'">
-              审批：${public.submitterName}、${public.approvalResult}、${public.approvalColor}、${public.approvalComment}
-            </div>
-            <div>
-              证书信息：<span v-for="key in certificateVariables" :key="key">{{ '${' + module + '.' + key + '}' }}　</span>
-            </div>
-            <div>
-              证书信息表格：{{ '${' + module + '.certificateTable}'
-              }}<span v-if="module === 'public'"
-                >；多系统信息：{{ '${public.usageTable}' }}、{{ '${public.systemOwner}' }}、{{ '${public.usageDomain}' }}</span
-              >
-            </div>
+            <p>把变量原样放入标题或正文，发送时以当前证书与收件人的信息替换。字段无值时留空。</p>
+            <el-descriptions :column="1" border size="small">
+              <el-descriptions-item v-for="[key, description] in noticeVariables" :key="key" :label="variable(key)">
+                {{ description }}
+              </el-descriptions-item>
+            </el-descriptions>
+            <p class="mt8">示例：<code>{{ variable('recipientName') }}，证书 {{ variable('serialNumber') }} {{ variable('expiryText') }}。</code></p>
           </el-collapse-item>
         </el-collapse>
         <el-collapse>
@@ -119,56 +111,41 @@ const categories = computed(() => [
       ]
     : [])
 ]);
-const certificateVariables = computed(() =>
-  [
-    'certificateName',
-    'subject',
-    'issuer',
-    'serialNumber',
-    'notBefore',
-    'notAfter',
-    'certTypeName',
-    'domainName',
-    'vendor',
-    'applicantAccount',
-    'applicantName',
-    'departmentName',
-    'systemName',
-    'usageScenario',
-    'maintainerAccount',
-    'maintainerName'
-  ].filter((key) => moduleCertificateFields[props.module].includes(key))
-);
+const certificateLabels: Record<string, string> = {
+  certificateName: '证书名称。内网证书使用主题，主题为空时使用序列号。',
+  subject: '证书主题', issuer: '颁发者或颁发机构', serialNumber: '证书序列号',
+  notBefore: '生效时间', notAfter: '到期时间', profileName: '签发模板名称',
+  certTypeName: '证书类型', domainName: '证书关联的域名', vendor: '供应商',
+  applicantAccount: '申请人域账号', applicantName: '申请人姓名', departmentName: '证书使用人或维护人的科室',
+  systemName: '使用系统。录入证书有多条使用记录时，按顺序用顿号连接。',
+  usageScenario: '使用场景。录入证书有多条使用记录时，按顺序用顿号连接。',
+  maintainerAccount: '维护人域账号', maintainerName: '维护人姓名'
+};
 const moduleCertificateFields = {
   root: ['certificateName', 'subject', 'issuer', 'serialNumber', 'notBefore', 'notAfter'],
-  intranet: [
-    'certificateName',
-    'subject',
-    'issuer',
-    'serialNumber',
-    'notBefore',
-    'notAfter',
-    'applicantAccount',
-    'applicantName',
-    'departmentName',
-    'systemName',
-    'usageScenario'
-  ],
-  public: [
-    'certTypeName',
-    'domainName',
-    'issuer',
-    'serialNumber',
-    'vendor',
-    'notBefore',
-    'notAfter',
-    'maintainerAccount',
-    'maintainerName',
-    'departmentName',
-    'systemName',
-    'usageScenario'
-  ]
+  intranet: ['certificateName', 'subject', 'issuer', 'serialNumber', 'notBefore', 'notAfter', 'profileName',
+    'applicantAccount', 'applicantName', 'departmentName', 'systemName', 'usageScenario'],
+  public: ['certTypeName', 'domainName', 'issuer', 'serialNumber', 'vendor', 'notBefore', 'notAfter',
+    'maintainerAccount', 'maintainerName', 'departmentName', 'systemName', 'usageScenario']
 };
+const noticeVariables = computed<[string, string][]>(() => {
+  const variables: [string, string][] = [
+    ['recipientName', '本条通知的收件人'], ['recipientRole', '收件人的角色，例如证书管理员'],
+    ['expiryText', '例如“有效期还有 7 天”或“已过期”'], ['days', '剩余天数，到期日为 0，已过期按自然日计为负数'],
+    ['certificateTable', '完整证书信息，录入证书还包括各条使用记录']
+  ];
+  if (props.module !== 'root') variables.push(['ownerName', '关联的证书使用人或维护人']);
+  if (props.module === 'public') {
+    variables.push(['submitterName', '录入提交人'], ['approvalResult', '审批结果'], ['approvalColor', '审批结果颜色'],
+      ['approvalComment', '审核意见'], ['updateUrl', '录入端访问地址'], ['usageTable', '所有系统的使用明细'],
+      ['systemOwner', '使用记录中的系统负责人，按顺序用顿号连接'], ['usageDomain', '使用域名，按顺序用顿号连接']);
+  }
+  return [...variables, ...moduleCertificateFields[props.module].map((field): [string, string] => [field, certificateLabels[field]])];
+});
+
+function variable(key: string) {
+  return '${' + props.module + '.' + key + '}';
+}
 const channels = [
   { value: 'EMAIL', label: '邮件' },
   { value: 'DINGTALK', label: '钉钉' }

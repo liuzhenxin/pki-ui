@@ -12,14 +12,8 @@
         <el-form-item label="申请人">
           <el-input v-model="queryParams.applicantKeyword" clearable placeholder="姓名、域账号或科室" @keyup.enter="handleQuery" />
         </el-form-item>
-        <el-form-item label="科室">
-          <el-input v-model="queryParams.deptName" clearable placeholder="申请科室" @keyup.enter="handleQuery" />
-        </el-form-item>
-        <el-form-item label="证书模板">
-          <el-input v-model="queryParams.profileName" clearable placeholder="模板名称" @keyup.enter="handleQuery" />
-        </el-form-item>
-        <el-form-item label="颁发机构">
-          <el-input v-model="queryParams.issuer" clearable placeholder="颁发者或 CA 名称" @keyup.enter="handleQuery" />
+        <el-form-item label="证书信息">
+          <el-input v-model="queryParams.certificateInfo" clearable placeholder="模板名称或颁发机构" @keyup.enter="handleQuery" />
         </el-form-item>
         <el-form-item label="证书状态">
           <el-select v-model="queryParams.certStatus" clearable placeholder="全部">
@@ -64,7 +58,7 @@
         </el-col>
         <el-col :span="1.5">
           <el-dropdown trigger="click" :disabled="!selectedRows.length" @command="batchLedgerAction">
-            <el-button plain :disabled="!selectedRows.length">操作</el-button>
+            <el-button class="mr8" plain icon="Operation" :disabled="!selectedRows.length">操作</el-button>
             <template #dropdown><el-dropdown-menu>
               <el-dropdown-item v-if="auth.hasPermi('ra:intranet-cert:remind')" command="enable">开启提醒</el-dropdown-item>
               <el-dropdown-item v-if="auth.hasPermi('ra:intranet-cert:remind')" command="disable">关闭提醒</el-dropdown-item>
@@ -79,8 +73,13 @@
         <el-col :span="1.5">
           <el-button v-if="auth.hasPermi('ra:intranet-cert:template')" plain icon="Bell" @click="businessNoticeSettings?.open()">通知设置</el-button>
         </el-col>
-        <right-toolbar v-model:showSearch="showSearch" @queryTable="loadList" />
-        <el-col :span="1.5"><el-button plain icon="Document" @click="deliveryLogsOpen = true">通知记录</el-button></el-col>
+        <right-toolbar v-model:showSearch="showSearch" @queryTable="loadList">
+          <template #prepend>
+            <el-tooltip content="通知记录">
+              <el-button circle icon="Document" aria-label="通知记录" @click="deliveryLogsOpen = true" />
+            </el-tooltip>
+          </template>
+        </right-toolbar>
       </el-row>
 
       <el-table v-loading="loading" :data="rows" @selection-change="selectedRows = $event" border stripe class="cert-table" empty-text="暂无内网证书台账">
@@ -106,6 +105,9 @@
           <template #default="{ row }">
             <el-tag :type="row.applicantStatus === 'LEFT' ? 'danger' : 'success'" effect="plain">{{ row.applicantStatusName || '-' }}</el-tag>
           </template>
+        </el-table-column>
+        <el-table-column label="提醒结果" width="112" align="center">
+          <template #default="{ row }"><BusinessReminderResultTag :result="reminderResults[String(row.id)]" :unavailable="reminderResultsFailed" /></template>
         </el-table-column>
         <el-table-column label="操作" fixed="right" width="228" align="center">
           <template #default="{ row }">
@@ -228,7 +230,7 @@
         <el-descriptions-item label="备注">{{ detail.remark || '-' }}</el-descriptions-item>
       </el-descriptions>
       <el-divider content-position="left">通知记录</el-divider>
-      <BusinessDeliveryLogs v-if="detailOpen && detail.id != null" module="intranet" :certificate-id="detail.id" />
+      <BusinessDeliveryLogs v-if="detailOpen && detail.id != null" module="intranet" :certificate-id="detail.id" timeline />
     </el-drawer>
 
     <el-dialog v-model="employeeOpen" title="选择申请人" width="980px" append-to-body>
@@ -274,6 +276,8 @@ import { formatCertificateSubject } from '@/utils/raCertificateSubject';
 import CertRowAction from '../components/CertRowAction.vue';
 import { notifyBusinessCertificates, setBusinessCertificateReminder } from '@/api/ra/businessNoticeSettings';
 import { businessCertificateValidity, confirmManualBusinessNotice, businessCertificateExpired, businessCertificateNoticeBlocked, confirmExpiredCertificateNotice } from '@/utils/businessCertificateNotice';
+import BusinessReminderResultTag from '../components/BusinessReminderResultTag.vue';
+import { getBusinessReminderResults, type BusinessReminderResult } from '@/api/ra/businessNoticeSettings';
 import BusinessDeliveryLogs from '../components/BusinessDeliveryLogs.vue';
 import RaCertDetailDialog from '../components/RaCertDetailDialog.vue';
 import { pageRaCert, type RaCertSummary } from '@/api/ra/cert';
@@ -323,9 +327,7 @@ const queryParams = reactive<IntranetCertQuery>({
   serialNumber: '',
   systemName: '',
   applicantKeyword: '',
-  deptName: '',
-  profileName: '',
-  issuer: '',
+  certificateInfo: '',
   certStatus: '',
   reminderEnabled: null,
   applicantStatus: '',
@@ -386,6 +388,9 @@ function queryPayload(): IntranetCertQuery {
   return { ...queryParams, notAfterStart: expiryRange.value?.[0], notAfterEnd: expiryRange.value?.[1] };
 }
 
+const reminderResults = ref<Record<string, BusinessReminderResult>>({});
+const reminderResultsFailed = ref(false);
+
 let listVersion = 0;
 
 async function loadList() {
@@ -395,6 +400,16 @@ async function loadList() {
     const page = unwrap<any>(await pageIntranetCerts(queryPayload()));
     if (version !== listVersion) return;
     rows.value = page.records || page.rows || [];
+    reminderResults.value = {};
+    reminderResultsFailed.value = false;
+    const noticeIds = rows.value.flatMap(row => row.id == null ? [] : [row.id]);
+    if (noticeIds.length) {
+      void getBusinessReminderResults('intranet', noticeIds).then(response => {
+        if (version === listVersion) reminderResults.value = response.data || {};
+      }).catch(() => {
+        if (version === listVersion) reminderResultsFailed.value = true;
+      });
+    }
     total.value = Number(page.total || 0);
   } finally {
     if (version === listVersion) loading.value = false;
@@ -413,9 +428,7 @@ function resetQuery() {
     serialNumber: '',
     systemName: '',
     applicantKeyword: '',
-    deptName: '',
-    profileName: '',
-    issuer: '',
+    certificateInfo: '',
     certStatus: '',
     reminderEnabled: null,
     applicantStatus: '',
@@ -532,6 +545,7 @@ async function toggleReminder(row: IntranetCert, value: boolean) {
     await setBusinessCertificateReminder('intranet', id, value, send);
     row.reminderEnabled = value;
     ElMessage.success(value ? '已开启提醒' : '已关闭提醒');
+    if (send) void loadList();
   } finally {
     reminderSaving.delete(id);
   }
@@ -543,7 +557,8 @@ async function sendNotice(row: IntranetCert) {
   sendingNotice.value = true;
   try {
     const count = unwrap<number>(await notifyBusinessCertificates('intranet', [row.id]));
-    ElMessage.info(count ? '通知已入队' : '没有可发送的通知，请检查通知渠道和收件范围');
+    ElMessage.info(count ? '通知已入队，发送结果请查看提醒结果' : '没有可发送的通知，请检查通知渠道和收件范围');
+    if (count) void loadList();
   } finally {
     sendingNotice.value = false;
   }
@@ -592,7 +607,7 @@ async function handleExport() {
 
 async function refreshOwnerStatus() {
   const count = unwrap<number>(await refreshIntranetOwnerStatus());
-  ElMessage.success(`刷新完成，需处理负责人 ${count || 0} 条`);
+  ElMessage.success('人员状态已刷新');
   loadList();
 }
 
@@ -676,7 +691,7 @@ useRaListRefreshOnReturn(loadList);
     }
 
     .query-actions {
-      grid-column: 1 / -1;
+      grid-column: -2 / -1;
     }
 
     .query-actions :deep(.el-form-item__content) {

@@ -1,4 +1,5 @@
 import request from '@/utils/request';
+import type { RaCertDetail } from '@/api/ra/cert';
 import type { Result } from '@/api/types';
 
 const endpoint = '/ra/v1/employee-certs/legacy';
@@ -57,6 +58,9 @@ export function importLegacyEmployeeCerts(file: File, token: string): Promise<Re
   });
 }
 
-export function pageLegacyEmployeeCerts(pageNum: number, status: string): Promise<Result<{ records: LegacyLedgerRow[]; total: number }>> {
-  return request({ url: endpoint, method: 'get', params: { pageNum, status } });
+export function pageLegacyEmployeeCerts(pageNum: number, status: string, pageSize = 30): Promise<Result<{ records: LegacyLedgerRow[]; total: number }>> {
+  return request({ url: endpoint, method: 'get', params: { pageNum, status, pageSize } });
 }
+
+export const getLegacyEmployeeCertificate = (id: string | number): Promise<Result<RaCertDetail>> =>
+  request({ url: `${endpoint}/${encodeURIComponent(id)}/certificate`, method: 'get' });

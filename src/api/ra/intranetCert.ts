@@ -12,6 +12,7 @@ export interface IntranetCertQuery {
   applicantKeyword?: string;
   deptName?: string;
   profileName?: string;
+  certificateInfo?: string;
   issuer?: string;
   certStatus?: IntranetCertStatus | '';
   reminderEnabled?: boolean | null;

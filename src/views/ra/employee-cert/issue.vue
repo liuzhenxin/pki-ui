@@ -221,7 +221,7 @@
             <el-table-column label="创建时间" min-width="166" align="center">
               <template #default="{ row }">{{ formatDate(row.createTime) }}</template>
             </el-table-column>
-            <el-table-column label="操作" min-width="106" align="center">
+            <el-table-column label="操作" width="106" align="center" fixed="right">
               <template #default="{ row }">
                 <CertRowAction label="详情" icon="View" @click="openTask(row)" />
                 <EmployeeCertificateDownloadMenu v-hasPermi="['ra:employee-cert:distribute']"
@@ -300,7 +300,8 @@
         </el-table-column>
         <el-table-column label="序列号" prop="serialNumber" min-width="220" show-overflow-tooltip>
           <template #default="{ row }">
-            <div>{{ row.serialNumber || '-' }}</div>
+            <el-button v-if="row.serialNumber && row.raCertId" link type="primary" @click="issuedDetail?.open({ id: row.id })">{{ row.serialNumber }}</el-button>
+            <span v-else>{{ row.serialNumber || '-' }}</span>
             <div v-for="original in row.originalSerialNumbers" :key="original" class="original-serial">旧证书序列号：{{ original }}</div>
           </template>
         </el-table-column>
@@ -310,7 +311,7 @@
             <el-tag :type="issueStatusType(displayIssueStatus(row))" effect="plain">{{ issueStatusLabel(displayIssueStatus(row)) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="签发记录" width="100">
+        <el-table-column label="签发记录" width="100" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" @click="showIssueHistory(row)">{{ row.issueHistory?.length || 0 }} 次</el-button>
           </template>
@@ -329,12 +330,13 @@
           icon="Promotion"
           @click="distributeTask(taskDetail.task)"
         >批量分发</el-button>
-        <EmployeeCertificateDownloadMenu v-hasPermi="['ra:employee-cert:distribute']" button="primary"
+        <EmployeeCertificateDownloadMenu v-hasPermi="['ra:employee-cert:distribute']" class="ml10" button="primary"
           :loading="downloadingTask === taskDetail.task.taskNo" :disabled="Boolean(downloadingTask)"
           @download="downloadTaskPackage(taskDetail.task, $event)" />
       </template>
     </el-drawer>
 
+    <RaCertDetailDialog ref="issuedDetail" :load-detail="loadIssuedDetail" />
     <el-dialog v-model="distributionPickerOpen" title="选择分发证书" width="680px" append-to-body>
       <el-table :data="distributableTaskCerts" max-height="360" border empty-text="当前没有可分发的证书"
         @selection-change="distributionSelection = $event">
@@ -548,6 +550,7 @@ import {
   type EmployeeDistributionSelection,
   type EmployeeMailType,
   getEmployeeCertTask,
+  getEmployeeTaskCertificate,
   getEmployeeProductionCandidateAvailability,
   getEmployeeProductionCandidateDetail,
   issueEmployeeCertTask,
@@ -898,6 +901,13 @@ const keyLoading = ref(false);
 const keyLoadFailed = ref(false);
 const currentEmployee = ref<EmployeeCertEmployee>();
 const keys = ref<EmployeeProductionCandidate[]>([]);
+const issuedDetail = ref<InstanceType<typeof RaCertDetailDialog>>();
+function loadIssuedDetail(id: string | number) {
+  const taskNo = taskDetail.value.task?.taskNo;
+  if (!taskNo) return Promise.reject(new Error('制作任务不存在'));
+  return getEmployeeTaskCertificate(taskNo, id);
+}
+
 const keyChoice = ref('AUTO');
 const productionChoices = ref<Record<string, EmployeeProductionChoice>>({});
 let keyRequestId = 0;

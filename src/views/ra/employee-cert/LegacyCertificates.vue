@@ -10,9 +10,7 @@
     <el-alert class="legacy-help" title="上传说明" type="info" :closable="false" show-icon>
       <div>上传无需解压密码的 ZIP，包内只放 .pfx 文件。单批最多 50 份，ZIP 不超过 20 MB。</div>
       <div>序列号使用十六进制，须与证书内一致，最后一段填写 PFX 密码。</div>
-      <div>支持的文件名格式</div>
-      <div><code>证书序列号_域账号_PFX密码.pfx</code></div>
-      <div><code>域账号_证书序列号_PFX密码.pfx</code></div>
+      <div>支持的文件名格式：证书序列号_域账号_PFX密码.pfx、域账号_证书序列号_PFX密码.pfx</div>
     </el-alert>
 
     <el-alert v-if="lastResult" class="legacy-result" type="success" :closable="false" show-icon>
@@ -41,13 +39,8 @@
         </el-table-column>
         <el-table-column prop="message" label="说明" min-width="225" show-overflow-tooltip />
       </el-table>
-      <el-pagination
-        v-if="filteredPreviewRows.length > previewPageSize"
-        v-model:current-page="previewPage"
-        :page-size="previewPageSize"
-        :total="filteredPreviewRows.length"
-        layout="prev, pager, next, total"
-      />
+      <pagination v-if="filteredPreviewRows.length" v-model:page="previewPage" v-model:limit="previewPageSize"
+        :total="filteredPreviewRows.length" :auto-scroll="false" />
     </template>
 
     <el-divider content-position="left">已导入存量证书</el-divider>
@@ -62,7 +55,9 @@
       <el-table-column prop="employeeName" label="员工" min-width="100">
         <template #default="{ row }">{{ row.status === 'UNMATCHED' ? '—' : row.employeeName }}</template>
       </el-table-column>
-      <el-table-column prop="serial" label="序列号" min-width="145" show-overflow-tooltip />
+      <el-table-column prop="serial" label="序列号" min-width="145" show-overflow-tooltip>
+        <template #default="{ row }"><el-button link type="primary" @click="certificateDetail?.open({ id: row.id })">{{ row.serial }}</el-button></template>
+      </el-table-column>
       <el-table-column label="归属" width="142">
         <template #default="{ row }">{{ statusLabel(row.status) }}</template>
       </el-table-column>
@@ -72,22 +67,19 @@
       <el-table-column prop="batchNo" label="导入批次" min-width="125" show-overflow-tooltip />
       <el-table-column prop="message" label="说明" min-width="170" show-overflow-tooltip />
     </el-table>
-    <el-pagination
-      v-if="ledgerTotal > 30"
-      v-model:current-page="ledgerPage"
-      :page-size="30"
-      :total="ledgerTotal"
-      layout="prev, pager, next, total"
-      @current-change="loadLedger"
-    />
+    <pagination v-if="ledgerTotal" v-model:page="ledgerPage" v-model:limit="ledgerPageSize" :total="ledgerTotal"
+      :auto-scroll="false" @pagination="loadLedger" />
+    <RaCertDetailDialog ref="certificateDetail" :load-detail="getLegacyEmployeeCertificate" />
   </el-card>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
+import RaCertDetailDialog from '../components/RaCertDetailDialog.vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import {
   importLegacyEmployeeCerts,
+  getLegacyEmployeeCertificate,
   pageLegacyEmployeeCerts,
   previewLegacyEmployeeCerts,
   type LegacyImportResult,
@@ -104,7 +96,9 @@ const importing = ref(false);
 const busy = computed(() => checking.value || importing.value);
 const previewFilter = ref('');
 const previewPage = ref(1);
-const previewPageSize = 30;
+const previewPageSize = ref(30);
+const ledgerPageSize = ref(30);
+const certificateDetail = ref<InstanceType<typeof RaCertDetailDialog>>();
 const ledgerFilter = ref('');
 const ledgerPage = ref(1);
 const ledgerLoading = ref(false);
@@ -131,8 +125,8 @@ const filteredPreviewRows = computed(() => {
   return previewFilter.value ? rows.filter((row) => row.status === previewFilter.value) : rows;
 });
 const visiblePreviewRows = computed(() => {
-  const offset = (previewPage.value - 1) * previewPageSize;
-  return filteredPreviewRows.value.slice(offset, offset + previewPageSize);
+  const offset = (previewPage.value - 1) * previewPageSize.value;
+  return filteredPreviewRows.value.slice(offset, offset + previewPageSize.value);
 });
 
 function selectArchive(event: Event) {
@@ -194,7 +188,7 @@ async function loadLedger() {
   const id = ++ledgerRequest;
   ledgerLoading.value = true;
   try {
-    const response = await pageLegacyEmployeeCerts(ledgerPage.value, ledgerFilter.value);
+    const response = await pageLegacyEmployeeCerts(ledgerPage.value, ledgerFilter.value, ledgerPageSize.value);
     if (id === ledgerRequest) {
       ledgerRows.value = response.data?.records || [];
       ledgerTotal.value = Number(response.data?.total || 0);
@@ -216,6 +210,8 @@ onMounted(loadLedger);
 
 <style scoped>
 .legacy-help {
+  line-height: 1.75;
+  overflow-wrap: anywhere;
   color: var(--el-text-color-secondary);
   margin: 12px 0 16px;
 }

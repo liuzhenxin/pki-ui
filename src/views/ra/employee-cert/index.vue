@@ -178,8 +178,8 @@
     <template v-if="managementTab === 'distribution'">
       <el-card shadow="never" class="query-card">
         <el-form inline class="distribution-query" @submit.prevent="searchDistributionRecords()">
-          <el-form-item label="任务号">
-            <el-input v-model="distributionTaskNo" clearable maxlength="40" placeholder="请输入完整任务号" />
+          <el-form-item label="批次号">
+            <el-input v-model="distributionBatchFilter" clearable maxlength="36" placeholder="请输入完整批次号" />
           </el-form-item>
           <el-form-item label="任务类型">
             <el-select v-model="distributionBatchType" clearable placeholder="全部" style="width: 150px">
@@ -234,7 +234,7 @@
           <el-table-column label="处理中" min-width="90"
             ><template #default="{ row }">{{ row.totalCount - row.successCount - row.failedCount }}</template></el-table-column
           >
-          <el-table-column label="操作" min-width="90" align="center">
+          <el-table-column label="操作" width="90" align="center" fixed="right">
             <template #default="{ row }"><CertRowAction label="查看分发明细" icon="View" @click="selectDistributionBatch(row.batchNo)" /></template>
           </el-table-column>
         </el-table>
@@ -296,7 +296,12 @@
             <el-table :data="distributionRecords" row-key="certId" border stripe empty-text="暂无本批明细">
               <el-table-column label="姓名" prop="employeeName" min-width="100" />
               <el-table-column label="域账号" prop="domainAccount" min-width="110" show-overflow-tooltip />
-              <el-table-column label="序列号" prop="serialNumber" min-width="170" show-overflow-tooltip />
+              <el-table-column label="序列号" prop="serialNumber" min-width="170" show-overflow-tooltip>
+                <template #default="{ row }">
+                  <el-button v-if="row.serialNumber && row.certId" link type="primary" @click="openDistributionSerial(row)">{{ row.serialNumber }}</el-button>
+                  <span v-else>{{ row.serialNumber || '-' }}</span>
+                </template>
+              </el-table-column>
               <el-table-column label="邮箱" prop="recipientEmail" min-width="180" show-overflow-tooltip />
               <el-table-column :label="activeDistributionBatch.taskType === 'UPLOAD' ? '上传结果' : '分发结果'" min-width="132" align="center" sortable :sort-method="(a, b) => a.sendStatus - b.sendStatus" :sort-orders="['descending', 'ascending', null]">
                 <template #default="{ row }"
@@ -317,7 +322,7 @@
                 <template #default="{ row }">{{ formatDate(row.sendTime) }}</template>
               </el-table-column>
               <el-table-column label="失败原因" prop="errorMessage" min-width="190" show-overflow-tooltip />
-              <el-table-column v-if="activeDistributionBatch.taskType !== 'UPLOAD'" label="日志" width="80" align="center"
+              <el-table-column v-if="activeDistributionBatch.taskType !== 'UPLOAD'" label="日志" width="80" align="center" fixed="right"
                 ><template #default="{ row }"><CertRowAction label="查看分发日志" icon="View" @click="openDetail({ id: row.certId })" /></template
               ></el-table-column>
             </el-table>
@@ -329,6 +334,8 @@
       </el-drawer>
     </template>
 
+    <RaCertDetailDialog ref="distributionCertificateDetail" :load-detail="loadDistributionCertificateDetail" />
+    <RaCertDetailDialog ref="adCertificateDetail" :load-detail="getRaCert" />
     <RaCertDetailDialog ref="ledgerCertificateDetail" :load-detail="getEmployeeLedgerCertificate" />
     <DistributionDialog ref="distributionDialog" @submitted="onDistributionSubmitted" />
     <el-drawer v-model="detailOpen" title="员工证书详情" size="min(940px, 100vw)" append-to-body>
@@ -481,13 +488,11 @@
             <code>${serialNumber}</code> 证书序列号 · <code>${departmentName}</code> 部门 · <code>${jobName}</code> 岗位 ·
             <code>${certTypeName}</code> 证书类型 · <code>${notBefore}</code> 生效时间 · <code>${notAfter}</code> 到期时间
           </p>
-          <p v-if="mixedScheme" class="template-help-example">
-            示例：<code
+          <p class="template-help-example">
+            示例：<code v-if="mixedScheme"
               >&lt;p&gt;您好，${employeeName}：&lt;br&gt;您的${certTypeName}已签发，序列号 ${serialNumber}，有效期至 ${notAfter}。&lt;/p&gt;</code
-            >
+            ><code v-else>您好，${employeeName}。您的证书有效期至 ${notAfter}。</code>
           </p>
-          <p v-if="mixedScheme" class="template-help-note">邮件正文按 HTML 发送，换行可用 &lt;br&gt;。邮件正文禁止使用 ${password}，证书密码通过钉钉发送。</p>
-          <p v-else class="template-help-note">纯文本模板用于通知，按原文换行。证书包和模板附件仅随 MIXED 邮件发送。</p>
         </div>
         <template v-if="mixedScheme">
           <el-divider content-position="left">钉钉模板</el-divider>
@@ -504,10 +509,6 @@
             <p>与邮件相同，另可用 <code>${password}</code> 证书密码。</p>
             <p class="template-help-example">
               示例：<code>${employeeName} 的${certTypeName}已签发。序列号：${serialNumber}；到期：${notAfter}；证书密码：${password}</code>
-            </p>
-            <p class="template-help-note">
-              自定义方案不强制包含 ${password}；如需随钉钉下发证书密码，请在正文中加入 ${password}。纯文本消息渲染后不能超过 500 字符。旧模板兼容
-              {domain_account}、{redomain_account}、{remail}、{password} 写法。
             </p>
           </div>
         </template>
@@ -534,7 +535,7 @@ import FileSaver from 'file-saver';
 import { certificateDownloadBlob, employeeCertificateDownload } from '@/utils/raCertificateDownload';
 import auth from '@/plugins/auth';
 import { useUserStore } from '@/store/modules/user';
-import type { RaCertFilterOption } from '@/api/ra/cert';
+import { getRaCert, type RaCertFilterOption } from '@/api/ra/cert';
 import EmployeeCertificateDownloadMenu from './EmployeeCertificateDownloadMenu.vue';
 import ChannelStatus from './ChannelStatus.vue';
 import DistributionDialog from './DistributionDialog.vue';
@@ -548,8 +549,6 @@ import {
   EmployeeDistributionBatch,
   type EmployeeDistributionBatchType,
   EmployeeDistributionBatchItem,
-  type EmployeeDistributionSelection,
-  type EmployeeMailType,
   EmployeeCertTemplate,
   type EmployeeDistributionScheme,
   listEmployeeDistributionSchemes,
@@ -563,6 +562,7 @@ import {
   queueEmployeeAdBatch,
   getEmployeeCert,
   exportEmployeeCertLedger,
+  getEmployeeDistributionCertificate,
   getEmployeeLedgerCertificate,
   getEmployeeDistributionBatch,
   pageEmployeeDistributionBatches,
@@ -705,6 +705,20 @@ const distributionBatches = ref<EmployeeDistributionBatch[]>([]);
 const distributionTotal = ref(0);
 const distributionPage = reactive({ pageNum: 1, pageSize: 10 });
 const distributionDetailsOpen = ref(false);
+const adCertificateDetail = ref<InstanceType<typeof RaCertDetailDialog>>();
+const distributionCertificateDetail = ref<InstanceType<typeof RaCertDetailDialog>>();
+function loadDistributionCertificateDetail(id: string | number) {
+  const batchNo = activeDistributionBatchNo.value;
+  if (!batchNo) return Promise.reject(new Error('发送批次不存在'));
+  return getEmployeeDistributionCertificate(batchNo, id);
+}
+function openDistributionSerial(row: EmployeeDistributionBatchItem) {
+  const dialog = row.messageType === 'UPLOAD' ? adCertificateDetail.value : distributionCertificateDetail.value;
+  return dialog?.open({ id: row.certId });
+}
+
+const distributionBatchFilter = ref('');
+const appliedBatchFilter = ref('');
 const distributionTaskNo = ref('');
 const distributionBatchType = ref<EmployeeDistributionBatchType | ''>('');
 const appliedDistributionBatchType = ref<EmployeeDistributionBatchType | ''>('');
@@ -921,6 +935,7 @@ async function uploadSelectedToAd() {
     const batch = unwrapData(await queueEmployeeAdBatch(ids));
     ElMessage.success('已加入 AD 上传队列');
     distributionTaskNo.value = '';
+    distributionBatchFilter.value = '';
     distributionBatchType.value = 'UPLOAD';
     managementTab.value = 'distribution';
     await searchDistributionRecords(batch);
@@ -1051,7 +1066,7 @@ async function loadDistributionRecords(retry = false) {
     const requestedUpload = batchType === 'UPLOAD'
       || distributionBatches.value.some(row => row.batchNo === requestedBatchNo && row.taskType === 'UPLOAD');
     const [response, requestedRecords] = await Promise.all([
-      pageEmployeeDistributionBatches({ ...distributionPage, taskNo: taskNo || undefined, batchType: batchType || undefined }),
+      pageEmployeeDistributionBatches({ ...distributionPage, taskNo: taskNo || undefined, batchNo: appliedBatchFilter.value || undefined, batchType: batchType || undefined }),
       requestedBatchNo ? loadBatchRecords(requestedBatchNo, requestedUpload) : undefined
     ]);
     if (request !== distributionRecordsRequest || pageDisposed) return;
@@ -1062,7 +1077,7 @@ async function loadDistributionRecords(retry = false) {
     const batch = requestedBatchNo
       ? batches.find(row => row.batchNo === requestedBatchNo)
       : batches.find(row => row.batchNo === activeDistributionBatchNo.value) || batches[0];
-    const selectedNo = requestedBatchNo || batch?.batchNo;
+    const selectedNo = requestedBatchNo;
     const isUpload = batchType === 'UPLOAD' || batch?.taskType === 'UPLOAD';
     let records = requestedRecords && (requestedUpload === isUpload || !batch) ? requestedRecords
       : selectedNo ? await loadBatchRecords(selectedNo, isUpload) : [];
@@ -1094,7 +1109,8 @@ function updateManagementRoute(tab: 'ledger' | 'distribution', taskNo: string, b
   return router.replace({
     path: route.path,
     query: { ...route.query, tab: tab === 'distribution' ? tab : undefined, taskNo: taskNo || undefined, batchNo: batchNo || undefined,
-      batchType: tab === 'distribution' ? appliedDistributionBatchType.value || undefined : undefined }
+      batchType: tab === 'distribution' ? appliedDistributionBatchType.value || undefined : undefined,
+      batchFilter: tab === 'distribution' ? appliedBatchFilter.value || undefined : undefined }
   });
 }
 
@@ -1109,6 +1125,7 @@ async function selectDistributionBatch(batchNo: string) {
 function searchDistributionRecords(batchNo = '', updateRoute = true) {
   distributionDetailsOpen.value = false;
   appliedDistributionTaskNo.value = distributionTaskNo.value.trim();
+  appliedBatchFilter.value = distributionBatchFilter.value.trim();
   appliedDistributionBatchType.value = distributionBatchType.value;
   distributionPage.pageNum = 1;
   requestedDistributionBatchNo.value = batchNo;
@@ -1122,20 +1139,14 @@ function searchDistributionRecords(batchNo = '', updateRoute = true) {
 
 function resetDistributionQuery() {
   distributionTaskNo.value = '';
+  distributionBatchFilter.value = '';
   distributionBatchType.value = '';
   return searchDistributionRecords();
 }
 
-function onDistributionSubmitted(
-  selection: EmployeeDistributionSelection,
-  _messageType: EmployeeMailType,
-  batchNo?: string,
-  taskNo = selection.taskNo
-) {
-  distributionTaskNo.value = taskNo || '';
-  distributionBatchType.value = '';
+function onDistributionSubmitted() {
   managementTab.value = 'distribution';
-  return searchDistributionRecords(batchNo);
+  return resetDistributionQuery();
 }
 
 function switchManagementTab(tab: string | number) {
@@ -1164,14 +1175,16 @@ function applyManagementRoute() {
   if (route.query.tab === 'distribution') {
     const batch = route.query.batchNo;
     const batchNo = typeof batch === 'string' && /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(batch) ? batch.toLowerCase() : '';
+    const filter = typeof route.query.batchFilter === 'string' ? route.query.batchFilter.slice(0, 36) : '';
     const type = route.query.batchType;
     const batchType = type === 'DISTRIBUTION' || type === 'UPLOAD' ? type : '';
     if (managementTab.value === 'distribution' && appliedDistributionTaskNo.value === taskNo
-      && requestedDistributionBatchNo.value === batchNo && appliedDistributionBatchType.value === batchType) return false;
+      && requestedDistributionBatchNo.value === batchNo && appliedDistributionBatchType.value === batchType && appliedBatchFilter.value === filter) return false;
     stopDistributionPolling();
     managementTab.value = 'distribution';
     detailOpen.value = false;
     distributionTaskNo.value = taskNo;
+    distributionBatchFilter.value = filter;
     distributionBatchType.value = batchType;
     void searchDistributionRecords(batchNo, false);
     return true;
@@ -1341,7 +1354,7 @@ onMounted(() => {
   if (!applyManagementRoute()) void loadList();
   void loadLedgerProfiles();
 });
-watch([() => route.path, () => route.query.taskNo, () => route.query.taskEntry, () => route.query.tab, () => route.query.batchNo, () => route.query.batchType], () => {
+watch([() => route.path, () => route.query.taskNo, () => route.query.taskEntry, () => route.query.tab, () => route.query.batchNo, () => route.query.batchType, () => route.query.batchFilter], () => {
   if (pageActive) applyManagementRoute();
 });
 watch([managementTab, () => queryParams.pageNum, () => queryParams.pageSize], clearLedgerPasswords, { flush: 'sync' });

@@ -26,6 +26,12 @@ export async function employeeCertificateDownload(response: unknown, baseName: s
   return { blob, filename: `${baseName}.${zipped ? 'zip' : format}` };
 }
 
+export function recoveredPkcs12(result: { fileBase64?: string; fileName?: string }, serial: string) {
+  if (!result?.fileBase64) throw new Error('CA 未返回 P12 文件');
+  const bytes = Uint8Array.from(atob(result.fileBase64), character => character.charCodeAt(0));
+  return { blob: new Blob([bytes], { type: 'application/x-pkcs12' }), filename: result.fileName || `${serial}.p12` };
+}
+
 export type IssuedCertificateFormat = 'pem' | 'cer' | 'der' | 'crt' | 'p7b';
 
 const certificateBlocks = (pem: string) => [...pem.matchAll(/-----BEGIN CERTIFICATE-----\s*([A-Za-z0-9+/=\s]+?)\s*-----END CERTIFICATE-----/g)]

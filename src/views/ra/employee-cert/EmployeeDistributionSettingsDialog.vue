@@ -391,7 +391,7 @@ defineExpose({ open });
 }
 
 .distribution-settings-header .el-switch {
-  margin-top: 4px;
+  margin: 4px 0 0 auto;
 }
 
 .distribution-test-row {

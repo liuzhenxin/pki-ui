@@ -1,6 +1,7 @@
 <template>
   <div class="top-right-btn" :style="style">
     <el-row>
+      <slot name="prepend" />
       <el-tooltip v-if="search" class="item" effect="dark" :content="showSearch ? '隐藏搜索' : '显示搜索'" placement="top">
         <el-button circle icon="Search" @click="toggleSearch()" />
       </el-tooltip>

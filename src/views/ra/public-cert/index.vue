@@ -20,6 +20,9 @@
         <el-form-item label="证书维护人">
           <el-input v-model="queryParams.ownerKeyword" clearable placeholder="姓名/账号" @keyup.enter="handleQuery" />
         </el-form-item>
+        <el-form-item v-if="managementTab !== 'records'" label="科室">
+          <el-input v-model="queryParams.departmentName" clearable placeholder="科室" @keyup.enter="handleQuery" />
+        </el-form-item>
         <el-form-item v-if="managementTab === 'handled'" label="审核状态">
           <el-select v-model="queryParams.approvalStatus" clearable placeholder="全部">
             <el-option label="已通过" value="APPROVED" />
@@ -111,6 +114,9 @@
         </el-table-column>
         <el-table-column label="人员状态" width="100" align="center">
           <template #default="{ row }"><el-tag :type="row.employeeStatus === 'ACTIVE' ? 'success' : 'danger'">{{ row.employeeStatus === 'ACTIVE' ? '在职' : '离职' }}</el-tag></template>
+        </el-table-column>
+        <el-table-column v-if="managementTab === 'records'" label="提醒结果" width="112" align="center">
+          <template #default="{ row }"><BusinessReminderResultTag :result="reminderResults[String(row.id)]" :unavailable="reminderResultsFailed" /></template>
         </el-table-column>
         <el-table-column label="操作" fixed="right" width="210" align="center">
           <template #default="{ row }">
@@ -269,20 +275,24 @@
         </el-timeline-item>
       </el-timeline>
       <el-divider content-position="left">通知记录</el-divider>
-      <BusinessDeliveryLogs v-if="detailOpen && detail.cert?.id != null" module="public" :certificate-id="detail.cert.id" @loaded="detailDeliveryLogs = $event" />
+      <BusinessDeliveryLogs v-if="detailOpen && detail.cert?.id != null" module="public" :certificate-id="detail.cert.id" timeline />
     </el-drawer>
 
     <el-dialog v-model="employeeOpen" title="选择员工" width="min(940px, 96vw)" append-to-body
       :close-on-click-modal="false" :close-on-press-escape="!employeeSelecting" :show-close="!employeeSelecting">
       <el-form :model="employeeQuery" inline @submit.prevent="searchEmployees">
         <el-form-item label="关键词">
-          <el-input v-model="employeeQuery.keyword" clearable placeholder="姓名/域账号/工号" style="width: 220px" />
+          <el-input v-model="employeeQuery.keyword" clearable placeholder="姓名、域账号、工号或科室" style="width: 220px" />
         </el-form-item>
         <el-form-item>
           <el-button type="primary" icon="Search" native-type="submit">搜索</el-button>
+          <el-button v-if="pickerTarget === 'grant'" type="success" plain icon="Check" :loading="employeeSelecting"
+            :disabled="!pickedEmployees.length" @click="grantSelectedEmployees(pickedEmployees)">选择</el-button>
         </el-form-item>
       </el-form>
-      <el-table v-loading="employeeLoading" :data="employees" border stripe height="420" @row-dblclick="selectEmployee">
+      <el-table v-if="employeeOpen" v-loading="employeeLoading" :data="employees" row-key="id" border stripe height="420"
+        @selection-change="pickedEmployees = $event" @row-dblclick="selectEmployee">
+        <el-table-column v-if="pickerTarget === 'grant'" type="selection" width="48" :reserve-selection="true" />
         <el-table-column label="姓名" prop="cnName" min-width="110" />
         <el-table-column label="域账号" prop="domainAccount" min-width="120" />
         <el-table-column label="工号" prop="employeeNo" min-width="110" />
@@ -458,14 +468,17 @@
       </el-card>
       <el-form :model="grantQuery" inline @submit.prevent="searchGrants">
         <el-form-item label="关键词">
-          <el-input v-model="grantQuery.keyword" clearable placeholder="姓名/域账号" style="width: 220px" />
+          <el-input v-model="grantQuery.keyword" clearable placeholder="姓名、域账号、工号或科室" style="width: 220px" />
         </el-form-item>
         <el-form-item>
           <el-button type="primary" icon="Search" native-type="submit">搜索</el-button>
           <el-button icon="User" :disabled="grantUpdating" @click="openEmployeePicker('grant')">新增授权</el-button>
+          <el-button type="danger" plain icon="Delete" :disabled="grantUpdating || !pickedGrants.length"
+            @click="removeSelectedGrants">移除授权</el-button>
         </el-form-item>
       </el-form>
-      <el-table v-loading="grantLoading" :data="grants" border stripe>
+      <el-table v-loading="grantLoading" :data="grants" row-key="id" border stripe @selection-change="pickedGrants = $event">
+        <el-table-column type="selection" width="48" />
         <el-table-column label="姓名" prop="employeeName" min-width="120" />
         <el-table-column label="域账号" prop="domainAccount" min-width="120" />
         <el-table-column label="邮箱" prop="employeeEmail" min-width="180" />
@@ -494,8 +507,10 @@
 
 <script setup name="RaPublicCert" lang="ts">
 import CertRowAction from '../components/CertRowAction.vue';
-import { type BusinessDeliveryLog, notifyBusinessCertificates, setBusinessCertificateReminder } from '@/api/ra/businessNoticeSettings';
+import { notifyBusinessCertificates, setBusinessCertificateReminder } from '@/api/ra/businessNoticeSettings';
 import { businessCertificateValidity, confirmManualBusinessNotice, businessCertificateExpired, businessCertificateNoticeBlocked, confirmExpiredCertificateNotice } from '@/utils/businessCertificateNotice';
+import BusinessReminderResultTag from '../components/BusinessReminderResultTag.vue';
+import { getBusinessReminderResults, type BusinessReminderResult } from '@/api/ra/businessNoticeSettings';
 import BusinessDeliveryLogs from '../components/BusinessDeliveryLogs.vue';
 import BusinessNoticeSettingsDialog from '../components/BusinessNoticeSettingsDialog.vue';
 import { useRaListRefreshOnReturn } from '@/hooks/useRaListRefreshOnReturn';
@@ -504,7 +519,7 @@ import auth from '@/plugins/auth';
 import { isFawvwEmployeeSourceActive } from '@/utils/fawvwEmployeeStatus';
 import { ElMessage, ElMessageBox, FormInstance, FormRules, type UploadUserFile } from 'element-plus';
 import UsageTable from './UsageTable.vue';
-import { publicCertDomainRequired, publicCertUsageError, publicCertEditValues, selectCertificateMaintainer, publicNoticeStatus } from '@/utils/publicCertForm';
+import { publicCertDomainRequired, publicCertUsageError, publicCertEditValues, selectCertificateMaintainer } from '@/utils/publicCertForm';
 import {
   auditPublicCerts,
   createPublicCertLedger,
@@ -514,6 +529,8 @@ import {
   getPublicCertPortalConfig,
   getPublicPortalSessionPolicy,
   grantPublicCertPermission,
+  grantPublicCertPermissions,
+  revokePublicCertPermissions,
   listPublicCertTypes,
   pagePublicCertPermissions,
   pagePublicCerts,
@@ -537,17 +554,10 @@ import { FawvwEmployee, pageFawvwEmployees } from '@/api/ra/employee';
 
 type PickerTarget = 'owner' | 'grant';
 
-const detailDeliveryLogs = ref<BusinessDeliveryLog[]>([]);
-const detailTimeline = computed(() => [
-  ...(detail.value.auditLogs || []).map((log) => ({
-    key: `audit-${log.id}`, time: log.createTime, color: 'info' as const,
-    text: `${log.operatorName || '-'} ${actionName(log.action)}：${log.comment || '-'}`
-  })),
-  ...detailDeliveryLogs.value.map((log) => ({
-    key: `notice-${log.id}`, time: log.time, color: log.status === 1 ? 'success' as const : log.status === 2 ? 'danger' as const : 'info' as const,
-    text: `${log.trigger} · ${log.channel === 'email' ? '邮件' : log.channel === 'dingtalk' ? '钉钉' : '提醒'} · ${log.title} · ${publicNoticeStatus(log.status)}`
-  }))
-].sort((left, right) => (right.time || '').localeCompare(left.time || '')));
+const detailTimeline = computed(() => (detail.value.auditLogs || []).map((log) => ({
+  key: log.id, time: log.createTime, color: 'info' as const,
+  text: `${log.operatorName || '-'} ${actionName(log.action)}：${log.comment || '-'}`
+})).sort((left, right) => (right.time || '').localeCompare(left.time || '')));
 const deliveryLogsOpen = ref(false);
 const businessNoticeSettings = ref<InstanceType<typeof BusinessNoticeSettingsDialog>>();
 const rows = ref<PublicCert[]>([]);
@@ -560,6 +570,9 @@ const sessionSaving = ref(false);
 const portalConfigSaving = ref(false);
 const total = ref(0);
 const loading = ref(false);
+const reminderResults = ref<Record<string, BusinessReminderResult>>({});
+const reminderResultsFailed = ref(false);
+
 let listVersion = 0;
 const showSearch = ref(true);
 const formOpen = ref(false);
@@ -580,6 +593,7 @@ const queryParams = reactive<PublicCertQuery>({
   certTypeName: '',
   systemName: '',
   ownerKeyword: '',
+  departmentName: '',
   approvalStatus: '',
   certStatus: '',
   ownerChangeRequired: null,
@@ -631,6 +645,8 @@ const typeDraft = reactive<PublicCertType>({
   sort: 100,
   enabled: true
 });
+const pickedEmployees = ref<FawvwEmployee[]>([]);
+const pickedGrants = ref<PublicCertPermission[]>([]);
 const grants = ref<PublicCertPermission[]>([]);
 const grantTotal = ref(0);
 const grantLoading = ref(false);
@@ -690,6 +706,16 @@ async function loadList(): Promise<void> {
       }
     }
     rows.value = page.records || page.rows || [];
+    reminderResults.value = {};
+    reminderResultsFailed.value = false;
+    const noticeIds = rows.value.flatMap(row => row.id == null ? [] : [row.id]);
+    if (managementTab.value === 'records' && noticeIds.length) {
+      void getBusinessReminderResults('public', noticeIds).then(response => {
+        if (version === listVersion) reminderResults.value = response.data || {};
+      }).catch(() => {
+        if (version === listVersion) reminderResultsFailed.value = true;
+      });
+    }
     selectedRows.value = [];
     total.value = nextTotal;
   } finally {
@@ -708,6 +734,7 @@ function handleQuery() {
 
 function handleTabChange() {
   queryParams.approvalStatus = '';
+  queryParams.departmentName = '';
   rows.value = [];
   total.value = 0;
   selectedRows.value = [];
@@ -723,6 +750,7 @@ function resetQuery() {
     certTypeName: '',
     systemName: '',
     ownerKeyword: '',
+    departmentName: '',
     approvalStatus: '',
     certStatus: '',
     ownerChangeRequired: null,
@@ -762,7 +790,6 @@ async function openEdit(row: PublicCert) {
 
 async function openDetail(row: Pick<PublicCert, 'id'>) {
   const data = unwrap<PublicCertDetail>(await getPublicCert(row.id!));
-  detailDeliveryLogs.value = [];
   detail.value = data;
   detailOpen.value = true;
 }
@@ -849,6 +876,7 @@ async function lookupEmployees(keyword: string): Promise<PublicCertEmployee[]> {
 
 function openEmployeePicker(target: PickerTarget) {
   pickerTarget.value = target;
+  pickedEmployees.value = [];
   employees.value = [];
   employeeTotal.value = 0;
   employeeOpen.value = true;
@@ -873,30 +901,53 @@ async function loadEmployees() {
   }
 }
 
+function employeeGrant(row: FawvwEmployee) {
+  return { employeeId: row.id, employeeIdentityKey: row.identityKey, domainAccount: row.domainAccount,
+    employeeName: row.cnName, employeeEmail: row.email, departmentName: row.departmentName, enabled: true };
+}
+
 async function selectEmployee(row: FawvwEmployee) {
   if (!employeeOpen.value || employeeSelecting.value) return;
-  if (pickerTarget.value === 'owner') {
-    if (!isFawvwEmployeeSourceActive(row.sourceStatus)) { ElMessage.warning('请选择在职员工'); return; }
-    selectCertificateMaintainer(form, row);
-  } else {
-    employeeSelecting.value = true;
-    try {
-      await grantPublicCertPermission({
-        employeeId: row.id,
-        employeeIdentityKey: row.identityKey,
-        domainAccount: row.domainAccount,
-        employeeName: row.cnName,
-        employeeEmail: row.email,
-        departmentName: row.departmentName,
-        enabled: true
-      });
-      ElMessage.success('授权已保存');
-      loadGrants();
-    } finally {
-      employeeSelecting.value = false;
-    }
+  if (pickerTarget.value === 'grant') {
+    await grantSelectedEmployees([row]);
+    return;
   }
+  if (!isFawvwEmployeeSourceActive(row.sourceStatus)) { ElMessage.warning('请选择在职员工'); return; }
+  selectCertificateMaintainer(form, row);
   employeeOpen.value = false;
+}
+
+async function grantSelectedEmployees(selection: FawvwEmployee[]) {
+  if (!selection.length || employeeSelecting.value || pickerTarget.value !== 'grant') return;
+  employeeSelecting.value = true;
+  try {
+    const commands = selection.map(employeeGrant);
+    if (commands.length === 1) await grantPublicCertPermission(commands[0]);
+    else await grantPublicCertPermissions(commands);
+    employeeOpen.value = false;
+    ElMessage.success('授权已保存');
+    await loadGrants();
+  } finally {
+    employeeSelecting.value = false;
+  }
+}
+
+async function removeSelectedGrants() {
+  if (grantUpdating.value) return;
+  const ids = pickedGrants.value.flatMap(row => row.id == null ? [] : [row.id]);
+  if (!ids.length) return;
+  grantUpdating.value = true;
+  try {
+    const confirmed = await ElMessageBox.confirm(`确认移除所选 ${ids.length} 条录入授权？`, '移除录入授权', { type: 'warning' })
+      .then(() => true, () => false);
+    if (!confirmed) return;
+    await revokePublicCertPermissions(ids);
+    pickedGrants.value = [];
+    ElMessage.success('录入授权已移除');
+    await loadGrants();
+  } finally {
+    grantUpdating.value = false;
+  }
 }
 
 function openTypes() {
@@ -960,7 +1011,7 @@ async function sendNotice(row: PublicCert) {
     const confirmed = await confirmManualBusinessNotice('public', row.notAfter);
     if (!confirmed) return;
     const count = unwrap<number>(await notifyBusinessCertificates('public', [row.id]));
-    ElMessage.info(count ? '通知已入队，发送结果请查看通知状态' : '没有新通知入队，请检查渠道和收件范围');
+    ElMessage.info(count ? '通知已入队，发送结果请查看提醒结果' : '没有新通知入队，请检查渠道和收件范围');
     loadList();
   } finally {
     sendingNotice.value = false;
@@ -1171,7 +1222,7 @@ useRaListRefreshOnReturn(loadList);
     }
 
     .query-actions {
-      grid-column: 1 / -1;
+      grid-column: -2 / -1;
     }
 
     .query-actions :deep(.el-form-item__content) {

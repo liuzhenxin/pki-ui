@@ -134,3 +134,7 @@ export function confirmRaRenewalDistribution(businessId: string | number, succes
     data: { success, message }
   }) as any;
 }
+
+export const downloadRaIssuedPkcs12 = (certId: string | number, password: string): Promise<Blob> =>
+  request({ url: `/ra/v1/cert-issues/${certId}/issued-download/p12`, method: 'post', data: { password },
+    headers: { repeatSubmit: false, sensitive: true, hideErrorNotify: true }, responseType: 'blob' });

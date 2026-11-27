@@ -298,7 +298,7 @@
             <el-divider class="employee-ad-divider" content-position="left">AD 上传记录</el-divider>
             <el-descriptions class="employee-detail-descriptions employee-ad-summary" :column="1" label-width="9rem" border>
               <el-descriptions-item label="最近成功上传 AD 的证书">
-                <el-button v-if="latestAdSuccess" link type="primary" @click="openCertificate(latestAdSuccess.certId)">{{ latestAdSuccess.serialNumber }}</el-button>
+                <el-button v-if="latestAdSuccess" class="ad-serial" link type="primary" @click="openCertificate(latestAdSuccess.certId)">{{ latestAdSuccess.serialNumber }}</el-button>
                 <span v-else>-</span>
               </el-descriptions-item>
               <el-descriptions-item label="最近成功上传 AD 的时间">{{ employeeDetailTime(latestAdSuccess?.sendTime) }}</el-descriptions-item>
@@ -1934,8 +1934,21 @@ useRaListRefreshOnReturn(() => {
   margin-bottom: 20px;
 }
 
-.employee-ad-summary {
+.employee-detail-descriptions.employee-ad-summary {
   margin-bottom: 16px;
+  :deep(.el-descriptions__label) {
+    width: 9rem;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .ad-serial {
+    max-width: 100%;
+    height: auto;
+    white-space: normal;
+    text-align: left;
+    overflow-wrap: anywhere;
+  }
+  .ad-serial :deep(span) { display: block; min-width: 0; }
 }
 
 .employee-detail-descriptions {

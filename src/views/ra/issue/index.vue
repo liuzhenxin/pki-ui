@@ -512,7 +512,7 @@
           <template #dropdown>
             <el-dropdown-menu>
               <el-dropdown-item v-for="item in resultDownloadFormats" :key="item.format" :command="item.format">{{ item.label }}</el-dropdown-item>
-              <el-dropdown-item v-if="issueResult.certId" command="pfx" divided>PFX 证书包</el-dropdown-item>
+              <el-dropdown-item v-if="issueResult.certId && !kmcResult" command="pfx" divided>PFX 证书包</el-dropdown-item>
             </el-dropdown-menu>
           </template>
         </el-dropdown>
@@ -521,8 +521,9 @@
           下载证书链
         </el-button>
         <el-button v-if="issueResult.fileBase64" type="success" icon="Download" @click="downloadKeyStore(issueResult)"
-          >下载{{ issueResult.fileFormat }}</el-button
+          >{{ issueResult.fileName?.endsWith('.jks') ? '下载 JKS' : '下载 P12' }}</el-button
         >
+        <el-button v-else-if="kmcResult" type="success" icon="Download" :loading="kmcP12Loading" @click="downloadKmcResult">下载 P12</el-button>
       </div>
       <el-input v-model="issueResult.cert" type="textarea" :rows="10" readonly class="cert-result-textarea" />
       <div v-if="issueResult.encCert" class="encryption-result">
@@ -585,13 +586,14 @@
 import { formatCertificateSubject, formatCertificateSubjectColumn } from '@/utils/raCertificateSubject';
 import CertRowAction from '../components/CertRowAction.vue';
 import { useRaListRefreshOnReturn } from '@/hooks/useRaListRefreshOnReturn';
-import { ElMessage, FormInstance, FormRules } from 'element-plus';
+import { ElMessage, ElMessageBox, FormInstance, FormRules } from 'element-plus';
 import PfxExportDialog from '../components/PfxExportDialog.vue';
 import RaIssueNotificationButton from './RaIssueNotificationButton.vue';
 import {
   confirmRaRenewalDistribution,
   executeRaCert,
   downloadRaIssuedChain,
+  downloadRaIssuedPkcs12,
   packageRaIssuedPfx,
   getRaCertIssue,
   issueRaCert,
@@ -1026,6 +1028,7 @@ async function handleIssue(row: RaCertIssue) {
       const response = await issueRaCert('cert_reissue', row.businessId, {});
       issueResultType.value = 'cert_reissue';
       renewalRaDownloadStatus.value = 'idle';
+      kmcResult.value = undefined;
       issueResult.value = response.data || {};
       issueResultOpen.value = true;
       proxy?.$modal.msgSuccess('补办完成，旧证书已吊销');
@@ -1154,6 +1157,7 @@ async function submitRenewal() {
     await confirmRaRenewalDistribution(renewalId, true, '续期证书已完成分发');
     renewalOpen.value = false;
     issueResultType.value = 'cert_renewal';
+    kmcResult.value = undefined;
     issueResult.value = result;
     issueResultOpen.value = true;
     const clientDownloaded = downloadRenewedClientCertificates(result);
@@ -1499,7 +1503,10 @@ function submitIssue() {
       issueStep.value = '证书签发成功，正在刷新待签发列表...';
       issueResultType.value = current.value.businessType;
       renewalRaDownloadStatus.value = 'idle';
-      issueResult.value = res.data || {};
+      const data = res.data;
+      const kmcId = data?.encCertId ?? (isRsaKmcEncryption.value ? data?.certId : undefined);
+      kmcResult.value = kmcId ? { id: kmcId, serial: data?.encSerialNumber || data?.serialNumber || 'ra-cert' } : undefined;
+      issueResult.value = data || {};
       const doneLabel = isCertReissue.value ? '补办' : isCertUpdate.value ? '更新' : '签发';
       proxy?.$modal.msgSuccess(`${doneLabel}成功，证书序列号：${res.data?.serialNumber || '-'}`);
       issueOpen.value = false;
@@ -1976,6 +1983,26 @@ const resultDownloadFormats: { format: IssuedCertificateFormat; label: string }[
 ];
 
 const pfxOpen = ref(false);
+const kmcResult = ref<{ id: number | string; serial: string }>();
+const kmcP12Loading = ref(false);
+async function downloadKmcResult() {
+  const cert = kmcResult.value;
+  if (!cert || kmcP12Loading.value) return;
+  const password = await ElMessageBox.prompt('请设置 P12 文件密码', '下载 P12', {
+    inputType: 'password', inputValidator: value => Boolean(value?.trim()) || '请输入文件密码'
+  }).then(result => result.value, () => undefined);
+  if (!password || kmcResult.value !== cert) return;
+  kmcP12Loading.value = true;
+  try {
+    const response = await downloadRaIssuedPkcs12(cert.id, password);
+    const blob = await certificateDownloadBlob(response, 'application/x-pkcs12', 'RA_CERT_DOWNLOAD_');
+    saveResultDownload(blob, `${cert.serial}.p12`);
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : 'P12 下载失败');
+  } finally {
+    kmcP12Loading.value = false;
+  }
+}
 
 async function downloadResultCertificate(
   certId: string | number | undefined, certPem: string | undefined, fileName: string, format: IssuedCertificateFormat | 'pfx'

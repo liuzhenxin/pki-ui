@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import forge from 'node-forge';
-import { certificateDownloadBlob, issuedCertificateBlob } from '../../src/utils/raCertificateDownload';
+import { certificateDownloadBlob, issuedCertificateBlob, recoveredPkcs12 } from '../../src/utils/raCertificateDownload';
 
 describe('certificate download validation', () => {
   it.each(['application/json', 'application/octet-stream', ''])('rejects Forbidden JSON with MIME %s', async (type) => {
@@ -21,6 +21,13 @@ describe('certificate download validation', () => {
     const buffer = new Uint8Array([0x30, 0x82, 0x01, 0x02, 0xff]).buffer;
     const blob = await certificateDownloadBlob({ data: buffer }, 'application/pkix-cert');
     expect(new Uint8Array(await blob.arrayBuffer())).toEqual(new Uint8Array(buffer));
+  });
+  it('uses the KMC recovery bytes as a P12 without asking for a private key', async () => {
+    const result = recoveredPkcs12({ fileBase64: 'AQID' }, 'AB');
+    expect(result.filename).toBe('AB.p12');
+    expect(result.blob.type).toBe('application/x-pkcs12');
+    expect(new Uint8Array(await result.blob.arrayBuffer())).toEqual(new Uint8Array([1, 2, 3]));
+    expect(() => recoveredPkcs12({}, 'AB')).toThrow('CA 未返回 P12 文件');
   });
   it('rejects empty and nonbinary responses', async () => {
     await expect(certificateDownloadBlob(new Blob([]), '')).rejects.toThrow();

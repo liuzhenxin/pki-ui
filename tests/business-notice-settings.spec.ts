@@ -41,6 +41,8 @@ test('business notification settings keep module values and templates isolated',
   expect(stored.root.days).toBe('3650,30,7,0');
   expect(stored.root.templates.map((entry: { channel: string }) => entry.channel)).toEqual(['EMAIL', 'DINGTALK']);
   expect(descriptor.template!.content).toContain('hasTemplate(category.value, channel.value)');
+  expect(component.variable('serialNumber')).toBe('${root.serialNumber}');
+  expect(component.noticeVariables.value).toContainEqual(['serialNumber', '证书序列号']);
   expect(stored.intranet.days).toBe('30,7,0');
   expect(stored.intranet.templates).toEqual([]);
 });

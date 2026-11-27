@@ -10,6 +10,7 @@ export interface PublicCertQuery {
   certTypeName?: string;
   systemName?: string;
   ownerKeyword?: string;
+  departmentName?: string;
   approvalStatus?: string;
   certStatus?: string;
   ownerChangeRequired?: boolean | null;
@@ -322,3 +323,10 @@ export const refreshPublicCertPersonnel = () => request({ url: '/ra/v1/public-ce
 
 export const downloadPublicCertAttachment = (id: number | string, attachmentId: number | string): Promise<Blob> =>
   request({ url: `/ra/v1/public-certs/${id}/attachments/${attachmentId}`, method: 'get', responseType: 'blob' }) as any;
+
+
+export const grantPublicCertPermissions = (data: Partial<PublicCertPermission>[]) =>
+  request({ url: '/ra/v1/public-certs/permissions/batch', method: 'post', data });
+
+export const revokePublicCertPermissions = (data: (string | number)[]) =>
+  request({ url: '/ra/v1/public-certs/permissions/batch-revoke', method: 'post', data });

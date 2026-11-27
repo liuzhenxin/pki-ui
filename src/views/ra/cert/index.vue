@@ -86,7 +86,8 @@
                 <el-dropdown-item command="cer">CER 证书 (.cer)</el-dropdown-item>
                 <el-dropdown-item command="der">DER 证书 (.der)</el-dropdown-item>
                 <el-dropdown-item command="p7b">P7B 证书链 (.p7b)</el-dropdown-item>
-                <el-dropdown-item command="pfx" divided>PFX 证书包 (.pfx)</el-dropdown-item>
+                <el-dropdown-item v-if="isKmcCertificate(row)" command="p12" divided :disabled="!canRecoverKey(row)">下载 P12 (.p12)</el-dropdown-item>
+                <el-dropdown-item v-else command="pfx" divided>PFX 证书包 (.pfx)</el-dropdown-item>
               </el-dropdown-menu>
             </template>
           </CertRowAction>
@@ -106,7 +107,7 @@
       @download="saveBlob"
     />
 
-    <el-dialog v-model="pkcs12Open" title="导出 PFX" width="480px" append-to-body @closed="resetPkcs12Form">
+    <el-dialog v-model="pkcs12Open" :title="selectedCert && isKmcCertificate(selectedCert) ? '下载 P12' : '导出 PFX'" width="480px" append-to-body @closed="resetPkcs12Form">
       <el-alert type="warning" :closable="false" show-icon title="PKCS#12 包含证书私钥，请设置高强度导出口令并妥善保管。" />
       <el-form ref="pkcs12FormRef" :model="pkcs12Form" :rules="pkcs12Rules" label-width="92px" class="pkcs12-form">
         <el-form-item label="证书序列号">
@@ -268,7 +269,7 @@ import { certificateFingerprint, isRsaSigningCertificate, signArchivePayload, ut
 import type { SkfSigningCertificate } from '@/utils/raArchiveSkf';
 import SKFClient from '@/api/skf/skf_api';
 import auth from '@/plugins/auth';
-import { certificateDownloadBlob } from '@/utils/raCertificateDownload';
+import { certificateDownloadBlob, recoveredPkcs12 } from '@/utils/raCertificateDownload';
 import { intranetCertSyncLocation } from '@/utils/raIntranetCertNavigation';
 import RaCertDetailDialog from '../components/RaCertDetailDialog.vue';
 import HistoricalRecoveryDialog from '@/views/ca/archive-cert/HistoricalRecoveryDialog.vue';
@@ -497,8 +498,12 @@ function resetQuery() {
   handleQuery();
 }
 
+function isKmcCertificate(row: RaCertSummary) {
+  return row.keySource?.toUpperCase() === 'KMC';
+}
+
 function canRecoverKey(row: RaCertSummary) {
-  return row.keySource === 'KMC' && row.keyRecoveryAvailable !== false;
+  return isKmcCertificate(row) && row.keyRecoveryAvailable !== false;
 }
 
 function openIntranetCertLedger(row: RaCertSummary) {
@@ -523,8 +528,13 @@ function statusName(status?: RaCertStatus) {
 }
 
 async function handleDownload(format: string, row: RaCertSummary) {
-  if (format === 'pfx') {
+  if (format === 'p12' || format === 'pfx') {
+    if (isKmcCertificate(row) && (format !== 'p12' || !canRecoverKey(row))) return;
     selectedCert.value = row;
+    if (format === 'p12') {
+      if (isKmcCertificate(row)) pkcs12Open.value = true;
+      return;
+    }
     if (row.pkcs12Available) pkcs12Open.value = true;
     else uploadedPfxOpen.value = true;
     return;
@@ -547,12 +557,21 @@ async function submitPkcs12Export() {
   if (!selectedCert.value || !(await pkcs12FormRef.value?.validate().catch(() => false))) return;
   pkcs12Loading.value = true;
   try {
-    const response = await downloadRaManagedPfx(selectedCert.value.id, pkcs12Form.password);
-    saveBlob(await certificateDownloadBlob(response, 'application/x-pkcs12', 'RA_CERT_DOWNLOAD_'), `${selectedCert.value.serialNumber}.pfx`);
+    const certificate = selectedCert.value;
+    if (isKmcCertificate(certificate)) {
+      const recovered = unwrapData<any>(await recoverRaKey(certificate.id, {
+        issueType: 'file', filePassword: pkcs12Form.password, fileFormat: 'PKCS12'
+      }));
+      const { blob, filename } = recoveredPkcs12(recovered, certificate.serialNumber);
+      saveBlob(blob, filename);
+    } else {
+      const response = await downloadRaManagedPfx(certificate.id, pkcs12Form.password);
+      saveBlob(await certificateDownloadBlob(response, 'application/x-pkcs12', 'RA_CERT_DOWNLOAD_'), `${certificate.serialNumber}.pfx`);
+    }
     pkcs12Open.value = false;
-    ElMessage.success('PFX 下载已开始');
+    ElMessage.success('证书下载已开始');
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : 'PFX 导出失败');
+    ElMessage.error(error instanceof Error ? error.message : '证书导出失败');
   } finally {
     pkcs12Loading.value = false;
   }

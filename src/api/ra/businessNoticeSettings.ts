@@ -50,3 +50,11 @@ export interface BusinessDeliveryLog {
 
 export const listBusinessDeliveryLogs = (module: NoticeModule, certificateId?: string | number, beforeId?: string | number) =>
   request({ url: `/ra/v1/business-notice-settings/${module}/logs`, method: 'get', params: { certificateId, beforeId } }) as any;
+
+export type BusinessReminderResult = 'SENT' | 'FAILED' | 'PENDING' | 'UNKNOWN';
+
+export const getBusinessReminderResults = (module: 'intranet' | 'public', ids: (string | number)[]) =>
+  request<unknown, { data: Record<string, BusinessReminderResult> }>({
+    url: `/ra/v1/business-notice-settings/${module}/reminder-results`, method: 'post', data: ids,
+    headers: { hideErrorNotify: true, repeatSubmit: false }
+  });

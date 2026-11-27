@@ -500,6 +500,9 @@ export const exportEmployeeCertLedger = (filters: EmployeeCertLedgerFilters): Pr
 export const getEmployeeLedgerCertificate = (id: number | string): Promise<Result<RaCertDetail>> =>
   request({ url: `/ra/v1/employee-certs/${encodeURIComponent(id)}/certificate`, method: 'get' }) as any;
 
+export const getEmployeeTaskCertificate = (taskNo: string, id: number | string): Promise<Result<RaCertDetail>> =>
+  request({ url: `/ra/v1/employee-certs/tasks/${encodeURIComponent(taskNo)}/certificates/${encodeURIComponent(id)}`, method: 'get' });
+
 export const getEmployeeCert = (id: number | string): Promise<Result<EmployeeCertDetail>> =>
   request({
     url: `/ra/v1/employee-certs/${id}`,
@@ -566,6 +569,7 @@ export type EmployeeDistributionBatchType = 'DISTRIBUTION' | 'UPLOAD';
 
 export const pageEmployeeDistributionBatches = (params: {
   taskNo?: string;
+  batchNo?: string;
   batchType?: EmployeeDistributionBatchType;
   pageNum: number;
   pageSize: number;
@@ -578,6 +582,9 @@ export const getEmployeeDistributionBatch = (batchNo: string): Promise<Result<Em
     method: 'get',
     headers: { hideErrorNotify: true }
   }) as any;
+
+export const getEmployeeDistributionCertificate = (batchNo: string, id: string | number): Promise<Result<RaCertDetail>> =>
+  request({ url: `/ra/v1/employee-certs/distribution-batches/${encodeURIComponent(batchNo)}/certificates/${encodeURIComponent(id)}`, method: 'get' });
 
 export const listEmployeePublicKeys = (employeeId: number | string): Promise<Result<EmployeePublicKey[]>> =>
   request({

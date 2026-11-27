@@ -34,8 +34,10 @@ test('canceling the final employee distribution confirmation sends nothing', asy
   const source = read('src/views/ra/employee-cert/DistributionDialog.vue');
   const method = source.slice(source.indexOf('async function submit()'), source.indexOf('defineExpose('));
   const submit = new Function('ElMessageBox', 'submitEmployeeDistribution', `
-    const options={value:{messageType:'MIXED',maxAttachmentBytes:10000}}, submitting={},selectedAttachments={value:[]},resetAttachments=()=>{},
-      selected={ids:[1]},target={value:'Person'},visible={value:true},ElMessage={warning(){},info(){}},emit=()=>{};
+    const options={value:{maxAttachmentBytes:10000,recipients:[{name:'Person',domainAccount:'person'}]}},
+      messageType={value:'TEXT'},chosenScheme={value:{name:'Test',confirmation:true}},submitting={value:false},
+      selected={ids:[1]},noticeMode={value:false},certificateChannel={},retryOnly={},boundSummary={value:[]},boundDeliveryNote={},
+      h=()=>({}),visible={value:true},resetAttachments=()=>{},ElMessage={warning(){},info(){}},emit=()=>{},targetTaskNo=undefined;
     ${transpile(method)}; return submit;
   `);
   let calls = 0;
@@ -127,8 +129,8 @@ test('switching the ledger and audit tabs ignores older query responses', async 
   const pagePublicCerts = () => ++calls === 1 ? new Promise((resolve) => (resolveOld = resolve))
     : Promise.resolve({ records: [{ id: 2 }], total: 1 });
   const load = new Function('pagePublicCerts', 'rows', 'total', `${code};
-    let listVersion=0; const loading={},queryParams={},notAfterRange={value:[]},managementTab={value:'records'},selectedRows={},noticeStates={};
-    const unwrap=x=>x,getPublicNoticeStates=async()=>[],queryPayload=()=>({});return loadList;`
+    let listVersion=0; const loading={},queryParams={},notAfterRange={value:[]},managementTab={value:'records'},selectedRows={},reminderResults={},reminderResultsFailed={};
+    const unwrap=x=>x,getBusinessReminderResults=async()=>({}),queryPayload=()=>({});return loadList;`
   )(pagePublicCerts, rows, total);
   const old = load();
   await load();
@@ -193,7 +195,7 @@ function component(path: string, scoped = false) {
       name==='@/utils/businessCertificateNotice'?{businessCertificateNoticeBlocked:()=>false,businessCertificateExpired:()=>false,
         businessCertificateValidity:()=>({text:'有效',type:'success'})}:
       name==='@/api/ra/businessNoticeSettings'?window.adminApi:
-      name.endsWith('/BusinessDeliveryLogs.vue')?{__esModule:true,default:{template:'<div />'}}:
+      (name.endsWith('/BusinessDeliveryLogs.vue')||name.endsWith('/BusinessReminderResultTag.vue'))?{__esModule:true,default:{template:'<div />'}}:
       name.endsWith('/BusinessNoticeSettingsDialog.vue')?{__esModule:true,default:window.BusinessNoticeSettingsDialog}:
       name==='@/api/ra/publicCert'||name==='@/api/ra/employee'?window.adminApi:
       name==='@/plugins/auth'?{__esModule:true,default:{hasPermi:()=>true}}:
@@ -272,23 +274,33 @@ for (const width of [1440, 390]) {
       const certs=statuses.map((status,index)=>({id:index+1,version:0,domainName:status.toLowerCase()+'.invalid',certTypeName:'Domain',businessOwnerName:'Current',notAfter:'2030-01-01 00:00:00',approvalStatus:status,certStatus:'NORMAL',reminderEnabled:true}));
       const grants=[{id:91,employeeId:5,employeeName:'Granted Employee',domainAccount:'grant-one',enabled:true}];
       window.revokedIds=[];
+      window.selectedGrantIds=[];
       window.adminApi=new Proxy({
         pagePublicCerts:async query=>{
           window.adminQuery=query;
           const records=certs.filter(cert=>query.approvalStatus==='HANDLED' ? ['APPROVED','REJECTED'].includes(cert.approvalStatus) : cert.approvalStatus===query.approvalStatus);
           return {data:{records,total:records.length}};
         },
-        getPublicNoticeStates:async()=>({data:[{id:1,emailStatus:1,dingtalkStatus:2}]}),
+        getBusinessReminderResults:async()=>({data:{1:'SENT'}}),
         listPublicCertTypes:async()=>({data:[]}),
         pagePublicCertPermissions:async query=>{
           window.grantQuery=query;
           const records=grants.filter(row=>row.domainAccount.includes(query.keyword || ''));
           return {data:{records,total:records.length}};
         },
-        revokePublicCertPermission:async id=>{window.revokedIds.push(id);grants.splice(grants.findIndex(row=>row.id===id),1);},
+        grantPublicCertPermissions:async commands=>{
+          window.selectedGrantIds=commands.map(item=>item.employeeId);
+        },
+        revokePublicCertPermissions:async ids=>{
+          window.revokedIds.push(...ids);
+          for(const id of ids){const index=grants.findIndex(row=>row.id===id);if(index>=0)grants.splice(index,1);}
+        },
         pageFawvwEmployees:async query=>{
           window.employeePickerQuery=query;
-          const records=query.keyword ? [{id:5,cnName:'Search Employee',domainAccount:query.keyword,sourceStatus:'A'}] : [];
+          const records=query.keyword ? [
+            {id:5,cnName:'Search Employee',domainAccount:query.keyword,sourceStatus:'A',departmentName:'Testing'},
+            {id:6,cnName:'Second Employee',domainAccount:query.keyword+'-second',sourceStatus:'A',departmentName:'Testing'}
+          ] : [];
           return {data:{records,total:records.length}};
         },
         getPublicPortalSessionPolicy:async()=>({data:{idleMinutes:30}}),
@@ -349,29 +361,32 @@ for (const width of [1440, 390]) {
     const grants = page.getByRole('dialog', { name: '证书录入授权' });
     const policy = grants.getByRole('region', { name: '自助登录策略' });
     await expect(policy.getByRole('spinbutton', { name: '登录空闲超时（分钟）' })).toHaveValue('30');
-    await expect(policy.getByRole('switch', { name: 'IAM 登录认证' })).toBeChecked();
     expect(await policy.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
     await grants.screenshot({ path: info.outputPath('admin-authorization.png'), animations: 'disabled' });
     if (width === 1440) {
-      const keyword = grants.getByPlaceholder('姓名/域账号', { exact: true });
+      const keyword = grants.getByPlaceholder('姓名、域账号、工号或科室', { exact: true });
       await keyword.fill('grant-one');
       await keyword.press('Enter');
       await expect.poll(() => page.evaluate(() => (window as any).grantQuery?.keyword)).toBe('grant-one');
       await grants.getByRole('button', { name: '新增授权' }).click();
       const picker = page.getByRole('dialog', { name: '选择员工' });
-      const employeeKeyword = picker.getByPlaceholder('姓名/域账号/工号', { exact: true });
+      const employeeKeyword = picker.getByPlaceholder('姓名、域账号、工号或科室', { exact: true });
       await employeeKeyword.fill('search-one');
       await employeeKeyword.press('Enter');
       await expect(picker.getByText('search-one', { exact: true })).toBeVisible();
       await employeeKeyword.fill('search-two');
       await picker.getByRole('button', { name: '搜索', exact: true }).click();
       await expect(picker.getByText('search-two', { exact: true })).toBeVisible();
-      await page.keyboard.press('Escape');
+      await picker.locator('tbody .el-checkbox').first().click();
+      await picker.locator('tbody .el-checkbox').nth(1).click();
+      await picker.locator('form').getByRole('button', { name: '选择', exact: true }).click();
       await expect(picker).toBeHidden();
-      const remove = grants.getByRole('button', { name: '移除授权' });
+      expect(await page.evaluate(() => (window as any).selectedGrantIds)).toEqual([5, 6]);
+      await grants.getByRole('row', { name: /Granted Employee/ }).locator('.el-checkbox').click();
+      const remove = grants.locator('form').getByRole('button', { name: '移除授权', exact: true });
       await remove.click();
       const confirm = page.getByRole('dialog', { name: '移除录入授权' });
-      await expect(confirm).toContainText('Granted Employee');
+      await expect(confirm).toContainText('确认移除所选 1 条录入授权');
       await page.keyboard.press('Escape');
       await expect(confirm).toBeHidden();
       expect(await page.evaluate(() => (window as any).revokedIds)).toEqual([]);

@@ -139,6 +139,7 @@ function harness(overrides: Record<string, unknown> = {}, permissions?: string[]
       if (name === '@/utils/raCertificateSubject') return certificateSubject;
       if (name === 'file-saver') return { default: { saveAs: () => {} } };
       if (name === '@/api/ra/employeeCert') return api;
+      if (name === '@/api/ra/cert') return { getRaCert: async () => ({ data: {} }) };
       if (name === '@/store/modules/user') return { useUserStore: () => ({ tenantId: '5', userId: '501' }) };
       if (name === '@/utils/raCertificateDownload') return { certificateDownloadBlob: async (blob: Blob) => blob };
       if (name === '@/plugins/auth') return { default: { hasPermi, hasPermiOr: (entries: string[]) => entries.some(hasPermi) } };
@@ -335,40 +336,32 @@ test('production task opens the exact ledger task without sending any certificat
   h.stop();
 });
 
-test('submitted distributions open the matching task and batch and keep mixed selections visible', async () => {
+test('submitting a distribution opens the unfiltered list and details open on demand', async () => {
   const pages: any[] = [];
   const details: string[] = [];
-  const batch = (batchNo: string, taskNo?: string) => ({
-    batchNo,
-    taskNo,
-    taskCount: taskNo ? 1 : 2,
-    totalCount: taskNo ? 1 : 2,
-    successCount: 1,
-    failedCount: taskNo ? 0 : 1
-  });
-  const one = { certId: 1, taskNo: 'EC-001', serialNumber: 'A1', sendStatus: 2, emailStatus: 'SENT', dingtalkStatus: 'FAILED', certTypeName: '员工邮件证书' };
-  const two = { certId: 2, taskNo: 'EC-002', sendStatus: 2, emailStatus: 'FAILED', dingtalkStatus: 'PENDING' };
+  const one = { certId: 1, taskNo: 'EC-001', serialNumber: 'A1', sendStatus: 2 };
+  const two = { certId: 2, taskNo: 'EC-002', sendStatus: 2 };
   const h = harness({
     pageEmployeeDistributionBatches: async (query: any) => {
       pages.push(query);
-      return { data: { total: 2, records: [batch('newest', 'EC-001'), query.taskNo ? batch(submittedBatchNo, query.taskNo) : batch(mixedBatchNo)] } };
+      return { data: { total: 1, records: [{ batchNo: mixedBatchNo, totalCount: 2, successCount: 0, failedCount: 2 }] } };
     },
     getEmployeeDistributionBatch: async (batchNo: string) => {
       details.push(batchNo);
       return { data: [one, two] };
     }
   });
-  await h.page.onDistributionSubmitted({ taskNo: 'EC-001' }, 'MIXED', submittedBatchNo);
+  h.page.distributionBatchFilter.value = submittedBatchNo;
+  h.page.distributionBatchType.value = 'DISTRIBUTION';
+  await h.page.onDistributionSubmitted();
   expect(h.page.managementTab.value).toBe('distribution');
-  expect(h.page.distributionTaskNo.value).toBe('EC-001');
-  expect(pages.at(-1)).toMatchObject({ taskNo: 'EC-001', pageNum: 1 });
-  expect(details.at(-1)).toBe(submittedBatchNo);
-  expect(h.page.distributionRecords.value).toEqual([one]);
-  expect(h.page.distributionTaskDetail.value).toEqual(one);
+  expect(pages.at(-1)).toMatchObject({ taskNo: undefined, batchNo: undefined, batchType: undefined, pageNum: 1 });
+  expect(details).toHaveLength(0);
   expect(h.page.distributionDetailsOpen.value).toBe(false);
-  await h.page.selectDistributionBatch(submittedBatchNo);
+  await h.page.selectDistributionBatch(mixedBatchNo);
   expect(h.page.distributionDetailsOpen.value).toBe(true);
-  expect(h.page.distributionRecords.value).toEqual([one]);
+  expect(details).toEqual([mixedBatchNo]);
+  expect(h.page.distributionRecords.value).toEqual([one, two]);
   h.page.distributionDetailsOpen.value = false;
 
   const first = {
@@ -393,17 +386,10 @@ test('submitted distributions open the matching task and batch and keep mixed se
     { selection: { ids: [1], freshBatch: true }, taskNo: 'EC-001' },
     { selection: { ids: [1, 2], freshBatch: true }, taskNo: undefined }
   ]);
-  await h.page.onDistributionSubmitted(selections[0].selection, 'TEXT', submittedBatchNo, selections[0].taskNo);
-  expect(pages.at(-1).taskNo).toBe('EC-001');
-  await h.page.onDistributionSubmitted(selections[2].selection, 'MIXED', mixedBatchNo, selections[2].taskNo);
-  expect(h.page.distributionTaskNo.value).toBe('');
-  expect(pages.at(-1).taskNo).toBeUndefined();
-  expect(details.at(-1)).toBe(mixedBatchNo);
-  expect(h.page.distributionRecords.value).toEqual([one, two]);
   h.stop();
 });
 
-test('sending records combine task number and batch type and reset both filters', async () => {
+test('sending records combine batch number and batch type and reset both filters', async () => {
   const filters: unknown[] = [];
   const { page, route, stop } = harness({
     pageEmployeeDistributionBatches: async (query: unknown) => {
@@ -412,16 +398,16 @@ test('sending records combine task number and batch type and reset both filters'
     }
   });
   page.managementTab.value = 'distribution';
-  page.distributionTaskNo.value = 'TASK-1';
+  page.distributionBatchFilter.value = submittedBatchNo;
   page.distributionBatchType.value = 'DISTRIBUTION';
   await page.searchDistributionRecords();
-  expect(filters.at(-1)).toMatchObject({ taskNo: 'TASK-1', batchType: 'DISTRIBUTION', pageNum: 1 });
-  expect(route.query).toMatchObject({ taskNo: 'TASK-1', batchType: 'DISTRIBUTION' });
+  expect(filters.at(-1)).toMatchObject({ batchNo: submittedBatchNo, batchType: 'DISTRIBUTION', pageNum: 1 });
+  expect(route.query).toMatchObject({ batchFilter: submittedBatchNo, batchType: 'DISTRIBUTION' });
   page.distributionBatchType.value = 'UPLOAD';
   await page.searchDistributionRecords();
-  expect(filters.at(-1)).toMatchObject({ taskNo: 'TASK-1', batchType: 'UPLOAD' });
+  expect(filters.at(-1)).toMatchObject({ batchNo: submittedBatchNo, batchType: 'UPLOAD' });
   await page.resetDistributionQuery();
-  expect(filters.at(-1)).toMatchObject({ taskNo: undefined, batchType: undefined });
+  expect(filters.at(-1)).toMatchObject({ batchNo: undefined, batchType: undefined });
   stop();
 });
 
@@ -440,8 +426,9 @@ test('a submitted batch stays selected outside the list page, across navigation 
   };
   const h = harness(api, undefined, { taskNo: 'EC-001' });
   h.mount();
-  await h.page.onDistributionSubmitted({ taskNo: 'EC-001' }, 'MIXED', submittedBatchNo);
-  expect(h.route.query).toEqual({ tab: 'distribution', taskNo: 'EC-001', batchNo: submittedBatchNo });
+  await h.page.onDistributionSubmitted();
+  await h.page.selectDistributionBatch(submittedBatchNo);
+  expect(h.route.query).toMatchObject({ tab: 'distribution', taskNo: undefined, batchNo: submittedBatchNo });
   expect(h.page.activeDistributionBatch.value).toMatchObject({ batchNo: submittedBatchNo, totalCount: 1, successCount: 1 });
   expect(h.page.distributionBatches.value[0].batchNo).toBe(mixedBatchNo);
 
@@ -488,7 +475,8 @@ test('record reads retry after list and detail failures without resubmitting a f
     }
   });
   h.mount();
-  await h.page.onDistributionSubmitted({ taskNo: 'EC-001' }, 'TEXT', submittedBatchNo);
+  h.page.managementTab.value = 'distribution';
+  await h.page.searchDistributionRecords(submittedBatchNo);
   expect(h.page.distributionReadFailures.value).toBe(1);
   expect(h.pending()).toBeDefined();
   await h.poll();
@@ -836,6 +824,7 @@ test('certificate pages compile and remove arbitrary package uploads and passwor
   const taskActions = taskSource.match(/<el-table-column label="操作"[^>]*>([\s\S]*?)<\/el-table-column>/)?.[1];
   expect(taskActions).toContain('<CertRowAction label="详情" icon="View" @click="openTask(row)" />');
   expect(taskActions).toContain('<EmployeeCertificateDownloadMenu');
+  expect(taskSource).toContain('issuedDetail?.open({ id: row.id })');
   expect(taskActions).toContain(`v-hasPermi="['ra:employee-cert:distribute']"`);
   expect(taskActions).toContain(':disabled="row.successCount <= 0 || Boolean(downloadingTask)"');
   expect(taskActions).toContain('@download="downloadTaskPackage(row, $event)"');

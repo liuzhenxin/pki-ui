@@ -81,7 +81,7 @@
       </template>
 
         <main class="portal-content">
-          <el-alert v-if="!access.granted" title="当前账号未开通证书录入权限，请联系证书管理员授权。" type="warning" show-icon :closable="false" />
+          <el-alert v-if="!access.granted" title="当前员工未开通证书录入权限，请联系证书管理员授权。" type="warning" show-icon :closable="false" />
           <template v-else>
             <div class="portal-heading">
               <div class="portal-heading-title">
@@ -126,7 +126,7 @@
                 </div>
               </el-form>
               <el-table v-loading="loading" :data="rows" class="portal-record-table" :empty-text="portalSection === 'todo' ? '暂无待办记录' : '暂无证书记录'">
-                <el-table-column label="域名" prop="domainName" min-width="155" show-overflow-tooltip />
+                <el-table-column label="域名" prop="domainName" width="140" show-overflow-tooltip />
                 <el-table-column label="审核结果" width="105">
                   <template #default="{ row }"><el-tag :type="approvalType(row.approvalStatus)" effect="light">{{ row.approvalStatus === 'PENDING' ? '审核中' : approvalLabel(row) }}</el-tag></template>
                 </el-table-column>
